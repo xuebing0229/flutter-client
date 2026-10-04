@@ -1,0 +1,247 @@
+name: Build and Publish Beta
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'build/beta-*'
+    paths:
+      - pubspec.yaml
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
+  BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java with Gradle cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Set up Go for embedded Syncthing
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.2'
+          cache: true
+
+      - name: Cache embedded Syncthing binaries
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/sync/jniLibs
+          key: embedded-syncthing-v2.1.5-${{ runner.os }}-android
+
+      - name: Build embedded Syncthing core
+        env:
+          SYNCTHING_VERSION: v2.1.5
+        run: bash tool/build_syncthing_android.sh
+
+      - name: Restore fixed Beta signing bundle
+        run: |
+          test -n "$BETA_SIGNING_BUNDLE_BASE64"
+          BUNDLE="$RUNNER_TEMP/beta-signing-bundle.zip"
+          printf '%s' "$BETA_SIGNING_BUNDLE_BASE64" | base64 --decode > "$BUNDLE"
+          unzip -q "$BUNDLE" -d android
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build signed Beta APK
+        run: |
+          flutter build apk \
+            --release \
+            --flavor beta \
+            --dart-define=APP_CHANNEL=beta
+          cp build/app/outputs/flutter-apk/app-beta-release.apk app-beta.apk
+
+      - name: Upload Android Beta package
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-android-package
+          path: app-beta.apk
+          if-no-files-found: error
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        shell: pwsh
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows Beta
+        shell: pwsh
+        run: flutter build windows --release --dart-define=APP_CHANNEL=beta
+
+      - name: Bundle embedded Syncthing core
+        shell: pwsh
+        run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.5
+
+      - name: Package Windows Beta
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "build/windows/x64/runner/Release/*" `
+            -DestinationPath "app-windows-beta.zip" `
+            -Force
+
+      - name: Upload Windows Beta package
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-windows-package
+          path: app-windows-beta.zip
+          if-no-files-found: error
+
+  publish:
+    needs:
+      - android
+      - windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download Android Beta package
+        uses: actions/download-artifact@v4
+        with:
+          name: beta-android-package
+          path: dist
+
+      - name: Download Windows Beta package
+        uses: actions/download-artifact@v4
+        with:
+          name: beta-windows-package
+          path: dist
+
+      - name: Read build metadata
+        shell: bash
+        run: |
+          META=$(python3 - <<'PY'
+          from pathlib import Path
+          for line in Path("pubspec.yaml").read_text().splitlines():
+              if line.startswith("version:"):
+                  value = line.split(":", 1)[1].strip()
+                  version, build = value.split("+", 1)
+                  print(version)
+                  print(build)
+                  break
+          PY
+          )
+          VERSION=$(printf '%s\n' "$META" | sed -n '1p')
+          BUILD=$(printf '%s\n' "$META" | sed -n '2p')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+
+      - name: Prepare static Beta update manifest
+        shell: bash
+        run: |
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          data = {
+              "schema": 1,
+              "channel": "beta",
+              "version": "${VERSION}",
+              "build": int("${BUILD}"),
+              "published": True,
+              "download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-beta.apk",
+              "windows_download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta.zip",
+              "notes": "Beta ${VERSION} (${BUILD})",
+          }
+          Path("app-beta-latest.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+          )
+          PY
+
+      - name: Publish Android and Windows packages
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN"
+          TAG="beta-v${VERSION}+${BUILD}-run${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            "dist/app-beta.apk#app-beta.apk" \
+            "dist/app-windows-beta.zip#app-windows-beta.zip" \
+            "app-beta-latest.json#app-beta-latest.json" \
+            --repo xuebing0229/release-files \
+            --title "Beta ${VERSION} (${BUILD})" \
+            --notes "Automated Beta build ${VERSION} (${BUILD}) for Android and Windows." \
+            --latest
+
+      - name: Update public Beta manifest
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        run: |
+          gh auth setup-git
+          rm -rf "$RUNNER_TEMP/release-files"
+          gh repo clone xuebing0229/release-files "$RUNNER_TEMP/release-files"
+          cd "$RUNNER_TEMP/release-files"
+
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          path = Path("version.json")
+          data = json.loads(path.read_text())
+          data.update({
+              "schema": 1,
+              "channel": "beta",
+              "version": "${VERSION}",
+              "build": int("${BUILD}"),
+              "published": True,
+              "download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-beta.apk",
+              "windows_download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta.zip",
+          })
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "beta: publish ${VERSION} (${BUILD})"
+          git push

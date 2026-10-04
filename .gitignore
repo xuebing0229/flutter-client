@@ -1,0 +1,48 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/generated_plugin_registrant.dart
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Local machine
+.DS_Store
+Thumbs.db
+local.properties
+
+# Signing - NEVER COMMIT
+*.jks
+*.keystore
+key.properties
+android/key.properties
+signing/
+secrets/
+*.p12
+*.pem
+*.key
+
+# Environment / private config
+.env
+.env.*
+!.env.example
+
+# Logs / temp
+*.log
+tmp/
+temp/
+
+# Android signing properties
+android/beta-key.properties
+android/release-key.properties
+
+# Offline license signing key - NEVER COMMIT
+*license_private_key*.txt
+*license-private-key*.txt

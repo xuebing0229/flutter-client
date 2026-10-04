@@ -1,0 +1,70 @@
+name: Build Stable APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
+
+jobs:
+  build-stable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Set up Go for embedded Syncthing
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.2'
+          cache: true
+
+      - name: Cache embedded Syncthing binaries
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/sync/jniLibs
+          key: embedded-syncthing-v2.1.5-${{ runner.os }}-android
+
+      - name: Build embedded Syncthing core
+        env:
+          SYNCTHING_VERSION: v2.1.5
+        run: bash tool/build_syncthing_android.sh
+
+      - name: Verify Release signing secret
+        run: test -n "$RELEASE_SIGNING_BUNDLE_BASE64"
+
+      - name: Restore fixed Release signing bundle
+        run: |
+          BUNDLE="$RUNNER_TEMP/release-signing-bundle.zip"
+          printf '%s' "$RELEASE_SIGNING_BUNDLE_BASE64" | base64 --decode > "$BUNDLE"
+          unzip -q "$BUNDLE" -d android
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+
+      - name: Build signed Stable APK
+        run: |
+          flutter build apk \
+            --release \
+            --flavor stable \
+            --dart-define=APP_CHANNEL=release
+          cp build/app/outputs/flutter-apk/app-stable-release.apk app-stable.apk
+
+      - name: Upload Stable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-stable
+          path: app-stable.apk
+          if-no-files-found: error
