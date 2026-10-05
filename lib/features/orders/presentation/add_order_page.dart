@@ -92,11 +92,21 @@ class _AddOrderPageState extends State<AddOrderPage> {
     setState(() => _pickingReferenceImages = true);
 
     try {
+      final accountId = widget.accountId;
       final imported = await _referenceImageStore.pickAndImport(
-        accountId: widget.accountId,
+        accountId: accountId,
         orderId: _draftOrderId,
       );
-      if (!mounted || imported.isEmpty) return;
+      if (!mounted) {
+        if (imported.isNotEmpty) {
+          await _referenceImageStore.deleteImages(
+            accountId: accountId,
+            images: imported,
+          );
+        }
+        return;
+      }
+      if (imported.isEmpty) return;
       setState(() => _referenceImages.addAll(imported));
     } catch (error) {
       if (!mounted) return;
@@ -187,7 +197,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
         ),
         actions: [
           TextButton(
-            onPressed: _save,
+            onPressed: _pickingReferenceImages ? null : _save,
             child: const Text('保存'),
           ),
           const SizedBox(width: 6),
@@ -316,7 +326,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _save,
+              onPressed: _pickingReferenceImages ? null : _save,
               icon: const Icon(Icons.check_rounded),
               label: const Text('保存'),
             ),
