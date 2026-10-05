@@ -197,6 +197,7 @@ class AppToolMenu extends StatelessWidget {
             context,
             archiveTool,
             ArchivePage(
+              accountId: syncCoordinator.accountId,
               orderStore: orderStore,
               productStore: productStore,
               nodePresetStore: nodePresetStore,
