@@ -10,6 +10,16 @@ class ProductStore extends ChangeNotifier {
   UnmodifiableListView<FinishedProduct> get products =>
       UnmodifiableListView(_products);
 
+  void _sortDefaultOrder() {
+    _products.sort((left, right) {
+      final byOrder = right.effectiveDefaultOrder.compareTo(
+        left.effectiveDefaultOrder,
+      );
+      if (byOrder != 0) return byOrder;
+      return right.id.compareTo(left.id);
+    });
+  }
+
   bool contains(String id) {
     return _products.any((product) => product.id == id);
   }
@@ -22,11 +32,13 @@ class ProductStore extends ChangeNotifier {
     _products
       ..clear()
       ..addAll(products);
+    _sortDefaultOrder();
     notifyListeners();
   }
 
   void addProduct(FinishedProduct product) {
-    _products.insert(0, product);
+    _products.add(product);
+    _sortDefaultOrder();
     notifyListeners();
   }
 
