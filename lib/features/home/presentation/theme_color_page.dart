@@ -7,15 +7,24 @@ import '../../shared/presentation/layout_spacing.dart';
 class ThemeColorPage extends StatelessWidget {
   const ThemeColorPage({
     required this.store,
+    this.onBack,
     super.key,
   });
 
   final AppThemeStore store;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: onBack == null
+            ? null
+            : IconButton(
+                tooltip: '返回设置',
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: onBack,
+              ),
         title: const Text(
           'UI主题色',
           style: TextStyle(fontWeight: FontWeight.w700),

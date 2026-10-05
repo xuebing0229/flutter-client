@@ -42,6 +42,7 @@ class AppDrawer extends StatelessWidget {
     required this.featureStore,
     required this.accountStore,
     required this.syncCoordinator,
+    required this.onApplyWorkspaceSettings,
     required this.onBeforeSignOut,
     required this.onShowTutorial,
     super.key,
@@ -54,6 +55,8 @@ class AppDrawer extends StatelessWidget {
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
   final SyncCoordinator syncCoordinator;
+  final Future<void> Function(Map<String, dynamic> settings)
+  onApplyWorkspaceSettings;
   final Future<void> Function() onBeforeSignOut;
   final VoidCallback onShowTutorial;
 
@@ -62,9 +65,7 @@ class AppDrawer extends StatelessWidget {
     return Drawer(
       width: MediaQuery.sizeOf(context).width * 0.78,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(
-          right: Radius.circular(26),
-        ),
+        borderRadius: BorderRadius.horizontal(right: Radius.circular(26)),
       ),
       child: SafeArea(
         child: AppToolMenu(
@@ -75,6 +76,7 @@ class AppDrawer extends StatelessWidget {
           featureStore: featureStore,
           accountStore: accountStore,
           syncCoordinator: syncCoordinator,
+          onApplyWorkspaceSettings: onApplyWorkspaceSettings,
           onBeforeSignOut: onBeforeSignOut,
           onBeforeNavigate: () => Navigator.of(context).pop(),
           onShowTutorial: onShowTutorial,
@@ -93,6 +95,7 @@ class AppToolMenu extends StatelessWidget {
   static const syncTool = 'sync';
   static const accountTool = 'account';
   static const settingsTool = 'settings';
+  static const themeColorTool = 'themeColor';
 
   const AppToolMenu({
     required this.orderStore,
@@ -102,6 +105,7 @@ class AppToolMenu extends StatelessWidget {
     required this.featureStore,
     required this.accountStore,
     required this.syncCoordinator,
+    required this.onApplyWorkspaceSettings,
     required this.onBeforeSignOut,
     required this.onShowTutorial,
     this.onBeforeNavigate,
@@ -120,6 +124,8 @@ class AppToolMenu extends StatelessWidget {
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
   final SyncCoordinator syncCoordinator;
+  final Future<void> Function(Map<String, dynamic> settings)
+  onApplyWorkspaceSettings;
   final Future<void> Function() onBeforeSignOut;
   final VoidCallback onShowTutorial;
   final VoidCallback? onBeforeNavigate;
@@ -140,11 +146,7 @@ class AppToolMenu extends StatelessWidget {
     }
 
     onBeforeNavigate?.call();
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => page,
-      ),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
   }
 
   Widget _item({
@@ -261,6 +263,7 @@ class AppToolMenu extends StatelessWidget {
               featureStore: featureStore,
               accountStore: accountStore,
               syncCoordinator: syncCoordinator,
+              onApplyWorkspaceSettings: onApplyWorkspaceSettings,
             ),
           ),
         ),
@@ -294,9 +297,7 @@ class AppMenuTile extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       selected: selected,
       selectedTileColor: colors.secondaryContainer,
       selectedColor: colors.onSecondaryContainer,

@@ -71,6 +71,8 @@ class SummaryTag extends StatelessWidget {
         ),
         child: Text(
           text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: (compact
                   ? Theme.of(context).textTheme.labelSmall
                   : Theme.of(context).textTheme.labelMedium)

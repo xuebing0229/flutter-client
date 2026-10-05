@@ -4,6 +4,7 @@ import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
@@ -401,21 +402,11 @@ class _ProductPageState extends State<ProductPage> {
                       ),
                     )
                   : useCardView
-                      ? GridView.builder(
-                          padding:
-                              AppLayoutSpacing.tabScrollPaddingWithFab(
-                            left: 12,
-                            top: 0,
-                            right: 12,
-                          ),
+                      ? CollectionCardGrid(
                           itemCount: products.length,
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio: 0.70,
-                          ),
+                          mobileAspectRatio: 0.70,
+                          desktopMinHeight: 260,
+                          desktopAspectRatio: 1.15,
                           itemBuilder: (context, index) {
                             final product = products[index];
                             return ProductSummaryCard(

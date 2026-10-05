@@ -50,7 +50,12 @@ class OrderSummaryCard extends StatelessWidget {
                 Row(
                   children: [
                     if (showPlatform)
-                      SummaryTag(text: order.platform.label, compact: true),
+                      Flexible(
+                        child: SummaryTag(
+                          text: order.platform.label,
+                          compact: true,
+                        ),
+                      ),
                     const Spacer(),
                     if (hasSyncConflict) ...[
                       const Tooltip(
@@ -67,7 +72,10 @@ class OrderSummaryCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 5),
                     ],
-                    _DeadlineStatusBadge(order: order, compact: true),
+                    Flexible(
+                      flex: 2,
+                      child: _DeadlineStatusBadge(order: order, compact: true),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),

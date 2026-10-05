@@ -11,6 +11,7 @@ import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
 import '../../orders/data/node_presets.dart';
@@ -31,6 +32,7 @@ import 'feature_toggle_page.dart';
 import 'first_run_guide.dart';
 import 'reminder_background_guide.dart';
 import 'settings_page.dart';
+import 'theme_color_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -106,9 +108,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
+      captureSettings: _captureSyncSettings,
+      applySettings: _applySyncSettings,
     );
     _syncCoordinator.addListener(_onSyncCoordinatorChanged);
 
+    widget.themeStore.addListener(_onThemeSettingsChanged);
     widget.featureStore.addListener(_onFeatureSettingsChanged);
     widget.accountStore.addListener(_onAccountStoreChanged);
     _restoreLocalData();
@@ -148,8 +153,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _productCardView = savedProductCardView;
         }
         final savedOrderSortMode = backup.settings[_orderSortModeSettingKey];
-        if (savedOrderSortMode is String && savedOrderSortMode.isNotEmpty) {
-          _orderSortMode = savedOrderSortMode;
+        final restoredOrderSortMode = _normalizeOrderSortMode(
+          savedOrderSortMode,
+        );
+        if (restoredOrderSortMode != null) {
+          _orderSortMode = restoredOrderSortMode;
         }
         final savedProductSortMode =
             backup.settings[_productSortModeSettingKey];
@@ -308,6 +316,103 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _index = 0);
     _scheduleSave();
     _scheduleReminderSync();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _onThemeSettingsChanged() {
+    if (!mounted) return;
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  Map<String, dynamic> _captureSyncSettings() {
+    return <String, dynamic>{
+      'id': SyncCoordinator.settingsRecordId,
+      'themeMode': widget.themeStore.mode.name,
+      'themePaletteId': widget.themeStore.paletteId,
+      'features': widget.featureStore.toJson(),
+      _orderCardViewSettingKey: _orderCardView,
+      _productCardViewSettingKey: _productCardView,
+      _orderSortModeSettingKey: _orderSortMode,
+      _productSortModeSettingKey: _productSortMode,
+      _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
+    };
+  }
+
+  Future<void> _applySyncSettings(Map<String, dynamic> settings) async {
+    final modeName = settings['themeMode'];
+    if (modeName is String) {
+      final mode = switch (modeName) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        'system' => ThemeMode.system,
+        _ => throw const FormatException('同步主题模式无效。'),
+      };
+      await widget.themeStore.setMode(mode);
+    }
+
+    final paletteId = settings['themePaletteId'];
+    if (paletteId is String && AppThemePalettes.containsId(paletteId)) {
+      await widget.themeStore.setPaletteId(paletteId);
+    } else if (paletteId != null) {
+      throw const FormatException('同步主题色无效。');
+    }
+
+    if (settings.containsKey('features')) {
+      await widget.featureStore.applyJson(settings['features']);
+    }
+
+    var layoutChanged = false;
+    final nextOrderCardView = settings[_orderCardViewSettingKey];
+    if (nextOrderCardView is bool && nextOrderCardView != _orderCardView) {
+      _orderCardView = nextOrderCardView;
+      layoutChanged = true;
+    }
+    final nextProductCardView = settings[_productCardViewSettingKey];
+    if (nextProductCardView is bool &&
+        nextProductCardView != _productCardView) {
+      _productCardView = nextProductCardView;
+      layoutChanged = true;
+    }
+    final nextOrderSortMode = _normalizeOrderSortMode(
+      settings[_orderSortModeSettingKey],
+    );
+    if (nextOrderSortMode != null && nextOrderSortMode != _orderSortMode) {
+      _orderSortMode = nextOrderSortMode;
+      layoutChanged = true;
+    }
+    final nextProductSortMode = settings[_productSortModeSettingKey];
+    if (nextProductSortMode is String &&
+        const <String>{
+          'defaultOrder',
+          'income',
+          'soldCount',
+        }.contains(nextProductSortMode) &&
+        nextProductSortMode != _productSortMode) {
+      _productSortMode = nextProductSortMode;
+      layoutChanged = true;
+    }
+    final nextNavigationOpen = settings[_desktopNavigationOpenSettingKey];
+    if (nextNavigationOpen is bool &&
+        nextNavigationOpen != _desktopNavigationOpen) {
+      _desktopNavigationOpen = nextNavigationOpen;
+      layoutChanged = true;
+    }
+
+    if (layoutChanged && mounted) {
+      setState(() {});
+      _scheduleSave();
+    }
+  }
+
+  String? _normalizeOrderSortMode(Object? value) {
+    if (value is! String) return null;
+    return switch (value) {
+      'defaultOrder' => 'defaultOrder',
+      'income' => 'income',
+      'deadline' || 'remainingTime' => 'deadline',
+      _ => null,
+    };
   }
 
   void _scheduleSave() {
@@ -417,11 +522,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       accountSyncState: _accountSyncSnapshot,
       settings: <String, dynamic>{
         'syncBaselineRecords': _syncCoordinator.syncBaselineSettings,
-        _orderCardViewSettingKey: _orderCardView,
-        _productCardViewSettingKey: _productCardView,
-        _orderSortModeSettingKey: _orderSortMode,
-        _productSortModeSettingKey: _productSortMode,
-        _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
+        ..._captureSyncSettings(),
       },
     );
   }
@@ -450,6 +551,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
+    widget.themeStore.removeListener(_onThemeSettingsChanged);
     widget.featureStore.removeListener(_onFeatureSettingsChanged);
     widget.accountStore.removeListener(_onAccountStoreChanged);
     _syncCoordinator.removeListener(_onSyncCoordinatorChanged);
@@ -513,30 +615,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_orderCardView == value) return;
     setState(() => _orderCardView = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductCardView(bool value) {
     if (_productCardView == value) return;
     setState(() => _productCardView = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setOrderSortMode(String value) {
     if (_orderSortMode == value) return;
     setState(() => _orderSortMode = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductSortMode(String value) {
     if (_productSortMode == value) return;
     setState(() => _productSortMode = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setDesktopNavigationOpen(bool value) {
     if (_desktopNavigationOpen == value) return;
     setState(() => _desktopNavigationOpen = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _selectDesktopTab(int value) {
@@ -577,6 +684,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         featureStore: widget.featureStore,
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
+        onApplyWorkspaceSettings: _applySyncSettings,
+        onOpenThemeColor: () =>
+            setState(() => _desktopToolSelection = AppToolMenu.themeColorTool),
+      ),
+      AppToolMenu.themeColorTool => ThemeColorPage(
+        store: widget.themeStore,
+        onBack: () =>
+            setState(() => _desktopToolSelection = AppToolMenu.settingsTool),
       ),
       _ => const SizedBox.shrink(),
     };
@@ -687,6 +802,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.accountTool => '账号与设备',
       AppToolMenu.settingsTool => '设置',
+      AppToolMenu.themeColorTool => 'UI主题色',
       _ => current.label,
     };
     final width = MediaQuery.sizeOf(context).width;
@@ -700,12 +816,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ],
     );
 
-    final desktopContent = _desktopToolSelection == null
-        ? tabBody
-        : KeyedSubtree(
-            key: ValueKey('desktop-tool-$_desktopToolSelection'),
-            child: _buildDesktopToolPage(_desktopToolSelection!),
-          );
+    final desktopContent = Navigator(
+      key: ValueKey('desktop-content-$_desktopToolSelection-$_index'),
+      onGenerateRoute: (_) => MaterialPageRoute<void>(
+        builder: (_) => _desktopToolSelection == null
+            ? tabBody
+            : KeyedSubtree(
+                key: ValueKey('desktop-tool-$_desktopToolSelection'),
+                child: _buildDesktopToolPage(_desktopToolSelection!),
+              ),
+      ),
+    );
 
     return Scaffold(
       drawer: _ready && _localDataHealthy
@@ -717,6 +838,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               featureStore: widget.featureStore,
               accountStore: widget.accountStore,
               syncCoordinator: _syncCoordinator,
+              onApplyWorkspaceSettings: _applySyncSettings,
               onBeforeSignOut: _prepareForSignOut,
               onShowTutorial: () => unawaited(_showTutorial()),
             )
@@ -794,13 +916,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     featureStore: widget.featureStore,
                                     accountStore: widget.accountStore,
                                     syncCoordinator: _syncCoordinator,
+                                    onApplyWorkspaceSettings:
+                                        _applySyncSettings,
                                     onBeforeSignOut: _prepareForSignOut,
                                     onShowTutorial: () =>
                                         unawaited(_showTutorial()),
                                     onSelectTool: (tool) => setState(
                                       () => _desktopToolSelection = tool,
                                     ),
-                                    selectedTool: _desktopToolSelection,
+                                    selectedTool:
+                                        _desktopToolSelection ==
+                                            AppToolMenu.themeColorTool
+                                        ? AppToolMenu.settingsTool
+                                        : _desktopToolSelection,
                                     showTrailing: false,
                                     padding: const EdgeInsets.fromLTRB(
                                       12,

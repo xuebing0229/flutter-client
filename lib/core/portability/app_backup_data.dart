@@ -36,7 +36,7 @@ class AppBackupData {
   /// history for an empty workspace.
   final List<Map<String, dynamic>>? syncRecords;
 
-  /// Reserved for app-level settings as the project grows.
+  /// App-level and layout settings that travel with a full workspace backup.
   final Map<String, dynamic> settings;
 
   factory AppBackupData.capture({
