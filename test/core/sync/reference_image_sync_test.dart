@@ -58,6 +58,33 @@ void main() {
     );
   });
 
+  test('legacy sync record without referenceImages can add its first image', () {
+    final engine = SyncMergeEngine();
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-1',
+      values: const <String, dynamic>{},
+      deviceId: 'device-a',
+    );
+
+    final updated = engine.applyLocalSnapshot(
+      record: base,
+      previousValues: <String, dynamic>{
+        'referenceImages': <dynamic>[],
+      },
+      nextValues: <String, dynamic>{
+        'referenceImages': <dynamic>[image('first')],
+      },
+      deviceId: 'device-a',
+    );
+
+    final materialized = engine.materialize(updated)!;
+    final images = materialized['referenceImages'] as List<dynamic>;
+
+    expect(images, hasLength(1));
+    expect((images.single as Map)['id'], 'first');
+  });
+
   test('reference image removal and concurrent addition both survive merge', () {
     final engine = SyncMergeEngine();
     final baseImages = <dynamic>[image('a')];
