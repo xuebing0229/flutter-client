@@ -142,6 +142,14 @@ class SyncMergeEngine {
       if (field == 'referenceImages' &&
           previous is List &&
           next is List) {
+        if (!fields.containsKey(field)) {
+          fields[field] = SyncFieldValue(
+            value: List<dynamic>.from(previous),
+            clock: SyncClock.empty().tick(deviceId),
+            updatedBy: deviceId,
+          );
+        }
+
         final metadata = _referenceImageDelta(previous, next);
         if (metadata.isNotEmpty) {
           final operation = _operation(
@@ -394,9 +402,18 @@ class SyncMergeEngine {
     }
 
     final rawReferenceImages = values['referenceImages'];
-    if (rawReferenceImages is List) {
+    final imageOperations = record.operations.values
+        .where((operation) => operation.kind == 'reference-image-delta')
+        .toList()
+      ..sort((a, b) {
+        final byTime = a.occurredAt.compareTo(b.occurredAt);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
+    if (rawReferenceImages is List || imageOperations.isNotEmpty) {
       final images = <String, Map<String, dynamic>>{};
-      for (final item in rawReferenceImages) {
+      for (final item in rawReferenceImages is List
+          ? rawReferenceImages
+          : const <dynamic>[]) {
         if (item is! Map) continue;
         final mapped = item.map(
           (key, value) => MapEntry(key.toString(), value),
@@ -406,14 +423,6 @@ class SyncMergeEngine {
           images[id] = mapped;
         }
       }
-
-      final imageOperations = record.operations.values
-          .where((operation) => operation.kind == 'reference-image-delta')
-          .toList()
-        ..sort((a, b) {
-          final byTime = a.occurredAt.compareTo(b.occurredAt);
-          return byTime != 0 ? byTime : a.id.compareTo(b.id);
-        });
 
       for (final operation in imageOperations) {
         final added = operation.metadata['added'];
