@@ -15,6 +15,7 @@ import '../../products/state/product_store.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({
+    required this.accountId,
     required this.store,
     required this.productStore,
     required this.nodePresetStore,
@@ -22,6 +23,7 @@ class SchedulePage extends StatefulWidget {
     super.key,
   });
 
+  final String accountId;
   final OrderStore store;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
@@ -125,6 +127,7 @@ class _SchedulePageState extends State<SchedulePage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => OrderDetailPage(
+          accountId: widget.accountId,
           store: widget.store,
           orderId: order.id,
           nodePresetStore: widget.nodePresetStore,
