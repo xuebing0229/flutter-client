@@ -237,6 +237,16 @@ class SyncRecordStore {
               Directory('${staging.path}/revocation-acks'),
             );
           }
+          // Reference-image binaries live in the same Syncthing folder but
+          // are intentionally not embedded into JSON sync history. Preserve
+          // them when replacing portable entity records.
+          final previousAssets = Directory('${previous.path}/assets');
+          if (await previousAssets.exists()) {
+            await _copyDirectory(
+              previousAssets,
+              Directory('${staging.path}/assets'),
+            );
+          }
         }
 
         await staging.rename(target.path);
