@@ -76,6 +76,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _productSortMode = 'defaultOrder';
   bool _desktopNavigationOpen = true;
   String? _desktopToolSelection;
+  GlobalKey<NavigatorState> _desktopContentNavigatorKey =
+      GlobalKey<NavigatorState>();
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
   bool _saving = false;
@@ -587,28 +589,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _openAddOrder() {
     FocusManager.instance.primaryFocus?.unfocus();
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AddOrderPage(
-          accountId: widget.accountId,
-          store: _orderStore,
-          nodePresetStore: _nodePresetStore,
-          featureStore: widget.featureStore,
-        ),
+    final route = MaterialPageRoute<void>(
+      builder: (_) => AddOrderPage(
+        accountId: widget.accountId,
+        store: _orderStore,
+        nodePresetStore: _nodePresetStore,
+        featureStore: widget.featureStore,
       ),
     );
+    final desktopNavigator = MediaQuery.sizeOf(context).width >= 900
+        ? _desktopContentNavigatorKey.currentState
+        : null;
+    (desktopNavigator ?? Navigator.of(context)).push(route);
   }
 
   void _openAddProduct() {
     FocusManager.instance.primaryFocus?.unfocus();
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AddProductPage(
-          store: _productStore,
-          featureStore: widget.featureStore,
-        ),
+    final route = MaterialPageRoute<void>(
+      builder: (_) => AddProductPage(
+        store: _productStore,
+        featureStore: widget.featureStore,
       ),
     );
+    final desktopNavigator = MediaQuery.sizeOf(context).width >= 900
+        ? _desktopContentNavigatorKey.currentState
+        : null;
+    (desktopNavigator ?? Navigator.of(context)).push(route);
   }
 
   void _setOrderCardView(bool value) {
@@ -651,6 +657,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _index = value;
       _desktopToolSelection = null;
+      _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+    });
+  }
+
+  void _selectDesktopTool(String? tool) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _desktopToolSelection = tool;
+      _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
     });
   }
 
@@ -686,12 +701,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         syncCoordinator: _syncCoordinator,
         onApplyWorkspaceSettings: _applySyncSettings,
         onOpenThemeColor: () =>
-            setState(() => _desktopToolSelection = AppToolMenu.themeColorTool),
+            _selectDesktopTool(AppToolMenu.themeColorTool),
       ),
       AppToolMenu.themeColorTool => ThemeColorPage(
         store: widget.themeStore,
-        onBack: () =>
-            setState(() => _desktopToolSelection = AppToolMenu.settingsTool),
+        onBack: () => _selectDesktopTool(AppToolMenu.settingsTool),
       ),
       _ => const SizedBox.shrink(),
     };
@@ -817,7 +831,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
 
     final desktopContent = Navigator(
-      key: ValueKey('desktop-content-$_desktopToolSelection-$_index'),
+      key: _desktopContentNavigatorKey,
       onGenerateRoute: (_) => MaterialPageRoute<void>(
         builder: (_) => _desktopToolSelection == null
             ? tabBody
@@ -921,9 +935,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     onBeforeSignOut: _prepareForSignOut,
                                     onShowTutorial: () =>
                                         unawaited(_showTutorial()),
-                                    onSelectTool: (tool) => setState(
-                                      () => _desktopToolSelection = tool,
-                                    ),
+                                    onSelectTool: _selectDesktopTool,
                                     selectedTool:
                                         _desktopToolSelection ==
                                             AppToolMenu.themeColorTool

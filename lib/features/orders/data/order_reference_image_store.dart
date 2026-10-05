@@ -8,6 +8,17 @@ import '../../../core/sync/sync_record_store.dart';
 import '../domain/queue_order.dart';
 
 class OrderReferenceImageStore {
+  static const Set<String> _supportedImageExtensions = <String>{
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.webp',
+    '.gif',
+    '.bmp',
+    '.heic',
+    '.heif',
+  };
+
   OrderReferenceImageStore({
     SyncRecordStore? syncRecordStore,
     DataPortabilityFileBridge fileBridge =
@@ -77,9 +88,13 @@ class OrderReferenceImageStore {
     final id =
         'ref-${DateTime.now().microsecondsSinceEpoch}-'
         '${_random.nextInt(0x7fffffff).toRadixString(36)}';
-    final extension = _safeExtension(picked.name) ??
-        _safeExtension(source.path) ??
-        '.img';
+    final detectedExtension =
+        _safeExtension(picked.name) ?? _safeExtension(source.path);
+    if (detectedExtension != null &&
+        !_supportedImageExtensions.contains(detectedExtension)) {
+      throw const FormatException('参考图只支持图片文件。');
+    }
+    final extension = detectedExtension ?? '.img';
     final storedName = '$id$extension';
     final destination = File(
       '${directory.path}${Platform.pathSeparator}$storedName',
