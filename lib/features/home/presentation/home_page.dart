@@ -805,7 +805,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     onSelectTool: (tool) => setState(
                                       () => _desktopToolSelection = tool,
                                     ),
-                                    selectedTool: _desktopToolSelection,
+                                    selectedTool:
+                                        _desktopToolSelection ==
+                                                AppToolMenu.themeColorTool
+                                            ? AppToolMenu.settingsTool
+                                            : _desktopToolSelection,
                                     showTrailing: false,
                                     padding: const EdgeInsets.fromLTRB(
                                       12,
