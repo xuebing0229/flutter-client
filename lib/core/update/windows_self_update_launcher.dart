@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 class WindowsSelfUpdateLauncher {
@@ -18,28 +19,32 @@ class WindowsSelfUpdateLauncher {
     final script = File(
       '${workDirectory.path}${Platform.pathSeparator}apply-windows-update.ps1',
     );
-    await script.writeAsString(_powerShellScript, flush: true);
+    // Windows PowerShell 5.1 treats a BOM-less script as the current ANSI
+    // code page.  The updater contains localized messages, so write an
+    // explicit UTF-8 BOM; PowerShell 5.1 and 7 both select UTF-8 reliably.
+    await script.writeAsBytes(<int>[
+      0xEF,
+      0xBB,
+      0xBF,
+      ...utf8.encode(_powerShellScript),
+    ], flush: true);
 
-    await Process.start(
-      'powershell.exe',
-      <String>[
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        script.path,
-        '-ParentPid',
-        pid.toString(),
-        '-ArchivePath',
-        archive.path,
-        '-InstallDir',
-        installDirectory.path,
-        '-ExeName',
-        executableName,
-      ],
-      mode: ProcessStartMode.detached,
-    );
+    await Process.start('powershell.exe', <String>[
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      script.path,
+      '-ParentPid',
+      pid.toString(),
+      '-ArchivePath',
+      archive.path,
+      '-InstallDir',
+      installDirectory.path,
+      '-ExeName',
+      executableName,
+    ], mode: ProcessStartMode.detached);
 
     await Future<void>.delayed(const Duration(milliseconds: 350));
     exit(0);
