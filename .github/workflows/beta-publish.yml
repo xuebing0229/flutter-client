@@ -93,6 +93,7 @@ jobs:
         with:
           name: beta-android-package
           path: app-beta.apk
+          retention-days: 1
           if-no-files-found: error
 
   windows:
@@ -166,6 +167,7 @@ jobs:
           path: |
             app-windows-beta.zip
             app-windows-beta-setup.exe
+          retention-days: 1
           if-no-files-found: error
 
   publish:
