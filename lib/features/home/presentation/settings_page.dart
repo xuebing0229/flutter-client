@@ -66,6 +66,9 @@ class _SettingsPageState extends State<SettingsPage>
       const OrderDeadlineReminderService();
 
   bool _checking = false;
+  bool _downloadingUpdate = false;
+  int _downloadReceivedBytes = 0;
+  int? _downloadTotalBytes;
   bool _reminderBusy = false;
   Map<String, dynamic> _reminderDiagnostics = const <String, dynamic>{};
   bool _backupBusy = false;
@@ -600,13 +603,32 @@ class _SettingsPageState extends State<SettingsPage>
 
     setState(() {
       _checking = true;
+      _downloadingUpdate = Platform.isWindows;
+      _downloadReceivedBytes = 0;
+      _downloadTotalBytes = null;
       if (Platform.isWindows) {
-        _status = '正在下载新版，完成后程序会自动关闭并重新启动…';
+        _status = '正在下载新版…';
       }
     });
 
     try {
-      final status = await updater.downloadAndInstall(latest);
+      final status = await updater.downloadAndInstall(
+        latest,
+        onProgress: Platform.isWindows
+            ? (receivedBytes, totalBytes) {
+                if (!mounted) return;
+                setState(() {
+                  _downloadReceivedBytes = receivedBytes;
+                  _downloadTotalBytes = totalBytes;
+                  if (totalBytes != null &&
+                      totalBytes > 0 &&
+                      receivedBytes >= totalBytes) {
+                    _status = '下载完成，正在准备自动更新…';
+                  }
+                });
+              }
+            : null,
+      );
       if (!mounted) return;
 
       setState(() {
@@ -621,9 +643,24 @@ class _SettingsPageState extends State<SettingsPage>
       setState(() => _status = '更新失败：$error');
     } finally {
       if (mounted) {
-        setState(() => _checking = false);
+        setState(() {
+          _checking = false;
+          _downloadingUpdate = false;
+        });
       }
     }
+  }
+
+  String _formatDownloadBytes(int bytes) {
+    const mb = 1024 * 1024;
+    if (bytes >= mb) {
+      return '${(bytes / mb).toStringAsFixed(1)} MB';
+    }
+    const kb = 1024;
+    if (bytes >= kb) {
+      return '${(bytes / kb).toStringAsFixed(0)} KB';
+    }
+    return '$bytes B';
   }
 
   @override
@@ -779,6 +816,29 @@ class _SettingsPageState extends State<SettingsPage>
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  if (_downloadingUpdate && Platform.isWindows) ...[
+                    const SizedBox(height: 12),
+                    LinearProgressIndicator(
+                      value: _downloadTotalBytes != null &&
+                              _downloadTotalBytes! > 0
+                          ? (_downloadReceivedBytes / _downloadTotalBytes!)
+                              .clamp(0.0, 1.0)
+                          : null,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _downloadTotalBytes != null && _downloadTotalBytes! > 0
+                          ? '${((_downloadReceivedBytes / _downloadTotalBytes!) * 100).clamp(0, 100).toStringAsFixed(0)}% · '
+                              '${_formatDownloadBytes(_downloadReceivedBytes)} / '
+                              '${_formatDownloadBytes(_downloadTotalBytes!)}'
+                          : '${_formatDownloadBytes(_downloadReceivedBytes)} 已下载',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
