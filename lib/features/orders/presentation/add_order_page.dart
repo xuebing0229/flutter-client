@@ -1,20 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../data/node_presets.dart';
+import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
 import '../state/order_store.dart';
+import 'order_reference_image_widgets.dart';
 
 class AddOrderPage extends StatefulWidget {
   const AddOrderPage({
+    required this.accountId,
     required this.store,
     required this.nodePresetStore,
     required this.featureStore,
     super.key,
   });
 
+  final String accountId;
   final OrderStore store;
   final NodePresetStore nodePresetStore;
   final AppFeatureStore featureStore;
@@ -24,6 +30,9 @@ class AddOrderPage extends StatefulWidget {
 }
 
 class _AddOrderPageState extends State<AddOrderPage> {
+  final _referenceImageStore = OrderReferenceImageStore();
+  final _referenceImages = <OrderReferenceImage>[];
+
   final _titleController = TextEditingController();
   final _clientController = TextEditingController();
   final _priceController = TextEditingController();
@@ -38,16 +47,28 @@ class _AddOrderPageState extends State<AddOrderPage> {
   String _presetId = defaultNodePreset.id;
   late String _currentNodeId;
   DateTime? _deadline;
+  late final String _draftOrderId;
+  bool _saved = false;
+  bool _pickingReferenceImages = false;
 
   @override
   void initState() {
     super.initState();
+    _draftOrderId = 'order-${DateTime.now().microsecondsSinceEpoch}';
     final preset = widget.nodePresetStore.byId(_presetId);
     _currentNodeId = preset.nodes.first.id;
   }
 
   @override
   void dispose() {
+    if (!_saved && _referenceImages.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: List<OrderReferenceImage>.from(_referenceImages),
+        ),
+      );
+    }
     _titleController.dispose();
     _clientController.dispose();
     _priceController.dispose();
@@ -64,6 +85,44 @@ class _AddOrderPageState extends State<AddOrderPage> {
       _onlineController.text = formatPercentValue(clamped);
       _offlineController.text = formatPercentValue(100 - clamped);
     });
+  }
+
+  Future<void> _addReferenceImages() async {
+    if (_pickingReferenceImages) return;
+    setState(() => _pickingReferenceImages = true);
+
+    try {
+      final imported = await _referenceImageStore.pickAndImport(
+        accountId: widget.accountId,
+        orderId: _draftOrderId,
+      );
+      if (!mounted || imported.isEmpty) return;
+      setState(() => _referenceImages.addAll(imported));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('添加参考图失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _pickingReferenceImages = false);
+      }
+    }
+  }
+
+  void _removeReferenceImage(OrderReferenceImage image) {
+    setState(() {
+      _referenceImages.removeWhere((item) => item.id == image.id);
+    });
+    unawaited(
+      _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: <OrderReferenceImage>[image],
+      ),
+    );
   }
 
   void _save() {
@@ -91,7 +150,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
         : preset.nodes.first.id;
 
     final order = QueueOrder(
-      id: 'order-${DateTime.now().microsecondsSinceEpoch}',
+      id: _draftOrderId,
       platform: _platform,
       title: title,
       clientName: client,
@@ -106,8 +165,12 @@ class _AddOrderPageState extends State<AddOrderPage> {
       supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
       deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
       description: _descriptionController.text.trim(),
+      referenceImages: List<OrderReferenceImage>.unmodifiable(
+        _referenceImages,
+      ),
     );
 
+    _saved = true;
     widget.store.addOrder(order);
     Navigator.of(context).pop();
   }
@@ -227,6 +290,17 @@ class _AddOrderPageState extends State<AddOrderPage> {
             onChanged: (nodeId) {
               setState(() => _currentNodeId = nodeId);
             },
+          ),
+          const SizedBox(height: 14),
+          OrderReferenceImagesSection(
+            accountId: widget.accountId,
+            images: _referenceImages,
+            store: _referenceImageStore,
+            editable: true,
+            onAdd: _pickingReferenceImages
+                ? null
+                : () => unawaited(_addReferenceImages()),
+            onRemove: _removeReferenceImage,
           ),
           const SizedBox(height: 14),
           const FormFieldLabel('描述'),
