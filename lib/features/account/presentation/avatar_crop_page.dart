@@ -8,11 +8,11 @@ import 'package:image/image.dart' as img;
 
 class AvatarCropPage extends StatefulWidget {
   const AvatarCropPage({
-    required this.imagePath,
+    required this.pickImage,
     super.key,
   });
 
-  final String imagePath;
+  final Future<String?> Function() pickImage;
 
   @override
   State<AvatarCropPage> createState() => _AvatarCropPageState();
@@ -29,12 +29,32 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
   @override
   void initState() {
     super.initState();
-    _prepareImage();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _selectAndPrepareImage();
+    });
   }
 
-  Future<void> _prepareImage() async {
+  Future<void> _selectAndPrepareImage() async {
     try {
-      final source = await File(widget.imagePath).readAsBytes();
+      final path = await widget.pickImage();
+      if (!mounted) return;
+      if (path == null) {
+        Navigator.of(context).pop();
+        return;
+      }
+      await _prepareImage(path);
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      setState(() => _loadError = error.message);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadError = '图片选择失败：$error');
+    }
+  }
+
+  Future<void> _prepareImage(String path) async {
+    try {
+      final source = await File(path).readAsBytes();
       final decoded = img.decodeImage(source);
       if (decoded == null) {
         throw const FormatException('无法识别这张图片。');
@@ -58,6 +78,15 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _loadError = '图片加载失败：$error');
+    } finally {
+      if (Platform.isAndroid) {
+        try {
+          final temp = File(path);
+          if (await temp.exists()) await temp.delete();
+        } catch (_) {
+          // Selected Android images are temporary cache files.
+        }
+      }
     }
   }
 
@@ -114,7 +143,7 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
                       const CircularProgressIndicator(),
                       const SizedBox(height: 14),
                       Text(
-                        '正在准备裁剪…',
+                        '正在载入图片并准备裁剪…',
                         style: TextStyle(color: colors.onSurfaceVariant),
                       ),
                     ],
