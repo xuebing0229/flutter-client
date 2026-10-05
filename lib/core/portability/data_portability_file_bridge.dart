@@ -208,7 +208,7 @@ class DataPortabilityFileBridge {
               suggestedName: fileName,
               acceptedTypeGroups: <XTypeGroup>[
                 XTypeGroup(
-                  label: '图片',
+                  label: mimeType.startsWith('image/') ? '图片' : '文件',
                   extensions: <String>[extension],
                 ),
               ],
