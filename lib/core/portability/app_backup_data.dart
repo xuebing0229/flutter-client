@@ -244,9 +244,7 @@ Map<String, dynamic> _normalizeLegacyOrder(Map<String, dynamic> source) {
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
-  json['defaultOrder'] ??= defaultOrderFromId(
-    _asString(json['id'], 'order.id'),
-  );
+  json['defaultOrder'] ??= 0;
   json['referenceImages'] ??= <dynamic>[];
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
@@ -272,9 +270,7 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
-  json['defaultOrder'] ??= defaultOrderFromId(
-    _asString(json['id'], 'product.id'),
-  );
+  json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
   json['isArchived'] ??= false;
@@ -321,7 +317,7 @@ Map<String, dynamic> _orderToJson(QueueOrder order) {
     'deductionAmount': order.deductionAmount,
     'deductionFeeEnabled': order.deductionFeeEnabled,
     'description': order.description,
-    'defaultOrder': order.effectiveDefaultOrder,
+    if (order.defaultOrder != 0) 'defaultOrder': order.defaultOrder,
     'referenceImages': [
       for (final image in order.referenceImages)
         <String, dynamic>{
@@ -399,7 +395,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
     ),
     description: _asText(json['description'], 'order.description'),
     defaultOrder: json['defaultOrder'] == null
-        ? defaultOrderFromId(id)
+        ? 0
         : _asInt(json['defaultOrder'], 'order.defaultOrder'),
     referenceImages: json['referenceImages'] == null
         ? const <OrderReferenceImage>[]
@@ -467,7 +463,7 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
     'deductionAmount': product.deductionAmount,
     'deductionFeeEnabled': product.deductionFeeEnabled,
     'description': product.description,
-    'defaultOrder': product.effectiveDefaultOrder,
+    if (product.defaultOrder != 0) 'defaultOrder': product.defaultOrder,
     'soldCount': product.soldCount,
     'saleRecords': [
       for (final soldAt in product.saleRecords)
@@ -521,7 +517,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
     ),
     description: _asText(json['description'], 'product.description'),
     defaultOrder: json['defaultOrder'] == null
-        ? defaultOrderFromId(id)
+        ? 0
         : _asInt(json['defaultOrder'], 'product.defaultOrder'),
     soldCount: _asInt(json['soldCount'], 'product.soldCount'),
     saleRecords: [
