@@ -165,6 +165,7 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
   Future<String> downloadAndInstall({
     required Uri uri,
     required String fileName,
+    UpdateDownloadProgressCallback? onProgress,
   }) async {
     if (uri.scheme != 'https' || uri.host.toLowerCase() != 'github.com') {
       throw const FormatException('Windows Beta 只能从 GitHub Releases 下载。');
@@ -207,8 +208,28 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       }
 
       final sink = target.openWrite();
+      final totalBytes =
+          response.contentLength > 0 ? response.contentLength : null;
+      var receivedBytes = 0;
+      var lastReportedAt = DateTime.fromMillisecondsSinceEpoch(0);
       try {
-        await response.pipe(sink);
+        await for (final chunk in response) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+
+          final now = DateTime.now();
+          final shouldReport =
+              totalBytes != null && receivedBytes >= totalBytes ||
+              now.difference(lastReportedAt) >=
+                  const Duration(milliseconds: 120);
+          if (shouldReport) {
+            lastReportedAt = now;
+            onProgress?.call(receivedBytes, totalBytes);
+          }
+        }
+        await sink.flush();
+        await sink.close();
+        onProgress?.call(receivedBytes, totalBytes);
       } catch (_) {
         await sink.close();
         if (await target.exists()) {
