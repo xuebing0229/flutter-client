@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 import 'beta_update_installer.dart';
+import 'windows_self_update_launcher.dart';
 
 class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
   const WindowsBetaUpdateInstaller();
@@ -219,12 +220,6 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       client.close(force: true);
     }
 
-    await Process.start(
-      'explorer.exe',
-      <String>['/select,', target.path],
-      mode: ProcessStartMode.detached,
-    );
-
-    return 'downloaded:${target.path}';
+    return const WindowsSelfUpdateLauncher().launch(archive: target);
   }
 }
