@@ -161,13 +161,13 @@ class SyncCoordinator extends ChangeNotifier {
   Timer? _pollTimer;
   Future<void> _tail = Future<void>.value();
 
-  Map<String, Map<String, dynamic>> _lastOrders =
-      <String, Map<String, dynamic>>{};
-  Map<String, Map<String, dynamic>> _lastProducts =
-      <String, Map<String, dynamic>>{};
-  Map<String, Map<String, dynamic>> _lastPresets =
-      <String, Map<String, dynamic>>{};
-  Map<String, dynamic> _lastSettings = <String, dynamic>{};
+  // Every workspace entity, including UI settings, goes through the same
+  // capture -> baseline -> merge -> apply pipeline.  Keep one baseline map so
+  // a new entity cannot accidentally grow a second, special-case sync path.
+  Map<SyncEntityKind, Map<String, Map<String, dynamic>>> _lastEntityValues = {
+    for (final kind in SyncEntityKind.values)
+      kind: <String, Map<String, dynamic>>{},
+  };
   List<SyncConflictView> _conflicts = const <SyncConflictView>[];
   EmbeddedSyncthingStatus _transportStatus = const EmbeddedSyncthingStatus(
     available: false,
@@ -368,10 +368,7 @@ class SyncCoordinator extends ChangeNotifier {
         applyWorkspace: applyWorkspace,
       );
 
-      _lastOrders = _captureOrders();
-      _lastProducts = _captureProducts();
-      _lastPresets = _capturePresets();
-      _lastSettings = captureSettings();
+      _lastEntityValues = _captureEntities();
 
       await _reconcileFromSyncDirectory(seedMissing: false);
       if (_transportPrepared) {
@@ -422,17 +419,14 @@ class SyncCoordinator extends ChangeNotifier {
     await _loadSyncPauseState();
 
     if (_hasRestoredSyncBaseline) {
-      _lastOrders = _baselineValues(SyncEntityKind.order);
-      _lastProducts = _baselineValues(SyncEntityKind.product);
-      _lastPresets = _baselineValues(SyncEntityKind.nodePreset);
-      _lastSettings =
-          _baselineValues(SyncEntityKind.settings)[settingsRecordId] ??
-          captureSettings();
+      _lastEntityValues = <SyncEntityKind, Map<String, Map<String, dynamic>>>{
+        for (final kind in SyncEntityKind.values)
+          kind: _baselineValues(kind),
+      };
+      final settings = _lastEntityValues[SyncEntityKind.settings]!;
+      settings.putIfAbsent(settingsRecordId, captureSettings);
     } else {
-      _lastOrders = _captureOrders();
-      _lastProducts = _captureProducts();
-      _lastPresets = _capturePresets();
-      _lastSettings = captureSettings();
+      _lastEntityValues = _captureEntities();
     }
 
     await _enqueue(() async {
@@ -902,41 +896,18 @@ class SyncCoordinator extends ChangeNotifier {
       return;
     }
 
-    final currentOrders = _captureOrders();
-    final currentProducts = _captureProducts();
-    final currentPresets = _capturePresets();
-    final currentSettings = captureSettings();
+    final currentEntities = _captureEntities();
 
     var wrote = false;
-    wrote |= await _flushKind(
-      kind: SyncEntityKind.order,
-      previous: _lastOrders,
-      current: currentOrders,
-    );
-    wrote |= await _flushKind(
-      kind: SyncEntityKind.product,
-      previous: _lastProducts,
-      current: currentProducts,
-    );
-    wrote |= await _flushKind(
-      kind: SyncEntityKind.nodePreset,
-      previous: _lastPresets,
-      current: currentPresets,
-    );
-    wrote |= await _flushKind(
-      kind: SyncEntityKind.settings,
-      previous: <String, Map<String, dynamic>>{
-        settingsRecordId: _lastSettings,
-      },
-      current: <String, Map<String, dynamic>>{
-        settingsRecordId: currentSettings,
-      },
-    );
+    for (final kind in SyncEntityKind.values) {
+      wrote |= await _flushKind(
+        kind: kind,
+        previous: _lastEntityValues[kind]!,
+        current: currentEntities[kind]!,
+      );
+    }
 
-    _lastOrders = currentOrders;
-    _lastProducts = currentProducts;
-    _lastPresets = currentPresets;
-    _lastSettings = currentSettings;
+    _lastEntityValues = currentEntities;
 
     if (wrote) {
       _lastSuccessfulSyncAt = DateTime.now();
@@ -1040,91 +1011,42 @@ class SyncCoordinator extends ChangeNotifier {
       return;
     }
 
-    final orderRecords = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.order,
-    );
-    final productRecords = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.product,
-    );
-    final presetRecords = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.nodePreset,
-    );
-    final settingsRecords = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.settings,
-    );
-
-    await _mergePersistedBaseline(SyncEntityKind.order, orderRecords);
-    await _mergePersistedBaseline(SyncEntityKind.product, productRecords);
-    await _mergePersistedBaseline(SyncEntityKind.nodePreset, presetRecords);
-    await _mergePersistedBaseline(SyncEntityKind.settings, settingsRecords);
+    final recordsByKind = <SyncEntityKind, Map<String, SyncRecord>>{};
+    for (final kind in SyncEntityKind.values) {
+      final records = await _recordStore.readAllMerged(
+        accountId: accountId,
+        kind: kind,
+      );
+      await _mergePersistedBaseline(kind, records);
+      recordsByKind[kind] = records;
+    }
 
     if (seedMissing) {
-      await _seedMissing(
-        kind: SyncEntityKind.order,
-        local: _captureOrders(),
-        records: orderRecords,
-      );
-      await _seedMissing(
-        kind: SyncEntityKind.product,
-        local: _captureProducts(),
-        records: productRecords,
-      );
-      await _seedMissing(
-        kind: SyncEntityKind.nodePreset,
-        local: _capturePresets(),
-        records: presetRecords,
-      );
-      await _seedMissing(
-        kind: SyncEntityKind.settings,
-        local: <String, Map<String, dynamic>>{
-          settingsRecordId: captureSettings(),
-        },
-        records: settingsRecords,
-      );
+      final localEntities = _captureEntities();
+      for (final kind in SyncEntityKind.values) {
+        await _seedMissing(
+          kind: kind,
+          local: localEntities[kind]!,
+          records: recordsByKind[kind]!,
+        );
+      }
     }
 
     _applyingRemote = true;
     try {
-      _applyOrderRecords(orderRecords);
-      _applyProductRecords(productRecords);
-      _applyPresetRecords(presetRecords);
-      final settingsRecord = settingsRecords[settingsRecordId];
-      if (settingsRecord != null) {
-        final settings = _mergeEngine.materializeKeepingLocalConflicts(
-          settingsRecord,
-          captureSettings(),
-        );
-        if (settings != null && !syncJsonEquals(settings, captureSettings())) {
-          try {
-            await applySettings(settings);
-          } catch (error) {
-            _lastError = '应用远端界面设置失败：$error';
-          }
-        }
+      for (final kind in SyncEntityKind.values) {
+        await _applyEntityRecords(kind, recordsByKind[kind]!);
       }
     } finally {
       _applyingRemote = false;
     }
 
-    _lastOrders = _captureOrders();
-    _lastProducts = _captureProducts();
-    _lastPresets = _capturePresets();
-    _lastSettings = captureSettings();
-    _lastFlushedRecords[SyncEntityKind.order] = orderRecords;
-    _lastFlushedRecords[SyncEntityKind.product] = productRecords;
-    _lastFlushedRecords[SyncEntityKind.nodePreset] = presetRecords;
-    _lastFlushedRecords[SyncEntityKind.settings] = settingsRecords;
+    _lastEntityValues = _captureEntities();
+    for (final kind in SyncEntityKind.values) {
+      _lastFlushedRecords[kind] = recordsByKind[kind]!;
+    }
     _hasRestoredSyncBaseline = false;
-    _conflicts = _collectConflicts(
-      orderRecords,
-      productRecords,
-      presetRecords,
-      settingsRecords,
-    );
+    _conflicts = _collectConflicts(recordsByKind);
     _lastSuccessfulSyncAt = DateTime.now();
     _lastError = null;
     if (!_disposed) notifyListeners();
@@ -1305,6 +1227,42 @@ class SyncCoordinator extends ChangeNotifier {
     }
   }
 
+  Future<void> _applyEntityRecords(
+    SyncEntityKind kind,
+    Map<String, SyncRecord> records,
+  ) async {
+    switch (kind) {
+      case SyncEntityKind.order:
+        _applyOrderRecords(records);
+      case SyncEntityKind.product:
+        _applyProductRecords(records);
+      case SyncEntityKind.nodePreset:
+        _applyPresetRecords(records);
+      case SyncEntityKind.settings:
+        await _applySettingsRecords(records);
+    }
+  }
+
+  Future<void> _applySettingsRecords(
+    Map<String, SyncRecord> records,
+  ) async {
+    final record = records[settingsRecordId];
+    if (record == null) return;
+
+    final local = captureSettings();
+    final settings = _mergeEngine.materializeKeepingLocalConflicts(
+      record,
+      local,
+    );
+    if (settings == null || syncJsonEquals(settings, local)) return;
+
+    try {
+      await applySettings(settings);
+    } catch (error) {
+      _lastError = '应用远端界面设置失败：$error';
+    }
+  }
+
   void _applyOrderRecords(Map<String, SyncRecord> records) {
     final result = <QueueOrder>[];
 
@@ -1429,17 +1387,12 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   List<SyncConflictView> _collectConflicts(
-    Map<String, SyncRecord> orders,
-    Map<String, SyncRecord> products,
-    Map<String, SyncRecord> presets,
-    Map<String, SyncRecord> settings,
+    Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
   ) {
-    final result = <SyncConflictView>[
-      ..._viewsFor(SyncEntityKind.order, orders),
-      ..._viewsFor(SyncEntityKind.product, products),
-      ..._viewsFor(SyncEntityKind.nodePreset, presets),
-      ..._viewsFor(SyncEntityKind.settings, settings),
-    ];
+    final result = <SyncConflictView>[];
+    for (final kind in SyncEntityKind.values) {
+      result.addAll(_viewsFor(kind, recordsByKind[kind]!));
+    }
     result.sort((a, b) => b.conflict.createdAt.compareTo(a.conflict.createdAt));
     return result;
   }
@@ -1460,23 +1413,14 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   Future<void> _rebuildConflicts() async {
-    final orders = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.order,
-    );
-    final products = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.product,
-    );
-    final presets = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.nodePreset,
-    );
-    final settings = await _recordStore.readAllMerged(
-      accountId: accountId,
-      kind: SyncEntityKind.settings,
-    );
-    _conflicts = _collectConflicts(orders, products, presets, settings);
+    final recordsByKind = <SyncEntityKind, Map<String, SyncRecord>>{};
+    for (final kind in SyncEntityKind.values) {
+      recordsByKind[kind] = await _recordStore.readAllMerged(
+        accountId: accountId,
+        kind: kind,
+      );
+    }
+    _conflicts = _collectConflicts(recordsByKind);
   }
 
   Map<String, Map<String, dynamic>> _baselineValues(SyncEntityKind kind) {
@@ -1506,6 +1450,17 @@ class SyncCoordinator extends ChangeNotifier {
     return <String, Map<String, dynamic>>{
       for (final preset in nodePresetStore.presets)
         preset.id: SyncEntityCodec.nodePresetToFields(preset),
+    };
+  }
+
+  Map<SyncEntityKind, Map<String, Map<String, dynamic>>> _captureEntities() {
+    return <SyncEntityKind, Map<String, Map<String, dynamic>>>{
+      SyncEntityKind.order: _captureOrders(),
+      SyncEntityKind.product: _captureProducts(),
+      SyncEntityKind.nodePreset: _capturePresets(),
+      SyncEntityKind.settings: <String, Map<String, dynamic>>{
+        settingsRecordId: captureSettings(),
+      },
     };
   }
 
