@@ -31,6 +31,7 @@ class SettingsPage extends StatefulWidget {
     required this.featureStore,
     required this.accountStore,
     required this.syncCoordinator,
+    this.onOpenThemeColor,
     super.key,
   });
 
@@ -41,6 +42,7 @@ class SettingsPage extends StatefulWidget {
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
   final SyncCoordinator syncCoordinator;
+  final VoidCallback? onOpenThemeColor;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -720,15 +722,16 @@ class _SettingsPageState extends State<SettingsPage>
                           const Icon(Icons.chevron_right_rounded),
                         ],
                       ),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ThemeColorPage(
-                              store: widget.themeStore,
-                            ),
-                          ),
-                        );
-                      },
+                      onTap: widget.onOpenThemeColor ??
+                          () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => ThemeColorPage(
+                                  store: widget.themeStore,
+                                ),
+                              ),
+                            );
+                          },
                     );
                   },
                 ),

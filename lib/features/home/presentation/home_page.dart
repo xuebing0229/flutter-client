@@ -31,6 +31,7 @@ import 'feature_toggle_page.dart';
 import 'first_run_guide.dart';
 import 'reminder_background_guide.dart';
 import 'settings_page.dart';
+import 'theme_color_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -575,6 +576,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         featureStore: widget.featureStore,
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
+        onOpenThemeColor: () =>
+            setState(() => _desktopToolSelection = AppToolMenu.themeColorTool),
+      ),
+      AppToolMenu.themeColorTool => ThemeColorPage(
+        store: widget.themeStore,
+        onBack: () =>
+            setState(() => _desktopToolSelection = AppToolMenu.settingsTool),
       ),
       _ => const SizedBox.shrink(),
     };
@@ -683,6 +691,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.accountTool => '账号与设备',
       AppToolMenu.settingsTool => '设置',
+      AppToolMenu.themeColorTool => 'UI主题色',
       _ => current.label,
     };
     final width = MediaQuery.sizeOf(context).width;

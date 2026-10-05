@@ -93,6 +93,7 @@ class AppToolMenu extends StatelessWidget {
   static const syncTool = 'sync';
   static const accountTool = 'account';
   static const settingsTool = 'settings';
+  static const themeColorTool = 'themeColor';
 
   const AppToolMenu({
     required this.orderStore,
