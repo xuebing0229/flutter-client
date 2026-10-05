@@ -14,6 +14,7 @@ import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
 import '../../orders/data/node_presets.dart';
+import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
 import '../../orders/presentation/node_preset_page.dart';
@@ -52,6 +53,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderStore _orderStore = OrderStore();
+  final OrderReferenceImageStore _referenceImageStore =
+      OrderReferenceImageStore();
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
   final AppDataPersistence _persistence = const AppDataPersistence();
@@ -83,6 +86,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _syncConflictPromptVisible = false;
   String? _lastPromptedConflictSignature;
   AccountSyncState? _accountSyncSnapshot;
+  Map<String, List<OrderReferenceImage>> _knownReferenceImagesByOrder =
+      <String, List<OrderReferenceImage>>{};
 
   @override
   void initState() {
@@ -172,6 +177,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       errorMessage = '本地数据读取失败：$error';
     }
 
+    _knownReferenceImagesByOrder = _captureReferenceImages();
     _orderStore.addListener(_onOrderStoreChanged);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
@@ -223,7 +229,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await showFirstRunGuide(context, detailed: true);
   }
 
+  Map<String, List<OrderReferenceImage>> _captureReferenceImages() {
+    return <String, List<OrderReferenceImage>>{
+      for (final order in _orderStore.orders)
+        order.id: List<OrderReferenceImage>.from(order.referenceImages),
+    };
+  }
+
   void _onOrderStoreChanged() {
+    final current = _captureReferenceImages();
+    final removed = <OrderReferenceImage>[];
+
+    for (final entry in _knownReferenceImagesByOrder.entries) {
+      final currentIds = <String>{
+        for (final image in current[entry.key] ?? const <OrderReferenceImage>[])
+          image.id,
+      };
+      for (final image in entry.value) {
+        if (!currentIds.contains(image.id)) removed.add(image);
+      }
+    }
+
+    _knownReferenceImagesByOrder = current;
+    if (removed.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: removed,
+        ),
+      );
+    }
+
     _scheduleSave();
     _scheduleReminderSync();
   }
