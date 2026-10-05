@@ -163,6 +163,7 @@ class SyncRecordStore {
     required Iterable<Map<String, dynamic>> records,
     Map<SyncEntityKind, Set<String>> requiredIds =
         const <SyncEntityKind, Set<String>>{},
+    Directory? assetSourceDirectory,
   }) async {
     final safeAccountId = requireValidAccountId(accountId);
     final decoded = _decodePortableRecords(
@@ -246,6 +247,14 @@ class SyncRecordStore {
               Directory('${staging.path}/assets'),
             );
           }
+        }
+
+        if (assetSourceDirectory != null &&
+            await assetSourceDirectory.exists()) {
+          await _copyDirectory(
+            assetSourceDirectory,
+            Directory('${staging.path}/assets'),
+          );
         }
 
         await staging.rename(target.path);
