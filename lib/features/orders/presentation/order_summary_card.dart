@@ -242,9 +242,9 @@ class _CompactDeadlineMeta extends StatelessWidget {
     }
 
     String two(int number) => number.toString().padLeft(2, '0');
-    final dateText =
-        '${deadline!.year}-${two(deadline!.month)}-${two(deadline!.day)}';
-    final timeText = '${two(deadline!.hour)}:${two(deadline!.minute)}';
+    final deadlineText =
+        '${deadline!.year}-${two(deadline!.month)}-${two(deadline!.day)}\n'
+        '${two(deadline!.hour)}:${two(deadline!.minute)}';
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,23 +259,12 @@ class _CompactDeadlineMeta extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                dateText,
-                maxLines: 1,
-                softWrap: false,
-                style: style?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                timeText,
-                maxLines: 1,
-                softWrap: false,
-                style: style,
-              ),
-            ],
+          child: Text(
+            deadlineText,
+            maxLines: 2,
+            softWrap: false,
+            textAlign: TextAlign.left,
+            style: style,
           ),
         ),
       ],
