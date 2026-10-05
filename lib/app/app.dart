@@ -219,11 +219,64 @@ class _AppState extends State<App> {
     super.dispose();
   }
 
-  ThemeData _lightTheme() {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: _themeStore.palette.lightSeed,
-      brightness: Brightness.light,
+  Color _onColor(Color color) {
+    return color.computeLuminance() > 0.48 ? Colors.black : Colors.white;
+  }
+
+  ColorScheme _paletteScheme(Brightness brightness) {
+    final palette = _themeStore.palette;
+    final colors = palette.previewColors;
+    final primary = colors.first;
+    final secondary = colors.length > 1 ? colors[1] : primary;
+    final tertiary = colors.length > 2 ? colors[2] : secondary;
+    final primaryContainer =
+        colors.length > 3 ? colors[3] : primary;
+    final secondaryContainer =
+        colors.length > 4 ? colors[4] : secondary;
+    final tertiaryContainer =
+        colors.length > 2 ? colors.last : primary;
+
+    final dark = brightness == Brightness.dark;
+    final neutralSurface =
+        dark ? const Color(0xFF171B17) : Colors.white;
+    final neutralSurfaceVariant =
+        dark ? const Color(0xFF202520) : const Color(0xFFF0F2EF);
+    final neutralOutline =
+        dark ? const Color(0xFF8B928B) : const Color(0xFF737A73);
+
+    final base = ColorScheme.fromSeed(
+      seedColor: primary,
+      brightness: brightness,
     );
+
+    return base.copyWith(
+      primary: primary,
+      onPrimary: _onColor(primary),
+      primaryContainer: primaryContainer,
+      onPrimaryContainer: _onColor(primaryContainer),
+      secondary: secondary,
+      onSecondary: _onColor(secondary),
+      secondaryContainer: secondaryContainer,
+      onSecondaryContainer: _onColor(secondaryContainer),
+      tertiary: tertiary,
+      onTertiary: _onColor(tertiary),
+      tertiaryContainer: tertiaryContainer,
+      onTertiaryContainer: _onColor(tertiaryContainer),
+      surface: neutralSurface,
+      onSurface: dark ? Colors.white : const Color(0xFF1A1C19),
+      surfaceContainerHighest: neutralSurfaceVariant,
+      onSurfaceVariant:
+          dark ? const Color(0xFFDDE2DC) : const Color(0xFF404640),
+      outline: neutralOutline,
+      outlineVariant:
+          dark ? const Color(0xFF434943) : const Color(0xFFC3C9C2),
+      inversePrimary: primary,
+      surfaceTint: Colors.transparent,
+    );
+  }
+
+  ThemeData _lightTheme() {
+    final scheme = _paletteScheme(Brightness.light);
 
     return ThemeData(
       useMaterial3: true,
@@ -243,10 +296,7 @@ class _AppState extends State<App> {
   }
 
   ThemeData _darkTheme() {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: _themeStore.palette.effectiveDarkSeed,
-      brightness: Brightness.dark,
-    );
+    final scheme = _paletteScheme(Brightness.dark);
 
     return ThemeData(
       useMaterial3: true,
