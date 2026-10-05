@@ -612,8 +612,6 @@ class _SettingsPageState extends State<SettingsPage>
       setState(() {
         if (status == 'permission_required') {
           _status = '请允许“安装未知应用”，返回后再次点击下载';
-        } else if (status == 'restarting') {
-          _status = '更新已下载，正在自动重启…';
         } else {
           _status = '已交给系统下载，完成后会自动打开安装页面';
         }
