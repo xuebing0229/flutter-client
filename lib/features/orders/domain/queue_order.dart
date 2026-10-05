@@ -1,5 +1,11 @@
 import '../../../core/finance/income_calculator.dart';
 
+int defaultOrderFromId(String id) {
+  final match = RegExp(r'(\d+)$').firstMatch(id);
+  if (match == null) return 0;
+  return int.tryParse(match.group(1)!) ?? 0;
+}
+
 enum CommissionPlatform {
   mihuashi('米画师'),
   huajia('画加'),
@@ -156,6 +162,7 @@ class QueueOrder {
     this.deductionAmount = 0,
     this.deductionFeeEnabled = false,
     this.description = '',
+    this.defaultOrder = 0,
     this.referenceImages = const <OrderReferenceImage>[],
     this.completedAt,
     this.settledAt,
@@ -197,6 +204,14 @@ class QueueOrder {
   final bool deductionFeeEnabled;
 
   final String description;
+
+  /// Stable cross-device order used by the default list sort.
+  ///
+  /// Older records derive this from their timestamp-like entity ID.
+  final int defaultOrder;
+  int get effectiveDefaultOrder =>
+      defaultOrder == 0 ? defaultOrderFromId(id) : defaultOrder;
+
   final List<OrderReferenceImage> referenceImages;
   final DateTime? completedAt;
 
@@ -296,6 +311,7 @@ class QueueOrder {
     double? deductionAmount,
     bool? deductionFeeEnabled,
     String? description,
+    int? defaultOrder,
     List<OrderReferenceImage>? referenceImages,
     DateTime? completedAt,
     bool clearCompletedAt = false,
@@ -334,6 +350,7 @@ class QueueOrder {
       deductionFeeEnabled:
           deductionFeeEnabled ?? this.deductionFeeEnabled,
       description: description ?? this.description,
+      defaultOrder: defaultOrder ?? this.defaultOrder,
       referenceImages: referenceImages ?? this.referenceImages,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       settledAt: clearSettledAt ? null : (settledAt ?? this.settledAt),

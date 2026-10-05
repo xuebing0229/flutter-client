@@ -175,6 +175,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
       supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
       deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
       description: _descriptionController.text.trim(),
+      defaultOrder: DateTime.now().microsecondsSinceEpoch,
       referenceImages: List<OrderReferenceImage>.unmodifiable(
         _referenceImages,
       ),

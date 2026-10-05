@@ -7,7 +7,7 @@ import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
 import '../../features/products/state/product_store.dart';
 
-const int currentBackupSchemaVersion = 5;
+const int currentBackupSchemaVersion = 6;
 const String appBackupKind = 'artist_queue_full_backup';
 
 class AppBackupData {
@@ -244,6 +244,7 @@ Map<String, dynamic> _normalizeLegacyOrder(Map<String, dynamic> source) {
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
+  json['defaultOrder'] ??= 0;
   json['referenceImages'] ??= <dynamic>[];
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
@@ -269,6 +270,7 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
+  json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
   json['isArchived'] ??= false;
@@ -315,6 +317,7 @@ Map<String, dynamic> _orderToJson(QueueOrder order) {
     'deductionAmount': order.deductionAmount,
     'deductionFeeEnabled': order.deductionFeeEnabled,
     'description': order.description,
+    if (order.defaultOrder != 0) 'defaultOrder': order.defaultOrder,
     'referenceImages': [
       for (final image in order.referenceImages)
         <String, dynamic>{
@@ -337,6 +340,7 @@ Map<String, dynamic> _orderToJson(QueueOrder order) {
 }
 
 QueueOrder _orderFromJson(Map<String, dynamic> json) {
+  final id = _asString(json['id'], 'order.id');
   final platform = _enumByName(
     CommissionPlatform.values,
     _asString(json['platform'], 'order.platform'),
@@ -354,7 +358,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
   }
 
   return QueueOrder(
-    id: _asString(json['id'], 'order.id'),
+    id: id,
     platform: platform,
     title: _asString(json['title'], 'order.title'),
     clientName: _asText(json['clientName'], 'order.clientName'),
@@ -390,6 +394,9 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       'order.deductionFeeEnabled',
     ),
     description: _asText(json['description'], 'order.description'),
+    defaultOrder: json['defaultOrder'] == null
+        ? 0
+        : _asInt(json['defaultOrder'], 'order.defaultOrder'),
     referenceImages: json['referenceImages'] == null
         ? const <OrderReferenceImage>[]
         : <OrderReferenceImage>[
@@ -456,6 +463,7 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
     'deductionAmount': product.deductionAmount,
     'deductionFeeEnabled': product.deductionFeeEnabled,
     'description': product.description,
+    if (product.defaultOrder != 0) 'defaultOrder': product.defaultOrder,
     'soldCount': product.soldCount,
     'saleRecords': [
       for (final soldAt in product.saleRecords)
@@ -467,6 +475,7 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
 }
 
 FinishedProduct _productFromJson(Map<String, dynamic> json) {
+  final id = _asString(json['id'], 'product.id');
   final platform = _enumByName(
     CommissionPlatform.values,
     _asString(json['platform'], 'product.platform'),
@@ -474,7 +483,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
   );
 
   return FinishedProduct(
-    id: _asString(json['id'], 'product.id'),
+    id: id,
     title: _asString(json['title'], 'product.title'),
     platform: platform,
     saleType: _enumByName(
@@ -507,6 +516,9 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       'product.deductionFeeEnabled',
     ),
     description: _asText(json['description'], 'product.description'),
+    defaultOrder: json['defaultOrder'] == null
+        ? 0
+        : _asInt(json['defaultOrder'], 'product.defaultOrder'),
     soldCount: _asInt(json['soldCount'], 'product.soldCount'),
     saleRecords: [
       for (final item in _asList(json['saleRecords'], 'product.saleRecords'))

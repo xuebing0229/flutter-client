@@ -11,6 +11,7 @@ import '../../../core/portability/app_backup_data.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
+import '../../../core/portability/full_backup_bundle_service.dart';
 import '../../../core/update/android_beta_update_installer.dart';
 import '../../../core/update/beta_update_coordinator.dart';
 import '../../../core/update/update_manifest.dart';
@@ -385,6 +386,11 @@ class _SettingsPageState extends State<SettingsPage>
     setState(() => _backupBusy = true);
 
     try {
+      final accountId = widget.accountStore.accountId;
+      if (accountId == null) {
+        throw StateError('当前账号未登录，不能导出完整备份。');
+      }
+
       final snapshot = await widget.syncCoordinator.exportPortableWorkspace();
       final backup = AppBackupData(
         exportedAt: snapshot.exportedAt,
@@ -396,14 +402,17 @@ class _SettingsPageState extends State<SettingsPage>
         settings: snapshot.settings,
       );
 
-      final saved = await _fileBridge.exportBackup(
+      final saved = await FullBackupBundleService(
+        fileBridge: _fileBridge,
+      ).exportFullBackup(
+        accountId: accountId,
+        backup: backup,
         fileName: _backupFileName(DateTime.now()),
-        content: backup.encode(),
       );
 
       if (!mounted) return;
       if (saved) {
-        _showMessage('数据备份已导出；参考图原文件由设备同步单独保存');
+        _showMessage('完整备份已导出，参考图原文件也已包含');
       }
     } catch (error) {
       if (!mounted) return;
@@ -417,12 +426,14 @@ class _SettingsPageState extends State<SettingsPage>
     if (_backupBusy) return;
 
     setState(() => _backupBusy = true);
+    ImportedBackupBundle? importedBundle;
 
     try {
-      final source = await _fileBridge.importBackup();
-      if (source == null) return;
+      final service = FullBackupBundleService(fileBridge: _fileBridge);
+      importedBundle = await service.pickAndReadBackup();
+      if (importedBundle == null) return;
 
-      final backup = AppBackupData.decode(source);
+      final backup = importedBundle.backup;
       if (backup.syncRecords == null) {
         throw const FormatException(
           '这份备份不包含双端同步历史，不能作为完整备份恢复。'
@@ -442,6 +453,16 @@ class _SettingsPageState extends State<SettingsPage>
       }
       if (!mounted) return;
 
+      final referenceImageCount = backup.orders.fold<int>(
+        0,
+        (count, order) => count + order.referenceImages.length,
+      );
+      final legacyAssetWarning =
+          !importedBundle.includesBundledAssets && referenceImageCount > 0
+          ? '\n\n注意：这是旧版 JSON 备份，里面只有参考图记录，没有图片原文件。'
+                '如果本机和已配对设备也没有这些图片，图片将无法恢复。'
+          : '';
+
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) {
@@ -452,9 +473,10 @@ class _SettingsPageState extends State<SettingsPage>
               '备份时间：${_formatDateTime(exported)}\n'
               '排单：${backup.orders.length} 条\n'
               '成品：${backup.products.length} 条\n'
-              '节点预设：${backup.nodePresets.length} 套\n\n'
-              '导入会用备份内容覆盖当前本地数据。\n'
-              '参考图原文件不存入 JSON 备份；已在本机或其他已配对设备上的图片会继续通过设备同步恢复。',
+              '节点预设：${backup.nodePresets.length} 套\n'
+              '参考图：$referenceImageCount 张\n\n'
+              '导入会用备份内容覆盖当前本地数据。'
+              '$legacyAssetWarning',
             ),
             actions: [
               TextButton(
@@ -474,6 +496,7 @@ class _SettingsPageState extends State<SettingsPage>
 
       await widget.syncCoordinator.restorePortableBackupForCurrentWorkspace(
         backup: backup,
+        assetSourceDirectory: importedBundle.assetDirectory,
         applyWorkspace: () => backup.restoreInto(
           orderStore: widget.orderStore,
           productStore: widget.productStore,
@@ -490,7 +513,11 @@ class _SettingsPageState extends State<SettingsPage>
         await widget.accountStore.mergeSyncedState(backup.accountSyncState!);
       }
 
-      _showMessage('备份已完整恢复');
+      _showMessage(
+        importedBundle.includesBundledAssets
+            ? '完整备份已恢复，参考图原文件也已恢复'
+            : '旧版数据备份已恢复',
+      );
     } on FormatException catch (error) {
       if (!mounted) return;
       _showMessage('备份文件无效：${error.message}');
@@ -498,6 +525,7 @@ class _SettingsPageState extends State<SettingsPage>
       if (!mounted) return;
       _showMessage('导入失败：$error');
     } finally {
+      await importedBundle?.dispose();
       if (mounted) setState(() => _backupBusy = false);
     }
   }
@@ -704,7 +732,9 @@ class _SettingsPageState extends State<SettingsPage>
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.upload_file_rounded),
                   title: const Text('导出完整备份'),
-                  subtitle: const Text('包含工作数据、UI 设置、账号设备记录和完整同步历史'),
+                  subtitle: const Text(
+                    '包含工作数据、UI 设置、账号设备记录、完整同步历史和参考图原文件',
+                  ),
                   trailing: _backupBusy
                       ? const SizedBox.square(
                           dimension: 20,
@@ -719,7 +749,7 @@ class _SettingsPageState extends State<SettingsPage>
                   leading: const Icon(Icons.download_for_offline_outlined),
                   title: const Text('导入完整备份'),
                   subtitle: const Text(
-                    '选择数据备份并覆盖当前本地数据；参考图原文件仍从已配对设备同步',
+                    '选择完整备份并覆盖当前本地数据；同时恢复参考图原文件',
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _backupBusy ? null : _importBackup,
@@ -957,7 +987,7 @@ String _backupFileName(DateTime now) {
   String two(int value) => value.toString().padLeft(2, '0');
   return 'artist-queue-backup-'
       '${now.year}${two(now.month)}${two(now.day)}-'
-      '${two(now.hour)}${two(now.minute)}.json';
+      '${two(now.hour)}${two(now.minute)}.zip';
 }
 
 String _formatClockTime(DateTime value) {

@@ -163,6 +163,7 @@ class SyncRecordStore {
     required Iterable<Map<String, dynamic>> records,
     Map<SyncEntityKind, Set<String>> requiredIds =
         const <SyncEntityKind, Set<String>>{},
+    Directory? assetSourceDirectory,
   }) async {
     final safeAccountId = requireValidAccountId(accountId);
     final decoded = _decodePortableRecords(
@@ -171,13 +172,10 @@ class SyncRecordStore {
       requiredIds: requiredIds,
     );
 
-    final support = await getApplicationSupportDirectory();
-    final accountDirectory = Directory(
-      '${support.path}/accounts/$safeAccountId',
-    );
-    await accountDirectory.create(recursive: true);
-
-    final target = Directory('${accountDirectory.path}/sync-v1');
+    // Resolve through rootDirectory so test stores and alternate local
+    // roots use the same atomic replacement path as production.
+    final target = await rootDirectory(safeAccountId);
+    final accountDirectory = target.parent;
     final suffix = DateTime.now().microsecondsSinceEpoch.toString();
     final staging = Directory(
       '${accountDirectory.path}/sync-v1.import-$suffix',
@@ -246,6 +244,14 @@ class SyncRecordStore {
               Directory('${staging.path}/assets'),
             );
           }
+        }
+
+        if (assetSourceDirectory != null &&
+            await assetSourceDirectory.exists()) {
+          await _copyDirectory(
+            assetSourceDirectory,
+            Directory('${staging.path}/assets'),
+          );
         }
 
         await staging.rename(target.path);

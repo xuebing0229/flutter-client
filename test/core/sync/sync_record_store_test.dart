@@ -161,4 +161,46 @@ void main() {
       expect(await _recordFile(roots[reader], SyncEntityKind.settings, 'app').exists(), isTrue);
     }
   });
+
+  test('portable restore overlays bundled assets without dropping existing ones', () async {
+    final existing = File(
+      '${temporary.path}/assets/order-reference-images/old/old.png',
+    );
+    await existing.parent.create(recursive: true);
+    await existing.writeAsBytes(<int>[1, 2, 3], flush: true);
+
+    final importedRoot = await Directory.systemTemp.createTemp(
+      'guild-import-assets-',
+    );
+    addTearDown(() async {
+      if (await importedRoot.exists()) {
+        await importedRoot.delete(recursive: true);
+      }
+    });
+    final imported = File(
+      '${importedRoot.path}/order-reference-images/new/new.png',
+    );
+    await imported.parent.create(recursive: true);
+    await imported.writeAsBytes(<int>[9, 8, 7], flush: true);
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+      assetSourceDirectory: importedRoot,
+    );
+
+    expect(
+      await File(
+        '${temporary.path}/assets/order-reference-images/old/old.png',
+      ).readAsBytes(),
+      <int>[1, 2, 3],
+    );
+    expect(
+      await File(
+        '${temporary.path}/assets/order-reference-images/new/new.png',
+      ).readAsBytes(),
+      <int>[9, 8, 7],
+    );
+  });
+
 }
