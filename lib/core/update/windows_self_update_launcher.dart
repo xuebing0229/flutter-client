@@ -29,9 +29,15 @@ class WindowsSelfUpdateLauncher {
       ...utf8.encode(_powerShellScript),
     ], flush: true);
 
+    // On Windows, Dart's detached mode can be terminated with the parent
+    // process when the application exits immediately after spawning it.
+    // The updater must stay attached long enough to replace the installation,
+    // so use the normal mode and then hand control to the script.
     await Process.start('powershell.exe', <String>[
       '-NoProfile',
       '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
       '-ExecutionPolicy',
       'Bypass',
       '-File',
@@ -44,7 +50,7 @@ class WindowsSelfUpdateLauncher {
       installDirectory.path,
       '-ExeName',
       executableName,
-    ], mode: ProcessStartMode.detached);
+    ], mode: ProcessStartMode.normal);
 
     await Future<void>.delayed(const Duration(milliseconds: 350));
     exit(0);
