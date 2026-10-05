@@ -3,6 +3,16 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 
+class PickedBackupFile {
+  const PickedBackupFile({
+    required this.path,
+    required this.name,
+  });
+
+  final String path;
+  final String name;
+}
+
 class PickedLocalImage {
   const PickedLocalImage({
     required this.path,
@@ -75,6 +85,34 @@ class DataPortabilityFileBridge {
     }
 
     throw UnsupportedError('当前平台暂未接入系统文件导入。');
+  }
+
+  Future<PickedBackupFile?> pickBackupFile() async {
+    if (Platform.isWindows) {
+      const typeGroup = XTypeGroup(
+        label: '完整备份',
+        extensions: <String>['zip', 'json'],
+      );
+      final file = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[typeGroup],
+      );
+      if (file == null) return null;
+      return PickedBackupFile(path: file.path, name: file.name);
+    }
+
+    if (!Platform.isAndroid) {
+      throw UnsupportedError('当前平台暂未接入系统备份文件选择器。');
+    }
+
+    final raw = await _channel.invokeMethod<Object?>('pickBackupFile');
+    if (raw == null) return null;
+    if (raw is! Map || raw['path'] is! String || raw['name'] is! String) {
+      throw const FormatException('系统返回的备份文件信息无效。');
+    }
+    return PickedBackupFile(
+      path: raw['path'] as String,
+      name: raw['name'] as String,
+    );
   }
 
   Future<String?> pickImage() async {
