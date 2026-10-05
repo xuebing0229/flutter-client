@@ -359,17 +359,23 @@ class SyncRecordStore {
     }
 
     final canonical = await _canonicalFile(accountId, kind, recordId);
+    final canonicalVariant = await _findCanonicalVariant(variants, canonical);
     final needsWrite =
         variants.length > 1 ||
         !await canonical.exists() ||
-        !_sameContent(variants, canonical.path, merged);
+        canonicalVariant == null ||
+        !syncJsonEquals(canonicalVariant.record.toJson(), merged.toJson());
 
     if (needsWrite) {
       await _atomicWrite(canonical, merged.encode());
     }
 
     for (final variant in variants) {
-      if (variant.file.path == canonical.path) continue;
+      // Directory enumeration on Windows can return the same file with a
+      // different slash style (for example, '/' versus '\\'). Comparing raw
+      // path strings would mistake the canonical file for a Syncthing conflict
+      // variant and delete the record we just merged.
+      if (await _sameFile(variant.file, canonical)) continue;
       try {
         if (await variant.file.exists()) await variant.file.delete();
       } catch (_) {
@@ -380,16 +386,23 @@ class SyncRecordStore {
     return merged;
   }
 
-  bool _sameContent(
+  Future<_RecordVariant?> _findCanonicalVariant(
     List<_RecordVariant> variants,
-    String canonicalPath,
-    SyncRecord merged,
-  ) {
+    File canonical,
+  ) async {
     for (final variant in variants) {
-      if (variant.file.path != canonicalPath) continue;
-      return syncJsonEquals(variant.record.toJson(), merged.toJson());
+      if (await _sameFile(variant.file, canonical)) return variant;
     }
-    return false;
+    return null;
+  }
+
+  Future<bool> _sameFile(File left, File right) async {
+    if (left.path == right.path) return true;
+    try {
+      return await FileSystemEntity.identical(left.path, right.path);
+    } on FileSystemException {
+      return false;
+    }
   }
 
   Future<File> _canonicalFile(
