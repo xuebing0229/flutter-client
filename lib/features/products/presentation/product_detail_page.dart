@@ -8,6 +8,7 @@ import '../../shared/presentation/detail_form_widgets.dart';
 import '../../orders/domain/queue_order.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
+import 'product_sale_history_page.dart';
 import 'product_summary_card.dart';
 
 class ProductDetailPage extends StatefulWidget {
@@ -308,6 +309,18 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   label: '售出状态',
                   value: product.saleStatusLabel,
                 ),
+                _SaleHistoryDetailRow(
+                  count: product.saleRecords.length,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ProductSaleHistoryPage(
+                          product: product,
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 ReadOnlyDetailRow(
                   label: '描述',
                   value: product.description.trim().isEmpty
@@ -431,6 +444,51 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           ),
         );
       },
+    );
+  }
+}
+
+
+class _SaleHistoryDetailRow extends StatelessWidget {
+  const _SaleHistoryDetailRow({
+    required this.count,
+    required this.onTap,
+  });
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 82,
+              child: Text(
+                '售出记录',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                count == 0 ? '暂无记录' : '$count 条记录',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: colors.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
