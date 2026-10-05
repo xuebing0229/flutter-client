@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../shared/presentation/layout_spacing.dart';
@@ -6,11 +8,14 @@ import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/adjustment_widgets.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
 import '../data/node_presets.dart';
+import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
 import '../state/order_store.dart';
+import 'order_reference_image_widgets.dart';
 
 class OrderDetailPage extends StatefulWidget {
   const OrderDetailPage({
+    required this.accountId,
     required this.store,
     required this.orderId,
     required this.nodePresetStore,
@@ -18,6 +23,7 @@ class OrderDetailPage extends StatefulWidget {
     super.key,
   });
 
+  final String accountId;
   final OrderStore store;
   final String orderId;
   final NodePresetStore nodePresetStore;
@@ -28,7 +34,12 @@ class OrderDetailPage extends StatefulWidget {
 }
 
 class _OrderDetailPageState extends State<OrderDetailPage> {
+  final _referenceImageStore = OrderReferenceImageStore();
+  final _referenceImages = <OrderReferenceImage>[];
+  final _sessionAddedReferenceImages = <OrderReferenceImage>[];
+
   bool _editing = false;
+  bool _pickingReferenceImages = false;
 
   late final TextEditingController _titleController;
   late final TextEditingController _clientController;
@@ -65,6 +76,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
   @override
   void dispose() {
+    if (_sessionAddedReferenceImages.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: List<OrderReferenceImage>.from(
+            _sessionAddedReferenceImages,
+          ),
+        ),
+      );
+    }
     _titleController.dispose();
     _clientController.dispose();
     _priceController.dispose();
@@ -80,6 +101,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _clientController.text = order.clientName;
     _priceController.text = order.price == 0 ? '' : _formatPrice(order.price);
     _descriptionController.text = order.description;
+    _referenceImages
+      ..clear()
+      ..addAll(order.referenceImages);
     _platform = order.platform;
     _presetId = order.nodePresetId;
     _presetSnapshot = order.nodePresetSnapshot.snapshot();
@@ -102,13 +126,92 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   void _startEditing() {
+    _sessionAddedReferenceImages.clear();
     _loadDraft(_order);
     setState(() => _editing = true);
   }
 
-  void _cancelEditing() {
+  Future<void> _cancelEditing() async {
+    final added = List<OrderReferenceImage>.from(
+      _sessionAddedReferenceImages,
+    );
+    _sessionAddedReferenceImages.clear();
+    if (added.isNotEmpty) {
+      await _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: added,
+      );
+    }
+    if (!mounted) return;
     _loadDraft(_order);
     setState(() => _editing = false);
+  }
+
+  Future<void> _addReferenceImages() async {
+    if (_pickingReferenceImages) return;
+    setState(() => _pickingReferenceImages = true);
+
+    try {
+      final imported = await _referenceImageStore.pickAndImport(
+        accountId: widget.accountId,
+        orderId: widget.orderId,
+      );
+      if (!mounted || imported.isEmpty) return;
+      setState(() {
+        _referenceImages.addAll(imported);
+        _sessionAddedReferenceImages.addAll(imported);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('添加参考图失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _pickingReferenceImages = false);
+      }
+    }
+  }
+
+  void _removeReferenceImage(OrderReferenceImage image) {
+    setState(() {
+      _referenceImages.removeWhere((item) => item.id == image.id);
+    });
+
+    final addedIndex = _sessionAddedReferenceImages.indexWhere(
+      (item) => item.id == image.id,
+    );
+    if (addedIndex != -1) {
+      final added = _sessionAddedReferenceImages.removeAt(addedIndex);
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: <OrderReferenceImage>[added],
+        ),
+      );
+    }
+  }
+
+  bool _sameReferenceImages(
+    List<OrderReferenceImage> left,
+    List<OrderReferenceImage> right,
+  ) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      final a = left[index];
+      final b = right[index];
+      if (a.id != b.id ||
+          a.fileName != b.fileName ||
+          a.relativePath != b.relativePath ||
+          a.addedAt != b.addedAt ||
+          a.sizeBytes != b.sizeBytes) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _save() {
@@ -130,6 +233,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     final loveLevelChanged = _huajiaLoveLevel != _draftBaseline.huajiaLoveLevel;
     final onlinePercentChanged =
         _onlinePercent != _draftBaseline.normalizedOnlinePercent;
+    final referenceImagesChanged = !_sameReferenceImages(
+      _referenceImages,
+      _draftBaseline.referenceImages,
+    );
+    final removedReferenceImages = referenceImagesChanged
+        ? <OrderReferenceImage>[
+            for (final image in _draftBaseline.referenceImages)
+              if (!_referenceImages.any((item) => item.id == image.id)) image,
+          ]
+        : const <OrderReferenceImage>[];
     final reopenDeliveredOrder =
         current.isCompleted && !current.isArchived && nodeChanged;
 
@@ -159,9 +272,21 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       description: descriptionChanged
           ? _descriptionController.text.trim()
           : current.description,
+      referenceImages: referenceImagesChanged
+          ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
+          : current.referenceImages,
     );
 
     widget.store.updateOrder(updated);
+    _sessionAddedReferenceImages.clear();
+    if (removedReferenceImages.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: removedReferenceImages,
+        ),
+      );
+    }
     setState(() => _editing = false);
   }
 
@@ -230,7 +355,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               else ...[
                 IconButton(
                   tooltip: '取消编辑',
-                  onPressed: _cancelEditing,
+                  onPressed: () => unawaited(_cancelEditing()),
                   icon: const Icon(Icons.close_rounded),
                 ),
                 IconButton(
@@ -351,6 +476,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         ? '待交稿'
                         : '已交稿 · ${formatDateTimeValue(order.completedAt!)}',
                   ),
+                const SizedBox(height: 8),
+                OrderReferenceImagesSection(
+                  accountId: widget.accountId,
+                  images: order.referenceImages,
+                  store: _referenceImageStore,
+                ),
+                const SizedBox(height: 8),
                 ReadOnlyDetailRow(
                   label: '描述',
                   value: order.description.trim().isEmpty
@@ -493,6 +625,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         },
                       ),
                   ],
+                ),
+                const SizedBox(height: 14),
+                OrderReferenceImagesSection(
+                  accountId: widget.accountId,
+                  images: _referenceImages,
+                  store: _referenceImageStore,
+                  editable: true,
+                  onAdd: _pickingReferenceImages
+                      ? null
+                      : () => unawaited(_addReferenceImages()),
+                  onRemove: _removeReferenceImage,
                 ),
                 const SizedBox(height: 14),
                 const FormFieldLabel('描述'),
