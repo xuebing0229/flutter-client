@@ -231,7 +231,7 @@ void main() {
     final restoredPreset = restored.nodePresets.single;
     final restoredAccount = restored.accountSyncState!;
 
-    expect(restored.exportedAt, source.exportedAt);
+    expect(restored.exportedAt.toUtc(), source.exportedAt.toUtc());
     expect(restored.settings, settings);
     expect(restored.syncRecords, source.syncRecords);
 
@@ -239,7 +239,7 @@ void main() {
     expect(restoredOrder.platform, order.platform);
     expect(restoredOrder.title, order.title);
     expect(restoredOrder.clientName, order.clientName);
-    expect(restoredOrder.deadline, order.deadline);
+    expect(restoredOrder.deadline!.toUtc(), order.deadline!.toUtc());
     expect(restoredOrder.nodePresetId, order.nodePresetId);
     expect(restoredOrder.currentNodeId, order.currentNodeId);
     expect(restoredOrder.currentNodeProgress, order.currentNodeProgress);
@@ -256,8 +256,8 @@ void main() {
     expect(restoredOrder.deductionFeeEnabled, order.deductionFeeEnabled);
     expect(restoredOrder.description, order.description);
     expect(restoredOrder.defaultOrder, order.defaultOrder);
-    expect(restoredOrder.completedAt, order.completedAt);
-    expect(restoredOrder.settledAt, order.settledAt);
+    expect(restoredOrder.completedAt!.toUtc(), order.completedAt!.toUtc());
+    expect(restoredOrder.settledAt!.toUtc(), order.settledAt!.toUtc());
     expect(restoredOrder.settledIncome, order.settledIncome);
     expect(restoredOrder.archiveOutcome, order.archiveOutcome);
     expect(restoredOrder.settlementNodeId, order.settlementNodeId);
@@ -270,7 +270,7 @@ void main() {
     expect(restoredImage.id, sourceImage.id);
     expect(restoredImage.fileName, sourceImage.fileName);
     expect(restoredImage.relativePath, sourceImage.relativePath);
-    expect(restoredImage.addedAt, sourceImage.addedAt);
+    expect(restoredImage.addedAt.toUtc(), sourceImage.addedAt.toUtc());
     expect(restoredImage.sizeBytes, sourceImage.sizeBytes);
 
     expect(restoredProduct.id, product.id);
@@ -294,7 +294,10 @@ void main() {
     expect(restoredProduct.description, product.description);
     expect(restoredProduct.defaultOrder, product.defaultOrder);
     expect(restoredProduct.soldCount, product.soldCount);
-    expect(restoredProduct.saleRecords, product.saleRecords);
+    expect(
+      restoredProduct.saleRecords.map((value) => value.toUtc()).toList(),
+      product.saleRecords.map((value) => value.toUtc()).toList(),
+    );
     expect(restoredProduct.isArchived, product.isArchived);
     expect(restoredProduct.isPinned, product.isPinned);
 
