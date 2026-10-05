@@ -438,7 +438,7 @@ class _SettingsPageState extends State<SettingsPage>
 
       if (!mounted) return;
       if (saved) {
-        _showMessage('完整备份已导出');
+        _showMessage('数据备份已导出；参考图原文件由设备同步单独保存');
       }
     } catch (error) {
       if (!mounted) return;
@@ -492,7 +492,8 @@ class _SettingsPageState extends State<SettingsPage>
               '排单：${backup.orders.length} 条\n'
               '成品：${backup.products.length} 条\n'
               '节点预设：${backup.nodePresets.length} 套\n\n'
-              '导入会用备份内容覆盖当前本地数据。',
+              '导入会用备份内容覆盖当前本地数据。\n'
+              '参考图原文件不存入 JSON 备份；已在本机或其他已配对设备上的图片会继续通过设备同步恢复。',
             ),
             actions: [
               TextButton(
@@ -767,7 +768,7 @@ class _SettingsPageState extends State<SettingsPage>
                   leading: const Icon(Icons.upload_file_rounded),
                   title: const Text('导出完整备份'),
                   subtitle: const Text(
-                    '包含排单、成品、节点预设、账号设备记录、归档状态和稿费数据',
+                    '包含排单、成品、节点预设、账号设备记录、归档状态和稿费数据；参考图原文件由设备同步单独保存',
                   ),
                   trailing: _backupBusy
                       ? const SizedBox.square(
@@ -782,7 +783,9 @@ class _SettingsPageState extends State<SettingsPage>
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.download_for_offline_outlined),
                   title: const Text('导入完整备份'),
-                  subtitle: const Text('选择备份文件并覆盖当前本地数据'),
+                  subtitle: const Text(
+                    '选择数据备份并覆盖当前本地数据；参考图原文件仍从已配对设备同步',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _backupBusy ? null : _importBackup,
                 ),
