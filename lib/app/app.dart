@@ -237,15 +237,9 @@ class _AppState extends State<App> {
         colors.length > 2 ? colors.last : primary;
 
     final dark = brightness == Brightness.dark;
-    final neutralSurface =
-        dark ? const Color(0xFF171B17) : Colors.white;
-    final neutralSurfaceVariant =
-        dark ? const Color(0xFF202520) : const Color(0xFFF0F2EF);
-    final neutralOutline =
-        dark ? const Color(0xFF8B928B) : const Color(0xFF737A73);
 
     final base = ColorScheme.fromSeed(
-      seedColor: primary,
+      seedColor: dark ? palette.effectiveDarkSeed : palette.lightSeed,
       brightness: brightness,
     );
 
@@ -262,14 +256,12 @@ class _AppState extends State<App> {
       onTertiary: _onColor(tertiary),
       tertiaryContainer: tertiaryContainer,
       onTertiaryContainer: _onColor(tertiaryContainer),
-      surface: neutralSurface,
-      onSurface: dark ? Colors.white : const Color(0xFF1A1C19),
-      surfaceContainerHighest: neutralSurfaceVariant,
-      onSurfaceVariant:
-          dark ? const Color(0xFFDDE2DC) : const Color(0xFF404640),
-      outline: neutralOutline,
-      outlineVariant:
-          dark ? const Color(0xFF434943) : const Color(0xFFC3C9C2),
+      surface: base.surface,
+      onSurface: base.onSurface,
+      surfaceContainerHighest: base.surfaceContainerHighest,
+      onSurfaceVariant: base.onSurfaceVariant,
+      outline: base.outline,
+      outlineVariant: base.outlineVariant,
       inversePrimary: primary,
       surfaceTint: Colors.transparent,
     );
@@ -281,14 +273,14 @@ class _AppState extends State<App> {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: const Color(0xFFF7F8F6),
-      appBarTheme: const AppBarTheme(
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: Color(0xFFF7F8F6),
+        backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: Colors.white,
+        backgroundColor: scheme.surfaceContainer,
         indicatorColor: scheme.secondaryContainer,
         height: 70,
       ),
@@ -301,14 +293,14 @@ class _AppState extends State<App> {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: const Color(0xFF111411),
-      appBarTheme: const AppBarTheme(
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: Color(0xFF111411),
+        backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: const Color(0xFF171B17),
+        backgroundColor: scheme.surfaceContainer,
         indicatorColor: scheme.secondaryContainer,
         height: 70,
       ),
