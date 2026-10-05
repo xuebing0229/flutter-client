@@ -161,6 +161,27 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     }
   }
 
+  Future<void> _cleanupStaleUpdateFiles(Directory directory) async {
+    if (!await directory.exists()) return;
+
+    await for (final entity in directory.list(followLinks: false)) {
+      final name = entity.path.split(Platform.pathSeparator).last.toLowerCase();
+
+      try {
+        if (entity is File &&
+            name.startsWith('app-beta-') &&
+            name.endsWith('.zip')) {
+          await entity.delete();
+        } else if (entity is Directory &&
+            (name.startsWith('stage-') || name.startsWith('backup-'))) {
+          await entity.delete(recursive: true);
+        }
+      } catch (_) {
+        // Cleanup is best-effort. A stale file must not block a new update.
+      }
+    }
+  }
+
   @override
   Future<String> downloadAndInstall({
     required Uri uri,
@@ -181,6 +202,7 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       '${Platform.pathSeparator}updates',
     );
     await updateDirectory.create(recursive: true);
+    await _cleanupStaleUpdateFiles(updateDirectory);
 
     final safeBaseName = fileName
         .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
