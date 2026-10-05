@@ -78,6 +78,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _desktopToolSelection;
   GlobalKey<NavigatorState> _desktopContentNavigatorKey =
       GlobalKey<NavigatorState>();
+  bool _desktopAddEditorOpen = false;
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
   bool _saving = false;
@@ -600,7 +601,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final desktopNavigator = MediaQuery.sizeOf(context).width >= 900
         ? _desktopContentNavigatorKey.currentState
         : null;
-    (desktopNavigator ?? Navigator.of(context)).push(route);
+    if (desktopNavigator != null) {
+      setState(() => _desktopAddEditorOpen = true);
+      desktopNavigator.push(route).whenComplete(() {
+        if (!mounted) return;
+        setState(() => _desktopAddEditorOpen = false);
+      });
+      return;
+    }
+    Navigator.of(context).push(route);
   }
 
   void _openAddProduct() {
@@ -614,7 +623,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final desktopNavigator = MediaQuery.sizeOf(context).width >= 900
         ? _desktopContentNavigatorKey.currentState
         : null;
-    (desktopNavigator ?? Navigator.of(context)).push(route);
+    if (desktopNavigator != null) {
+      setState(() => _desktopAddEditorOpen = true);
+      desktopNavigator.push(route).whenComplete(() {
+        if (!mounted) return;
+        setState(() => _desktopAddEditorOpen = false);
+      });
+      return;
+    }
+    Navigator.of(context).push(route);
   }
 
   void _setOrderCardView(bool value) {
@@ -657,6 +674,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _index = value;
       _desktopToolSelection = null;
+      _desktopAddEditorOpen = false;
       _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
     });
   }
@@ -665,6 +683,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _desktopToolSelection = tool;
+      _desktopAddEditorOpen = false;
       _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
     });
   }
@@ -972,7 +991,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             )
           : tabBody,
       floatingActionButton:
-          !_ready || !_localDataHealthy || _desktopToolSelection != null
+          !_ready ||
+              !_localDataHealthy ||
+              _desktopToolSelection != null ||
+              (useDesktopLayout && _desktopAddEditorOpen)
           ? null
           : switch (current.label) {
               '排单' => FloatingActionButton.extended(
