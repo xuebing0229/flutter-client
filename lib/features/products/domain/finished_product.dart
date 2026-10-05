@@ -24,6 +24,7 @@ class FinishedProduct {
     this.deductionAmount = 0,
     this.deductionFeeEnabled = false,
     this.description = '',
+    this.defaultOrder = 0,
     this.soldCount = 0,
     this.saleRecords = const <DateTime>[],
     this.isArchived = false,
@@ -46,6 +47,12 @@ class FinishedProduct {
   final bool deductionFeeEnabled;
 
   final String description;
+
+  /// Stable cross-device order used by the default list sort.
+  final int defaultOrder;
+  int get effectiveDefaultOrder =>
+      defaultOrder == 0 ? defaultOrderFromId(id) : defaultOrder;
+
   final int soldCount;
 
   /// Timestamp for each recorded sale.
@@ -112,6 +119,7 @@ class FinishedProduct {
     double? deductionAmount,
     bool? deductionFeeEnabled,
     String? description,
+    int? defaultOrder,
     int? soldCount,
     List<DateTime>? saleRecords,
     bool? isArchived,
@@ -140,6 +148,7 @@ class FinishedProduct {
       deductionFeeEnabled:
           deductionFeeEnabled ?? this.deductionFeeEnabled,
       description: description ?? this.description,
+      defaultOrder: defaultOrder ?? this.defaultOrder,
       soldCount: nextSoldCount,
       saleRecords: saleRecords ?? this.saleRecords,
       isArchived: isArchived ?? this.isArchived,
