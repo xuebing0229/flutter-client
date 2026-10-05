@@ -130,11 +130,42 @@ jobs:
             -DestinationPath "app-windows-beta.zip" `
             -Force
 
+      - name: Build Windows Beta installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = ($versionLine -split ':', 2)[1].Trim()
+
+          & $iscc `
+            "/DMyAppVersion=$version" `
+            "/O$PWD" `
+            "/Fapp-windows-beta-setup" `
+            "windows\installer\adventurers_guild_beta.iss"
+
+          if (-not (Test-Path "app-windows-beta-setup.exe")) {
+            throw "Windows Beta installer was not created."
+          }
+
       - name: Upload Windows Beta package
         uses: actions/upload-artifact@v4
         with:
           name: beta-windows-package
-          path: app-windows-beta.zip
+          path: |
+            app-windows-beta.zip
+            app-windows-beta-setup.exe
           if-no-files-found: error
 
   publish:
@@ -191,6 +222,7 @@ jobs:
               "published": True,
               "download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-beta.apk",
               "windows_download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta.zip",
+              "windows_installer_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta-setup.exe",
               "notes": "Beta ${VERSION} (${BUILD})",
           }
           Path("app-beta-latest.json").write_text(
@@ -207,6 +239,7 @@ jobs:
           gh release create "$TAG" \
             "dist/app-beta.apk#app-beta.apk" \
             "dist/app-windows-beta.zip#app-windows-beta.zip" \
+            "dist/app-windows-beta-setup.exe#app-windows-beta-setup.exe" \
             "app-beta-latest.json#app-beta-latest.json" \
             --repo xuebing0229/release-files \
             --title "Beta ${VERSION} (${BUILD})" \
@@ -236,6 +269,7 @@ jobs:
               "published": True,
               "download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-beta.apk",
               "windows_download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta.zip",
+              "windows_installer_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta-setup.exe",
           })
           path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
           PY
