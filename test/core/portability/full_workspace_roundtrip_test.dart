@@ -325,6 +325,39 @@ void main() {
     expect(SyncEntityCodec.productToFields(restoredProduct), productFields);
   });
 
+  test('legacy entities do not require a defaultOrder field', () {
+    final legacyOrder = QueueOrder(
+      id: 'order-123456789',
+      platform: CommissionPlatform.mihuashi,
+      title: '旧排单',
+      clientName: '旧单主',
+      deadline: null,
+      nodePresetId: preset.id,
+      nodePresetSnapshot: preset,
+      currentNodeId: nodeA.id,
+    );
+    final legacyProduct = FinishedProduct(
+      id: 'product-987654321',
+      title: '旧成品',
+      platform: CommissionPlatform.mihuashi,
+      saleType: ProductSaleType.single,
+    );
+
+    final orderFields = SyncEntityCodec.orderToFields(legacyOrder);
+    final productFields = SyncEntityCodec.productToFields(legacyProduct);
+
+    expect(orderFields.containsKey('defaultOrder'), isFalse);
+    expect(productFields.containsKey('defaultOrder'), isFalse);
+    expect(
+      SyncEntityCodec.orderFromFields(orderFields).effectiveDefaultOrder,
+      123456789,
+    );
+    expect(
+      SyncEntityCodec.productFromFields(productFields).effectiveDefaultOrder,
+      987654321,
+    );
+  });
+
   test('legacy entity ids get deterministic default order', () {
     expect(defaultOrderFromId('order-123456789'), 123456789);
     expect(defaultOrderFromId('product-987654321'), 987654321);
