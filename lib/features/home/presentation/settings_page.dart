@@ -598,7 +598,12 @@ class _SettingsPageState extends State<SettingsPage>
     final latest = _latest;
     if (updater == null || latest == null || _checking) return;
 
-    setState(() => _checking = true);
+    setState(() {
+      _checking = true;
+      if (Platform.isWindows) {
+        _status = '正在下载新版，完成后程序会自动关闭并重新启动…';
+      }
+    });
 
     try {
       final status = await updater.downloadAndInstall(latest);
@@ -607,8 +612,8 @@ class _SettingsPageState extends State<SettingsPage>
       setState(() {
         if (status == 'permission_required') {
           _status = '请允许“安装未知应用”，返回后再次点击下载';
-        } else if (status.startsWith('downloaded:')) {
-          _status = 'Windows 新版已下载，并已打开文件所在位置。关闭程序后解压覆盖即可。';
+        } else if (status == 'restarting') {
+          _status = '更新已下载，正在自动重启…';
         } else {
           _status = '已交给系统下载，完成后会自动打开安装页面';
         }
@@ -784,7 +789,7 @@ class _SettingsPageState extends State<SettingsPage>
                             onPressed: _checking ? null : _downloadLatest,
                             icon: const Icon(Icons.download_rounded),
                             label: Text(
-                              Platform.isWindows ? '下载新版' : '下载并更新',
+                              Platform.isWindows ? '下载并自动更新' : '下载并更新',
                             ),
                           )
                         : OutlinedButton.icon(
