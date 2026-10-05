@@ -92,7 +92,7 @@ class FullBackupBundleService {
         await encoder.close();
       }
 
-      return _fileBridge.exportLocalFile(
+      return await _fileBridge.exportLocalFile(
         sourcePath: archiveFile.path,
         fileName: fileName,
         mimeType: 'application/zip',
