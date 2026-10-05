@@ -152,11 +152,21 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     setState(() => _pickingReferenceImages = true);
 
     try {
+      final accountId = widget.accountId;
       final imported = await _referenceImageStore.pickAndImport(
-        accountId: widget.accountId,
+        accountId: accountId,
         orderId: widget.orderId,
       );
-      if (!mounted || imported.isEmpty) return;
+      if (!mounted || !_editing) {
+        if (imported.isNotEmpty) {
+          await _referenceImageStore.deleteImages(
+            accountId: accountId,
+            images: imported,
+          );
+        }
+        return;
+      }
+      if (imported.isEmpty) return;
       setState(() {
         _referenceImages.addAll(imported);
         _sessionAddedReferenceImages.addAll(imported);
@@ -341,12 +351,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               else ...[
                 IconButton(
                   tooltip: '取消编辑',
-                  onPressed: () => unawaited(_cancelEditing()),
+                  onPressed: _pickingReferenceImages
+                      ? null
+                      : () => unawaited(_cancelEditing()),
                   icon: const Icon(Icons.close_rounded),
                 ),
                 IconButton(
                   tooltip: '保存',
-                  onPressed: _save,
+                  onPressed: _pickingReferenceImages ? null : _save,
                   icon: const Icon(Icons.check_rounded),
                 ),
               ],
@@ -635,7 +647,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _save,
+                    onPressed: _pickingReferenceImages ? null : _save,
                     icon: const Icon(Icons.check_rounded),
                     label: const Text('确认'),
                   ),
