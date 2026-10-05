@@ -390,13 +390,17 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       'order.deductionFeeEnabled',
     ),
     description: _asText(json['description'], 'order.description'),
-    referenceImages: [
-      for (final item in _asList(
-        json['referenceImages'],
-        'order.referenceImages',
-      ))
-        _referenceImageFromJson(_asMap(item, 'order.referenceImage')),
-    ],
+    referenceImages: json['referenceImages'] == null
+        ? const <OrderReferenceImage>[]
+        : <OrderReferenceImage>[
+            for (final item in _asList(
+              json['referenceImages'],
+              'order.referenceImages',
+            ))
+              _referenceImageFromJson(
+                _asMap(item, 'order.referenceImage'),
+              ),
+          ],
     completedAt: _asNullableDateTime(json['completedAt'], 'order.completedAt'),
     settledAt: _asNullableDateTime(json['settledAt'], 'order.settledAt'),
     settledIncome: _asNullableDouble(
