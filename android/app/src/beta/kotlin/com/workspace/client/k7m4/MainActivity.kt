@@ -48,6 +48,8 @@ class MainActivity : FlutterActivity() {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
 
+        cleanupStaleUpdatePackages()
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "app.beta_update",
@@ -280,6 +282,8 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        cleanupUpdateDirectory(updateDir)
+
         val apk = File(updateDir, safeName)
         if (apk.exists()) {
             apk.delete()
@@ -346,6 +350,25 @@ class MainActivity : FlutterActivity() {
         } catch (error: Exception) {
             unregisterDownloadReceiver()
             result.error("DOWNLOAD_FAILED", error.message, null)
+        }
+    }
+
+    private fun cleanupStaleUpdatePackages() {
+        val baseDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: return
+        val updateDir = File(baseDir, "updates")
+        cleanupUpdateDirectory(updateDir)
+    }
+
+    private fun cleanupUpdateDirectory(updateDir: File) {
+        if (!updateDir.exists()) return
+
+        runCatching {
+            updateDir.listFiles()?.forEach { file ->
+                if (file.isFile && file.name.lowercase().endsWith(".apk")) {
+                    file.delete()
+                }
+            }
         }
     }
 
