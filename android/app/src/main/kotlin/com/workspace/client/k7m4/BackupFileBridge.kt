@@ -361,46 +361,59 @@ class BackupFileBridge(
             return
         }
 
-        val createdFiles = mutableListOf<File>()
-        try {
-            val cacheDir = File(activity.cacheDir, "reference-import").apply {
-                mkdirs()
-            }
-            val payload = mutableListOf<Map<String, String>>()
-
-            for (uri in uris) {
-                val displayName = queryDisplayName(uri)
-                val extension = safeExtension(displayName)
-                val file = File(
-                    cacheDir,
-                    "ref-${UUID.randomUUID()}${extension ?: ".img"}",
-                )
-
-                val input = activity.contentResolver.openInputStream(uri)
-                    ?: throw IllegalStateException("Unable to open selected image.")
-                input.use { source ->
-                    file.outputStream().use { destination ->
-                        source.copyTo(destination)
+        Thread {
+            val createdFiles = mutableListOf<File>()
+            try {
+                val cacheDir = File(activity.cacheDir, "reference-import").apply {
+                    mkdirs()
+                }
+                runCatching {
+                    cacheDir.listFiles()?.forEach { stale ->
+                        if (stale.isFile) stale.delete()
                     }
                 }
-                createdFiles.add(file)
-                payload.add(
-                    linkedMapOf(
-                        "path" to file.absolutePath,
-                        "name" to displayName,
-                    ),
-                )
-            }
 
-            result.success(payload)
-        } catch (error: Exception) {
-            createdFiles.forEach { runCatching { it.delete() } }
-            result.error(
-                "REFERENCE_IMAGE_IMPORT_FAILED",
-                error.message ?: "Reference image import failed.",
-                null,
-            )
-        }
+                val payload = mutableListOf<Map<String, String>>()
+                for (uri in uris) {
+                    val displayName = queryDisplayName(uri)
+                    val extension = safeExtension(displayName)
+                    val file = File(
+                        cacheDir,
+                        "ref-${UUID.randomUUID()}${extension ?: ".img"}",
+                    )
+
+                    val input = activity.contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException(
+                            "Unable to open selected image.",
+                        )
+                    input.use { source ->
+                        file.outputStream().use { destination ->
+                            source.copyTo(destination)
+                        }
+                    }
+                    createdFiles.add(file)
+                    payload.add(
+                        linkedMapOf(
+                            "path" to file.absolutePath,
+                            "name" to displayName,
+                        ),
+                    )
+                }
+
+                activity.runOnUiThread {
+                    result.success(payload)
+                }
+            } catch (error: Exception) {
+                createdFiles.forEach { runCatching { it.delete() } }
+                activity.runOnUiThread {
+                    result.error(
+                        "REFERENCE_IMAGE_IMPORT_FAILED",
+                        error.message ?: "Reference image import failed.",
+                        null,
+                    )
+                }
+            }
+        }.start()
     }
 
     private fun finishLocalFileExport(
@@ -427,26 +440,36 @@ class BackupFileBridge(
             return
         }
 
-        try {
-            val source = File(sourcePath)
-            if (!source.isFile) {
-                throw IllegalStateException("The source file is no longer available.")
-            }
-            val output = activity.contentResolver.openOutputStream(uri, "w")
-                ?: throw IllegalStateException("Unable to open file destination.")
-            source.inputStream().use { input ->
-                output.use { destination ->
-                    input.copyTo(destination)
+        Thread {
+            try {
+                val source = File(sourcePath)
+                if (!source.isFile) {
+                    throw IllegalStateException(
+                        "The source file is no longer available.",
+                    )
+                }
+                val output = activity.contentResolver.openOutputStream(uri, "w")
+                    ?: throw IllegalStateException(
+                        "Unable to open file destination.",
+                    )
+                source.inputStream().use { input ->
+                    output.use { destination ->
+                        input.copyTo(destination)
+                    }
+                }
+                activity.runOnUiThread {
+                    result.success(true)
+                }
+            } catch (error: Exception) {
+                activity.runOnUiThread {
+                    result.error(
+                        "LOCAL_FILE_EXPORT_FAILED",
+                        error.message ?: "File export failed.",
+                        null,
+                    )
                 }
             }
-            result.success(true)
-        } catch (error: Exception) {
-            result.error(
-                "LOCAL_FILE_EXPORT_FAILED",
-                error.message ?: "File export failed.",
-                null,
-            )
-        }
+        }.start()
     }
 
     private fun queryDisplayName(uri: Uri): String {
