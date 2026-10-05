@@ -357,6 +357,7 @@ class SyncCoordinator extends ChangeNotifier {
   Future<void> restorePortableBackupForCurrentWorkspace({
     required AppBackupData backup,
     required void Function() applyWorkspace,
+    Directory? assetSourceDirectory,
   }) {
     if (_disposed || !_initialized) {
       throw StateError('同步协调器尚未准备好，不能恢复同步历史。');
@@ -367,6 +368,7 @@ class SyncCoordinator extends ChangeNotifier {
       await _restorePortableBackup(
         backup: backup,
         applyWorkspace: applyWorkspace,
+        assetSourceDirectory: assetSourceDirectory,
       );
 
       _lastEntityValues = _captureEntities();
@@ -381,6 +383,7 @@ class SyncCoordinator extends ChangeNotifier {
   Future<void> _restorePortableBackup({
     required AppBackupData backup,
     required void Function()? applyWorkspace,
+    Directory? assetSourceDirectory,
   }) async {
     PortableSyncWorkspaceValidator.validateBackup(
       backup: backup,
@@ -391,6 +394,7 @@ class SyncCoordinator extends ChangeNotifier {
     await _recordStore.replacePortableRecords(
       accountId: accountId,
       records: records,
+      assetSourceDirectory: assetSourceDirectory,
       requiredIds: <SyncEntityKind, Set<String>>{
         SyncEntityKind.order: <String>{
           for (final order in backup.orders) order.id,
