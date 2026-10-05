@@ -164,16 +164,17 @@ class DataPortabilityFileBridge {
 
     if (Platform.isWindows) {
       final extension = _extensionOf(fileName);
-      final typeGroup = XTypeGroup(
-        label: '图片',
-        extensions: extension == null
-            ? const <String>[]
-            : <String>[extension],
-      );
-      final location = await getSaveLocation(
-        suggestedName: fileName,
-        acceptedTypeGroups: <XTypeGroup>[typeGroup],
-      );
+      final location = extension == null
+          ? await getSaveLocation(suggestedName: fileName)
+          : await getSaveLocation(
+              suggestedName: fileName,
+              acceptedTypeGroups: <XTypeGroup>[
+                XTypeGroup(
+                  label: '图片',
+                  extensions: <String>[extension],
+                ),
+              ],
+            );
       if (location == null) return false;
 
       await File(sourcePath).copy(location.path);
