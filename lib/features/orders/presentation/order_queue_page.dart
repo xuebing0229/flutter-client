@@ -821,8 +821,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   ? CollectionCardGrid(
                       itemCount: orders.length,
                       mobileAspectRatio: widget.featureStore.nodeProgress
-                          ? 0.48
-                          : 0.58,
+                          ? 0.43
+                          : 0.52,
                       desktopMinHeight: widget.featureStore.nodeProgress
                           ? 320
                           : 260,

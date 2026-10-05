@@ -49,42 +49,39 @@ class OrderSummaryCard extends StatelessWidget {
               if (compact) ...[
                 Row(
                   children: [
-                    if (showPlatform) ...[
+                    if (showPlatform)
                       SummaryTag(
                         text: order.platform.label,
                         compact: true,
                       ),
-                      const SizedBox(width: 6),
-                    ],
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          if (hasSyncConflict) ...[
-                            const Tooltip(
-                              message: '有同步冲突待确认',
-                              child: _SyncConflictDot(),
-                            ),
-                            const SizedBox(width: 7),
-                          ],
-                          if (order.isPinned) ...[
-                            Icon(
-                              Icons.push_pin_rounded,
-                              size: 16,
-                              color: colors.primary,
-                            ),
-                            const SizedBox(width: 5),
-                          ],
-                          Flexible(
-                            child: _DeadlineStatusBadge(
-                              order: order,
-                              compact: true,
-                            ),
-                          ),
-                        ],
+                    const Spacer(),
+                    if (hasSyncConflict) ...[
+                      const Tooltip(
+                        message: '有同步冲突待确认',
+                        child: _SyncConflictDot(),
                       ),
-                    ),
+                      const SizedBox(width: 7),
+                    ],
+                    if (order.isPinned)
+                      Icon(
+                        Icons.push_pin_rounded,
+                        size: 16,
+                        color: colors.primary,
+                      ),
                   ],
+                ),
+                const SizedBox(height: 7),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: _DeadlineStatusBadge(
+                      order: order,
+                      compact: true,
+                      neverEllipsize: true,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -155,13 +152,15 @@ class OrderSummaryCard extends StatelessWidget {
               SizedBox(height: compact ? 10 : 13),
               Divider(height: 1, color: colors.outlineVariant),
               SizedBox(height: compact ? 9 : 13),
-              SummaryMetaItem(
-                icon: Icons.calendar_today_outlined,
-                label: order.deadline == null
-                    ? '截稿时间未设置'
-                    : _formatDateTime(order.deadline!),
-                compact: compact,
-              ),
+              if (compact)
+                _CompactDeadlineMeta(deadline: order.deadline)
+              else
+                SummaryMetaItem(
+                  icon: Icons.calendar_today_outlined,
+                  label: order.deadline == null
+                      ? '截稿时间未设置'
+                      : _formatDateTime(order.deadline!),
+                ),
               SizedBox(height: compact ? 7 : 9),
               SummaryMetaItem(
                 icon: Icons.route_outlined,
@@ -211,6 +210,75 @@ class OrderSummaryCard extends StatelessWidget {
               ],
         ],
       ),
+    );
+  }
+}
+
+class _CompactDeadlineMeta extends StatelessWidget {
+  const _CompactDeadlineMeta({required this.deadline});
+
+  final DateTime? deadline;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: colors.onSurfaceVariant,
+      height: 1.15,
+    );
+
+    if (deadline == null) {
+      return Row(
+        children: [
+          Icon(
+            Icons.calendar_today_outlined,
+            size: 15,
+            color: colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(child: Text('截稿时间未设置', style: style)),
+        ],
+      );
+    }
+
+    String two(int number) => number.toString().padLeft(2, '0');
+    final dateText =
+        '${deadline!.year}-${two(deadline!.month)}-${two(deadline!.day)}';
+    final timeText = '${two(deadline!.hour)}:${two(deadline!.minute)}';
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(
+            Icons.calendar_today_outlined,
+            size: 15,
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                dateText,
+                maxLines: 1,
+                softWrap: false,
+                style: style?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                timeText,
+                maxLines: 1,
+                softWrap: false,
+                style: style,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -341,10 +409,12 @@ class _DeadlineStatusBadge extends StatefulWidget {
   const _DeadlineStatusBadge({
     required this.order,
     this.compact = false,
+    this.neverEllipsize = false,
   });
 
   final QueueOrder order;
   final bool compact;
+  final bool neverEllipsize;
 
   @override
   State<_DeadlineStatusBadge> createState() => _DeadlineStatusBadgeState();
@@ -405,7 +475,10 @@ class _DeadlineStatusBadgeState extends State<_DeadlineStatusBadge> {
         child: Text(
           status.label,
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          overflow: widget.neverEllipsize
+              ? TextOverflow.visible
+              : TextOverflow.ellipsis,
+          softWrap: false,
           style: (widget.compact
                   ? Theme.of(context).textTheme.labelSmall
                   : Theme.of(context).textTheme.labelMedium)
