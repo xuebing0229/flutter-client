@@ -170,12 +170,8 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
   }
 
   void _reorder(int oldIndex, int newIndex) {
-    // Flutter's onReorder reports the insertion point before the removed item
-    // is taken out, so dragging an item down needs a one-position adjustment.
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
-    }
-
+    // onReorderItem already reports newIndex after accounting for the removed
+    // item, so no extra downward-drag adjustment is needed here.
     final reordered = [..._nodes];
     final item = reordered.removeAt(oldIndex);
     final target = newIndex.clamp(0, reordered.length);
@@ -334,7 +330,7 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
               ),
               buildDefaultDragHandles: false,
               itemCount: _nodes.length,
-              onReorder: _reorder,
+              onReorderItem: _reorder,
               itemBuilder: (context, index) {
                 final node = _nodes[index];
                 final isLast = index == _nodes.length - 1;
