@@ -108,6 +108,7 @@ class ThemePalettePreview extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final color in colors)
             Expanded(
