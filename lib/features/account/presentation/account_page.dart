@@ -606,17 +606,12 @@ class _AccountCardState extends State<_AccountCard> {
   Future<void> _pickAvatar() async {
     if (_avatarBusy) return;
 
-    String? path;
     setState(() => _avatarBusy = true);
     try {
-      path = await _fileBridge.pickImage();
-      if (!mounted || path == null) return;
-
-      if (!mounted) return;
       final cropped = await Navigator.of(context).push<Uint8List>(
         MaterialPageRoute<Uint8List>(
           builder: (_) => AvatarCropPage(
-            imagePath: path!,
+            pickImage: _fileBridge.pickImage,
           ),
         ),
       );
@@ -662,12 +657,6 @@ class _AccountCardState extends State<_AccountCard> {
         SnackBar(content: Text('头像更新失败：$error')),
       );
     } finally {
-      if (Platform.isAndroid && path != null) {
-        try {
-          final temp = File(path);
-          if (await temp.exists()) await temp.delete();
-        } catch (_) {}
-      }
       if (mounted) setState(() => _avatarBusy = false);
     }
   }
