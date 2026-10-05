@@ -131,15 +131,9 @@ class BackupFileBridge(
 
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
+            // Providers disagree on the MIME types for .zip and .json files.
+            // Select broadly here and validate the chosen file in Dart.
             type = "*/*"
-            putExtra(
-                Intent.EXTRA_MIME_TYPES,
-                arrayOf(
-                    "application/zip",
-                    "application/json",
-                    "application/octet-stream",
-                ),
-            )
         }
         activity.startActivityForResult(intent, REQUEST_BACKUP_FILE)
     }
