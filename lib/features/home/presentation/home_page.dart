@@ -659,6 +659,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           icon: Icons.calendar_month_outlined,
           selectedIcon: Icons.calendar_month_rounded,
           page: SchedulePage(
+            accountId: widget.accountId,
             store: _orderStore,
             productStore: _productStore,
             nodePresetStore: _nodePresetStore,
