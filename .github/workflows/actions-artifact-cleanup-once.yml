@@ -1,0 +1,34 @@
+name: Cleanup old Actions artifacts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/actions-artifact-cleanup-once.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KEEP_RUN_ID: "37272467182"
+    steps:
+      - name: Delete previous build artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | [.id, (.workflow_run.id // 0), .name] | @tsv' |
+          while IFS=$'\t' read -r artifact_id run_id artifact_name; do
+            if [ "$run_id" = "$KEEP_RUN_ID" ]; then
+              echo "Keeping active run artifact: $artifact_name ($artifact_id)"
+              continue
+            fi
+            echo "Deleting artifact: $artifact_name ($artifact_id) from run $run_id"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id"
+          done
