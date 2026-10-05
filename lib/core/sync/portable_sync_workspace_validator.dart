@@ -35,6 +35,16 @@ class PortableSyncWorkspaceValidator {
       for (final preset in backup.nodePresets)
         preset.id: SyncEntityCodec.nodePresetToFields(preset),
     };
+    final containsSettingsRecord = records.any(
+      (record) => record['kind'] == SyncEntityKind.settings.name,
+    );
+    final settings = containsSettingsRecord
+        ? <String, dynamic>{
+            'id': 'app',
+            for (final entry in backup.settings.entries)
+              if (entry.key != 'syncBaselineRecords') entry.key: entry.value,
+          }
+        : null;
 
     final mergeEngine = SyncMergeEngine();
     final recordStore = SyncRecordStore(mergeEngine: mergeEngine);
@@ -54,6 +64,7 @@ class PortableSyncWorkspaceValidator {
       orders: orders,
       products: products,
       presets: presets,
+      settings: settings,
       mergeEngine: mergeEngine,
     )) {
       throw const FormatException(
@@ -69,6 +80,7 @@ class PortableSyncWorkspaceValidator {
     required Map<String, Map<String, dynamic>> orders,
     required Map<String, Map<String, dynamic>> products,
     required Map<String, Map<String, dynamic>> presets,
+    Map<String, dynamic>? settings,
     SyncMergeEngine? mergeEngine,
   }) {
     final engine = mergeEngine ?? SyncMergeEngine();
@@ -77,6 +89,11 @@ class PortableSyncWorkspaceValidator {
       SyncEntityKind.product: products,
       SyncEntityKind.nodePreset: presets,
     };
+    if (settings != null) {
+      expected[SyncEntityKind.settings] = <String, Map<String, dynamic>>{
+        'app': settings,
+      };
+    }
     final seen = <SyncEntityKind, Set<String>>{
       for (final kind in SyncEntityKind.values) kind: <String>{},
     };
@@ -90,7 +107,9 @@ class PortableSyncWorkspaceValidator {
         final identity = '${record.kind.name}\u0000${record.id}';
         if (!identities.add(identity)) return false;
 
-        final local = expected[record.kind]![record.id];
+        final kindExpected = expected[record.kind];
+        if (kindExpected == null) return false;
+        final local = kindExpected[record.id];
         final materialized = engine.materializeKeepingLocalConflicts(
           record,
           local,
