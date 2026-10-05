@@ -23,6 +23,7 @@ class BackupFileBridge(
         private const val REQUEST_QR_IMAGE = 7103
         private const val REQUEST_REFERENCE_IMAGES = 7104
         private const val REQUEST_LOCAL_FILE_EXPORT = 7105
+        private const val REQUEST_BACKUP_FILE = 7106
     }
 
     private var pendingExport: MethodChannel.Result? = null
@@ -30,6 +31,7 @@ class BackupFileBridge(
     private var pendingQrImage: MethodChannel.Result? = null
     private var pendingReferenceImages: MethodChannel.Result? = null
     private var pendingLocalFileExport: MethodChannel.Result? = null
+    private var pendingBackupFile: MethodChannel.Result? = null
     private var pendingExportContent: String? = null
     private var pendingLocalFilePath: String? = null
 
@@ -38,6 +40,7 @@ class BackupFileBridge(
             when (call.method) {
                 "exportBackup" -> handleExport(call, result)
                 "importBackup" -> handleImport(result)
+                "pickBackupFile" -> handleBackupFile(result)
                 "pickQrImage" -> handleQrImage(result)
                 "pickReferenceImages" -> handleReferenceImages(result)
                 "exportLocalFile" -> handleLocalFileExport(call, result)
@@ -51,7 +54,8 @@ class BackupFileBridge(
             pendingImport != null ||
             pendingQrImage != null ||
             pendingReferenceImages != null ||
-            pendingLocalFileExport != null
+            pendingLocalFileExport != null ||
+            pendingBackupFile != null
 
     private fun handleExport(
         call: MethodCall,
@@ -111,6 +115,33 @@ class BackupFileBridge(
         }
 
         activity.startActivityForResult(intent, REQUEST_IMPORT)
+    }
+
+    private fun handleBackupFile(result: MethodChannel.Result) {
+        if (isFileDialogBusy()) {
+            result.error(
+                "FILE_DIALOG_BUSY",
+                "A file dialog is already open.",
+                null,
+            )
+            return
+        }
+
+        pendingBackupFile = result
+
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf(
+                    "application/zip",
+                    "application/json",
+                    "application/octet-stream",
+                ),
+            )
+        }
+        activity.startActivityForResult(intent, REQUEST_BACKUP_FILE)
     }
 
     private fun handleQrImage(result: MethodChannel.Result) {
@@ -220,6 +251,10 @@ class BackupFileBridge(
                 finishImport(resultCode, data?.data)
                 true
             }
+            REQUEST_BACKUP_FILE -> {
+                finishBackupFile(resultCode, data?.data)
+                true
+            }
             REQUEST_QR_IMAGE -> {
                 finishQrImage(resultCode, data?.data)
                 true
@@ -296,6 +331,60 @@ class BackupFileBridge(
                 null,
             )
         }
+    }
+
+    private fun finishBackupFile(resultCode: Int, uri: Uri?) {
+        val result = pendingBackupFile ?: return
+        pendingBackupFile = null
+
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            result.success(null)
+            return
+        }
+
+        Thread {
+            try {
+                val displayName = queryDisplayName(uri)
+                val extension = safeExtension(displayName)
+                val cacheDir = File(activity.cacheDir, "backup-import").apply {
+                    mkdirs()
+                }
+                runCatching {
+                    cacheDir.listFiles()?.forEach { stale ->
+                        if (stale.isFile) stale.delete()
+                    }
+                }
+                val file = File(
+                    cacheDir,
+                    "backup-${UUID.randomUUID()}${extension ?: ".bin"}",
+                )
+
+                val input = activity.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Unable to open backup file.")
+                input.use { source ->
+                    file.outputStream().use { destination ->
+                        source.copyTo(destination)
+                    }
+                }
+
+                activity.runOnUiThread {
+                    result.success(
+                        linkedMapOf(
+                            "path" to file.absolutePath,
+                            "name" to displayName,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                activity.runOnUiThread {
+                    result.error(
+                        "BACKUP_FILE_IMPORT_FAILED",
+                        error.message ?: "Backup file import failed.",
+                        null,
+                    )
+                }
+            }
+        }.start()
     }
 
     private fun finishQrImage(resultCode: Int, uri: Uri?) {
