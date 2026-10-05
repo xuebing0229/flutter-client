@@ -300,11 +300,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
 
       if (openSyncPage == true && mounted) {
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => DeviceSyncPage(coordinator: _syncCoordinator),
-          ),
-        );
+        if (MediaQuery.sizeOf(context).width >= 900) {
+          _selectDesktopTool(AppToolMenu.syncTool);
+        } else {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => DeviceSyncPage(coordinator: _syncCoordinator),
+            ),
+          );
+        }
       }
     } finally {
       _syncConflictPromptVisible = false;
@@ -590,6 +594,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _openAddOrder() {
     FocusManager.instance.primaryFocus?.unfocus();
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    if (useDesktopLayout && _desktopAddEditorOpen) return;
+
     final route = MaterialPageRoute<void>(
       builder: (_) => AddOrderPage(
         accountId: widget.accountId,
@@ -598,7 +605,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         featureStore: widget.featureStore,
       ),
     );
-    final desktopNavigator = MediaQuery.sizeOf(context).width >= 900
+    final desktopNavigator = useDesktopLayout
         ? _desktopContentNavigatorKey.currentState
         : null;
     if (desktopNavigator != null) {
@@ -614,13 +621,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _openAddProduct() {
     FocusManager.instance.primaryFocus?.unfocus();
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    if (useDesktopLayout && _desktopAddEditorOpen) return;
+
     final route = MaterialPageRoute<void>(
       builder: (_) => AddProductPage(
         store: _productStore,
         featureStore: widget.featureStore,
       ),
     );
-    final desktopNavigator = MediaQuery.sizeOf(context).width >= 900
+    final desktopNavigator = useDesktopLayout
         ? _desktopContentNavigatorKey.currentState
         : null;
     if (desktopNavigator != null) {
