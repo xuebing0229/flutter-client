@@ -177,11 +177,24 @@ class BackupFileBridge(
 
         pendingReferenceImages = result
 
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-        }
+        val intent =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Intent(MediaStore.ACTION_PICK_IMAGES).apply {
+                    type = "image/*"
+                    putExtra(
+                        MediaStore.EXTRA_PICK_IMAGES_MAX,
+                        MediaStore.getPickImagesMaxLimit(),
+                    )
+                }
+            } else {
+                Intent(
+                    Intent.ACTION_PICK,
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                ).apply {
+                    type = "image/*"
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }
+            }
         activity.startActivityForResult(intent, REQUEST_REFERENCE_IMAGES)
     }
 
@@ -458,6 +471,16 @@ class BackupFileBridge(
 
                 val payload = mutableListOf<Map<String, String>>()
                 for (uri in uris) {
+                    val mimeType = activity.contentResolver.getType(uri)
+                    if (
+                        mimeType != null &&
+                        !mimeType.startsWith("image/")
+                    ) {
+                        throw IllegalArgumentException(
+                            "Only image files can be used as reference images.",
+                        )
+                    }
+
                     val displayName = queryDisplayName(uri)
                     val extension = safeExtension(displayName)
                     val file = File(
