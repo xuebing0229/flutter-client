@@ -92,10 +92,7 @@ class _AddProductPageState extends State<AddProductPage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('保存'),
-          ),
+          TextButton(onPressed: _save, child: const Text('保存')),
           const SizedBox(width: 6),
         ],
       ),
@@ -108,9 +105,7 @@ class _AddProductPageState extends State<AddProductPage> {
         ),
         children: [
           const FormFieldLabel('图名'),
-          TextField(
-            controller: _titleController,
-          ),
+          TextField(controller: _titleController),
           const SizedBox(height: 14),
           CommissionSettingsEditor(
             platform: _platform,
@@ -155,10 +150,7 @@ class _AddProductPageState extends State<AddProductPage> {
           const FormFieldLabel('售卖方式'),
           SegmentedButton<ProductSaleType>(
             segments: const [
-              ButtonSegment(
-                value: ProductSaleType.single,
-                label: Text('单次售卖'),
-              ),
+              ButtonSegment(value: ProductSaleType.single, label: Text('单次售卖')),
               ButtonSegment(
                 value: ProductSaleType.multiple,
                 label: Text('多次售卖'),
@@ -175,8 +167,15 @@ class _AddProductPageState extends State<AddProductPage> {
             controller: _descriptionController,
             minLines: 3,
             maxLines: 7,
-            decoration: const InputDecoration(
-              hintText: '成品内容、说明或备注',
+            decoration: const InputDecoration(hintText: '成品内容、说明或备注'),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _save,
+              icon: const Icon(Icons.check_rounded),
+              label: const Text('保存'),
             ),
           ),
         ],
