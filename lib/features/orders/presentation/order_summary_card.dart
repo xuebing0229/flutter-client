@@ -49,32 +49,40 @@ class OrderSummaryCard extends StatelessWidget {
               if (compact) ...[
                 Row(
                   children: [
-                    if (showPlatform)
-                      Flexible(
-                        child: SummaryTag(
-                          text: order.platform.label,
-                          compact: true,
-                        ),
+                    if (showPlatform) ...[
+                      SummaryTag(
+                        text: order.platform.label,
+                        compact: true,
                       ),
-                    const Spacer(),
-                    if (hasSyncConflict) ...[
-                      const Tooltip(
-                        message: '有同步冲突待确认',
-                        child: _SyncConflictDot(),
-                      ),
-                      const SizedBox(width: 7),
+                      const SizedBox(width: 6),
                     ],
-                    if (order.isPinned) ...[
-                      Icon(
-                        Icons.push_pin_rounded,
-                        size: 16,
-                        color: colors.primary,
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (hasSyncConflict) ...[
+                            const Tooltip(
+                              message: '有同步冲突待确认',
+                              child: _SyncConflictDot(),
+                            ),
+                            const SizedBox(width: 7),
+                          ],
+                          if (order.isPinned) ...[
+                            Icon(
+                              Icons.push_pin_rounded,
+                              size: 16,
+                              color: colors.primary,
+                            ),
+                            const SizedBox(width: 5),
+                          ],
+                          Flexible(
+                            child: _DeadlineStatusBadge(
+                              order: order,
+                              compact: true,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 5),
-                    ],
-                    Flexible(
-                      flex: 2,
-                      child: _DeadlineStatusBadge(order: order, compact: true),
                     ),
                   ],
                 ),
