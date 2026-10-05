@@ -17,6 +17,16 @@ class OrderStore extends ChangeNotifier {
     return _orders.firstWhere((order) => order.id == id);
   }
 
+  void _sortDefaultOrder() {
+    _orders.sort((left, right) {
+      final byOrder = right.effectiveDefaultOrder.compareTo(
+        left.effectiveDefaultOrder,
+      );
+      if (byOrder != 0) return byOrder;
+      return right.id.compareTo(left.id);
+    });
+  }
+
   QueueOrder _normalizeActiveNode(QueueOrder order) {
     if (order.isArchived || order.nodePresetSnapshot.nodes.isEmpty) {
       return order;
@@ -49,11 +59,13 @@ class OrderStore extends ChangeNotifier {
     _orders
       ..clear()
       ..addAll(orders.map(_normalizeActiveNode));
+    _sortDefaultOrder();
     notifyListeners();
   }
 
   void addOrder(QueueOrder order) {
-    _orders.insert(0, _normalizeActiveNode(order));
+    _orders.add(_normalizeActiveNode(order));
+    _sortDefaultOrder();
     notifyListeners();
   }
 
