@@ -157,9 +157,10 @@ class SyncOperation {
       delta: rawDelta as num?,
       metadata: rawMetadata == null
           ? const <String, dynamic>{}
-          : rawMetadata.map(
-              (key, value) => MapEntry(key.toString(), value),
-            ),
+          : <String, dynamic>{
+              for (final entry in rawMetadata.entries)
+                entry.key.toString(): entry.value,
+            },
     );
   }
 }

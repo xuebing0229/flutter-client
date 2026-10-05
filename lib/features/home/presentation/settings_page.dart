@@ -31,6 +31,7 @@ class SettingsPage extends StatefulWidget {
     required this.featureStore,
     required this.accountStore,
     required this.syncCoordinator,
+    required this.onApplyWorkspaceSettings,
     this.onOpenThemeColor,
     super.key,
   });
@@ -42,6 +43,8 @@ class SettingsPage extends StatefulWidget {
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
   final SyncCoordinator syncCoordinator;
+  final Future<void> Function(Map<String, dynamic> settings)
+  onApplyWorkspaceSettings;
   final VoidCallback? onOpenThemeColor;
 
   @override
@@ -53,14 +56,10 @@ class _SettingsPageState extends State<SettingsPage>
   late final BetaUpdateCoordinator? _betaUpdater = !isBetaBuild
       ? null
       : Platform.isAndroid
-          ? BetaUpdateCoordinator(
-              installer: const AndroidBetaUpdateInstaller(),
-            )
-          : Platform.isWindows
-              ? BetaUpdateCoordinator(
-                  installer: const WindowsBetaUpdateInstaller(),
-                )
-              : null;
+      ? BetaUpdateCoordinator(installer: const AndroidBetaUpdateInstaller())
+      : Platform.isWindows
+      ? BetaUpdateCoordinator(installer: const WindowsBetaUpdateInstaller())
+      : null;
 
   final DataPortabilityFileBridge _fileBridge =
       const DataPortabilityFileBridge();
@@ -79,8 +78,7 @@ class _SettingsPageState extends State<SettingsPage>
   UpdateManifest? _latest;
   String _status = '尚未检查';
 
-  bool get _hasUpdate =>
-      _latest != null && _latest!.build > _currentBuild;
+  bool get _hasUpdate => _latest != null && _latest!.build > _currentBuild;
 
   @override
   void initState() {
@@ -130,15 +128,13 @@ class _SettingsPageState extends State<SettingsPage>
 
     setState(() => _reminderBusy = true);
     try {
-      final notificationGranted =
-          await _reminderService.ensurePermission();
+      final notificationGranted = await _reminderService.ensurePermission();
       if (!notificationGranted) {
         if (mounted) _showMessage('请先允许通知权限');
         return;
       }
 
-      final diagnostics =
-          await _reminderService.scheduleDiagnosticTest();
+      final diagnostics = await _reminderService.scheduleDiagnosticTest();
       if (!mounted) return;
 
       setState(() => _reminderDiagnostics = diagnostics);
@@ -178,8 +174,7 @@ class _SettingsPageState extends State<SettingsPage>
     }
   }
 
-  bool _diagnosticBool(String key) =>
-      _reminderDiagnostics[key] == true;
+  bool _diagnosticBool(String key) => _reminderDiagnostics[key] == true;
 
   int _diagnosticMillis(String key) {
     final value = _reminderDiagnostics[key];
@@ -197,14 +192,14 @@ class _SettingsPageState extends State<SettingsPage>
   Widget _buildReminderDiagnosticsCard() {
     final colors = Theme.of(context).colorScheme;
     final loaded = _reminderDiagnostics.isNotEmpty;
-    final notificationsEnabled =
-        _diagnosticBool('notificationsEnabled');
-    final notificationChannelEnabled =
-        _diagnosticBool('notificationChannelEnabled');
-    final exactAlarmGranted =
-        _diagnosticBool('exactAlarmGranted');
-    final batteryOptimizationIgnored =
-        _diagnosticBool('batteryOptimizationIgnored');
+    final notificationsEnabled = _diagnosticBool('notificationsEnabled');
+    final notificationChannelEnabled = _diagnosticBool(
+      'notificationChannelEnabled',
+    );
+    final exactAlarmGranted = _diagnosticBool('exactAlarmGranted');
+    final batteryOptimizationIgnored = _diagnosticBool(
+      'batteryOptimizationIgnored',
+    );
     final lastFailure =
         (_reminderDiagnostics['lastFailure'] as String?)?.trim() ?? '';
     final savedCount =
@@ -221,27 +216,23 @@ class _SettingsPageState extends State<SettingsPage>
               color: ok ? colors.primary : colors.error,
             ),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text('$label：${ok ? good : bad}'),
-            ),
+            Expanded(child: Text('$label：${ok ? good : bad}')),
           ],
         ),
       );
     }
 
     final coreReady =
-        notificationsEnabled &&
-        notificationChannelEnabled &&
-        exactAlarmGranted;
+        notificationsEnabled && notificationChannelEnabled && exactAlarmGranted;
     final guidanceText = !loaded
         ? '正在检查系统提醒状态…'
         : !coreReady
-            ? '有系统权限尚未准备好，建议先按下面的状态逐项处理。'
-            : isAggressiveReminderVendor(_reminderDiagnostics)
-                ? '提醒链路本身正常。你的系统在手动划掉 App 后仍可能停止本地提醒，建议锁定最近任务并不要主动划掉。'
-                : batteryOptimizationIgnored
-                    ? '本地提醒配置正常。'
-                    : '提醒链路正常，但系统仍在对 App 做电池优化，可能导致后台提醒延迟。';
+        ? '有系统权限尚未准备好，建议先按下面的状态逐项处理。'
+        : isAggressiveReminderVendor(_reminderDiagnostics)
+        ? '提醒链路本身正常。你的系统在手动划掉 App 后仍可能停止本地提醒，建议锁定最近任务并不要主动划掉。'
+        : batteryOptimizationIgnored
+        ? '本地提醒配置正常。'
+        : '提醒链路正常，但系统仍在对 App 做电池优化，可能导致后台提醒延迟。';
 
     return _SettingsCard(
       title: '截稿提醒',
@@ -285,30 +276,10 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           const SizedBox(height: 14),
           if (loaded) ...[
-            statusLine(
-              '通知权限',
-              notificationsEnabled,
-              '正常',
-              '未开启',
-            ),
-            statusLine(
-              '提醒频道',
-              notificationChannelEnabled,
-              '正常',
-              '被系统关闭',
-            ),
-            statusLine(
-              '精确闹钟',
-              exactAlarmGranted,
-              '可用',
-              '不可用',
-            ),
-            statusLine(
-              '电池优化',
-              batteryOptimizationIgnored,
-              '已忽略限制',
-              '仍受系统限制',
-            ),
+            statusLine('通知权限', notificationsEnabled, '正常', '未开启'),
+            statusLine('提醒频道', notificationChannelEnabled, '正常', '被系统关闭'),
+            statusLine('精确闹钟', exactAlarmGranted, '可用', '不可用'),
+            statusLine('电池优化', batteryOptimizationIgnored, '已忽略限制', '仍受系统限制'),
           ],
           const SizedBox(height: 6),
           Wrap(
@@ -382,17 +353,14 @@ class _SettingsPageState extends State<SettingsPage>
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.tonalIcon(
-                  onPressed:
-                      _reminderBusy ? null : _runReminderDiagnosticTest,
+                  onPressed: _reminderBusy ? null : _runReminderDiagnosticTest,
                   icon: _reminderBusy
                       ? const SizedBox.square(
                           dimension: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.timer_outlined),
-                  label: Text(
-                    _reminderBusy ? '正在安排…' : '1 分钟测试提醒',
-                  ),
+                  label: Text(_reminderBusy ? '正在安排…' : '1 分钟测试提醒'),
                 ),
               ),
               const SizedBox(height: 8),
@@ -417,8 +385,7 @@ class _SettingsPageState extends State<SettingsPage>
     setState(() => _backupBusy = true);
 
     try {
-      final snapshot =
-          await widget.syncCoordinator.exportPortableWorkspace();
+      final snapshot = await widget.syncCoordinator.exportPortableWorkspace();
       final backup = AppBackupData(
         exportedAt: snapshot.exportedAt,
         orders: snapshot.orders,
@@ -466,16 +433,12 @@ class _SettingsPageState extends State<SettingsPage>
       final incomingAccount = backup.accountSyncState;
       final localAccountId = widget.accountStore.accountId;
       if (localAccountId != null && incomingAccount == null) {
-        throw const FormatException(
-          '这份备份没有账号归属信息，不能覆盖当前账号。',
-        );
+        throw const FormatException('这份备份没有账号归属信息，不能覆盖当前账号。');
       }
       if (incomingAccount != null &&
           localAccountId != null &&
           incomingAccount.accountId != localAccountId) {
-        throw const FormatException(
-          '这份备份属于另一个激活账号，不能导入到当前账号。',
-        );
+        throw const FormatException('这份备份属于另一个激活账号，不能导入到当前账号。');
       }
       if (!mounted) return;
 
@@ -517,28 +480,13 @@ class _SettingsPageState extends State<SettingsPage>
         ),
       );
 
-      final themeModeName = backup.settings['themeMode'];
-      final restoredMode = switch (themeModeName) {
-        'light' => ThemeMode.light,
-        'dark' => ThemeMode.dark,
-        'system' => ThemeMode.system,
-        _ => throw const FormatException('备份主题设置格式无效。'),
-      };
-      await widget.themeStore.setMode(restoredMode);
-
-      final restoredPaletteId = backup.settings['themePaletteId'];
-      if (restoredPaletteId is String && restoredPaletteId.isNotEmpty) {
-        await widget.themeStore.setPaletteId(restoredPaletteId);
-      }
-
-      await widget.featureStore.applyJson(
-        backup.settings['features'],
-      );
+      // Keep backup restore on the same settings application path as device
+      // sync. This restores layout/sort/navigation settings as well as theme
+      // and feature switches, without maintaining a second partial importer.
+      await widget.onApplyWorkspaceSettings(backup.settings);
 
       if (backup.accountSyncState != null) {
-        await widget.accountStore.mergeSyncedState(
-          backup.accountSyncState!,
-        );
+        await widget.accountStore.mergeSyncedState(backup.accountSyncState!);
       }
 
       _showMessage('备份已完整恢复');
@@ -555,10 +503,7 @@ class _SettingsPageState extends State<SettingsPage>
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -577,9 +522,7 @@ class _SettingsPageState extends State<SettingsPage>
 
       setState(() {
         _latest = latest;
-        _status = latest.build > _currentBuild
-            ? '发现新的测试版'
-            : '已经是最新测试版';
+        _status = latest.build > _currentBuild ? '发现新的测试版' : '已经是最新测试版';
       });
     } on SocketException {
       if (!mounted) return;
@@ -667,10 +610,7 @@ class _SettingsPageState extends State<SettingsPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '设置',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: const Text('设置', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
       body: ListView(
         padding: AppLayoutSpacing.pageScrollPadding(
@@ -718,13 +658,13 @@ class _SettingsPageState extends State<SettingsPage>
                           const Icon(Icons.chevron_right_rounded),
                         ],
                       ),
-                      onTap: widget.onOpenThemeColor ??
+                      onTap:
+                          widget.onOpenThemeColor ??
                           () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                builder: (_) => ThemeColorPage(
-                                  store: widget.themeStore,
-                                ),
+                                builder: (_) =>
+                                    ThemeColorPage(store: widget.themeStore),
                               ),
                             );
                           },
@@ -739,9 +679,7 @@ class _SettingsPageState extends State<SettingsPage>
                       contentPadding: EdgeInsets.zero,
                       secondary: const Icon(Icons.auto_awesome_outlined),
                       title: const Text('抽象版'),
-                      subtitle: const Text(
-                        '开启后会逐步启用抽象版 UI 和趣味弹窗；当前仅预留入口。',
-                      ),
+                      subtitle: const Text('开启后会逐步启用抽象版 UI 和趣味弹窗；当前仅预留入口。'),
                       value: widget.featureStore.abstractMode,
                       onChanged: (value) {
                         widget.featureStore.setEnabled(
@@ -765,9 +703,7 @@ class _SettingsPageState extends State<SettingsPage>
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.upload_file_rounded),
                   title: const Text('导出完整备份'),
-                  subtitle: const Text(
-                    '包含排单、成品、节点预设、账号设备记录、归档状态和稿费数据',
-                  ),
+                  subtitle: const Text('包含工作数据、UI 设置、账号设备记录和完整同步历史'),
                   trailing: _backupBusy
                       ? const SizedBox.square(
                           dimension: 20,
@@ -818,24 +754,23 @@ class _SettingsPageState extends State<SettingsPage>
                   if (_downloadingUpdate && Platform.isWindows) ...[
                     const SizedBox(height: 12),
                     LinearProgressIndicator(
-                      value: _downloadTotalBytes != null &&
+                      value:
+                          _downloadTotalBytes != null &&
                               _downloadTotalBytes! > 0
                           ? (_downloadReceivedBytes / _downloadTotalBytes!)
-                              .clamp(0.0, 1.0)
+                                .clamp(0.0, 1.0)
                           : null,
                     ),
                     const SizedBox(height: 6),
                     Text(
                       _downloadTotalBytes != null && _downloadTotalBytes! > 0
                           ? '${((_downloadReceivedBytes / _downloadTotalBytes!) * 100).clamp(0, 100).toStringAsFixed(0)}% · '
-                              '${_formatDownloadBytes(_downloadReceivedBytes)} / '
-                              '${_formatDownloadBytes(_downloadTotalBytes!)}'
+                                '${_formatDownloadBytes(_downloadReceivedBytes)} / '
+                                '${_formatDownloadBytes(_downloadTotalBytes!)}'
                           : '${_formatDownloadBytes(_downloadReceivedBytes)} 已下载',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -938,18 +873,13 @@ class _ThemeModeButton extends StatelessWidget {
       color: selected ? colors.secondaryContainer : Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: selected ? colors.primary : colors.outline,
-        ),
+        side: BorderSide(color: selected ? colors.primary : colors.outline),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onPressed,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1006,8 +936,8 @@ class _SettingsCard extends StatelessWidget {
                 Text(
                   title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),

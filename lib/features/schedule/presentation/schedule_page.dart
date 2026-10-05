@@ -46,9 +46,7 @@ class _SchedulePageState extends State<SchedulePage> {
   List<QueueOrder> _pendingOn(DateTime date) {
     return widget.store.orders.where((order) {
       final deadline = order.deadline;
-      return !order.isCompleted &&
-          deadline != null &&
-          _sameDay(deadline, date);
+      return !order.isCompleted && deadline != null && _sameDay(deadline, date);
     }).toList();
   }
 
@@ -71,12 +69,7 @@ class _SchedulePageState extends State<SchedulePage> {
     for (final product in widget.productStore.products) {
       for (final soldAt in product.saleRecords) {
         if (_sameDay(soldAt, date)) {
-          result.add(
-            _ProductSaleOccurrence(
-              product: product,
-              soldAt: soldAt,
-            ),
-          );
+          result.add(_ProductSaleOccurrence(product: product, soldAt: soldAt));
         }
       }
     }
@@ -87,15 +80,8 @@ class _SchedulePageState extends State<SchedulePage> {
 
   void _changeMonth(int delta) {
     setState(() {
-      _visibleMonth = DateTime(
-        _visibleMonth.year,
-        _visibleMonth.month + delta,
-      );
-      _selectedDate = DateTime(
-        _visibleMonth.year,
-        _visibleMonth.month,
-        1,
-      );
+      _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + delta);
+      _selectedDate = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
     });
   }
 
@@ -163,11 +149,7 @@ class _SchedulePageState extends State<SchedulePage> {
         final dailyIncome = _dailyIncomeOn(_selectedDate);
 
         return ListView(
-          padding: AppLayoutSpacing.tabScrollPadding(
-            left: 0,
-            top: 0,
-            right: 0,
-          ),
+          padding: AppLayoutSpacing.tabScrollPadding(left: 0, top: 0, right: 0),
           children: [
             _MonthHeader(
               month: _visibleMonth,
@@ -197,18 +179,16 @@ class _SchedulePageState extends State<SchedulePage> {
                       Expanded(
                         child: Text(
                           _formatSelectedDate(_selectedDate),
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ),
                       Text(
                         '当日收入 ¥${_money(dailyIncome)}',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
+                          fontWeight: FontWeight.w800,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -275,9 +255,7 @@ class _SchedulePageState extends State<SchedulePage> {
     return widgets;
   }
 
-  List<Widget> _productSaleCards(
-    List<_ProductSaleOccurrence> sales,
-  ) {
+  List<Widget> _productSaleCards(List<_ProductSaleOccurrence> sales) {
     final widgets = <Widget>[];
 
     for (var index = 0; index < sales.length; index++) {
@@ -315,8 +293,10 @@ class _MonthHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = MediaQuery.sizeOf(context).width >= 900;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      padding: EdgeInsets.fromLTRB(12, desktop ? 6 : 10, 12, desktop ? 4 : 8),
       child: Row(
         children: [
           IconButton(
@@ -329,8 +309,9 @@ class _MonthHeader extends StatelessWidget {
               '${month.year} 年 ${month.month} 月',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                fontWeight: FontWeight.w800,
+                fontSize: desktop ? 28 : null,
+              ),
             ),
           ),
           IconButton(
@@ -351,10 +332,11 @@ class _WeekdayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = MediaQuery.sizeOf(context).width >= 900;
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: desktop ? 2 : 4),
       child: Row(
         children: [
           for (final label in _labels)
@@ -365,6 +347,7 @@ class _WeekdayHeader extends StatelessWidget {
                   style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.w600,
+                    fontSize: desktop ? 16 : null,
                   ),
                 ),
               ),
@@ -401,12 +384,12 @@ class _MonthGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // A fixed aspect ratio makes a wide desktop window produce very tall
-        // cells. Keep the compact desktop rhythm while allowing narrow phone
-        // layouts enough height for the date and event counters.
-        final cellHeight = (constraints.maxWidth / 7 * 1.05)
-            .clamp(56.0, 96.0)
-            .toDouble();
+        final desktop = MediaQuery.sizeOf(context).width >= 900;
+        // Desktop cells have much more horizontal room than a phone. Keep the
+        // month compact vertically and spend that room on readable labels.
+        final cellHeight = desktop
+            ? (constraints.maxWidth / 7 * 0.45).clamp(64.0, 74.0).toDouble()
+            : (constraints.maxWidth / 7 * 1.05).clamp(56.0, 96.0).toDouble();
 
         return GridView.builder(
           shrinkWrap: true,
@@ -466,16 +449,20 @@ class _CalendarCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = MediaQuery.sizeOf(context).width >= 900;
     final colors = Theme.of(context).colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.all(2),
+      padding: EdgeInsets.all(desktop ? 1 : 2),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(desktop ? 10 : 12),
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 3),
+          padding: EdgeInsets.symmetric(
+            vertical: desktop ? 3 : 5,
+            horizontal: 3,
+          ),
           decoration: BoxDecoration(
             color: selected ? colors.secondaryContainer : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
@@ -490,12 +477,12 @@ class _CalendarCell extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.auto_awesome_rounded,
-                        size: 34,
+                        size: desktop ? 28 : 34,
                         color: colors.primary.withValues(alpha: 0.18),
                       ),
                       Icon(
                         Icons.auto_awesome_outlined,
-                        size: 34,
+                        size: desktop ? 28 : 34,
                         color: colors.primary.withValues(alpha: 0.52),
                       ),
                     ],
@@ -506,17 +493,17 @@ class _CalendarCell extends StatelessWidget {
                   Text(
                     '${date.day}',
                     style: TextStyle(
-                      fontWeight:
-                          selected ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      fontSize: desktop ? 18 : null,
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  SizedBox(height: desktop ? 1 : 3),
                   if (pending > 0)
                     Text(
                       '待 $pending',
                       style: TextStyle(
                         color: colors.error,
-                        fontSize: 10,
+                        fontSize: desktop ? 13 : 10,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -525,7 +512,7 @@ class _CalendarCell extends StatelessWidget {
                       '已 $completed',
                       style: TextStyle(
                         color: colors.onSurface,
-                        fontSize: 10,
+                        fontSize: desktop ? 13 : 10,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -534,7 +521,7 @@ class _CalendarCell extends StatelessWidget {
                       '售 $sold',
                       style: TextStyle(
                         color: colors.primary,
-                        fontSize: 10,
+                        fontSize: desktop ? 13 : 10,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -549,10 +536,7 @@ class _CalendarCell extends StatelessWidget {
 }
 
 class _ProductSaleOccurrence {
-  const _ProductSaleOccurrence({
-    required this.product,
-    required this.soldAt,
-  });
+  const _ProductSaleOccurrence({required this.product, required this.soldAt});
 
   final FinishedProduct product;
   final DateTime soldAt;
@@ -576,17 +560,14 @@ class _SectionTitle extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 7),
         Text(
           '$title $count',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
       ],
     );
@@ -604,9 +585,7 @@ class _EmptySection extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Text(
         text,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );
   }
@@ -617,7 +596,6 @@ bool _sameDay(DateTime left, DateTime right) {
       left.month == right.month &&
       left.day == right.day;
 }
-
 
 String _money(double value) {
   return value == value.roundToDouble()

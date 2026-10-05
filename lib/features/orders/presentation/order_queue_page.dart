@@ -12,20 +12,13 @@ import '../state/order_store.dart';
 import 'order_detail_page.dart';
 import 'order_summary_card.dart';
 
-enum _TerminationSettlementMode {
-  node,
-  customRefund,
-}
+enum _TerminationSettlementMode { node, customRefund }
 
-enum _BulkOrderArchiveMode {
-  successful,
-  terminatedIndividually,
-}
+enum _BulkOrderArchiveMode { successful, terminatedIndividually }
 
 enum _OrderSortMode {
   defaultOrder('默认排序'),
   income('按收入金额'),
-  remainingTime('按剩余截稿时间'),
   deadline('按截稿时间');
 
   const _OrderSortMode(this.label);
@@ -64,9 +57,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   String _searchField = 'all';
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
-        (mode) => mode.name == widget.sortModeName,
-        orElse: () => _OrderSortMode.defaultOrder,
-      );
+    (mode) => mode.name == widget.sortModeName,
+    orElse: () => _OrderSortMode.defaultOrder,
+  );
 
   @override
   void dispose() {
@@ -75,14 +68,12 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   }
 
   List<QueueOrder> _visibleOrders() {
-    final query = widget.featureStore.search
-        ? _query.trim().toLowerCase()
-        : '';
+    final query = widget.featureStore.search ? _query.trim().toLowerCase() : '';
 
     final effectiveSearchField =
         _searchField == 'client' && !widget.featureStore.clientInfo
-            ? 'all'
-            : _searchField;
+        ? 'all'
+        : _searchField;
 
     final filtered = widget.store.orders.where((order) {
       if (order.isArchived) {
@@ -93,10 +84,12 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
       final currentNode = order.currentNode;
       final titleMatches = order.title.toLowerCase().contains(query);
-      final clientMatches = widget.featureStore.clientInfo &&
+      final clientMatches =
+          widget.featureStore.clientInfo &&
           order.clientName.toLowerCase().contains(query);
-      final platformMatches =
-          order.platform.label.toLowerCase().contains(query);
+      final platformMatches = order.platform.label.toLowerCase().contains(
+        query,
+      );
       final nodeMatches = currentNode.name.toLowerCase().contains(query);
 
       return switch (effectiveSearchField) {
@@ -127,23 +120,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           final byPrice = right.realIncome.compareTo(left.realIncome);
           if (byPrice != 0) return byPrice;
           return _compareDeadline(left.deadline, right.deadline);
-        });
-      case _OrderSortMode.remainingTime:
-        final now = DateTime.now();
-        orders.sort((left, right) {
-          final leftDeadline = left.deadline;
-          final rightDeadline = right.deadline;
-          if (leftDeadline == null && rightDeadline == null) {
-            return right.realIncome.compareTo(left.realIncome);
-          }
-          if (leftDeadline == null) return 1;
-          if (rightDeadline == null) return -1;
-
-          final leftRemaining = leftDeadline.difference(now);
-          final rightRemaining = rightDeadline.difference(now);
-          final byRemaining = leftRemaining.compareTo(rightRemaining);
-          if (byRemaining != 0) return byRemaining;
-          return right.realIncome.compareTo(left.realIncome);
         });
       case _OrderSortMode.deadline:
         orders.sort((left, right) {
@@ -201,7 +177,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           content: Text(
             completesOrder
                 ? '将“${order.title}”标记为已交稿？\n\n'
-                    '标记后仍保留在排单中，需手动归档后才正式结算。'
+                      '标记后仍保留在排单中，需手动归档后才正式结算。'
                 : '将“${order.title}”从“$currentName”推进到“$nextNodeName”？',
           ),
           actions: [
@@ -258,6 +234,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       ),
     );
   }
+
   Future<void> _showQuickActions(QueueOrder order) {
     return showCollectionQuickActions(
       context: context,
@@ -299,8 +276,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           CollectionBulkItem(
             id: order.id,
             title: order.title,
-            subtitle:
-                '${order.platform.label} · ${order.currentNode.name}',
+            subtitle: '${order.platform.label} · ${order.currentNode.name}',
           ),
       ],
     );
@@ -318,9 +294,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          '删除 ${ids.length} 个排单？',
-        ),
+        title: Text('删除 ${ids.length} 个排单？'),
         content: const Text('删除后会从本地数据中移除，无法从归档页恢复。'),
         actions: [
           TextButton(
@@ -329,10 +303,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor:
-                  Theme.of(dialogContext).colorScheme.error,
-              foregroundColor:
-                  Theme.of(dialogContext).colorScheme.onError,
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('批量删除'),
@@ -374,18 +346,18 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   leading: const Icon(Icons.check_circle_outline_rounded),
                   title: const Text('顺利结算'),
                   subtitle: const Text('所选排单全部按完整真实收入结算'),
-                  onTap: () => Navigator.of(sheetContext).pop(
-                    _BulkOrderArchiveMode.successful,
-                  ),
+                  onTap: () => Navigator.of(
+                    sheetContext,
+                  ).pop(_BulkOrderArchiveMode.successful),
                 ),
                 ListTile(
                   leading: const Icon(Icons.handshake_outlined),
                   title: const Text('中止合作'),
                   subtitle: const Text('逐个排单分别选择按节点结算或自定义退款'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(sheetContext).pop(
-                    _BulkOrderArchiveMode.terminatedIndividually,
-                  ),
+                  onTap: () => Navigator.of(
+                    sheetContext,
+                  ).pop(_BulkOrderArchiveMode.terminatedIndividually),
                 ),
               ],
             ),
@@ -416,9 +388,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       final stepLabel =
           '${index + 1}/${selectedOrders.length} · ${order.title}';
 
-      final mode = await _pickTerminationSettlementMode(
-        title: stepLabel,
-      );
+      final mode = await _pickTerminationSettlementMode(title: stepLabel);
       if (!mounted || mode == null) return;
 
       if (mode == _TerminationSettlementMode.node) {
@@ -427,15 +397,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           title: stepLabel,
         );
         if (!mounted || settlementNodeId == null) return;
-        widget.store.archiveAsTerminated(
-          order.id,
-          settlementNodeId,
-        );
+        widget.store.archiveAsTerminated(order.id, settlementNodeId);
       } else {
-        final refundAmount = await _pickCustomRefund(
-          order,
-          title: stepLabel,
-        );
+        final refundAmount = await _pickCustomRefund(order, title: stepLabel);
         if (!mounted || refundAmount == null) return;
         widget.store.archiveAsTerminatedWithCustomRefund(
           order.id,
@@ -469,8 +433,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                     '按完整真实收入 ¥${_formatMoney(order.realIncome)} 结算',
                   ),
                   onTap: () {
-                    Navigator.of(sheetContext)
-                        .pop(OrderArchiveOutcome.successful);
+                    Navigator.of(
+                      sheetContext,
+                    ).pop(OrderArchiveOutcome.successful);
                   },
                 ),
                 ListTile(
@@ -479,8 +444,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   subtitle: const Text('可按节点结算，也可自定义实际退款金额'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () {
-                    Navigator.of(sheetContext)
-                        .pop(OrderArchiveOutcome.terminated);
+                    Navigator.of(
+                      sheetContext,
+                    ).pop(OrderArchiveOutcome.terminated);
                   },
                 ),
               ],
@@ -509,10 +475,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
     final refundAmount = await _pickCustomRefund(order);
     if (!mounted || refundAmount == null) return;
-    widget.store.archiveAsTerminatedWithCustomRefund(
-      order.id,
-      refundAmount,
-    );
+    widget.store.archiveAsTerminatedWithCustomRefund(order.id, refundAmount);
   }
 
   Future<_TerminationSettlementMode?> _pickTerminationSettlementMode({
@@ -533,27 +496,25 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                     title ?? '中止合作如何结算',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: title == null
-                      ? null
-                      : const Text('选择这笔排单的结算方式'),
+                  subtitle: title == null ? null : const Text('选择这笔排单的结算方式'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.account_tree_outlined),
                   title: const Text('按节点结算'),
                   subtitle: const Text('选择最终节点，按节点比例计算最终收入'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(sheetContext).pop(
-                    _TerminationSettlementMode.node,
-                  ),
+                  onTap: () => Navigator.of(
+                    sheetContext,
+                  ).pop(_TerminationSettlementMode.node),
                 ),
                 ListTile(
                   leading: const Icon(Icons.edit_note_rounded),
                   title: const Text('自定义退款'),
                   subtitle: const Text('自行输入协商后的实际退款金额'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(sheetContext).pop(
-                    _TerminationSettlementMode.customRefund,
-                  ),
+                  onTap: () => Navigator.of(
+                    sheetContext,
+                  ).pop(_TerminationSettlementMode.customRefund),
                 ),
               ],
             ),
@@ -563,10 +524,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     );
   }
 
-  Future<double?> _pickCustomRefund(
-    QueueOrder order, {
-    String? title,
-  }) async {
+  Future<double?> _pickCustomRefund(QueueOrder order, {String? title}) async {
     final controller = TextEditingController();
     String? errorText;
     var previewRefund = 0.0;
@@ -602,8 +560,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         final parsed = double.tryParse(value.trim());
                         setDialogState(() {
                           errorText = null;
-                          previewRefund =
-                              parsed == null || parsed < 0 ? 0 : parsed;
+                          previewRefund = parsed == null || parsed < 0
+                              ? 0
+                              : parsed;
                         });
                       },
                     ),
@@ -623,8 +582,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                     Text(
                       '¥ ${_formatMoney(finalIncome)}',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
                 ),
@@ -659,16 +618,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     return result;
   }
 
-  Future<String?> _pickTerminationNode(
-    QueueOrder order, {
-    String? title,
-  }) {
+  Future<String?> _pickTerminationNode(QueueOrder order, {String? title}) {
     final nodes = order.nodePresetSnapshot.nodes;
     if (nodes.isEmpty) return Future<String?>.value(null);
 
-    final validNodeIds = <String>{
-      for (final node in nodes) node.id,
-    };
+    final validNodeIds = <String>{for (final node in nodes) node.id};
     var selectedNodeId = validNodeIds.contains(order.currentNodeId)
         ? order.currentNodeId
         : nodes.first.id;
@@ -683,8 +637,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final node = selectedNode();
-            final finalIncome =
-                order.incomeAtProgress(node.progressPercent);
+            final finalIncome = order.incomeAtProgress(node.progressPercent);
 
             return AlertDialog(
               title: Text(title ?? '中止合作'),
@@ -696,9 +649,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   children: [
                     DropdownButtonFormField<String>(
                       initialValue: selectedNodeId,
-                      decoration: const InputDecoration(
-                        labelText: '最终结算节点',
-                      ),
+                      decoration: const InputDecoration(labelText: '最终结算节点'),
                       items: [
                         for (final item in order.nodePresetSnapshot.nodes)
                           DropdownMenuItem(
@@ -715,16 +666,13 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      '最终收入',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
+                    Text('最终收入', style: Theme.of(context).textTheme.labelLarge),
                     const SizedBox(height: 4),
                     Text(
                       '¥ ${_formatMoney(finalIncome)}',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -781,8 +729,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       ]),
       builder: (context, _) {
         final orders = _visibleOrders();
-        final useCardView =
-            widget.featureStore.viewSwitch && widget.cardView;
+        final useCardView = widget.featureStore.viewSwitch && widget.cardView;
 
         return Column(
           children: [
@@ -812,53 +759,52 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   });
                 },
               ),
-            if (widget.featureStore.sorting ||
-                widget.featureStore.viewSwitch)
+            if (widget.featureStore.sorting || widget.featureStore.viewSwitch)
               CollectionToolbar(
-              title: '排单',
-              count: orders.length,
-              summaryText:
-                  '待收入 ¥${_formatMoney(orders.fold<double>(0, (sum, order) => sum + order.realIncome))}',
-              helpMessage: '长按卡片，可快速进行置顶、归档、删除操作',
-              sortControl: widget.featureStore.sorting
-                  ? PopupMenuButton<_OrderSortMode>(
-                tooltip: '选择排序方式',
-                initialValue: _sortMode,
-                onSelected: (value) {
-                  widget.onSortModeChanged(value.name);
-                },
-                itemBuilder: (context) {
-                  return [
-                    for (final mode in _OrderSortMode.values)
-                      PopupMenuItem<_OrderSortMode>(
-                        value: mode,
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 28,
-                              child: _sortMode == mode
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      size: 19,
-                                    )
-                                  : null,
-                            ),
-                            Expanded(child: Text(mode.label)),
-                          ],
-                        ),
-                      ),
-                  ];
-                },
-                icon: const Icon(Icons.sort_rounded),
-              )
-                  : null,
-              cardView: widget.cardView,
-              onToggleView: widget.featureStore.viewSwitch
-                  ? () {
-                      widget.onCardViewChanged(!widget.cardView);
-                    }
-                  : null,
-            ),
+                title: '排单',
+                count: orders.length,
+                summaryText:
+                    '待收入 ¥${_formatMoney(orders.fold<double>(0, (sum, order) => sum + order.realIncome))}',
+                helpMessage: '长按卡片，可快速进行置顶、归档、删除操作',
+                sortControl: widget.featureStore.sorting
+                    ? PopupMenuButton<_OrderSortMode>(
+                        tooltip: '选择排序方式',
+                        initialValue: _sortMode,
+                        onSelected: (value) {
+                          widget.onSortModeChanged(value.name);
+                        },
+                        itemBuilder: (context) {
+                          return [
+                            for (final mode in _OrderSortMode.values)
+                              PopupMenuItem<_OrderSortMode>(
+                                value: mode,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 28,
+                                      child: _sortMode == mode
+                                          ? const Icon(
+                                              Icons.check_rounded,
+                                              size: 19,
+                                            )
+                                          : null,
+                                    ),
+                                    Expanded(child: Text(mode.label)),
+                                  ],
+                                ),
+                              ),
+                          ];
+                        },
+                        icon: const Icon(Icons.sort_rounded),
+                      )
+                    : null,
+                cardView: widget.cardView,
+                onToggleView: widget.featureStore.viewSwitch
+                    ? () {
+                        widget.onCardViewChanged(!widget.cardView);
+                      }
+                    : null,
+              ),
             Expanded(
               child: orders.isEmpty
                   ? Center(
@@ -869,104 +815,100 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       ),
                     )
                   : useCardView
-                      ? CollectionCardGrid(
-                          itemCount: orders.length,
-                          mobileAspectRatio:
-                              widget.featureStore.nodeProgress ? 0.48 : 0.58,
-                          desktopMinHeight:
-                              widget.featureStore.nodeProgress ? 320 : 260,
-                          desktopAspectRatio: 1.05,
-                          itemBuilder: (context, index) {
-                            final order = orders[index];
-                            return OrderSummaryCard(
-                              order: order,
-                              hasSyncConflict: widget.syncCoordinator
-                                  .conflictedOrderIds
-                                  .contains(order.id),
-                              compact: true,
-                              onTap: () => _openOrder(order),
-                              onLongPress: () => _showQuickActions(order),
-                              showClient: widget.featureStore.clientInfo,
-                              showNodeProgress: widget.featureStore.nodeProgress,
-                              onConfirmNode: order.isCompleted ||
-                                      order.nodePresetSnapshot.nodes.isEmpty
-                                  ? null
-                                  : () => _confirmNode(order),
-                              onDecreaseNodeProgress:
-                                  !widget.featureStore.nodeProgress ||
-                                          order.isCompleted ||
-                                          order.currentNodeId ==
-                                              notStartedNodeId
-                                      ? null
-                                      : () => widget.store
-                                          .adjustCurrentNodeProgress(
-                                            order.id,
-                                            -10,
-                                          ),
-                              onIncreaseNodeProgress:
-                                  !widget.featureStore.nodeProgress ||
-                                          order.isCompleted ||
-                                          order.currentNodeId ==
-                                              notStartedNodeId
-                                      ? null
-                                      : () => widget.store
-                                          .adjustCurrentNodeProgress(
-                                            order.id,
-                                            10,
-                                          ),
-                            );
-                          },
-                        )
-                      : ListView.separated(
-                          padding:
-                              AppLayoutSpacing.tabScrollPaddingWithFab(
-                            left: 14,
-                            top: 0,
-                            right: 14,
-                          ),
-                          itemCount: orders.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final order = orders[index];
-                            return OrderSummaryCard(
-                              order: order,
-                              hasSyncConflict: widget.syncCoordinator
-                                  .conflictedOrderIds
-                                  .contains(order.id),
-                              onTap: () => _openOrder(order),
-                              onLongPress: () => _showQuickActions(order),
-                              showClient: widget.featureStore.clientInfo,
-                              showNodeProgress: widget.featureStore.nodeProgress,
-                              onConfirmNode: order.isCompleted ||
-                                      order.nodePresetSnapshot.nodes.isEmpty
-                                  ? null
-                                  : () => _confirmNode(order),
-                              onDecreaseNodeProgress:
-                                  !widget.featureStore.nodeProgress ||
-                                          order.isCompleted ||
-                                          order.currentNodeId ==
-                                              notStartedNodeId
-                                      ? null
-                                      : () => widget.store
-                                          .adjustCurrentNodeProgress(
-                                            order.id,
-                                            -10,
-                                          ),
-                              onIncreaseNodeProgress:
-                                  !widget.featureStore.nodeProgress ||
-                                          order.isCompleted ||
-                                          order.currentNodeId ==
-                                              notStartedNodeId
-                                      ? null
-                                      : () => widget.store
-                                          .adjustCurrentNodeProgress(
-                                            order.id,
-                                            10,
-                                          ),
-                            );
-                          },
-                        ),
+                  ? CollectionCardGrid(
+                      itemCount: orders.length,
+                      mobileAspectRatio: widget.featureStore.nodeProgress
+                          ? 0.48
+                          : 0.58,
+                      desktopMinHeight: widget.featureStore.nodeProgress
+                          ? 320
+                          : 260,
+                      desktopAspectRatio: 1.05,
+                      itemBuilder: (context, index) {
+                        final order = orders[index];
+                        return OrderSummaryCard(
+                          order: order,
+                          hasSyncConflict: widget
+                              .syncCoordinator
+                              .conflictedOrderIds
+                              .contains(order.id),
+                          compact: true,
+                          onTap: () => _openOrder(order),
+                          onLongPress: () => _showQuickActions(order),
+                          showClient: widget.featureStore.clientInfo,
+                          showNodeProgress: widget.featureStore.nodeProgress,
+                          onConfirmNode:
+                              order.isCompleted ||
+                                  order.nodePresetSnapshot.nodes.isEmpty
+                              ? null
+                              : () => _confirmNode(order),
+                          onDecreaseNodeProgress:
+                              !widget.featureStore.nodeProgress ||
+                                  order.isCompleted ||
+                                  order.currentNodeId == notStartedNodeId
+                              ? null
+                              : () => widget.store.adjustCurrentNodeProgress(
+                                  order.id,
+                                  -10,
+                                ),
+                          onIncreaseNodeProgress:
+                              !widget.featureStore.nodeProgress ||
+                                  order.isCompleted ||
+                                  order.currentNodeId == notStartedNodeId
+                              ? null
+                              : () => widget.store.adjustCurrentNodeProgress(
+                                  order.id,
+                                  10,
+                                ),
+                        );
+                      },
+                    )
+                  : ListView.separated(
+                      padding: AppLayoutSpacing.tabScrollPaddingWithFab(
+                        left: 14,
+                        top: 0,
+                        right: 14,
+                      ),
+                      itemCount: orders.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final order = orders[index];
+                        return OrderSummaryCard(
+                          order: order,
+                          hasSyncConflict: widget
+                              .syncCoordinator
+                              .conflictedOrderIds
+                              .contains(order.id),
+                          onTap: () => _openOrder(order),
+                          onLongPress: () => _showQuickActions(order),
+                          showClient: widget.featureStore.clientInfo,
+                          showNodeProgress: widget.featureStore.nodeProgress,
+                          onConfirmNode:
+                              order.isCompleted ||
+                                  order.nodePresetSnapshot.nodes.isEmpty
+                              ? null
+                              : () => _confirmNode(order),
+                          onDecreaseNodeProgress:
+                              !widget.featureStore.nodeProgress ||
+                                  order.isCompleted ||
+                                  order.currentNodeId == notStartedNodeId
+                              ? null
+                              : () => widget.store.adjustCurrentNodeProgress(
+                                  order.id,
+                                  -10,
+                                ),
+                          onIncreaseNodeProgress:
+                              !widget.featureStore.nodeProgress ||
+                                  order.isCompleted ||
+                                  order.currentNodeId == notStartedNodeId
+                              ? null
+                              : () => widget.store.adjustCurrentNodeProgress(
+                                  order.id,
+                                  10,
+                                ),
+                        );
+                      },
+                    ),
             ),
           ],
         );
@@ -974,7 +916,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     );
   }
 }
-
 
 int _compareDeadline(DateTime? left, DateTime? right) {
   if (left == null && right == null) return 0;

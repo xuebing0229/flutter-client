@@ -153,8 +153,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _productCardView = savedProductCardView;
         }
         final savedOrderSortMode = backup.settings[_orderSortModeSettingKey];
-        if (savedOrderSortMode is String && savedOrderSortMode.isNotEmpty) {
-          _orderSortMode = savedOrderSortMode;
+        final restoredOrderSortMode = _normalizeOrderSortMode(
+          savedOrderSortMode,
+        );
+        if (restoredOrderSortMode != null) {
+          _orderSortMode = restoredOrderSortMode;
         }
         final savedProductSortMode =
             backup.settings[_productSortModeSettingKey];
@@ -366,26 +369,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       layoutChanged = true;
     }
     final nextProductCardView = settings[_productCardViewSettingKey];
-    if (nextProductCardView is bool && nextProductCardView != _productCardView) {
+    if (nextProductCardView is bool &&
+        nextProductCardView != _productCardView) {
       _productCardView = nextProductCardView;
       layoutChanged = true;
     }
-    final nextOrderSortMode = settings[_orderSortModeSettingKey];
-    if (nextOrderSortMode is String &&
-        const <String>{
-          'defaultOrder',
-          'income',
-          'remainingTime',
-          'deadline',
-        }.contains(nextOrderSortMode) &&
-        nextOrderSortMode != _orderSortMode) {
+    final nextOrderSortMode = _normalizeOrderSortMode(
+      settings[_orderSortModeSettingKey],
+    );
+    if (nextOrderSortMode != null && nextOrderSortMode != _orderSortMode) {
       _orderSortMode = nextOrderSortMode;
       layoutChanged = true;
     }
     final nextProductSortMode = settings[_productSortModeSettingKey];
     if (nextProductSortMode is String &&
-        const <String>{'defaultOrder', 'income', 'soldCount'}
-            .contains(nextProductSortMode) &&
+        const <String>{
+          'defaultOrder',
+          'income',
+          'soldCount',
+        }.contains(nextProductSortMode) &&
         nextProductSortMode != _productSortMode) {
       _productSortMode = nextProductSortMode;
       layoutChanged = true;
@@ -401,6 +403,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {});
       _scheduleSave();
     }
+  }
+
+  String? _normalizeOrderSortMode(Object? value) {
+    if (value is! String) return null;
+    return switch (value) {
+      'defaultOrder' => 'defaultOrder',
+      'income' => 'income',
+      'deadline' || 'remainingTime' => 'deadline',
+      _ => null,
+    };
   }
 
   void _scheduleSave() {
@@ -670,6 +682,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         featureStore: widget.featureStore,
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
+        onApplyWorkspaceSettings: _applySyncSettings,
         onOpenThemeColor: () =>
             setState(() => _desktopToolSelection = AppToolMenu.themeColorTool),
       ),
@@ -799,12 +812,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ],
     );
 
-    final desktopContent = _desktopToolSelection == null
-        ? tabBody
-        : KeyedSubtree(
-            key: ValueKey('desktop-tool-$_desktopToolSelection'),
-            child: _buildDesktopToolPage(_desktopToolSelection!),
-          );
+    final desktopContent = Navigator(
+      key: ValueKey('desktop-content-$_desktopToolSelection-$_index'),
+      onGenerateRoute: (_) => MaterialPageRoute<void>(
+        builder: (_) => _desktopToolSelection == null
+            ? tabBody
+            : KeyedSubtree(
+                key: ValueKey('desktop-tool-$_desktopToolSelection'),
+                child: _buildDesktopToolPage(_desktopToolSelection!),
+              ),
+      ),
+    );
 
     return Scaffold(
       drawer: _ready && _localDataHealthy
@@ -816,6 +834,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               featureStore: widget.featureStore,
               accountStore: widget.accountStore,
               syncCoordinator: _syncCoordinator,
+              onApplyWorkspaceSettings: _applySyncSettings,
               onBeforeSignOut: _prepareForSignOut,
               onShowTutorial: () => unawaited(_showTutorial()),
             )
@@ -893,6 +912,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     featureStore: widget.featureStore,
                                     accountStore: widget.accountStore,
                                     syncCoordinator: _syncCoordinator,
+                                    onApplyWorkspaceSettings:
+                                        _applySyncSettings,
                                     onBeforeSignOut: _prepareForSignOut,
                                     onShowTutorial: () =>
                                         unawaited(_showTutorial()),
@@ -901,9 +922,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     ),
                                     selectedTool:
                                         _desktopToolSelection ==
-                                                AppToolMenu.themeColorTool
-                                            ? AppToolMenu.settingsTool
-                                            : _desktopToolSelection,
+                                            AppToolMenu.themeColorTool
+                                        ? AppToolMenu.settingsTool
+                                        : _desktopToolSelection,
                                     showTrailing: false,
                                     padding: const EdgeInsets.fromLTRB(
                                       12,
