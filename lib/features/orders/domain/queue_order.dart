@@ -118,6 +118,24 @@ const NodeDefinition notStartedNode = NodeDefinition(
   builtIn: true,
 );
 
+class OrderReferenceImage {
+  const OrderReferenceImage({
+    required this.id,
+    required this.fileName,
+    required this.relativePath,
+    required this.addedAt,
+    required this.sizeBytes,
+  });
+
+  final String id;
+  final String fileName;
+
+  /// Path relative to this account's Syncthing workspace root.
+  final String relativePath;
+  final DateTime addedAt;
+  final int sizeBytes;
+}
+
 class QueueOrder {
   const QueueOrder({
     required this.id,
@@ -138,6 +156,7 @@ class QueueOrder {
     this.deductionAmount = 0,
     this.deductionFeeEnabled = false,
     this.description = '',
+    this.referenceImages = const <OrderReferenceImage>[],
     this.completedAt,
     this.settledAt,
     this.settledIncome,
@@ -178,6 +197,7 @@ class QueueOrder {
   final bool deductionFeeEnabled;
 
   final String description;
+  final List<OrderReferenceImage> referenceImages;
   final DateTime? completedAt;
 
   /// Timestamp when income was finalized by manual archive settlement.
@@ -276,6 +296,7 @@ class QueueOrder {
     double? deductionAmount,
     bool? deductionFeeEnabled,
     String? description,
+    List<OrderReferenceImage>? referenceImages,
     DateTime? completedAt,
     bool clearCompletedAt = false,
     DateTime? settledAt,
@@ -313,6 +334,7 @@ class QueueOrder {
       deductionFeeEnabled:
           deductionFeeEnabled ?? this.deductionFeeEnabled,
       description: description ?? this.description,
+      referenceImages: referenceImages ?? this.referenceImages,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       settledAt: clearSettledAt ? null : (settledAt ?? this.settledAt),
       settledIncome:

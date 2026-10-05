@@ -7,7 +7,7 @@ import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
 import '../../features/products/state/product_store.dart';
 
-const int currentBackupSchemaVersion = 4;
+const int currentBackupSchemaVersion = 5;
 const String appBackupKind = 'artist_queue_full_backup';
 
 class AppBackupData {
@@ -244,6 +244,7 @@ Map<String, dynamic> _normalizeLegacyOrder(Map<String, dynamic> source) {
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
+  json['referenceImages'] ??= <dynamic>[];
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
   json['nodePresetSnapshot'] = _normalizeLegacyPreset(
@@ -314,6 +315,16 @@ Map<String, dynamic> _orderToJson(QueueOrder order) {
     'deductionAmount': order.deductionAmount,
     'deductionFeeEnabled': order.deductionFeeEnabled,
     'description': order.description,
+    'referenceImages': [
+      for (final image in order.referenceImages)
+        <String, dynamic>{
+          'id': image.id,
+          'fileName': image.fileName,
+          'relativePath': image.relativePath,
+          'addedAt': image.addedAt.toUtc().toIso8601String(),
+          'sizeBytes': image.sizeBytes,
+        },
+    ],
     'completedAt': order.completedAt?.toUtc().toIso8601String(),
     'settledAt': order.settledAt?.toUtc().toIso8601String(),
     'settledIncome': order.settledIncome,
@@ -379,6 +390,17 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       'order.deductionFeeEnabled',
     ),
     description: _asText(json['description'], 'order.description'),
+    referenceImages: json['referenceImages'] == null
+        ? const <OrderReferenceImage>[]
+        : <OrderReferenceImage>[
+            for (final item in _asList(
+              json['referenceImages'],
+              'order.referenceImages',
+            ))
+              _referenceImageFromJson(
+                _asMap(item, 'order.referenceImage'),
+              ),
+          ],
     completedAt: _asNullableDateTime(json['completedAt'], 'order.completedAt'),
     settledAt: _asNullableDateTime(json['settledAt'], 'order.settledAt'),
     settledIncome: _asNullableDouble(
@@ -396,6 +418,26 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
     ),
     isArchived: _asBool(json['isArchived'], 'order.isArchived'),
     isPinned: _asBool(json['isPinned'], 'order.isPinned'),
+  );
+}
+
+OrderReferenceImage _referenceImageFromJson(
+  Map<String, dynamic> json,
+) {
+  final sizeBytes = _asInt(json['sizeBytes'], 'order.referenceImage.sizeBytes');
+  if (sizeBytes < 0) {
+    throw const FormatException('参考图文件大小无效。');
+  }
+
+  return OrderReferenceImage(
+    id: _asString(json['id'], 'order.referenceImage.id'),
+    fileName: _asText(json['fileName'], 'order.referenceImage.fileName'),
+    relativePath: _asString(
+      json['relativePath'],
+      'order.referenceImage.relativePath',
+    ),
+    addedAt: _asDateTime(json['addedAt'], 'order.referenceImage.addedAt'),
+    sizeBytes: sizeBytes,
   );
 }
 

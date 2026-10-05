@@ -488,6 +488,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AddOrderPage(
+          accountId: widget.accountId,
           store: _orderStore,
           nodePresetStore: _nodePresetStore,
           featureStore: widget.featureStore,
@@ -553,6 +554,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         store: widget.featureStore,
       ),
       AppToolMenu.archiveTool => ArchivePage(
+        accountId: widget.accountId,
         orderStore: _orderStore,
         productStore: _productStore,
         nodePresetStore: _nodePresetStore,
@@ -625,6 +627,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         icon: Icons.format_list_bulleted_rounded,
         selectedIcon: Icons.view_list_rounded,
         page: OrderQueuePage(
+          accountId: widget.accountId,
           store: _orderStore,
           nodePresetStore: _nodePresetStore,
           featureStore: widget.featureStore,
@@ -656,6 +659,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           icon: Icons.calendar_month_outlined,
           selectedIcon: Icons.calendar_month_rounded,
           page: SchedulePage(
+            accountId: widget.accountId,
             store: _orderStore,
             productStore: _productStore,
             nodePresetStore: _nodePresetStore,

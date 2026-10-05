@@ -139,6 +139,31 @@ class SyncMergeEngine {
       final next = nextValues[field];
       if (syncJsonEquals(previous, next)) continue;
 
+      if (field == 'referenceImages' &&
+          previous is List &&
+          next is List) {
+        if (!fields.containsKey(field)) {
+          fields[field] = SyncFieldValue(
+            value: List<dynamic>.from(previous),
+            clock: SyncClock.empty().tick(deviceId),
+            updatedBy: deviceId,
+          );
+        }
+
+        final metadata = _referenceImageDelta(previous, next);
+        if (metadata.isNotEmpty) {
+          final operation = _operation(
+            field: field,
+            kind: 'reference-image-delta',
+            deviceId: deviceId,
+            metadata: metadata,
+          );
+          operations[operation.id] = operation;
+        }
+        _clearFieldConflicts(conflicts, field);
+        continue;
+      }
+
       if (field == 'soldCount' &&
           nextValues['saleType'] == 'single' &&
           previous is num &&
@@ -376,6 +401,55 @@ class SyncMergeEngine {
       values['currentNodeProgress'] = progress.round().clamp(0, 100);
     }
 
+    final rawReferenceImages = values['referenceImages'];
+    final imageOperations = record.operations.values
+        .where((operation) => operation.kind == 'reference-image-delta')
+        .toList()
+      ..sort((a, b) {
+        final byTime = a.occurredAt.compareTo(b.occurredAt);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
+    if (rawReferenceImages is List || imageOperations.isNotEmpty) {
+      final images = <String, Map<String, dynamic>>{};
+      for (final item in rawReferenceImages is List
+          ? rawReferenceImages
+          : const <dynamic>[]) {
+        if (item is! Map) continue;
+        final mapped = item.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final id = mapped['id'];
+        if (id is String && id.isNotEmpty) {
+          images[id] = mapped;
+        }
+      }
+
+      for (final operation in imageOperations) {
+        final added = operation.metadata['added'];
+        if (added is List) {
+          for (final item in added) {
+            if (item is! Map) continue;
+            final mapped = item.map(
+              (key, value) => MapEntry(key.toString(), value),
+            );
+            final id = mapped['id'];
+            if (id is String && id.isNotEmpty) {
+              images.putIfAbsent(id, () => mapped);
+            }
+          }
+        }
+
+        final removed = operation.metadata['removed'];
+        if (removed is List) {
+          for (final item in removed) {
+            if (item is String) images.remove(item);
+          }
+        }
+      }
+
+      values['referenceImages'] = images.values.toList(growable: false);
+    }
+
     final rawSaleRecords = values['saleRecords'];
     if (rawSaleRecords is List) {
       final records = <String>[
@@ -475,6 +549,46 @@ class SyncMergeEngine {
       delta: delta,
       metadata: metadata,
     );
+  }
+
+  Map<String, dynamic> _referenceImageDelta(
+    List<dynamic> previousValue,
+    List<dynamic> nextValue,
+  ) {
+    Map<String, dynamic>? asImage(Object? value) {
+      if (value is! Map) return null;
+      final mapped = value.map(
+        (key, item) => MapEntry(key.toString(), item),
+      );
+      final id = mapped['id'];
+      return id is String && id.isNotEmpty ? mapped : null;
+    }
+
+    final previous = <String, Map<String, dynamic>>{};
+    for (final item in previousValue) {
+      final image = asImage(item);
+      if (image != null) previous[image['id'] as String] = image;
+    }
+
+    final next = <String, Map<String, dynamic>>{};
+    for (final item in nextValue) {
+      final image = asImage(item);
+      if (image != null) next[image['id'] as String] = image;
+    }
+
+    final added = <Map<String, dynamic>>[
+      for (final entry in next.entries)
+        if (!previous.containsKey(entry.key)) entry.value,
+    ];
+    final removed = <String>[
+      for (final id in previous.keys)
+        if (!next.containsKey(id)) id,
+    ];
+
+    return <String, dynamic>{
+      if (added.isNotEmpty) 'added': added,
+      if (removed.isNotEmpty) 'removed': removed,
+    };
   }
 
   Map<String, dynamic> _saleRecordDelta(

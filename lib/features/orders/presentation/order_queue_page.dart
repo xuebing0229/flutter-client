@@ -33,6 +33,7 @@ enum _OrderSortMode {
 
 class OrderQueuePage extends StatefulWidget {
   const OrderQueuePage({
+    required this.accountId,
     required this.store,
     required this.nodePresetStore,
     required this.featureStore,
@@ -44,6 +45,7 @@ class OrderQueuePage extends StatefulWidget {
     super.key,
   });
 
+  final String accountId;
   final OrderStore store;
   final NodePresetStore nodePresetStore;
   final AppFeatureStore featureStore;
@@ -158,6 +160,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => OrderDetailPage(
+          accountId: widget.accountId,
           store: widget.store,
           orderId: order.id,
           nodePresetStore: widget.nodePresetStore,

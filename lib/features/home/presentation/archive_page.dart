@@ -14,6 +14,7 @@ import '../../shared/presentation/layout_spacing.dart';
 
 class ArchivePage extends StatelessWidget {
   const ArchivePage({
+    required this.accountId,
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
@@ -21,6 +22,7 @@ class ArchivePage extends StatelessWidget {
     super.key,
   });
 
+  final String accountId;
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
@@ -30,6 +32,7 @@ class ArchivePage extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => OrderDetailPage(
+          accountId: accountId,
           store: orderStore,
           orderId: orderId,
           nodePresetStore: nodePresetStore,

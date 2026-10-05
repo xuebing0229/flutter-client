@@ -79,6 +79,7 @@ String syncFieldLabel(String field) {
     'deductionAmount' => '减款基准',
     'deductionFeeEnabled' => '减款手续费',
     'description' => '备注',
+    'referenceImages' => '参考图',
     'completedAt' => '交稿时间',
     'settledAt' => '结算时间',
     'settledIncome' => '结算收入',
