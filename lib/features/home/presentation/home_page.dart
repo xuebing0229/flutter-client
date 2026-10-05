@@ -11,6 +11,7 @@ import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
 import '../../orders/data/node_presets.dart';
@@ -107,9 +108,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
+      captureSettings: _captureSyncSettings,
+      applySettings: _applySyncSettings,
     );
     _syncCoordinator.addListener(_onSyncCoordinatorChanged);
 
+    widget.themeStore.addListener(_onThemeSettingsChanged);
     widget.featureStore.addListener(_onFeatureSettingsChanged);
     widget.accountStore.addListener(_onAccountStoreChanged);
     _restoreLocalData();
@@ -309,6 +313,94 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _index = 0);
     _scheduleSave();
     _scheduleReminderSync();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _onThemeSettingsChanged() {
+    if (!mounted) return;
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  Map<String, dynamic> _captureSyncSettings() {
+    return <String, dynamic>{
+      'id': SyncCoordinator.settingsRecordId,
+      'themeMode': widget.themeStore.mode.name,
+      'themePaletteId': widget.themeStore.paletteId,
+      'features': widget.featureStore.toJson(),
+      _orderCardViewSettingKey: _orderCardView,
+      _productCardViewSettingKey: _productCardView,
+      _orderSortModeSettingKey: _orderSortMode,
+      _productSortModeSettingKey: _productSortMode,
+      _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
+    };
+  }
+
+  Future<void> _applySyncSettings(Map<String, dynamic> settings) async {
+    final modeName = settings['themeMode'];
+    if (modeName is String) {
+      final mode = switch (modeName) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        'system' => ThemeMode.system,
+        _ => throw const FormatException('同步主题模式无效。'),
+      };
+      await widget.themeStore.setMode(mode);
+    }
+
+    final paletteId = settings['themePaletteId'];
+    if (paletteId is String && AppThemePalettes.containsId(paletteId)) {
+      await widget.themeStore.setPaletteId(paletteId);
+    } else if (paletteId != null) {
+      throw const FormatException('同步主题色无效。');
+    }
+
+    if (settings.containsKey('features')) {
+      await widget.featureStore.applyJson(settings['features']);
+    }
+
+    var layoutChanged = false;
+    final nextOrderCardView = settings[_orderCardViewSettingKey];
+    if (nextOrderCardView is bool && nextOrderCardView != _orderCardView) {
+      _orderCardView = nextOrderCardView;
+      layoutChanged = true;
+    }
+    final nextProductCardView = settings[_productCardViewSettingKey];
+    if (nextProductCardView is bool && nextProductCardView != _productCardView) {
+      _productCardView = nextProductCardView;
+      layoutChanged = true;
+    }
+    final nextOrderSortMode = settings[_orderSortModeSettingKey];
+    if (nextOrderSortMode is String &&
+        const <String>{
+          'defaultOrder',
+          'income',
+          'remainingTime',
+          'deadline',
+        }.contains(nextOrderSortMode) &&
+        nextOrderSortMode != _orderSortMode) {
+      _orderSortMode = nextOrderSortMode;
+      layoutChanged = true;
+    }
+    final nextProductSortMode = settings[_productSortModeSettingKey];
+    if (nextProductSortMode is String &&
+        const <String>{'defaultOrder', 'income', 'soldCount'}
+            .contains(nextProductSortMode) &&
+        nextProductSortMode != _productSortMode) {
+      _productSortMode = nextProductSortMode;
+      layoutChanged = true;
+    }
+    final nextNavigationOpen = settings[_desktopNavigationOpenSettingKey];
+    if (nextNavigationOpen is bool &&
+        nextNavigationOpen != _desktopNavigationOpen) {
+      _desktopNavigationOpen = nextNavigationOpen;
+      layoutChanged = true;
+    }
+
+    if (layoutChanged && mounted) {
+      setState(() {});
+      _scheduleSave();
+    }
   }
 
   void _scheduleSave() {
@@ -418,11 +510,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       accountSyncState: _accountSyncSnapshot,
       settings: <String, dynamic>{
         'syncBaselineRecords': _syncCoordinator.syncBaselineSettings,
-        _orderCardViewSettingKey: _orderCardView,
-        _productCardViewSettingKey: _productCardView,
-        _orderSortModeSettingKey: _orderSortMode,
-        _productSortModeSettingKey: _productSortMode,
-        _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
+        ..._captureSyncSettings(),
       },
     );
   }
@@ -451,6 +539,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
+    widget.themeStore.removeListener(_onThemeSettingsChanged);
     widget.featureStore.removeListener(_onFeatureSettingsChanged);
     widget.accountStore.removeListener(_onAccountStoreChanged);
     _syncCoordinator.removeListener(_onSyncCoordinatorChanged);
@@ -513,30 +602,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_orderCardView == value) return;
     setState(() => _orderCardView = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductCardView(bool value) {
     if (_productCardView == value) return;
     setState(() => _productCardView = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setOrderSortMode(String value) {
     if (_orderSortMode == value) return;
     setState(() => _orderSortMode = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductSortMode(String value) {
     if (_productSortMode == value) return;
     setState(() => _productSortMode = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _setDesktopNavigationOpen(bool value) {
     if (_desktopNavigationOpen == value) return;
     setState(() => _desktopNavigationOpen = value);
     _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
   }
 
   void _selectDesktopTab(int value) {

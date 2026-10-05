@@ -3,7 +3,8 @@ import 'dart:convert';
 enum SyncEntityKind {
   order('orders'),
   product('products'),
-  nodePreset('node-presets');
+  nodePreset('node-presets'),
+  settings('settings');
 
   const SyncEntityKind(this.directoryName);
   final String directoryName;

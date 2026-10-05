@@ -426,11 +426,7 @@ class _SettingsPageState extends State<SettingsPage>
         nodePresets: snapshot.nodePresets,
         accountSyncState: snapshot.accountSyncState,
         syncRecords: snapshot.syncRecords,
-        settings: <String, dynamic>{
-          'themeMode': widget.themeStore.mode.name,
-          'themePaletteId': widget.themeStore.paletteId,
-          'features': widget.featureStore.toJson(),
-        },
+        settings: snapshot.settings,
       );
 
       final saved = await _fileBridge.exportBackup(

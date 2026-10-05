@@ -4,6 +4,7 @@ import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../data/node_presets.dart';
 import '../domain/queue_order.dart';
@@ -868,22 +869,13 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       ),
                     )
                   : useCardView
-                      ? GridView.builder(
-                          padding:
-                              AppLayoutSpacing.tabScrollPaddingWithFab(
-                            left: 12,
-                            top: 0,
-                            right: 12,
-                          ),
+                      ? CollectionCardGrid(
                           itemCount: orders.length,
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio:
-                                widget.featureStore.nodeProgress ? 0.48 : 0.58,
-                          ),
+                          mobileAspectRatio:
+                              widget.featureStore.nodeProgress ? 0.48 : 0.58,
+                          desktopMinHeight:
+                              widget.featureStore.nodeProgress ? 320 : 260,
+                          desktopAspectRatio: 1.05,
                           itemBuilder: (context, index) {
                             final order = orders[index];
                             return OrderSummaryCard(
