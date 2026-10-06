@@ -21,6 +21,7 @@ import 'sync_entity_codec.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
+import 'sync_ui_coordinator.dart';
 
 typedef SyncSettingsCapture = Map<String, dynamic> Function();
 typedef SyncSettingsApply = Future<void> Function(Map<String, dynamic> settings);
@@ -123,7 +124,7 @@ String syncFieldLabel(String field) {
   };
 }
 
-class SyncCoordinator extends ChangeNotifier {
+class SyncCoordinator extends ChangeNotifier implements SyncUiCoordinator {
   static const settingsRecordId = 'app';
 
   SyncCoordinator({
