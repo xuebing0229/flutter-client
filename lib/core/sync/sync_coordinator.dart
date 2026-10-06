@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:synchronized/synchronized.dart';
 
 import '../account/account_models.dart';
@@ -20,6 +21,7 @@ import 'portable_sync_workspace_validator.dart';
 import 'sync_entity_codec.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
+import 'sync_protocol.dart';
 import 'sync_record_store.dart';
 
 typedef SyncSettingsCapture = Map<String, dynamic> Function();
@@ -434,6 +436,21 @@ class SyncCoordinator extends ChangeNotifier {
 
   Future<void> initialize({bool seedLocalSettings = true}) async {
     if (_initialized || _disposed) return;
+
+    int? appBuild;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      appBuild = int.tryParse(info.buildNumber);
+    } catch (_) {
+      // Protocol metadata is still useful even if package metadata is
+      // unavailable on an unusual platform/runtime.
+    }
+    await accountStore.touchCurrentDevice(
+      notify: false,
+      appBuild: appBuild,
+      syncProtocolVersion: currentSyncProtocolVersion,
+      minSyncProtocolVersion: minimumCompatibleSyncProtocolVersion,
+    );
 
     await _loadSyncPauseState();
 
