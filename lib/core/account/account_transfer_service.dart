@@ -488,6 +488,11 @@ class SyncthingAccountTransferClientSession {
 
   bool _closed = false;
 
+  Future<Map<String, dynamic>?> transferProgress() async {
+    final status = await _bridge.statusFolder(descriptor.folderId);
+    return status.syncProgress;
+  }
+
   Future<String> receive({
     Duration timeout = const Duration(minutes: 5),
   }) async {
