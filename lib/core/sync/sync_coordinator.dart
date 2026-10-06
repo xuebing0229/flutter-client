@@ -1057,6 +1057,8 @@ class SyncCoordinator extends ChangeNotifier {
       }
     }
 
+    await _migrateLegacyFeatureSettings(recordsByKind[SyncEntityKind.settings]!);
+
     _applyingRemote = true;
     try {
       for (final kind in SyncEntityKind.values) {
@@ -1250,6 +1252,41 @@ class SyncCoordinator extends ChangeNotifier {
       await _recordStore.write(accountId: accountId, record: record);
       records[entry.key] = record;
     }
+  }
+
+  Future<void> _migrateLegacyFeatureSettings(
+    Map<String, SyncRecord> records,
+  ) async {
+    final record = records[settingsRecordId];
+    if (record == null) return;
+
+    final legacy = record.fields['features']?.value;
+    if (legacy is! Map) return;
+
+    final before = _mergeEngine.materialize(record);
+    if (before == null) return;
+    final next = <String, dynamic>{...before};
+    var changed = false;
+
+    for (final entry in legacy.entries) {
+      final name = entry.key;
+      final value = entry.value;
+      if (name is! String || value is! bool) continue;
+      final field = 'feature.$name';
+      if (record.fields.containsKey(field)) continue;
+      next[field] = value;
+      changed = true;
+    }
+    if (!changed) return;
+
+    final migrated = _mergeEngine.applyLocalSnapshot(
+      record: record,
+      previousValues: before,
+      nextValues: next,
+      deviceId: deviceId,
+    );
+    await _recordStore.write(accountId: accountId, record: migrated);
+    records[settingsRecordId] = migrated;
   }
 
   Future<void> _applyEntityRecords(
