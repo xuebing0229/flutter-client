@@ -97,6 +97,7 @@ String syncFieldLabel(String field) {
     'saleType' => '售卖方式',
     'soldCount' => '售出数量基准',
     'saleRecords' => '售出记录',
+    'archivedAt' => '归档时间',
     'themeMode' => '主题模式',
     'themePaletteId' => '主题色',
     'features' => '功能开关',
