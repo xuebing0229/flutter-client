@@ -90,7 +90,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _notificationPermissionChecked = false;
   bool _localDataHealthy = true;
   bool _syncConflictPromptVisible = false;
-  String? _lastPromptedConflictSignature;
+  bool _syncConflictPromptedUntilClear = false;
   AccountSyncState? _accountSyncSnapshot;
 
   @override
@@ -132,13 +132,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _restoreLocalData() async {
     String? errorMessage;
     var isNewAccount = false;
+    var bootstrapOnly = false;
     var hasWorkspaceSettings = false;
     var consumedPortableSyncHistory = false;
 
     try {
       final backup = await _persistence.load(accountId: widget.accountId);
       isNewAccount = backup == null;
-      final bootstrapOnly = backup?.settings['bootstrapOnly'] == true;
+      bootstrapOnly = backup?.settings['bootstrapOnly'] == true;
       hasWorkspaceSettings =
           backup != null &&
           !bootstrapOnly &&
@@ -192,7 +193,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await widget.featureStore.resetToDefaults();
       }
       await _syncCoordinator.initialize(
-        seedLocalSettings: hasWorkspaceSettings,
+        seedLocalWorkspace: !bootstrapOnly,
+        seedLocalSettings:
+            !bootstrapOnly && (hasWorkspaceSettings || isNewAccount),
       );
       if (consumedPortableSyncHistory) {
         // The portable history is a one-time handoff. Persist the materialized
@@ -256,20 +259,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final conflicts = _syncCoordinator.conflicts;
     if (conflicts.isEmpty) {
-      _lastPromptedConflictSignature = null;
+      _syncConflictPromptedUntilClear = false;
       return;
     }
 
-    final ids = <String>[for (final view in conflicts) view.conflict.id]
-      ..sort();
-    final signature = ids.join('|');
-
-    if (_syncConflictPromptVisible ||
-        signature == _lastPromptedConflictSignature) {
+    // One conflict batch gets one interruption. Resolving one item changes the
+    // conflict list, but must not pop the same modal again for every remaining
+    // item. The latch resets only after the batch is fully cleared.
+    if (_syncConflictPromptVisible || _syncConflictPromptedUntilClear) {
       return;
     }
 
-    _lastPromptedConflictSignature = signature;
+    _syncConflictPromptedUntilClear = true;
     _syncConflictPromptVisible = true;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
