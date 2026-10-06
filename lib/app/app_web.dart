@@ -820,7 +820,58 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       }
     }
 
-    if (mounted) setState(() => _ready = true);
+    if (mounted) {
+      setState(() => _ready = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_showDailyBackupReminder());
+      });
+    }
+  }
+
+  Future<void> _showDailyBackupReminder() async {
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    final today = '${now.year}-${two(now.month)}-${two(now.day)}';
+    final reminderKey =
+        'adventurers-guild.web.backup-reminder.v1.$_accountId';
+
+    try {
+      if (html.window.localStorage[reminderKey] == today) return;
+      // Record the reminder as soon as it is shown so dismissing it still
+      // keeps the promise of at most one reminder per local calendar day.
+      html.window.localStorage[reminderKey] = today;
+    } catch (_) {
+      // If browser storage is unavailable, showing the reminder is safer than
+      // silently skipping backup guidance.
+    }
+
+    if (!mounted) return;
+    final backupNow = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('今天备份了吗？'),
+        content: const Text(
+          '网页版数据只保存在当前浏览器里。建议每天导出一次完整备份，'
+          '这样即使浏览器清理了本地数据，也能恢复排单、成品、节点和参考图。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('今天不再提醒'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.file_download_outlined),
+            label: const Text('立即备份'),
+          ),
+        ],
+      ),
+    );
+
+    if (backupNow == true && mounted) {
+      await _exportBackup(context);
+    }
   }
 
   Map<String, dynamic> _captureSettings() {
