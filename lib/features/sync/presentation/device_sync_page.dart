@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_protocol.dart';
 
 class DeviceSyncPage extends StatefulWidget {
   const DeviceSyncPage({
@@ -45,6 +46,10 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
       builder: (context, _) {
         final status = coordinator.transportStatus;
         final colors = Theme.of(context).colorScheme;
+        final versionNotices = syncDeviceVersionNotices(
+          state: coordinator.accountStore.syncSnapshot,
+          currentDeviceId: coordinator.accountStore.currentDeviceId,
+        );
 
         return Scaffold(
           appBar: AppBar(
@@ -83,6 +88,39 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
               : ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
+              if (versionNotices.isNotEmpty) ...[
+                _Card(
+                  title: versionNotices.any(
+                    (item) => item.status == SyncVersionStatus.incompatible,
+                  )
+                      ? '版本兼容性警告'
+                      : '设备版本不同',
+                  icon: Icons.system_update_alt_rounded,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final notice in versionNotices) ...[
+                        Text(
+                          _versionNoticeText(notice),
+                          style: TextStyle(
+                            color:
+                                notice.status == SyncVersionStatus.incompatible
+                                ? colors.error
+                                : colors.onSurfaceVariant,
+                            fontWeight:
+                                notice.status == SyncVersionStatus.incompatible
+                                ? FontWeight.w700
+                                : null,
+                          ),
+                        ),
+                        if (notice != versionNotices.last)
+                          const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               _Card(
                 title: '同步控制',
                 icon: coordinator.syncPaused
@@ -248,6 +286,22 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
         );
       },
     );
+  }
+
+  static String _versionNoticeText(SyncDeviceVersionNotice notice) {
+    final device = notice.device;
+    return switch (notice.status) {
+      SyncVersionStatus.differentBuild =>
+        '${device.name} 为 Beta ${device.appBuild}，本机为 Beta '
+            '${notice.localBuild}。当前同步协议兼容，可以继续同步；'
+            '建议更新到同一版本。',
+      SyncVersionStatus.legacyUnknown =>
+        '${device.name} 尚未上报同步协议版本，可能正在使用较旧版本。'
+            '同步可以继续，但建议先更新该设备。',
+      SyncVersionStatus.incompatible =>
+        '${device.name} 的同步协议与本机不兼容。'
+            '为避免数据异常，请先把两台设备更新到兼容版本。',
+    };
   }
 
   static void _message(BuildContext context, String message) {
