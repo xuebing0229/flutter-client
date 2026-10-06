@@ -1,0 +1,32 @@
+name: Web iOS validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'web-ios'
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build web release
+        run: flutter build web --release
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: adventurers-guild-web
+          path: build/web
+          retention-days: 1
+          if-no-files-found: error
