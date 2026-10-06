@@ -332,18 +332,17 @@ class SyncMergeEngine {
 
     for (final operation in record.operations.values) {
       if (operation.compacted) continue;
-      switch (operation.kind) {
-        case 'amount-delta':
-          foldFields.add(operation.field);
-        case 'sale-delta':
-        case 'single-sale-state':
-          foldFields
-            ..add('soldCount')
-            ..add('saleRecords');
-        case 'progress-delta':
-          foldFields.add('currentNodeProgress');
-        case 'reference-image-delta':
-          foldFields.add('referenceImages');
+      if (operation.kind == 'amount-delta') {
+        foldFields.add(operation.field);
+      } else if (operation.kind == 'sale-delta' ||
+          operation.kind == 'single-sale-state') {
+        foldFields
+          ..add('soldCount')
+          ..add('saleRecords');
+      } else if (operation.kind == 'progress-delta') {
+        foldFields.add('currentNodeProgress');
+      } else if (operation.kind == 'reference-image-delta') {
+        foldFields.add('referenceImages');
       }
     }
 
