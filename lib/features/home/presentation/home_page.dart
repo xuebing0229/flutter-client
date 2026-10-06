@@ -848,6 +848,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         productStore: _productStore,
         nodePresetStore: _nodePresetStore,
         featureStore: widget.featureStore,
+        syncCoordinator: _syncCoordinator,
       ),
       AppToolMenu.syncTool => DeviceSyncPage(coordinator: _syncCoordinator),
       AppToolMenu.accountTool => AccountPage(
