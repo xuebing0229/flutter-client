@@ -33,6 +33,7 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+          token: ${{ secrets.RELEASE_FILES_TOKEN }}
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
