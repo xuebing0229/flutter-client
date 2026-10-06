@@ -212,7 +212,8 @@ class _ArchivePageState extends State<ArchivePage> {
             '${imageBytes > 0 ? '（约 ${_formatBytes(imageBytes)}）' : ''}'
             '${undatedLegacyProducts > 0 ? '\n\n有 $undatedLegacyProducts 个旧版成品没有归档日期，'
                 '本次不会删除。' : ''}'
-            '\n\n删除后无法从归档恢复，并会同步删除到其他设备。'
+            '\n\n删除后无法从归档恢复，对应的历史收入、日程记录和参考图也会一起移除，'
+            '并同步删除到其他设备。'
             '如需长期留存，建议先导出完整备份。',
           ),
           actions: [
