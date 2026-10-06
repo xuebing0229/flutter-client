@@ -221,7 +221,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '下面这些字段在不同设备上被同时修改。请选择要保留的版本，确认后会继续同步。',
+                        '请选择最终要保留的版本。每个选项都会标明来自哪台设备，并用容易看懂的方式说明差异。',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -230,6 +230,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                       for (final conflict in coordinator.conflicts)
                         _ConflictTile(
                           view: conflict,
+                          coordinator: coordinator,
                           onChoose: (index) async {
                             try {
                               await coordinator.resolveConflict(
@@ -399,22 +400,23 @@ String _formatBytes(int bytes) {
 class _ConflictTile extends StatelessWidget {
   const _ConflictTile({
     required this.view,
+    required this.coordinator,
     required this.onChoose,
   });
 
   final SyncConflictView view;
+  final SyncCoordinator coordinator;
   final ValueChanged<int> onChoose;
 
   @override
   Widget build(BuildContext context) {
     final candidates = view.conflict.candidates;
+    final colors = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withValues(alpha: 0.45),
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -422,15 +424,15 @@ class _ConflictTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${view.entityLabel} · ${view.fieldLabel}',
+                _conflictSubject(coordinator, view),
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 4),
               Text(
-                view.recordId,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
+                '这项内容在两台设备上不一样，点选你最终想保留的版本。',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
               ),
               const SizedBox(height: 10),
               for (var index = 0; index < candidates.length; index++) ...[
@@ -438,17 +440,41 @@ class _ConflictTile extends StatelessWidget {
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () => onChoose(index),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                    ),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text(
-                        '${_shortDeviceId(candidates[index].deviceId)}：'
-                        '${_formatValue(candidates[index].value)}',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _deviceLabel(
+                              coordinator,
+                              candidates[index].deviceId,
+                            ),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatConflictValue(
+                              view.conflict.field,
+                              candidates[index].value,
+                            ),
+                            style: TextStyle(color: colors.onSurface),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
                 if (index != candidates.length - 1)
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
               ],
             ],
           ),
