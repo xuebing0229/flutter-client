@@ -2,6 +2,9 @@ name: Deploy Web iOS
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'web-ios'
 
 permissions:
   contents: read
@@ -28,6 +31,8 @@ jobs:
         run: flutter build web --release --base-href /flutter-client/
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
