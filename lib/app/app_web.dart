@@ -1376,6 +1376,14 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                   FeatureTogglePage(store: widget.featureStore),
                 ),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.auto_awesome_outlined),
+                title: const Text('抽象版'),
+                subtitle: const Text('切换普通版与抽象版'),
+                value: widget.featureStore.abstractMode,
+                onChanged: (value) =>
+                    widget.featureStore.setEnabled(AppFeature.abstractMode, value),
+              ),
               ListTile(
                 leading: const Icon(Icons.palette_outlined),
                 title: const Text('UI主题色'),
