@@ -160,32 +160,35 @@ class FeatureTogglePage extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              _FeatureSection(
-                title: '版本玩法',
-                children: [
-                  _FeatureSwitch(
-                    store: store,
-                    feature: AppFeature.abstractMode,
-                    icon: Icons.auto_awesome_rounded,
-                    title: '抽象版',
-                    subtitle: '开启后使用抽象版表现和专属教程；第一次开启会自动打开一次教程。',
-                  ),
-                  if (store.abstractMode && onHideFeatureToggle != null)
-                    SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                      secondary: const Icon(Icons.visibility_off_outlined),
-                      title: const Text('附加功能开关'),
-                      subtitle: const Text('关闭后，本入口会在当前抽象版里消失。'),
-                      value: true,
-                      onChanged: (value) {
-                        if (value) return;
-                        onHideFeatureToggle?.call();
-                        Navigator.of(context).maybePop();
-                      },
+              if (store.abstractMode) ...[
+                const SizedBox(height: 14),
+                _FeatureSection(
+                  title: '版本玩法',
+                  children: [
+                    _FeatureSwitch(
+                      store: store,
+                      feature: AppFeature.abstractEffects,
+                      icon: Icons.auto_awesome_rounded,
+                      title: '抽象版表现',
+                      subtitle: '控制抽象版里的趣味表现；关闭后仅保留抽象版美化。',
                     ),
-                ],
-              ),
+                    if (store.abstractEffects && onHideFeatureToggle != null)
+                      SwitchListTile(
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 8),
+                        secondary: const Icon(Icons.visibility_off_outlined),
+                        title: const Text('附加功能开关'),
+                        subtitle: const Text('关闭后，本入口会在当前抽象版里消失。'),
+                        value: true,
+                        onChanged: (value) {
+                          if (value) return;
+                          onHideFeatureToggle?.call();
+                          Navigator.of(context).maybePop();
+                        },
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 '排单名、稿费、节点、截稿日期、备注、平台手续费、补款减款和归档属于基础功能，始终保留。',
