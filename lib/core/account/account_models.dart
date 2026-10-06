@@ -28,6 +28,9 @@ class AccountDevice {
   final DateTime lastSeenAt;
   final DateTime? nameUpdatedAt;
   final String? syncTransportId;
+  final int? appBuild;
+  final int? syncProtocolVersion;
+  final int? minSyncProtocolVersion;
 
   AccountDevice copyWith({
     String? name,
