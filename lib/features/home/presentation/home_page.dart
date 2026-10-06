@@ -90,6 +90,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _saveAgain = false;
   bool _notificationPermissionChecked = false;
   bool _localDataHealthy = true;
+  bool _abstractFeatureToggleHidden = false;
+  bool _abstractGuidePromptVisible = false;
+  bool _lastAbstractMode = false;
   bool _syncConflictPromptVisible = false;
   bool _syncConflictPromptedUntilClear = false;
   AccountSyncState? _accountSyncSnapshot;
@@ -102,6 +105,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _onDesktopNavigatorNestedStateChanged,
     );
     _accountSyncSnapshot = widget.accountStore.syncSnapshot;
+    _lastAbstractMode = widget.featureStore.abstractMode;
 
     var deviceName = '本机';
     final currentDeviceId = widget.accountStore.currentDeviceId!;
@@ -247,6 +251,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _showAbstractModeGuideOnce() async {
+    if (_abstractGuidePromptVisible || !mounted) return;
+    if (await _hintStore.hasSeenAbstractModeGuide(widget.accountId)) return;
+    if (!mounted || !widget.featureStore.abstractMode) return;
+
+    _abstractGuidePromptVisible = true;
+    try {
+      await showAbstractModeGuide(context, forced: true);
+      await _hintStore.markAbstractModeGuideSeen(widget.accountId);
+    } finally {
+      _abstractGuidePromptVisible = false;
+    }
+  }
+
+  void _hideFeatureToggleForAbstractSession() {
+    if (!mounted || !widget.featureStore.abstractMode) return;
+    setState(() {
+      _abstractFeatureToggleHidden = true;
+      if (_desktopToolSelection == AppToolMenu.featureToggleTool) {
+        _desktopToolSelection = null;
+        _replaceDesktopContentNavigator();
+      }
+    });
+  }
+
   void _onOrderStoreChanged() {
     _scheduleSave();
     _scheduleReminderSync();
@@ -328,16 +357,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _onFeatureSettingsChanged() {
     if (!mounted) return;
+
+    final abstractMode = widget.featureStore.abstractMode;
+    final enteredAbstractMode = !_lastAbstractMode && abstractMode;
+    final leftAbstractMode = _lastAbstractMode && !abstractMode;
+    _lastAbstractMode = abstractMode;
+
     if (!widget.featureStore.deadlineReminders) {
       _notificationPermissionChecked = false;
     }
+
     setState(() {
       _index = 0;
+      if (leftAbstractMode) {
+        _abstractFeatureToggleHidden = false;
+      }
       _refreshDesktopCollectionRootIfNeeded();
     });
+
     _scheduleSave();
     _scheduleReminderSync();
     _syncCoordinator.notifySettingsChanged();
+
+    if (_ready && enteredAbstractMode) {
+      unawaited(_showAbstractModeGuideOnce());
+    }
   }
 
   void _onThemeSettingsChanged() {
@@ -795,7 +839,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.nodePresetTool => NodePresetPage(store: _nodePresetStore),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
         store: widget.featureStore,
-        accountId: widget.accountId,
+        onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
       ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
@@ -978,6 +1022,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onApplyWorkspaceSettings: _applySyncSettings,
               onBeforeSignOut: _prepareForSignOut,
               onShowTutorial: () => unawaited(_showTutorial()),
+              showFeatureToggle:
+                  !widget.featureStore.abstractMode ||
+                  !_abstractFeatureToggleHidden,
+              onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
             )
           : null,
       appBar: _desktopToolSelection == null
@@ -1058,6 +1106,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     onBeforeSignOut: _prepareForSignOut,
                                     onShowTutorial: () =>
                                         unawaited(_showTutorial()),
+                                    showFeatureToggle:
+                                        !widget.featureStore.abstractMode ||
+                                        !_abstractFeatureToggleHidden,
+                                    onHideFeatureToggle:
+                                        _hideFeatureToggleForAbstractSession,
                                     onSelectTool: _selectDesktopTool,
                                     selectedTool:
                                         _desktopToolSelection ==
