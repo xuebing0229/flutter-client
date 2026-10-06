@@ -737,16 +737,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   Uint8List _archiveFileBytes(ArchiveFile file) {
-    final content = file.content;
-    if (content is Uint8List) return content;
-    if (content is ByteBuffer) return Uint8List.view(content);
-    if (content is List<int>) return Uint8List.fromList(content);
-    if (content is List) {
-      return Uint8List.fromList(
-        content.whereType<num>().map((value) => value.toInt()).toList(),
-      );
-    }
-    throw FormatException('无法读取备份文件：${file.name}');
+    return file.content;
   }
 
   bool _safeAssetPath(String value) {
