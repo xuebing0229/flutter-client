@@ -27,10 +27,29 @@ jobs:
         run: flutter pub get
       - name: Build web release
         run: flutter build web --release
-      - name: Upload web build
+      - name: Pack single-file offline HTML
+        run: |
+          mkdir -p dist
+          python3 tool/pack_web_single_html.py \
+            build/web \
+            "dist/冒险者公会.html"
+
+      - name: Validate portable HTML
+        shell: bash
+        run: |
+          test -s "dist/冒险者公会.html"
+          SIZE=$(wc -c < "dist/冒险者公会.html")
+          test "$SIZE" -gt 5000000
+          if grep -Eiq '<script[^>]+src=' "dist/冒险者公会.html"; then
+            echo "Portable HTML still contains an external script tag." >&2
+            exit 1
+          fi
+          echo "Portable HTML size: $SIZE bytes"
+
+      - name: Upload single HTML
         uses: actions/upload-artifact@v4
         with:
-          name: adventurers-guild-web
-          path: build/web
-          retention-days: 1
+          name: adventurers-guild-html
+          path: "dist/冒险者公会.html"
+          retention-days: 7
           if-no-files-found: error
