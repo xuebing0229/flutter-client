@@ -709,7 +709,7 @@ class _SettingsPageState extends State<SettingsPage>
                       contentPadding: EdgeInsets.zero,
                       secondary: const Icon(Icons.auto_awesome_outlined),
                       title: const Text('抽象版'),
-                      subtitle: const Text('开启后会逐步启用抽象版 UI 和趣味弹窗；当前仅预留入口。'),
+                      subtitle: const Text('开启后使用抽象版表现和专属教程。'),
                       value: widget.featureStore.abstractMode,
                       onChanged: (value) {
                         widget.featureStore.setEnabled(
