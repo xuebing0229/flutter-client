@@ -355,6 +355,8 @@ class _ReceiveAccountTransferPageState
       SyncthingAccountTransferClient();
 
   SyncthingAccountTransferClientSession? _session;
+  Timer? _progressTimer;
+  Map<String, dynamic>? _transferProgress;
   String? _error;
   bool _finished = false;
 
@@ -373,21 +375,51 @@ class _ReceiveAccountTransferPageState
         return;
       }
       setState(() => _session = session);
+      _startProgressPolling(session);
 
       final source = await session.receive();
       _finished = true;
+      _stopProgressPolling();
       await Future<void>.delayed(const Duration(milliseconds: 700));
       await session.close();
 
       if (!mounted) return;
       Navigator.of(context).pop(source);
     } on FormatException catch (error) {
+      _stopProgressPolling();
       await session?.close();
       if (mounted) setState(() => _error = error.message);
     } catch (error) {
+      _stopProgressPolling();
       await session?.close();
       if (mounted) setState(() => _error = '设备确认失败：$error');
     }
+  }
+
+  void _startProgressPolling(SyncthingAccountTransferClientSession session) {
+    _progressTimer?.cancel();
+    unawaited(_refreshTransferProgress(session));
+    _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      unawaited(_refreshTransferProgress(session));
+    });
+  }
+
+  Future<void> _refreshTransferProgress(
+    SyncthingAccountTransferClientSession session,
+  ) async {
+    try {
+      final progress = await session.transferProgress();
+      if (!mounted || !identical(_session, session)) return;
+      setState(() => _transferProgress = progress);
+    } catch (_) {
+      // Progress is supplemental. The transfer itself keeps running if a
+      // status sample is temporarily unavailable.
+    }
+  }
+
+  void _stopProgressPolling() {
+    _progressTimer?.cancel();
+    _progressTimer = null;
   }
 
   Future<void> _copyResponse() async {
@@ -405,6 +437,7 @@ class _ReceiveAccountTransferPageState
 
   @override
   void dispose() {
+    _stopProgressPolling();
     if (!_finished) {
       unawaited(_session?.close());
     }
@@ -415,6 +448,14 @@ class _ReceiveAccountTransferPageState
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final response = _session?.response.encode();
+    final progress = _transferProgress;
+    final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
+        .clamp(0, 100)
+        .toDouble();
+    final progressBytes = (progress?['globalBytes'] as num?)?.toInt() ?? 0;
+    final progressItems = (progress?['globalItems'] as num?)?.toInt() ?? 0;
+    final hasMeasuredProgress = progress != null &&
+        (progressBytes > 0 || progressItems > 0);
 
     return Scaffold(
       appBar: AppBar(title: const Text('确认新设备')),
@@ -453,7 +494,12 @@ class _ReceiveAccountTransferPageState
                   ] else if (response == null) ...[
                     const CircularProgressIndicator(),
                     const SizedBox(height: 12),
-                    const Text('正在准备本机回应码……'),
+                    Text(
+                      Platform.isWindows
+                          ? '正在初始化 Windows 同步核心并准备本机回应码……首次使用可能需要 10–30 秒。'
+                          : '正在准备本机回应码……',
+                      textAlign: TextAlign.center,
+                    ),
                   ] else ...[
                     const Text(
                       '请让原设备扫描下面的回应二维码',
@@ -488,10 +534,14 @@ class _ReceiveAccountTransferPageState
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const LinearProgressIndicator(),
+                    LinearProgressIndicator(
+                      value: hasMeasuredProgress ? completion / 100 : null,
+                    ),
                     const SizedBox(height: 8),
                     Text(
-                      '原设备确认后会自动接收账号信息。完成后本页会自动关闭，不需要再操作。',
+                      hasMeasuredProgress
+                          ? '正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
+                          : '原设备确认后会自动接收账号信息。完成后本页会自动关闭，不需要再操作。',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
