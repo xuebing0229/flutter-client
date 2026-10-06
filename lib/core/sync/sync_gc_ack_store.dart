@@ -39,6 +39,23 @@ class SyncGcAckStore {
   Future<String> signature(SyncRecord record) async {
     final json = Map<String, dynamic>.from(record.toJson())
       ..remove('accountId');
+
+    // Map order is normalized by stableJsonSignature, but operations and
+    // conflicts are serialized as lists. Sort them by their deterministic IDs
+    // so two devices that merged the same record in a different order still
+    // acknowledge the same state.
+    for (final key in const <String>['operations', 'conflicts']) {
+      final raw = json[key];
+      if (raw is! List) continue;
+      final sorted = <dynamic>[...raw]
+        ..sort((left, right) {
+          final leftId = left is Map ? left['id']?.toString() ?? '' : '';
+          final rightId = right is Map ? right['id']?.toString() ?? '' : '';
+          return leftId.compareTo(rightId);
+        });
+      json[key] = sorted;
+    }
+
     final bytes = utf8.encode(stableJsonSignature(json));
     final hash = await _sha256.hash(bytes);
     return base64UrlEncode(hash.bytes).replaceAll('=', '');
