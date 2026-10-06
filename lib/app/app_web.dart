@@ -1537,3 +1537,11 @@ class _WebDataPage extends StatelessWidget {
     );
   }
 }
+
+class _WebTab {
+  const _WebTab(this.id, this.label, this.icon);
+
+  final String id;
+  final String label;
+  final IconData icon;
+}
