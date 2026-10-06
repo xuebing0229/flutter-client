@@ -102,6 +102,7 @@ String syncFieldLabel(String field) {
     'features' => '功能开关',
     'feature.clientInfo' => '显示单主信息',
     'feature.nodeProgress' => '节点小进度',
+    'feature.referenceImages' => '参考图',
     'feature.search' => '搜索',
     'feature.sorting' => '排序',
     'feature.viewSwitch' => '列表 / 卡片视图切换',
