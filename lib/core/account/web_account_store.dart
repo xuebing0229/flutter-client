@@ -211,7 +211,8 @@ class WebAccountStore extends ChangeNotifier {
     }
 
     final now = DateTime.now().toUtc();
-    final deviceId = _deviceIdForAccount(license.accountId);
+    final deviceId = _randomDeviceId();
+    _rememberDeviceId(license.accountId, deviceId);
     final state = AccountSyncState(
       accountId: license.accountId,
       accountName: trimmedName,
@@ -259,7 +260,11 @@ class WebAccountStore extends ChangeNotifier {
         stayLoggedIn: stayLoggedIn,
       );
     } else {
-      final deviceId = _deviceIdForAccount(incoming.accountId);
+      var deviceId = _deviceIdForAccount(incoming.accountId);
+      if (incoming.isRevoked(deviceId)) {
+        deviceId = _randomDeviceId();
+        _rememberDeviceId(incoming.accountId, deviceId);
+      }
       _accounts[incoming.accountId] = _WebAccountRecord(
         syncState: _touchDevice(incoming, deviceId, createIfMissing: true),
         currentDeviceId: deviceId,
