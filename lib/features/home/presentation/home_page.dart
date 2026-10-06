@@ -132,11 +132,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _restoreLocalData() async {
     String? errorMessage;
     var isNewAccount = false;
+    var hasWorkspaceSettings = false;
     var consumedPortableSyncHistory = false;
 
     try {
       final backup = await _persistence.load(accountId: widget.accountId);
       isNewAccount = backup == null;
+      final bootstrapOnly = backup?.settings['bootstrapOnly'] == true;
+      hasWorkspaceSettings =
+          backup != null &&
+          !bootstrapOnly &&
+          (backup.settings.containsKey('themeMode') ||
+              backup.settings.containsKey('features') ||
+              backup.settings.keys.any(
+                (key) => key.startsWith(_featureSettingPrefix),
+              ));
       if (backup != null) {
         _syncCoordinator.restoreSyncBaseline(
           backup.settings['syncBaselineRecords'],
@@ -153,10 +163,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           nodePresetStore: _nodePresetStore,
         );
 
-        // Theme, feature switches and layout belong to the account workspace.
-        // Restore all of them before sync starts so switching accounts cannot
-        // leak the previous account's in-memory settings into this one.
-        await _applySyncSettings(backup.settings);
+        // A bootstrap-only package deliberately contains account identity but no
+        // workspace settings. Do not treat it as authoritative local state.
+        if (hasWorkspaceSettings) {
+          // Theme, feature switches and layout belong to the account workspace.
+          // Restore all of them before sync starts so switching accounts cannot
+          // leak the previous account's in-memory settings into this one.
+          await _applySyncSettings(backup.settings);
+        }
 
         if (backup.accountSyncState != null) {
           await widget.accountStore.mergeSyncedState(backup.accountSyncState!);
@@ -173,11 +187,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _nodePresetStore.addListener(_scheduleSave);
 
     if (_localDataHealthy) {
-      if (isNewAccount) {
+      if (!hasWorkspaceSettings) {
         await widget.themeStore.resetToDefaults();
         await widget.featureStore.resetToDefaults();
       }
-      await _syncCoordinator.initialize(seedLocalSettings: !isNewAccount);
+      await _syncCoordinator.initialize(
+        seedLocalSettings: hasWorkspaceSettings,
+      );
       if (consumedPortableSyncHistory) {
         // The portable history is a one-time handoff. Persist the materialized
         // workspace again without embedding it, otherwise every launch would
