@@ -26,6 +26,7 @@ import '../../products/state/product_store.dart';
 import '../../schedule/presentation/schedule_page.dart';
 import '../../statistics/presentation/statistics_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
+import 'abstract_mode_guide.dart';
 import 'app_drawer.dart';
 import 'archive_page.dart';
 import 'feature_toggle_page.dart';
@@ -239,7 +240,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _showTutorial() async {
     if (!mounted) return;
-    await showFirstRunGuide(context, detailed: true);
+    if (widget.featureStore.abstractMode) {
+      await showAbstractModeGuide(context);
+    } else {
+      await showFirstRunGuide(context, detailed: true);
+    }
   }
 
   void _onOrderStoreChanged() {
@@ -790,6 +795,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.nodePresetTool => NodePresetPage(store: _nodePresetStore),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
         store: widget.featureStore,
+        accountId: widget.accountId,
       ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
