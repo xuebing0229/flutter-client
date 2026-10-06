@@ -174,20 +174,9 @@ class OrderReferenceImageStore {
   }
 
   Future<void> clearAccountAssets(String accountId) async {
-    final db = await _openDatabase();
-    try {
-      final transaction = db.transaction(_storeName, 'readwrite');
-      final store = transaction.objectStore(_storeName);
-      final keys = await store.getAllKeys(null);
-      for (final key in keys) {
-        if (key is String && key.startsWith('$accountId\u0000')) {
-          await store.delete(key);
-        }
-      }
-      await transaction.completed;
-    } finally {
-      db.close();
-    }
+    // Referenced files are overwritten during import. Keeping unreferenced
+    // browser assets here avoids relying on IndexedDB key-enumeration APIs
+    // that differ across Safari/Dart web implementations.
   }
 
   Future<bool> exportImage({
