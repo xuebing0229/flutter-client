@@ -111,6 +111,7 @@ String syncFieldLabel(String field) {
     'feature.statistics' => '统计功能开关',
     'feature.deadlineReminders' => '截稿提醒开关',
     'feature.abstractMode' => '抽象版开关',
+    'feature.abstractEffects' => '抽象版表现',
     'orderCardView' => '排单卡片视图',
     'productCardView' => '成品卡片视图',
     'orderSortMode' => '排单排序',
