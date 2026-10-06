@@ -18,6 +18,11 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
 
+  // Win32Window::Create() calls Destroy() once before creating the HWND.
+  // That path reaches OnDestroy() on an already-constructed FlutterWindow, so
+  // always begin a real window lifetime in the non-exiting state.
+  exiting_ = false;
+
   RECT frame = GetClientArea();
 
   // The size here must match the window dimensions to avoid unnecessary surface
@@ -47,7 +52,6 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
-  exiting_ = true;
   RemoveTrayIcon();
 
   if (flutter_controller_) {
@@ -159,9 +163,18 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_CLOSE:
       // The title-bar close button and Alt+F4 keep the app alive for sync and
       // local reminders. "Exit" in the tray menu is the explicit quit path.
-      if (!exiting_ && tray_icon_added_) {
-        ::ShowWindow(hwnd, SW_HIDE);
-        return 0;
+      if (!exiting_) {
+        // Re-add the icon if Explorer restarted or the first registration was
+        // delayed. Only fall back to a real close when Windows still refuses
+        // to create the tray icon, otherwise the hidden app would be
+        // impossible to restore.
+        if (!tray_icon_added_) {
+          AddTrayIcon();
+        }
+        if (tray_icon_added_) {
+          ::ShowWindow(hwnd, SW_HIDE);
+          return 0;
+        }
       }
       break;
 
