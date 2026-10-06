@@ -11,6 +11,12 @@ $IconName = 'app_icon_{0}.{1}.{2}+{3}.ico' -f
   $Version.FileBuildPart, $Version.FilePrivatePart
 $IconPath = Join-Path $InstallDir $IconName
 
+# The beta installer is per-user and uses this stable Inno Setup AppId. App
+# self-update does not run the installer again, so keep the uninstall entry
+# pointing at the newly versioned icon before older icon files are removed.
+$UninstallKey =
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8E886A0E-6E19-4E6F-9A26-0F39E7E7A2C4}_is1'
+
 # Changing the icon path prevents Explorer from reusing the previous build's
 # cached image. The icon is bundled alongside the executable by the workflow.
 if (-not (Test-Path -LiteralPath $IconPath -PathType Leaf)) {
@@ -74,3 +80,32 @@ foreach ($Directory in $ShortcutDirectories) {
 [AdventurersGuildShellRefresh]::SHChangeNotify(
   0x08000000, 0x1000, $null, $null
 )
+
+# Self-update replaces the application files directly, so refresh the uninstall
+# entry as well. This makes it safe to remove icons from older builds.
+try {
+  if (Test-Path -LiteralPath $UninstallKey) {
+    Set-ItemProperty -LiteralPath $UninstallKey -Name 'DisplayIcon' -Value $IconPath
+    $DisplayVersion = '{0}.{1}.{2}+{3}' -f
+      $Version.FileMajorPart, $Version.FileMinorPart,
+      $Version.FileBuildPart, $Version.FilePrivatePart
+    Set-ItemProperty -LiteralPath $UninstallKey -Name 'DisplayVersion' -Value $DisplayVersion
+  }
+} catch {
+  Write-Warning ("Could not refresh uninstall metadata: " + $_.Exception.Message)
+}
+
+# Versioned icon paths are intentional for defeating Explorer's icon cache, but
+# only the current one is needed after all shortcuts/metadata have been moved.
+Get-ChildItem -LiteralPath $InstallDir -Filter 'app_icon_*.ico' -File |
+  Where-Object {
+    -not $_.FullName.Equals($IconPath, [StringComparison]::OrdinalIgnoreCase)
+  } |
+  ForEach-Object {
+    try {
+      Remove-Item -LiteralPath $_.FullName -Force
+      Write-Output ("Removed old icon: " + $_.Name)
+    } catch {
+      Write-Warning ("Could not remove old icon " + $_.Name + ": " + $_.Exception.Message)
+    }
+  }
