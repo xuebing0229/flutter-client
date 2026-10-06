@@ -39,6 +39,9 @@ class AccountDevice {
     DateTime? lastSeenAt,
     DateTime? nameUpdatedAt,
     String? syncTransportId,
+    int? appBuild,
+    int? syncProtocolVersion,
+    int? minSyncProtocolVersion,
   }) {
     return AccountDevice(
       id: id,
@@ -48,6 +51,10 @@ class AccountDevice {
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       nameUpdatedAt: nameUpdatedAt ?? this.nameUpdatedAt,
       syncTransportId: syncTransportId ?? this.syncTransportId,
+      appBuild: appBuild ?? this.appBuild,
+      syncProtocolVersion: syncProtocolVersion ?? this.syncProtocolVersion,
+      minSyncProtocolVersion:
+          minSyncProtocolVersion ?? this.minSyncProtocolVersion,
     );
   }
 
