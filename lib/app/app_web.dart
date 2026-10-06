@@ -1070,6 +1070,18 @@ class _WebDataPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
+          Card(
+            margin: EdgeInsets.zero,
+            child: const ListTile(
+              leading: Icon(Icons.ios_share_rounded),
+              title: Text(
+                'iPhone / iPad 可以添加到主屏幕',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text('用 Safari 打开网页 → 点“分享” → “添加到主屏幕”，之后就能像普通 App 一样从桌面进入。'),
+            ),
+          ),
+          const SizedBox(height: 14),
           Text(
             '网页版没有后台 P2P，同步动作只发生在你主动导入或导出时。'
             '网页本地数据使用浏览器存储；清除站点数据前请先导出备份。',
