@@ -3,33 +3,19 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
-import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
-import 'abstract_mode_guide.dart';
 import 'reminder_background_guide.dart';
 
 class FeatureTogglePage extends StatelessWidget {
   const FeatureTogglePage({
     required this.store,
-    required this.accountId,
+    this.onHideFeatureToggle,
     super.key,
   });
 
   final AppFeatureStore store;
-  final String accountId;
-  static const InteractionHintStore _hintStore = InteractionHintStore();
-
-  Future<void> _setAbstractMode(BuildContext context, bool enabled) async {
-    await store.setEnabled(AppFeature.abstractMode, enabled);
-    if (!enabled || !context.mounted) return;
-
-    final seen = await _hintStore.hasSeenAbstractModeGuide(accountId);
-    if (seen || !context.mounted) return;
-
-    await showAbstractModeGuide(context, forced: true);
-    await _hintStore.markAbstractModeGuideSeen(accountId);
-  }
+  final VoidCallback? onHideFeatureToggle;
 
   Future<void> _setDeadlineReminders(BuildContext context, bool enabled) async {
     if (!enabled) {
@@ -185,8 +171,20 @@ class FeatureTogglePage extends StatelessWidget {
                     icon: Icons.auto_awesome_rounded,
                     title: '抽象版',
                     subtitle: '开启后使用抽象版表现和专属教程；第一次开启会自动打开一次教程。',
-                    onChanged: (value) => _setAbstractMode(context, value),
                   ),
+                  if (store.abstractMode && onHideFeatureToggle != null)
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      secondary: const Icon(Icons.visibility_off_outlined),
+                      title: const Text('附加功能开关'),
+                      subtitle: const Text('关闭后，本入口会在当前抽象版里消失。'),
+                      value: true,
+                      onChanged: (value) {
+                        if (value) return;
+                        onHideFeatureToggle?.call();
+                        Navigator.of(context).maybePop();
+                      },
+                    ),
                 ],
               ),
               const SizedBox(height: 16),
