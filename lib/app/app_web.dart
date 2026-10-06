@@ -694,9 +694,8 @@ class _WebWorkspace extends StatefulWidget {
 }
 
 class _WebWorkspaceState extends State<_WebWorkspace> {
-  static const String _workspaceKey = 'adventurers-guild.web.workspace.v1';
-  static const String _deviceKey = 'adventurers-guild.web.device-id.v1';
-  static const String _fallbackAccountId = 'web-local';
+  static const String _legacyWorkspaceKey =
+      'adventurers-guild.web.workspace.v1';
   static const String _manifestName = 'backup.json';
 
   final OrderStore _orderStore = OrderStore();
@@ -705,11 +704,15 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   final EmptySyncUiCoordinator _syncUi = EmptySyncUiCoordinator();
   final OrderReferenceImageStore _referenceImageStore =
       OrderReferenceImageStore();
+  final WebBackupReader _backupReader = const WebBackupReader();
 
   Timer? _saveDebounce;
-  AccountSyncState? _accountState;
-  String _accountId = _fallbackAccountId;
-  late final String _webDeviceId;
+
+  String get _accountId => widget.accountStore.accountId!;
+  AccountSyncState get _accountState => widget.accountStore.syncSnapshot!;
+  String get _webDeviceId => widget.accountStore.currentDeviceId!;
+  String get _workspaceKey =>
+      'adventurers-guild.web.workspace.v2.$_accountId';
 
   bool _ready = false;
   bool _busy = false;
@@ -724,30 +727,12 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   @override
   void initState() {
     super.initState();
-    _webDeviceId = _loadWebDeviceId();
     _orderStore.addListener(_scheduleSave);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
     widget.featureStore.addListener(_onFeatureStoreChanged);
     widget.themeStore.addListener(_scheduleSave);
     unawaited(_restoreWorkspace());
-  }
-
-  String _loadWebDeviceId() {
-    try {
-      final existing = html.window.localStorage[_deviceKey];
-      if (existing != null && existing.trim().isNotEmpty) {
-        return existing.trim();
-      }
-      final random = Random.secure();
-      final next =
-          'web-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
-          '${random.nextInt(0x7fffffff).toRadixString(36)}';
-      html.window.localStorage[_deviceKey] = next;
-      return next;
-    } catch (_) {
-      return 'web-session-${DateTime.now().microsecondsSinceEpoch}';
-    }
   }
 
   void _onFeatureStoreChanged() {
@@ -761,17 +746,39 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   Future<void> _restoreWorkspace() async {
     try {
-      final source = html.window.localStorage[_workspaceKey];
+      var source = html.window.localStorage[_workspaceKey];
+      var migratedLegacy = false;
+      if (source == null || source.trim().isEmpty) {
+        final legacy = html.window.localStorage[_legacyWorkspaceKey];
+        if (legacy != null && legacy.trim().isNotEmpty) {
+          final legacyBackup = AppBackupData.decode(legacy);
+          final legacyAccountId = legacyBackup.accountSyncState?.accountId;
+          if (legacyAccountId == null || legacyAccountId == _accountId) {
+            source = legacy;
+            migratedLegacy = true;
+          }
+        }
+      }
+
       if (source != null && source.trim().isNotEmpty) {
         final backup = AppBackupData.decode(source);
+        final backupAccount = backup.accountSyncState;
+        if (backupAccount != null && backupAccount.accountId != _accountId) {
+          throw const FormatException('浏览器本地数据属于另一个账号。');
+        }
+        if (backupAccount != null) {
+          await widget.accountStore.mergeCurrentAccountState(backupAccount);
+        }
         backup.restoreInto(
           orderStore: _orderStore,
           productStore: _productStore,
           nodePresetStore: _nodePresetStore,
         );
-        _accountState = backup.accountSyncState;
-        _accountId = _accountState?.accountId ?? _fallbackAccountId;
         await _applySettings(backup.settings);
+        if (migratedLegacy) {
+          await _persistWorkspace();
+          html.window.localStorage.remove(_legacyWorkspaceKey);
+        }
       }
     } catch (error) {
       if (mounted) {
@@ -872,9 +879,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
       accountSyncState: _accountState,
-      syncRecords: portable && _accountState != null
-          ? _buildPortableRecords(settings)
-          : null,
+      syncRecords: portable ? _buildPortableRecords(settings) : null,
       settings: settings,
     );
   }
@@ -882,7 +887,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   List<Map<String, dynamic>> _buildPortableRecords(
     Map<String, dynamic> settings,
   ) {
-    final accountId = _accountState!.accountId;
+    final accountId = _accountState.accountId;
 
     Map<String, dynamic> record(
       SyncEntityKind kind,
