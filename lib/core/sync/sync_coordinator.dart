@@ -291,69 +291,103 @@ class SyncCoordinator extends ChangeNotifier {
 
     _changeDebounce?.cancel();
     return _enqueue(() async {
-      for (var attempt = 0; attempt < 3; attempt++) {
-        await _flushLocalChanges();
-        await _reconcileFromSyncDirectory(seedMissing: false);
-
-        final state = accountStore.syncSnapshot;
-        if (state == null ||
-            state.accountId != accountId ||
-            state.isRevoked(deviceId)) {
-          throw StateError('当前设备已经不能导出这个账号的数据。');
+      var pausedTransportForExport = false;
+      try {
+        // A complete backup must capture the workspace JSON and the synced
+        // record history as one consistent point-in-time snapshot. Syncthing
+        // writes the same directory independently of this Dart queue, so pause
+        // only the transport folder for the few moments needed to capture it.
+        // This does not change the user's persisted sync-pause setting.
+        if (_transportPrepared && !_syncPaused) {
+          await _bridge.setAccountFolderPaused(
+            accountId: accountId,
+            paused: true,
+          );
+          pausedTransportForExport = true;
+          // Let any file operation already in flight finish before reading.
+          await Future<void>.delayed(const Duration(milliseconds: 120));
         }
 
-        final orderFields = _captureOrders();
-        final productFields = _captureProducts();
-        final presetFields = _capturePresets();
-        final settings = captureSettings();
-        final orders = <QueueOrder>[...orderStore.orders];
-        final products = <FinishedProduct>[...productStore.products];
-        final presets = <NodePreset>[
-          for (final preset in nodePresetStore.presets) preset.snapshot(),
-        ];
-        final accountSnapshot = state;
+        for (var attempt = 0; attempt < 5; attempt++) {
+          await _flushLocalChanges();
+          await _reconcileFromSyncDirectory(seedMissing: false);
 
-        final records = await _recordStore.exportPortableRecords(
-          accountId: accountId,
-        );
+          final state = accountStore.syncSnapshot;
+          if (state == null ||
+              state.accountId != accountId ||
+              state.isRevoked(deviceId)) {
+            throw StateError('当前设备已经不能导出这个账号的数据。');
+          }
 
-        final storesUnchanged =
-            syncJsonEquals(orderFields, _captureOrders()) &&
-            syncJsonEquals(productFields, _captureProducts()) &&
-            syncJsonEquals(presetFields, _capturePresets()) &&
-            syncJsonEquals(settings, captureSettings()) &&
-            syncJsonEquals(
-              accountSnapshot.toJson(),
-              accountStore.syncSnapshot?.toJson(),
+          final orderFields = _captureOrders();
+          final productFields = _captureProducts();
+          final presetFields = _capturePresets();
+          final settings = captureSettings();
+          final orders = <QueueOrder>[...orderStore.orders];
+          final products = <FinishedProduct>[...productStore.products];
+          final presets = <NodePreset>[
+            for (final preset in nodePresetStore.presets) preset.snapshot(),
+          ];
+
+          final records = await _recordStore.exportPortableRecords(
+            accountId: accountId,
+          );
+
+          final storesUnchanged =
+              syncJsonEquals(orderFields, _captureOrders()) &&
+              syncJsonEquals(productFields, _captureProducts()) &&
+              syncJsonEquals(presetFields, _capturePresets()) &&
+              syncJsonEquals(settings, captureSettings());
+          if (!storesUnchanged) continue;
+
+          if (!PortableSyncWorkspaceValidator.recordsMatchWorkspace(
+            accountId: accountId,
+            records: records,
+            orders: orderFields,
+            products: productFields,
+            presets: presetFields,
+            settings: settings,
+            mergeEngine: _mergeEngine,
+          )) {
+            // A local canonicalization can still finish between two reads.
+            // Reconcile that result and retry without treating harmless account
+            // activity timestamps as workspace mutations.
+            continue;
+          }
+
+          final accountSnapshot = accountStore.syncSnapshot;
+          if (accountSnapshot == null ||
+              accountSnapshot.accountId != accountId ||
+              accountSnapshot.isRevoked(deviceId)) {
+            throw StateError('当前设备已经不能导出这个账号的数据。');
+          }
+
+          return PortableWorkspaceSnapshot(
+            exportedAt: DateTime.now(),
+            orders: orders,
+            products: products,
+            nodePresets: presets,
+            settings: settings,
+            accountSyncState: accountSnapshot,
+            syncRecords: records,
+          );
+        }
+
+        throw StateError('导出快照暂时无法稳定，请稍后再试。');
+      } finally {
+        if (pausedTransportForExport) {
+          try {
+            await _bridge.setAccountFolderPaused(
+              accountId: accountId,
+              paused: false,
             );
-        if (!storesUnchanged) continue;
-
-        if (!PortableSyncWorkspaceValidator.recordsMatchWorkspace(
-          accountId: accountId,
-          records: records,
-          orders: orderFields,
-          products: productFields,
-          presets: presetFields,
-          settings: settings,
-          mergeEngine: _mergeEngine,
-        )) {
-          // Syncthing can land a file while the export is being read. Reconcile
-          // that version into the stores, then capture the package again.
-          continue;
+            await _bridge.requestScan(accountId: accountId);
+          } catch (error) {
+            _lastError = '备份完成后恢复设备同步失败：$error';
+            if (!_disposed) notifyListeners();
+          }
         }
-
-        return PortableWorkspaceSnapshot(
-          exportedAt: DateTime.now(),
-          orders: orders,
-          products: products,
-          nodePresets: presets,
-          settings: settings,
-          accountSyncState: accountSnapshot,
-          syncRecords: records,
-        );
       }
-
-      throw StateError('导出期间数据持续发生变化，请稍后重试。');
     });
   }
 
