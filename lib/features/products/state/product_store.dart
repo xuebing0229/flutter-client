@@ -79,6 +79,8 @@ class ProductStore extends ChangeNotifier {
 
     final product = _products[index];
     _products[index] = product.copyWith(
+      archivedAt: archived ? DateTime.now() : null,
+      clearArchivedAt: !archived,
       isArchived: archived,
       isPinned: archived ? false : product.isPinned,
     );
@@ -89,9 +91,12 @@ class ProductStore extends ChangeNotifier {
     final idSet = ids.toSet();
     if (idSet.isEmpty) return;
 
+    final archivedAt = archived ? DateTime.now() : null;
     for (var i = 0; i < _products.length; i++) {
       if (idSet.contains(_products[i].id)) {
         _products[i] = _products[i].copyWith(
+          archivedAt: archivedAt,
+          clearArchivedAt: !archived,
           isArchived: archived,
           isPinned: archived ? false : _products[i].isPinned,
         );
