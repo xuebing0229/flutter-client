@@ -65,7 +65,7 @@ begin
   InstallDir := ExpandConstant('{app}');
   Command :=
     '$target = [IO.Path]::GetFullPath(''' + InstallDir +
-    '\syncthing\syncthing.exe'''); ' +
+    '\syncthing\syncthing.exe''); ' +
     '$deadline = (Get-Date).AddSeconds(15); ' +
     'do { ' +
     '$running = @(Get-Process -Name ''syncthing'' -ErrorAction SilentlyContinue | ' +
