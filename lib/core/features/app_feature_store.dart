@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 enum AppFeature {
   clientInfo,
   nodeProgress,
+  referenceImages,
   search,
   sorting,
   viewSwitch,
@@ -29,6 +30,7 @@ class AppFeatureStore extends ChangeNotifier {
 
   bool get clientInfo => enabled(AppFeature.clientInfo);
   bool get nodeProgress => enabled(AppFeature.nodeProgress);
+  bool get referenceImages => enabled(AppFeature.referenceImages);
   bool get search => enabled(AppFeature.search);
   bool get sorting => enabled(AppFeature.sorting);
   bool get viewSwitch => enabled(AppFeature.viewSwitch);
@@ -80,7 +82,10 @@ class AppFeatureStore extends ChangeNotifier {
     if (raw is! Map) {
       throw const FormatException('功能开关设置格式无效。');
     }
+    // Missing keys keep their current/default value. This keeps saved
+    // settings readable when a new optional feature is added later.
     for (final feature in AppFeature.values) {
+      if (!raw.containsKey(feature.name)) continue;
       if (raw[feature.name] is! bool) {
         throw FormatException('功能开关 ${feature.name} 格式无效。');
       }
