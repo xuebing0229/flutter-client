@@ -74,7 +74,7 @@ void FlutterWindow::AddTrayIcon() {
   data.uCallbackMessage = kTrayCallbackMessage;
   data.hIcon = ::LoadIconW(
       ::GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDI_APP_ICON));
-  ::wcsncpy_s(data.szTip, ARRAYSIZE(data.szTip), L"冒险者公会",
+  ::wcsncpy_s(data.szTip, ARRAYSIZE(data.szTip), L"\u5192\u9669\u8005\u516c\u4f1a",
               _TRUNCATE);
 
   tray_icon_added_ = ::Shell_NotifyIconW(NIM_ADD, &data) != FALSE;
@@ -121,10 +121,10 @@ void FlutterWindow::ShowTrayMenu() {
   }
 
   ::AppendMenuW(menu, MF_STRING, kTrayOpenCommand,
-                L"打开冒险者公会");
+                L"\u6253\u5f00\u5192\u9669\u8005\u516c\u4f1a");
   ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   ::AppendMenuW(menu, MF_STRING, kTrayExitCommand,
-                L"退出冒险者公会");
+                L"\u9000\u51fa\u5192\u9669\u8005\u516c\u4f1a");
 
   POINT cursor{};
   ::GetCursorPos(&cursor);
