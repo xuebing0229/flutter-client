@@ -16,6 +16,9 @@ class AccountDevice {
     required this.lastSeenAt,
     this.nameUpdatedAt,
     this.syncTransportId,
+    this.appBuild,
+    this.syncProtocolVersion,
+    this.minSyncProtocolVersion,
   });
 
   final String id;
