@@ -98,6 +98,13 @@ class FeatureTogglePage extends StatelessWidget {
                   ),
                   _FeatureSwitch(
                     store: store,
+                    feature: AppFeature.referenceImages,
+                    icon: Icons.photo_library_outlined,
+                    title: '参考图',
+                    subtitle: '关闭后新增、详情和编辑页隐藏参考图；已有图片不会删除。',
+                  ),
+                  _FeatureSwitch(
+                    store: store,
                     feature: AppFeature.search,
                     icon: Icons.search_rounded,
                     title: '搜索',
