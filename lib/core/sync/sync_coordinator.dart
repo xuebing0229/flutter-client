@@ -1107,6 +1107,23 @@ class SyncCoordinator extends ChangeNotifier {
 
     await _migrateLegacyFeatureSettings(recordsByKind[SyncEntityKind.settings]!);
 
+    // Schema upgrades can add fields to an existing entity. If the local
+    // object already has the new field but the older sync record does not,
+    // normal change detection sees no edit (for example missing vs null) and
+    // would leave the record permanently incomplete. Backfill those fields
+    // before applying/exporting so the portable history exactly represents
+    // the current workspace.
+    if (!_awaitingInitialRemoteWorkspace) {
+      final localEntities = _captureEntities();
+      for (final kind in SyncEntityKind.values) {
+        await _backfillMissingRecordFields(
+          kind: kind,
+          local: localEntities[kind]!,
+          records: recordsByKind[kind]!,
+        );
+      }
+    }
+
     _applyingRemote = true;
     try {
       for (final kind in SyncEntityKind.values) {
@@ -1320,6 +1337,42 @@ class SyncCoordinator extends ChangeNotifier {
       return settings;
     }
     return <String, dynamic>{...settings}..remove('features');
+  }
+
+  Future<void> _backfillMissingRecordFields({
+    required SyncEntityKind kind,
+    required Map<String, Map<String, dynamic>> local,
+    required Map<String, SyncRecord> records,
+  }) async {
+    for (final entry in local.entries) {
+      final record = records[entry.key];
+      if (record == null || record.isDeleted) continue;
+
+      final fields = <String, SyncFieldValue>{...record.fields};
+      var changed = false;
+      for (final valueEntry in entry.value.entries) {
+        final field = valueEntry.key;
+        if (field == 'id' || fields.containsKey(field)) continue;
+        fields[field] = SyncFieldValue(
+          value: valueEntry.value,
+          clock: SyncClock.empty().tick(deviceId),
+          updatedBy: deviceId,
+        );
+        changed = true;
+      }
+      if (!changed) continue;
+
+      final migrated = SyncRecord(
+        accountId: record.accountId,
+        kind: kind,
+        id: record.id,
+        fields: Map<String, SyncFieldValue>.unmodifiable(fields),
+        operations: record.operations,
+        conflicts: record.conflicts,
+      );
+      await _recordStore.write(accountId: accountId, record: migrated);
+      records[entry.key] = migrated;
+    }
   }
 
   Future<void> _migrateLegacyFeatureSettings(
