@@ -52,11 +52,20 @@ class SyncMergeEngine {
               updatedBy: _deterministicDevice(a.updatedBy, b.updatedBy),
             );
           } else {
-            final conflict = _createConflict(left.id, fieldName, a, b);
-            generatedConflicts[conflict.id] = conflict;
-            fields[fieldName] = _deterministicField(a, b).withClock(
-              a.clock.merge(b.clock),
+            final compactionWinner = _compactionWinnerForField(
+              fieldName,
+              left,
+              right,
             );
+            if (compactionWinner != null) {
+              fields[fieldName] = compactionWinner == 0 ? a : b;
+            } else {
+              final conflict = _createConflict(left.id, fieldName, a, b);
+              generatedConflicts[conflict.id] = conflict;
+              fields[fieldName] = _deterministicField(a, b).withClock(
+                a.clock.merge(b.clock),
+              );
+            }
           }
         case SyncClockRelation.concurrent:
           if (syncJsonEquals(a.value, b.value)) {
@@ -351,8 +360,11 @@ class SyncMergeEngine {
       final current = fields[field];
       fields[field] = SyncFieldValue(
         value: materialized[field],
-        clock: (current?.clock ?? SyncClock.empty()).tick(deviceId),
-        updatedBy: deviceId,
+        // Folding acknowledged operations is storage maintenance, not a user
+        // edit. Preserve the semantic clock so a concurrent delete/edit is not
+        // manufactured purely by compaction.
+        clock: current?.clock ?? SyncClock.empty(),
+        updatedBy: current?.updatedBy ?? deviceId,
       );
     }
 
@@ -803,6 +815,51 @@ class SyncMergeEngine {
       mergedClock: mergedClock,
       createdAt: DateTime.now().toUtc(),
     );
+  }
+
+  int? _compactionWinnerForField(
+    String field,
+    SyncRecord left,
+    SyncRecord right,
+  ) {
+    final leftCompacted = _hasCompactedEffectForField(left, right, field);
+    final rightCompacted = _hasCompactedEffectForField(right, left, field);
+    if (leftCompacted == rightCompacted) return null;
+    return leftCompacted ? 0 : 1;
+  }
+
+  bool _hasCompactedEffectForField(
+    SyncRecord candidate,
+    SyncRecord other,
+    String field,
+  ) {
+    for (final operation in candidate.operations.values) {
+      if (!operation.compacted || !_operationAffectsField(operation, field)) {
+        continue;
+      }
+      final otherOperation = other.operations[operation.id];
+      if (otherOperation == null || !otherOperation.compacted) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _operationAffectsField(SyncOperation operation, String field) {
+    if (operation.kind == 'amount-delta') {
+      return operation.field == field;
+    }
+    if (operation.kind == 'sale-delta' ||
+        operation.kind == 'single-sale-state') {
+      return field == 'soldCount' || field == 'saleRecords';
+    }
+    if (operation.kind == 'progress-delta') {
+      return field == 'currentNodeProgress';
+    }
+    if (operation.kind == 'reference-image-delta') {
+      return field == 'referenceImages';
+    }
+    return false;
   }
 
   SyncFieldValue _deterministicField(
