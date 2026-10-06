@@ -119,6 +119,7 @@ class SyncOperation {
     required this.occurredAt,
     this.delta,
     this.metadata = const <String, dynamic>{},
+    this.compacted = false,
   });
 
   final String id;
@@ -129,6 +130,11 @@ class SyncOperation {
   final num? delta;
   final Map<String, dynamic> metadata;
 
+  /// True once every active device has acknowledged this operation and its
+  /// effect has been folded into the record's base fields. The marker itself
+  /// remains so a stale peer cannot re-apply the old operation.
+  final bool compacted;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'field': field,
@@ -137,6 +143,7 @@ class SyncOperation {
         'occurredAt': occurredAt.toUtc().toIso8601String(),
         if (delta != null) 'delta': delta,
         if (metadata.isNotEmpty) 'metadata': metadata,
+        if (compacted) 'compacted': true,
       };
 
   factory SyncOperation.fromJson(Map<String, dynamic> json) {
@@ -161,6 +168,7 @@ class SyncOperation {
               for (final entry in rawMetadata.entries)
                 entry.key.toString(): entry.value,
             },
+      compacted: json['compacted'] == true,
     );
   }
 }
