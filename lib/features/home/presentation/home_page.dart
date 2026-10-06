@@ -688,7 +688,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         store: _orderStore,
         nodePresetStore: _nodePresetStore,
         featureStore: widget.featureStore,
-        syncCoordinator: _syncCoordinator,
       ),
     );
     final desktopNavigator = useDesktopLayout
