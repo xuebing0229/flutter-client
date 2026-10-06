@@ -247,15 +247,89 @@ class SyncthingBridge(
         }
 
         var folderState: String? = null
+        var syncProgress: Map<String, Any?>? = null
         if (folderId.isNotBlank()) {
-            folderState = runCatching {
-                val body = request(
-                    "GET",
-                    "/rest/db/status?folder=" +
-                        URLEncoder.encode(folderId, Charsets.UTF_8.name()),
+            val encodedFolder = URLEncoder.encode(folderId, Charsets.UTF_8.name())
+            val candidates = mutableListOf<Map<String, Any?>>()
+            val folderStatus = runCatching {
+                JSONObject(
+                    request(
+                        "GET",
+                        "/rest/db/status?folder=$encodedFolder",
+                    ),
                 )
-                JSONObject(body).optString("state").ifBlank { null }
             }.getOrNull()
+
+            if (folderStatus != null) {
+                folderState = folderStatus.optString("state").ifBlank { null }
+                val globalBytes = folderStatus.optLong("globalBytes", 0L)
+                val needBytes = folderStatus.optLong("needBytes", 0L)
+                val globalItems = when {
+                    folderStatus.has("globalTotalItems") ->
+                        folderStatus.optLong("globalTotalItems", 0L)
+                    else -> folderStatus.optLong("globalFiles", 0L)
+                }
+                val needItems = when {
+                    folderStatus.has("needTotalItems") ->
+                        folderStatus.optLong("needTotalItems", 0L)
+                    else -> folderStatus.optLong("needFiles", 0L)
+                }
+                val completion = when {
+                    globalBytes > 0L ->
+                        ((globalBytes - needBytes).toDouble() / globalBytes.toDouble() * 100.0)
+                            .coerceIn(0.0, 100.0)
+                    globalItems > 0L ->
+                        ((globalItems - needItems).toDouble() / globalItems.toDouble() * 100.0)
+                            .coerceIn(0.0, 100.0)
+                    else -> 100.0
+                }
+                candidates += linkedMapOf(
+                    "deviceId" to "",
+                    "deviceName" to "本机",
+                    "direction" to "receiving",
+                    "completion" to completion,
+                    "globalBytes" to globalBytes,
+                    "needBytes" to needBytes,
+                    "globalItems" to globalItems,
+                    "needItems" to needItems,
+                )
+            }
+
+            for (remoteId in connectedDeviceIds) {
+                val completion = runCatching {
+                    JSONObject(
+                        request(
+                            "GET",
+                            "/rest/db/completion?folder=$encodedFolder&device=" +
+                                URLEncoder.encode(remoteId, Charsets.UTF_8.name()),
+                        ),
+                    )
+                }.getOrNull() ?: continue
+
+                val rawCompletion = completion.optDouble("completion", Double.NaN)
+                if (rawCompletion.isNaN()) continue
+
+                val configuredName = configuredDevices
+                    .firstOrNull { it["deviceId"] == remoteId }
+                    ?.get("name")
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+                candidates += linkedMapOf(
+                    "deviceId" to remoteId,
+                    "deviceName" to configuredName.ifBlank { remoteId.take(7) },
+                    "direction" to "sending",
+                    "completion" to rawCompletion.coerceIn(0.0, 100.0),
+                    "globalBytes" to completion.optLong("globalBytes", 0L),
+                    "needBytes" to completion.optLong("needBytes", 0L),
+                    "globalItems" to completion.optLong("globalItems", 0L),
+                    "needItems" to completion.optLong("needItems", 0L),
+                )
+            }
+
+            syncProgress = candidates.minByOrNull {
+                (it["completion"] as? Number)?.toDouble() ?: 100.0
+            }
         }
 
         return linkedMapOf(
@@ -266,6 +340,7 @@ class SyncthingBridge(
             "connectedDeviceIds" to connectedDeviceIds,
             "configuredDevices" to configuredDevices,
             "folderState" to folderState,
+            "syncProgress" to syncProgress,
         )
     }
 
