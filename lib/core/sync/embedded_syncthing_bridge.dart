@@ -15,6 +15,7 @@ class EmbeddedSyncthingStatus {
     this.connectedDeviceIds = const <String>[],
     this.configuredDevices = const <Map<String, dynamic>>[],
     this.folderState,
+    this.syncProgress,
     this.error,
   });
 
@@ -25,6 +26,7 @@ class EmbeddedSyncthingStatus {
   final List<String> connectedDeviceIds;
   final List<Map<String, dynamic>> configuredDevices;
   final String? folderState;
+  final Map<String, dynamic>? syncProgress;
   final String? error;
 
   factory EmbeddedSyncthingStatus.fromMap(Map<Object?, Object?> map) {
@@ -49,6 +51,11 @@ class EmbeddedSyncthingStatus {
       ],
       configuredDevices: mapList(map['configuredDevices']),
       folderState: map['folderState'] as String?,
+      syncProgress: map['syncProgress'] is Map
+          ? (map['syncProgress'] as Map).map(
+              (key, value) => MapEntry(key.toString(), value),
+            )
+          : null,
       error: map['error'] as String?,
     );
   }
