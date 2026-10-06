@@ -446,6 +446,30 @@ class WindowsSyncthingTransport {
     });
   }
 
+  /// Stops the detached embedded process without changing any account's
+  /// auto-start preference. The Windows self-updater calls this immediately
+  /// before handing the installation directory to its replacement script.
+  Future<void> shutdown() async {
+    if (!Platform.isWindows) return;
+
+    try {
+      final apiKey = await _ensureApiKey();
+      if (!await _ping(apiKey)) return;
+      await _request(
+        'POST',
+        '/rest/system/shutdown',
+        apiKey: apiKey,
+      );
+      for (var attempt = 0; attempt < 50; attempt++) {
+        if (!await _ping(apiKey)) return;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    } catch (_) {
+      // The update script performs a path-specific process check as a
+      // fallback. A transient API failure must not prevent an update attempt.
+    }
+  }
+
   Future<void> _configureFolder({
     required String folderId,
     required String label,
