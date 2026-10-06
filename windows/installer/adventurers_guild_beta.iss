@@ -52,6 +52,47 @@ Type: filesandordirs; Name: "{app}"
 var
   RemoveUserDataOnUninstall: Boolean;
 
+function StopEmbeddedSyncthingForInstall(var ResultCode: Integer): Boolean;
+var
+  PowerShellPath, InstallDir, Command, Parameters: String;
+begin
+  Result := False;
+  ResultCode := -1;
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PowerShellPath) then
+    Exit;
+
+  InstallDir := ExpandConstant('{app}');
+  Command :=
+    '$target = [IO.Path]::GetFullPath(''' + InstallDir +
+    '\syncthing\syncthing.exe'''); ' +
+    '$deadline = (Get-Date).AddSeconds(15); ' +
+    'do { ' +
+    '$running = @(Get-Process -Name ''syncthing'' -ErrorAction SilentlyContinue | ' +
+    'Where-Object { $_.Path -and [IO.Path]::GetFullPath($_.Path).Equals($target, [StringComparison]::OrdinalIgnoreCase) }); ' +
+    'if ($running.Count -eq 0) { exit 0 }; ' +
+    '$running | Stop-Process -Force -ErrorAction SilentlyContinue; ' +
+    'Start-Sleep -Milliseconds 250 ' +
+    '} while ((Get-Date) -lt $deadline); exit 1';
+  Parameters :=
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
+    Command + '"';
+  if not Exec(
+    PowerShellPath, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode
+  ) then
+    Exit;
+  Result := ResultCode = 0;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  if not StopEmbeddedSyncthingForInstall(ResultCode) then
+    Result := '无法在安装前关闭内置同步核心。请关闭冒险者公会后重试。';
+end;
+
 function InitializeUninstall(): Boolean;
 var
   Choice: Integer;
