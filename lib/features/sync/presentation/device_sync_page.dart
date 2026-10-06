@@ -371,9 +371,16 @@ class _SyncTransferProgress extends StatelessWidget {
 
 bool _hasVisibleSyncProgress(Map<String, dynamic>? progress) {
   if (progress == null) return false;
+  final completion = ((progress['completion'] as num?)?.toDouble() ?? 100)
+      .clamp(0, 100)
+      .toDouble();
   final globalBytes = (progress['globalBytes'] as num?)?.toInt() ?? 0;
+  final needBytes = (progress['needBytes'] as num?)?.toInt() ?? 0;
   final globalItems = (progress['globalItems'] as num?)?.toInt() ?? 0;
-  return globalBytes > 0 || globalItems > 0;
+  final needItems = (progress['needItems'] as num?)?.toInt() ?? 0;
+  final hasData = globalBytes > 0 || globalItems > 0;
+  final unfinished = completion < 99.95 || needBytes > 0 || needItems > 0;
+  return hasData && unfinished;
 }
 
 String _formatBytes(int bytes) {
