@@ -18,6 +18,7 @@ import 'account_sync_record_store.dart';
 import 'embedded_syncthing_bridge.dart';
 import 'portable_sync_workspace_validator.dart';
 import 'sync_entity_codec.dart';
+import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
@@ -140,10 +141,12 @@ class SyncCoordinator extends ChangeNotifier {
     SyncMergeEngine? mergeEngine,
     SyncRecordStore? recordStore,
     AccountSyncRecordStore? accountSyncStore,
+    SyncGcAckStore? gcAckStore,
     EmbeddedSyncthingBridge bridge = const EmbeddedSyncthingBridge(),
   }) : _mergeEngine = mergeEngine ?? SyncMergeEngine(),
        _recordStore = recordStore ?? SyncRecordStore(),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
+       _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
        _bridge = bridge;
 
   final String accountId;
@@ -158,6 +161,7 @@ class SyncCoordinator extends ChangeNotifier {
   final SyncMergeEngine _mergeEngine;
   final SyncRecordStore _recordStore;
   final AccountSyncRecordStore _accountSyncStore;
+  final SyncGcAckStore _gcAckStore;
   final EmbeddedSyncthingBridge _bridge;
   final Lock _pauseLock = Lock();
 
@@ -1133,6 +1137,24 @@ class SyncCoordinator extends ChangeNotifier {
       _applyingRemote = false;
     }
 
+    var gcChanged = false;
+    if (!_awaitingInitialRemoteWorkspace) {
+      await _gcAckStore.writeSnapshot(
+        accountId: accountId,
+        deviceId: deviceId,
+        recordsByKind: recordsByKind,
+      );
+      gcChanged = await _compactAcknowledgedHistory(recordsByKind);
+      if (gcChanged) {
+        // Publish the post-GC state as this device's new acknowledgement.
+        await _gcAckStore.writeSnapshot(
+          accountId: accountId,
+          deviceId: deviceId,
+          recordsByKind: recordsByKind,
+        );
+      }
+    }
+
     _lastEntityValues = _captureEntities();
     for (final kind in SyncEntityKind.values) {
       _lastFlushedRecords[kind] = recordsByKind[kind]!;
@@ -1149,7 +1171,108 @@ class SyncCoordinator extends ChangeNotifier {
     _conflicts = _collectConflicts(recordsByKind);
     _lastSuccessfulSyncAt = DateTime.now();
     _lastError = null;
+    if (gcChanged && _transportPrepared) {
+      try {
+        await _bridge.requestScan(accountId: accountId);
+      } catch (error) {
+        _lastError = '同步历史优化后触发扫描失败：$error';
+      }
+    }
     if (!_disposed) notifyListeners();
+  }
+
+  Future<bool> _compactAcknowledgedHistory(
+    Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
+  ) async {
+    final state = accountStore.syncSnapshot;
+    if (state == null || state.accountId != accountId) return false;
+
+    final activeDeviceIds = <String>{
+      for (final device in state.activeDevices) device.id,
+    };
+    if (activeDeviceIds.isEmpty) return false;
+
+    final acknowledgements = await _gcAckStore.readAll(accountId);
+    if (!activeDeviceIds.every(acknowledgements.containsKey)) {
+      // An old/offline active device has not joined the GC protocol yet.
+      // Keeping history is safer than making that device capable of reviving
+      // or double-applying stale data later.
+      return false;
+    }
+
+    var changed = false;
+    final now = DateTime.now().toUtc();
+
+    for (final kind in SyncEntityKind.values) {
+      final records = recordsByKind[kind]!;
+      final entries = records.entries.toList(growable: false);
+
+      for (final entry in entries) {
+        final record = entry.value;
+        if (record.conflicts.isNotEmpty) continue;
+
+        final key = _gcAckStore.recordKey(record);
+        final signature = await _gcAckStore.signature(record);
+        final seenByAll = activeDeviceIds.every(
+          (id) => acknowledgements[id]?[key] == signature,
+        );
+        if (!seenByAll) continue;
+
+        if (record.isDeleted) {
+          DateTime? deletedAt;
+          for (final operation in record.operations.values) {
+            if (operation.kind != 'delete') continue;
+            if (deletedAt == null || operation.occurredAt.isAfter(deletedAt)) {
+              deletedAt = operation.occurredAt;
+            }
+          }
+          // Keep a short safety window even after every active device has seen
+          // the tombstone. Revoked devices no longer participate.
+          if (deletedAt == null ||
+              now.difference(deletedAt.toUtc()) <
+                  const Duration(hours: 24)) {
+            continue;
+          }
+
+          await _recordStore.deleteRecord(
+            accountId: accountId,
+            kind: kind,
+            recordId: record.id,
+          );
+          records.remove(record.id);
+          changed = true;
+          continue;
+        }
+
+        final hasFullOperations =
+            record.operations.values.any((operation) => !operation.compacted);
+        if (hasFullOperations) {
+          final compacted = _mergeEngine.compactAcknowledgedOperations(
+            record,
+            deviceId: deviceId,
+          );
+          if (!syncJsonEquals(record.toJson(), compacted.toJson())) {
+            await _recordStore.write(accountId: accountId, record: compacted);
+            records[record.id] = compacted;
+            changed = true;
+          }
+          continue;
+        }
+
+        if (record.operations.isNotEmpty) {
+          // Second phase: every device has now acknowledged the folded record,
+          // so the tiny operation markers themselves can disappear too.
+          final stripped = record.copyWith(
+            operations: const <String, SyncOperation>{},
+          );
+          await _recordStore.write(accountId: accountId, record: stripped);
+          records[record.id] = stripped;
+          changed = true;
+        }
+      }
+    }
+
+    return changed;
   }
 
   Future<void> _mergePersistedBaseline(
