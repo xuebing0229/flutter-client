@@ -488,12 +488,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         ? '待交稿'
                         : '已交稿 · ${formatDateTimeValue(order.completedAt!)}',
                   ),
-                const SizedBox(height: 8),
-                OrderReferenceImagesSection(
-                  accountId: widget.accountId,
-                  images: order.referenceImages,
-                  store: _referenceImageStore,
-                ),
+                if (widget.featureStore.referenceImages) ...[
+                  const SizedBox(height: 8),
+                  OrderReferenceImagesSection(
+                    accountId: widget.accountId,
+                    images: order.referenceImages,
+                    store: _referenceImageStore,
+                  ),
+                ],
                 const SizedBox(height: 8),
                 ReadOnlyDetailRow(
                   label: '描述',
@@ -638,17 +640,19 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                OrderReferenceImagesSection(
-                  accountId: widget.accountId,
-                  images: _referenceImages,
-                  store: _referenceImageStore,
-                  editable: true,
-                  onAdd: _pickingReferenceImages
-                      ? null
-                      : () => unawaited(_addReferenceImages()),
-                  onRemove: _removeReferenceImage,
-                ),
+                if (widget.featureStore.referenceImages) ...[
+                  const SizedBox(height: 14),
+                  OrderReferenceImagesSection(
+                    accountId: widget.accountId,
+                    images: _referenceImages,
+                    store: _referenceImageStore,
+                    editable: true,
+                    onAdd: _pickingReferenceImages
+                        ? null
+                        : () => unawaited(_addReferenceImages()),
+                    onRemove: _removeReferenceImage,
+                  ),
+                ],
                 const SizedBox(height: 14),
                 const FormFieldLabel('描述'),
                 TextField(
