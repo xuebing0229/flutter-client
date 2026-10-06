@@ -67,6 +67,11 @@ class AccountDevice {
     if (nameUpdatedAt != null)
       'nameUpdatedAt': nameUpdatedAt!.toUtc().toIso8601String(),
     if (syncTransportId != null) 'syncTransportId': syncTransportId,
+    if (appBuild != null) 'appBuild': appBuild,
+    if (syncProtocolVersion != null)
+      'syncProtocolVersion': syncProtocolVersion,
+    if (minSyncProtocolVersion != null)
+      'minSyncProtocolVersion': minSyncProtocolVersion,
   };
 
   factory AccountDevice.fromJson(Map<String, dynamic> json) {
@@ -75,6 +80,9 @@ class AccountDevice {
     final platform = json['platform'];
     final nameUpdatedAt = json['nameUpdatedAt'];
     final syncTransportId = json['syncTransportId'];
+    final appBuild = json['appBuild'];
+    final syncProtocolVersion = json['syncProtocolVersion'];
+    final minSyncProtocolVersion = json['minSyncProtocolVersion'];
     if (id is! String || id.isEmpty) {
       throw const FormatException('设备记录缺少设备 ID。');
     }
