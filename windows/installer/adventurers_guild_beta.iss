@@ -14,6 +14,7 @@ AppPublisher=xuebing0229
 DefaultDirName={localappdata}\Programs\AdventurersGuildBeta
 DefaultGroupName=冒险者公会 Beta
 DisableProgramGroupPage=yes
+DisableDirPage=no
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -32,11 +33,12 @@ UsePreviousTasks=yes
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "快捷方式："; Flags: unchecked
 
 [Files]
+Source: "..\runner\resources\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{autodesktop}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autodesktop}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "启动冒险者公会 Beta"; Flags: nowait postinstall skipifsilent
