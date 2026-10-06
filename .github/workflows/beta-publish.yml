@@ -123,6 +123,10 @@ jobs:
         shell: pwsh
         run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.5
 
+      - name: Bundle current Windows icon
+        shell: pwsh
+        run: Copy-Item "windows/runner/resources/app_icon.ico" "build/windows/x64/runner/Release/app_icon.ico" -Force
+
       - name: Package Windows Beta
         shell: pwsh
         run: |
