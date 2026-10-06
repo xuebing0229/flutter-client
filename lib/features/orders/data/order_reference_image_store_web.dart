@@ -178,7 +178,7 @@ class OrderReferenceImageStore {
     try {
       final transaction = db.transaction(_storeName, 'readwrite');
       final store = transaction.objectStore(_storeName);
-      final keys = await store.getAllKeys();
+      final keys = await store.getAllKeys(null);
       for (final key in keys) {
         if (key is String && key.startsWith('$accountId\u0000')) {
           await store.delete(key);
@@ -240,7 +240,7 @@ class OrderReferenceImageStore {
       onUpgradeNeeded: (VersionChangeEvent event) {
         final request = event.target as Request;
         final db = request.result as Database;
-        if (!db.objectStoreNames.contains(_storeName)) {
+        if (db.objectStoreNames?.contains(_storeName) != true) {
           db.createObjectStore(_storeName);
         }
       },
