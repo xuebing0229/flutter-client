@@ -49,4 +49,18 @@ void main() {
     expect(delegate.crossAxisCount, 4);
     expect(delegate.mainAxisExtent, isNotNull);
   });
+
+  testWidgets('uses three columns for a medium desktop content pane', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness(760));
+
+    final grid = tester.widget<GridView>(find.byType(GridView));
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+
+    expect(delegate.crossAxisCount, 3);
+    expect(delegate.mainAxisExtent, isNotNull);
+  });
+
 }
