@@ -4,7 +4,6 @@ import 'dart:html' as html;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -1077,11 +1076,9 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            _accountState == null
-                ? '完整备份已导出。当前是纯网页版工作区，尚未关联桌面/安卓账号。'
-                : '完整备份已导出，可在安卓或电脑端“设置 → 导入完整备份”中手动同步。',
+            '完整备份已导出，可在安卓或电脑端“设置 → 导入完整备份”中手动同步。',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -1102,22 +1099,21 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   Future<void> _importBackup(BuildContext context) async {
     if (_busy) return;
 
-    const typeGroup = XTypeGroup(
-      label: '冒险者公会备份',
-      extensions: <String>['zip', 'json'],
-    );
-    final picked = await openFile(
-      acceptedTypeGroups: const <XTypeGroup>[typeGroup],
-    );
-    if (picked == null) return;
+    final imported = await _backupReader.pickAndRead();
+    if (imported == null) return;
 
     setState(() => _busy = true);
     try {
-      final imported = await _readPickedBackup(picked);
       final backup = imported.backup;
-      final targetAccountId =
-          backup.accountSyncState?.accountId ?? _fallbackAccountId;
-      final accountName = backup.accountSyncState?.accountName;
+      final backupAccount = backup.accountSyncState;
+      if (backupAccount != null && backupAccount.accountId != _accountId) {
+        throw FormatException(
+          '这份备份属于账号“${backupAccount.accountName}”，'
+          '不能覆盖当前账号“${widget.accountStore.accountName}”。',
+        );
+      }
+      final accountName =
+          backupAccount?.accountName ?? widget.accountStore.accountName;
 
       if (!context.mounted) return;
       final confirmed = await showDialog<bool>(
@@ -1127,9 +1123,9 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           content: Text(
             '排单 ${backup.orders.length} 条 · 成品 ${backup.products.length} 条 · '
             '节点预设 ${backup.nodePresets.length} 个\n'
-            '${accountName == null ? '未绑定客户端账号' : '账号：$accountName'}\n'
+            '账号：${accountName ?? '当前账号'}\n'
             '备份时间：${_formatDateTime(backup.exportedAt.toLocal())}\n\n'
-            '导入后会用这份备份替换当前网页版工作区。'
+            '导入后会用这份备份替换当前账号的网页版工作区。'
             '${imported.includesAssets ? '' : '\n这份文件不含参考图原文件，已有参考图可能显示为缺失。'}',
           ),
           actions: [
@@ -1147,18 +1143,15 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       if (confirmed != true) return;
 
       if (imported.includesAssets) {
-        await _referenceImageStore.clearAccountAssets(targetAccountId);
+        await _referenceImageStore.clearAccountAssets(_accountId);
         for (final order in backup.orders) {
           for (final image in order.referenceImages) {
             final bytes = imported.assets[image.relativePath];
             if (bytes == null) {
               throw FormatException('完整备份缺少参考图：${image.fileName}');
             }
-            if (bytes.length != image.sizeBytes) {
-              throw FormatException('参考图大小校验失败：${image.fileName}');
-            }
             await _referenceImageStore.writeAssetBytes(
-              accountId: targetAccountId,
+              accountId: _accountId,
               relativePath: image.relativePath,
               bytes: bytes,
             );
@@ -1166,8 +1159,9 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         }
       }
 
-      _accountState = backup.accountSyncState;
-      _accountId = targetAccountId;
+      if (backupAccount != null) {
+        await widget.accountStore.mergeCurrentAccountState(backupAccount);
+      }
       backup.restoreInto(
         orderStore: _orderStore,
         productStore: _productStore,
@@ -1177,12 +1171,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       await _persistWorkspace();
 
       if (!context.mounted) return;
-      setState(() {
-        _selectedTab = 'orders';
-      });
+      setState(() => _selectedTab = 'orders');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('导入完成，网页版工作区已经替换。'),
+          content: Text('导入完成，当前账号的网页版工作区已经替换。'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1197,84 +1189,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<_ImportedWebBackup> _readPickedBackup(XFile picked) async {
-    final lowerName = picked.name.toLowerCase();
-    if (lowerName.endsWith('.json')) {
-      return _ImportedWebBackup(
-        backup: AppBackupData.decode(await picked.readAsString()),
-        includesAssets: false,
-        assets: const <String, Uint8List>{},
-      );
-    }
-    if (!lowerName.endsWith('.zip')) {
-      throw const FormatException('请选择 .zip 完整备份或 .json 旧版备份。');
-    }
-
-    final bytes = await picked.readAsBytes();
-    final archive = ZipDecoder().decodeBytes(bytes, verify: true);
-    ArchiveFile? manifest;
-    final files = <String, ArchiveFile>{};
-
-    for (final file in archive) {
-      if (!file.isFile) continue;
-      final name = file.name;
-      if (name == _manifestName) {
-        if (manifest != null) {
-          throw const FormatException('备份中存在重复的 backup.json。');
-        }
-        manifest = file;
-        continue;
-      }
-      if (!_safeAssetPath(name)) {
-        throw FormatException('备份中包含未知文件：$name');
-      }
-      files[name] = file;
-    }
-
-    if (manifest == null) {
-      throw const FormatException('完整备份缺少 backup.json。');
-    }
-
-    final backup = AppBackupData.decode(
-      utf8.decode(_archiveFileBytes(manifest)),
-    );
-    final assets = <String, Uint8List>{};
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
-        final file = files[image.relativePath];
-        if (file == null) {
-          throw FormatException('完整备份缺少参考图：${image.fileName}');
-        }
-        assets[image.relativePath] = _archiveFileBytes(file);
-      }
-    }
-
-    return _ImportedWebBackup(
-      backup: backup,
-      includesAssets: true,
-      assets: assets,
-    );
-  }
-
-  Uint8List _archiveFileBytes(ArchiveFile file) {
-    return file.content;
-  }
-
-  bool _safeAssetPath(String value) {
-    if (value.contains('\\') || value.startsWith('/')) return false;
-    final segments = value.split('/');
-    return segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
-        segments.skip(2).every(
-              (segment) =>
-                  segment.isNotEmpty &&
-                  segment != '.' &&
-                  segment != '..' &&
-                  RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
-            );
   }
 
   void _downloadBytes({
@@ -1349,7 +1263,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 : () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => _WebDataPage(
-                          linkedAccountName: _accountState?.accountName,
+                          linkedAccountName: _accountState.accountName,
                           busy: () => _busy,
                           onExport: _exportBackup,
                           onImport: _importBackup,
@@ -1434,7 +1348,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 onTap: () => _openTool(
                   context,
                   _WebDataPage(
-                    linkedAccountName: _accountState?.accountName,
+                    linkedAccountName: _accountState.accountName,
                     busy: () => _busy,
                     onExport: _exportBackup,
                     onImport: _importBackup,
@@ -1622,24 +1536,4 @@ class _WebDataPage extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ImportedWebBackup {
-  const _ImportedWebBackup({
-    required this.backup,
-    required this.includesAssets,
-    required this.assets,
-  });
-
-  final AppBackupData backup;
-  final bool includesAssets;
-  final Map<String, Uint8List> assets;
-}
-
-class _WebTab {
-  const _WebTab(this.id, this.label, this.icon);
-
-  final String id;
-  final String label;
-  final IconData icon;
 }
