@@ -118,87 +118,6 @@ function Write-UpdateLog {
 }
 
 
-function Refresh-AppShortcuts {
-  param(
-    [Parameter(Mandatory = $true)][string]$ExePath,
-    [Parameter(Mandatory = $true)][string]$InstallDir
-  )
-
-  try {
-    $IconPath = Join-Path $InstallDir 'app_icon.ico'
-    if (-not (Test-Path -LiteralPath $IconPath -PathType Leaf)) {
-      $IconPath = $ExePath
-    }
-
-    $Shell = New-Object -ComObject WScript.Shell
-    $Candidates = @(
-      (Join-Path ([Environment]::GetFolderPath('Programs')) '冒险者公会 Beta.lnk'),
-      (Join-Path ([Environment]::GetFolderPath('Desktop')) '冒险者公会 Beta.lnk')
-    )
-
-    $PinnedRoot = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
-    if (Test-Path -LiteralPath $PinnedRoot -PathType Container) {
-      $Candidates += Get-ChildItem -LiteralPath $PinnedRoot -Filter '*.lnk' -File |
-        Select-Object -ExpandProperty FullName
-    }
-
-    foreach ($ShortcutPath in ($Candidates | Select-Object -Unique)) {
-      if (-not (Test-Path -LiteralPath $ShortcutPath -PathType Leaf)) {
-        continue
-      }
-
-      try {
-        $Shortcut = $Shell.CreateShortcut($ShortcutPath)
-        if ([string]::IsNullOrWhiteSpace($Shortcut.TargetPath)) {
-          continue
-        }
-
-        $ShortcutTarget = [IO.Path]::GetFullPath($Shortcut.TargetPath)
-        $ExpectedTarget = [IO.Path]::GetFullPath($ExePath)
-        if (-not $ShortcutTarget.Equals(
-          $ExpectedTarget,
-          [StringComparison]::OrdinalIgnoreCase
-        )) {
-          continue
-        }
-
-        $Shortcut.IconLocation = $IconPath + ',0'
-        $Shortcut.WorkingDirectory = $InstallDir
-        $Shortcut.Save()
-      } catch {
-        Write-UpdateLog ("Shortcut refresh skipped: " + $_.Exception.Message)
-      }
-    }
-
-    try {
-      Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-
-public static class AdventurersGuildShellRefresh {
-  [DllImport("shell32.dll")]
-  public static extern void SHChangeNotify(
-    uint wEventId,
-    uint uFlags,
-    IntPtr dwItem1,
-    IntPtr dwItem2
-  );
-}
-'@
-      [AdventurersGuildShellRefresh]::SHChangeNotify(
-        0x08000000,
-        0,
-        [IntPtr]::Zero,
-        [IntPtr]::Zero
-      )
-    } catch {
-      Write-UpdateLog ("Shell icon refresh skipped: " + $_.Exception.Message)
-    }
-  } catch {
-    Write-UpdateLog ("Shortcut refresh failed: " + $_.Exception.Message)
-  }
-}
-
 function Restore-Backup {
   if (-not (Test-Path -LiteralPath $BackupDir)) {
     return
@@ -332,7 +251,12 @@ try {
   }
 
   Write-UpdateLog 'Refreshing shortcuts and shell icon cache.'
-  Refresh-AppShortcuts -ExePath $NewExecutable -InstallDir $InstallDir
+  & powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass `
+    -File (Join-Path $InstallDir 'refresh_app_shortcuts.ps1') -ExePath $NewExecutable 2>&1 |
+    ForEach-Object { Write-UpdateLog ([string]$_) }
+  if ($LASTEXITCODE -ne 0) {
+    Write-UpdateLog 'Shortcut refresh failed; application files were updated successfully.'
+  }
 
   Write-UpdateLog 'Update applied successfully. Restarting application.'
   Start-Process -FilePath $NewExecutable -WorkingDirectory $InstallDir
@@ -380,3 +304,4 @@ catch {
   exit 1
 }
 ''';
+
