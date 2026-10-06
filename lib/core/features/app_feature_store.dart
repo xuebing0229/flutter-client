@@ -15,6 +15,7 @@ enum AppFeature {
   statistics,
   deadlineReminders,
   abstractMode,
+  abstractEffects,
 }
 
 class AppFeatureStore extends ChangeNotifier {
@@ -37,6 +38,13 @@ class AppFeatureStore extends ChangeNotifier {
   bool get statistics => enabled(AppFeature.statistics);
   bool get deadlineReminders => enabled(AppFeature.deadlineReminders);
   bool get abstractMode => enabled(AppFeature.abstractMode);
+
+  /// Effective abstract behavior. The preference may stay enabled while the
+  /// user is in normal mode, but abstract effects must never leak into normal
+  /// mode. Any abstract-only UI/behavior should read this getter rather than
+  /// the raw feature value.
+  bool get abstractEffects =>
+      abstractMode && enabled(AppFeature.abstractEffects);
 
   Future<File> _file() async {
     final dir = await getApplicationSupportDirectory();
@@ -80,12 +88,21 @@ class AppFeatureStore extends ChangeNotifier {
     if (raw is! Map) {
       throw const FormatException('功能开关设置格式无效。');
     }
+
+    final normalized = <String, dynamic>{
+      for (final entry in raw.entries) entry.key.toString(): entry.value,
+    };
+    // abstractEffects was added after abstractMode. Older backups and synced
+    // settings do not have this field; default them to enabled so upgrading
+    // does not silently disable abstract-version effects.
+    normalized.putIfAbsent(AppFeature.abstractEffects.name, () => true);
+
     for (final feature in AppFeature.values) {
-      if (raw[feature.name] is! bool) {
+      if (normalized[feature.name] is! bool) {
         throw FormatException('功能开关 ${feature.name} 格式无效。');
       }
     }
-    _applyMap(raw, notify: true);
+    _applyMap(normalized, notify: true);
     await _persist();
   }
 
