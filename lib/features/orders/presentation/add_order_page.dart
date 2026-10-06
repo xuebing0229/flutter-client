@@ -302,17 +302,19 @@ class _AddOrderPageState extends State<AddOrderPage> {
               setState(() => _currentNodeId = nodeId);
             },
           ),
-          const SizedBox(height: 14),
-          OrderReferenceImagesSection(
-            accountId: widget.accountId,
-            images: _referenceImages,
-            store: _referenceImageStore,
-            editable: true,
-            onAdd: _pickingReferenceImages
-                ? null
-                : () => unawaited(_addReferenceImages()),
-            onRemove: _removeReferenceImage,
-          ),
+          if (widget.featureStore.referenceImages) ...[
+            const SizedBox(height: 14),
+            OrderReferenceImagesSection(
+              accountId: widget.accountId,
+              images: _referenceImages,
+              store: _referenceImageStore,
+              editable: true,
+              onAdd: _pickingReferenceImages
+                  ? null
+                  : () => unawaited(_addReferenceImages()),
+              onRemove: _removeReferenceImage,
+            ),
+          ],
           const SizedBox(height: 14),
           const FormFieldLabel('描述'),
           TextField(
