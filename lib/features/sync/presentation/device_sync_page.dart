@@ -635,7 +635,12 @@ String _formatConflictValue(String field, Object? value) {
 
   if (value is String) {
     if (value.isEmpty) return '空';
-    if (<String>{'deadline', 'completedAt', 'settledAt'}.contains(field)) {
+    if (<String>{
+      'deadline',
+      'completedAt',
+      'settledAt',
+      'archivedAt',
+    }.contains(field)) {
       final parsed = DateTime.tryParse(value);
       if (parsed != null) {
         final local = parsed.toLocal();
