@@ -43,10 +43,11 @@ Name: "{autoprograms}\卸载冒险者公会 Beta"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon_{#MyAppVersion}.ico"; Tasks: desktopicon
 
 [InstallDelete]
-Type: files; Name: "{autodesktop}\冒险者公会 Beta.lnk"
+Type: files; Name: "{autodesktop}\冒险者公会 Beta.lnk"; Tasks: desktopicon
 Type: files; Name: "{autoprograms}\冒险者公会 Beta.lnk"
 
 [Run]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\refresh_app_shortcuts.ps1"" -ExePath ""{app}\{#MyAppExeName}"""; Flags: runhidden; StatusMsg: "正在刷新应用快捷方式和图标…"
 Filename: "{app}\{#MyAppExeName}"; Description: "启动冒险者公会 Beta"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
@@ -127,3 +128,4 @@ begin
       DelTree(UpdateDir, True, True, True);
   end;
 end;
+

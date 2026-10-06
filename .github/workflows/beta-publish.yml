@@ -137,6 +137,7 @@ jobs:
           $sourceIcon = "windows/runner/resources/app_icon.ico"
           Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon.ico") -Force
           Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon_$version.ico") -Force
+          Copy-Item -LiteralPath "windows/installer/refresh_app_shortcuts.ps1" -Destination $releaseDir -Force
 
       - name: Package Windows Beta
         shell: pwsh
@@ -296,3 +297,4 @@ jobs:
           git add version.json
           git commit -m "beta: publish ${VERSION} (${BUILD})"
           git push
+
