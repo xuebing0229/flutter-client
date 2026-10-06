@@ -528,7 +528,7 @@ class _WebLoginPageState extends State<_WebLoginPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('从这个浏览器移除账号？'),
-        content: const Text('只移除网页登录记录，不会影响安卓、Windows 或其他设备上的账号。'),
+        content: const Text('会移除当前浏览器里这个账号的登录与工作区记录，不会影响安卓、Windows 或其他设备。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
