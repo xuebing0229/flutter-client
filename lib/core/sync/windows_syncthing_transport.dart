@@ -422,24 +422,43 @@ class WindowsSyncthingTransport {
     final apiKey = await _ensureApiKey();
     if (await _ping(apiKey)) return;
 
+    // Treat process creation + API readiness as one startup transaction.
+    // A fresh Syncthing profile can take noticeably longer on Windows while
+    // it creates its identity/configuration and is scanned by security tools.
+    // All concurrent callers must wait for the same startup instead of
+    // launching additional detached processes during that cold-start window.
     final existingStart = _starting;
     if (existingStart != null) {
       await existingStart;
-    } else {
-      final start = _startProcess(binary, apiKey);
-      _starting = start;
-      try {
-        await start;
-      } finally {
-        if (identical(_starting, start)) _starting = null;
-      }
+      return;
     }
 
-    for (var attempt = 0; attempt < 32; attempt++) {
+    final start = _startAndWaitUntilReady(binary, apiKey);
+    _starting = start;
+    try {
+      await start;
+    } finally {
+      if (identical(_starting, start)) _starting = null;
+    }
+  }
+
+  Future<void> _startAndWaitUntilReady(File binary, String apiKey) async {
+    // Another caller/process may have finished starting between the first ping
+    // and taking the startup lock.
+    if (await _ping(apiKey)) return;
+
+    await _startProcess(binary, apiKey);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
       if (await _ping(apiKey)) return;
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
-    throw StateError('Windows 同步核心启动超时');
+
+    // Avoid failing on the exact boundary if the API became ready while the
+    // final delay was completing.
+    if (await _ping(apiKey)) return;
+    throw StateError('Windows 同步核心启动超时，请稍后重试');
   }
 
   Future<void> _startProcess(File binary, String apiKey) async {
