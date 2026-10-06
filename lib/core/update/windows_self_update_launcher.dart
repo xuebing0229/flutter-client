@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../sync/windows_syncthing_transport.dart';
+
 class WindowsSelfUpdateLauncher {
   const WindowsSelfUpdateLauncher();
 
@@ -15,6 +17,11 @@ class WindowsSelfUpdateLauncher {
     final workDirectory = archive.parent;
 
     await _ensureInstallDirectoryWritable(installDirectory);
+
+    // The embedded transport is a separate detached process. Closing the
+    // Flutter window does not stop it, so release its executable before the
+    // updater tries to replace the installation directory.
+    await WindowsSyncthingTransport.instance.shutdown();
 
     final script = File(
       '${workDirectory.path}${Platform.pathSeparator}apply-windows-update.ps1',
@@ -50,6 +57,11 @@ class WindowsSelfUpdateLauncher {
       installDirectory.path,
       '-ExeName',
       executableName,
+      '-SyncthingPath',
+      File(
+        '${installDirectory.path}${Platform.pathSeparator}'
+        'syncthing${Platform.pathSeparator}syncthing.exe',
+      ).path,
     ], mode: ProcessStartMode.normal);
 
     await Future<void>.delayed(const Duration(milliseconds: 350));
@@ -87,7 +99,8 @@ param(
   [Parameter(Mandatory = $true)][int]$ParentPid,
   [Parameter(Mandatory = $true)][string]$ArchivePath,
   [Parameter(Mandatory = $true)][string]$InstallDir,
-  [Parameter(Mandatory = $true)][string]$ExeName
+  [Parameter(Mandatory = $true)][string]$ExeName,
+  [Parameter(Mandatory = $true)][string]$SyncthingPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -205,6 +218,52 @@ function Restore-Backup {
   }
 }
 
+function Get-EmbeddedSyncthingProcesses {
+  if (-not (Test-Path -LiteralPath $SyncthingPath -PathType Leaf)) {
+    return @()
+  }
+
+  $ExpectedPath = [IO.Path]::GetFullPath($SyncthingPath)
+  @(Get-Process -Name 'syncthing' -ErrorAction SilentlyContinue |
+    Where-Object {
+      try {
+        $ProcessPath = $_.Path
+        $ProcessPath -and
+          [IO.Path]::GetFullPath($ProcessPath).Equals(
+            $ExpectedPath,
+            [StringComparison]::OrdinalIgnoreCase
+          )
+      } catch {
+        $false
+      }
+    })
+}
+
+function Stop-EmbeddedSyncthing {
+  $Deadline = (Get-Date).AddSeconds(15)
+  while ($true) {
+    $Processes = @(Get-EmbeddedSyncthingProcesses)
+    foreach ($Process in $Processes) {
+      try {
+        Write-UpdateLog ("Stopping embedded Syncthing process " + $Process.Id + '.')
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+      } catch {
+        if ((Get-Date) -ge $Deadline) {
+          throw "无法停止内置同步核心：$($_.Exception.Message)"
+        }
+      }
+    }
+
+    if (@(Get-EmbeddedSyncthingProcesses).Count -eq 0) {
+      return
+    }
+    if ((Get-Date) -ge $Deadline) {
+      throw '内置同步核心仍在运行，无法替换 syncthing.exe。'
+    }
+    Start-Sleep -Milliseconds 250
+  }
+}
+
 try {
   Write-UpdateLog "Updater started. Parent PID: $ParentPid"
 
@@ -220,6 +279,7 @@ try {
     Start-Sleep -Milliseconds 250
   }
 
+  Stop-EmbeddedSyncthing
   Write-UpdateLog 'Application exited. Extracting update archive.'
   New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
   Expand-Archive -LiteralPath $ArchivePath -DestinationPath $StageDir -Force
