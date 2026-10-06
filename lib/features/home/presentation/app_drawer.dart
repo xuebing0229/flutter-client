@@ -45,6 +45,8 @@ class AppDrawer extends StatelessWidget {
     required this.onApplyWorkspaceSettings,
     required this.onBeforeSignOut,
     required this.onShowTutorial,
+    required this.showFeatureToggle,
+    required this.onHideFeatureToggle,
     super.key,
   });
 
@@ -59,6 +61,8 @@ class AppDrawer extends StatelessWidget {
   onApplyWorkspaceSettings;
   final Future<void> Function() onBeforeSignOut;
   final VoidCallback onShowTutorial;
+  final bool showFeatureToggle;
+  final VoidCallback onHideFeatureToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +84,8 @@ class AppDrawer extends StatelessWidget {
           onBeforeSignOut: onBeforeSignOut,
           onBeforeNavigate: () => Navigator.of(context).pop(),
           onShowTutorial: onShowTutorial,
+          showFeatureToggle: showFeatureToggle,
+          onHideFeatureToggle: onHideFeatureToggle,
           closeBeforeTutorial: true,
           padding: const EdgeInsets.fromLTRB(12, 24, 12, 20),
         ),
@@ -108,6 +114,8 @@ class AppToolMenu extends StatelessWidget {
     required this.onApplyWorkspaceSettings,
     required this.onBeforeSignOut,
     required this.onShowTutorial,
+    required this.showFeatureToggle,
+    required this.onHideFeatureToggle,
     this.onBeforeNavigate,
     this.onSelectTool,
     this.selectedTool,
@@ -128,6 +136,8 @@ class AppToolMenu extends StatelessWidget {
   onApplyWorkspaceSettings;
   final Future<void> Function() onBeforeSignOut;
   final VoidCallback onShowTutorial;
+  final bool showFeatureToggle;
+  final VoidCallback onHideFeatureToggle;
   final VoidCallback? onBeforeNavigate;
   final ValueChanged<String>? onSelectTool;
   final String? selectedTool;
@@ -181,19 +191,20 @@ class AppToolMenu extends StatelessWidget {
             NodePresetPage(store: nodePresetStore),
           ),
         ),
-        _item(
-          icon: Icons.extension_outlined,
-          title: '附加功能开关',
-          tool: featureToggleTool,
-          onTap: () => _open(
-            context,
-            featureToggleTool,
-            FeatureTogglePage(
-              store: featureStore,
-              accountId: syncCoordinator.accountId,
+        if (showFeatureToggle)
+          _item(
+            icon: Icons.extension_outlined,
+            title: '附加功能开关',
+            tool: featureToggleTool,
+            onTap: () => _open(
+              context,
+              featureToggleTool,
+              FeatureTogglePage(
+                store: featureStore,
+                onHideFeatureToggle: onHideFeatureToggle,
+              ),
             ),
           ),
-        ),
         _item(
           icon: Icons.archive_outlined,
           title: '归档',
