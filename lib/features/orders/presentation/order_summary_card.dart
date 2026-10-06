@@ -72,10 +72,10 @@ class OrderSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 7),
                 Align(
-                  alignment: Alignment.centerRight,
+                  alignment: Alignment.centerLeft,
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
+                    alignment: Alignment.centerLeft,
                     child: _DeadlineStatusBadge(
                       order: order,
                       compact: true,
