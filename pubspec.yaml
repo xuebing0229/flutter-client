@@ -1,7 +1,7 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+89
+version: 0.0.1+90
 # build/beta-89 retry after analyzer fix
 
 environment:
