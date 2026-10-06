@@ -309,18 +309,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   label: '售出状态',
                   value: product.saleStatusLabel,
                 ),
-                _SaleHistoryDetailRow(
-                  count: product.saleRecords.length,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ProductSaleHistoryPage(
-                          product: product,
+                if (product.saleType == ProductSaleType.multiple)
+                  _SaleHistoryDetailRow(
+                    count: product.saleRecords.length,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProductSaleHistoryPage(
+                            product: product,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
                 ReadOnlyDetailRow(
                   label: '描述',
                   value: product.description.trim().isEmpty
