@@ -165,6 +165,519 @@ class _AppState extends State<App> {
   }
 }
 
+
+class _WebAccountGate extends StatefulWidget {
+  const _WebAccountGate({
+    required this.accountStore,
+    required this.themeStore,
+    required this.featureStore,
+  });
+
+  final WebAccountStore accountStore;
+  final AppThemeStore themeStore;
+  final AppFeatureStore featureStore;
+
+  @override
+  State<_WebAccountGate> createState() => _WebAccountGateState();
+}
+
+class _WebAccountGateState extends State<_WebAccountGate> {
+  final WebBackupReader _backupReader = const WebBackupReader();
+  final OrderReferenceImageStore _referenceImageStore =
+      OrderReferenceImageStore();
+  bool _importing = false;
+
+  Future<void> _importAccountBackup() async {
+    if (_importing) return;
+    setState(() => _importing = true);
+    try {
+      final imported = await _backupReader.pickAndRead();
+      if (imported == null) return;
+      final state = imported.backup.accountSyncState;
+      if (state == null || !state.hasCredentials) {
+        throw const FormatException(
+          '这份备份没有完整账号凭据，不能用来在新浏览器登录。',
+        );
+      }
+
+      final accountId = state.accountId;
+      html.window.localStorage[
+        'adventurers-guild.web.workspace.v2.$accountId'
+      ] = imported.backup.encode(pretty: false);
+
+      if (imported.includesAssets) {
+        for (final order in imported.backup.orders) {
+          for (final image in order.referenceImages) {
+            final bytes = imported.assets[image.relativePath];
+            if (bytes == null) {
+              throw FormatException('完整备份缺少参考图：${image.fileName}');
+            }
+            await _referenceImageStore.writeAssetBytes(
+              accountId: accountId,
+              relativePath: image.relativePath,
+              bytes: bytes,
+            );
+          }
+        }
+      }
+
+      await widget.accountStore.importAccountState(
+        state,
+        select: true,
+        stayLoggedIn: false,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('账号和本地数据已导入，请输入账号密码登录。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('导入失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (widget.accountStore.status) {
+      WebAccountStatus.loading => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      WebAccountStatus.unlocked => _WebWorkspace(
+          accountStore: widget.accountStore,
+          themeStore: widget.themeStore,
+          featureStore: widget.featureStore,
+        ),
+      WebAccountStatus.locked => _WebLoginPage(store: widget.accountStore),
+      WebAccountStatus.revoked => _WebRevokedPage(store: widget.accountStore),
+      WebAccountStatus.unactivated => _WebAccountEntryPage(
+          store: widget.accountStore,
+          importing: _importing,
+          onImportBackup: _importAccountBackup,
+        ),
+    };
+  }
+}
+
+class _WebAccountEntryPage extends StatelessWidget {
+  const _WebAccountEntryPage({
+    required this.store,
+    required this.importing,
+    required this.onImportBackup,
+  });
+
+  final WebAccountStore store;
+  final bool importing;
+  final Future<void> Function() onImportBackup;
+
+  @override
+  Widget build(BuildContext context) {
+    final accounts = store.localAccounts;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '冒险者公会',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
+            children: [
+              Text(
+                accounts.isEmpty ? '开始使用网页版' : '选择本机账号',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '网页账号只保存在当前浏览器。已有安卓 / Windows 账号请从客户端完整备份导入，不需要重新使用激活码。',
+                style: TextStyle(
+                  height: 1.5,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (accounts.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      for (var index = 0; index < accounts.length; index++) ...[
+                        ListTile(
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.person_outline_rounded),
+                          ),
+                          title: Text(
+                            accounts[index].accountName,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: const Text('当前浏览器已保存'),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () =>
+                              store.selectLocalAccount(accounts[index].accountId),
+                        ),
+                        if (index != accounts.length - 1)
+                          const Divider(height: 1, indent: 72),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: importing ? null : onImportBackup,
+                icon: importing
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.file_upload_outlined),
+                label: Text(importing ? '正在导入…' : '从客户端完整备份导入账号'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: importing
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => _WebActivationPage(store: store),
+                          ),
+                        ),
+                icon: const Icon(Icons.key_rounded),
+                label: const Text('使用激活码创建新账号'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebActivationPage extends StatefulWidget {
+  const _WebActivationPage({required this.store});
+
+  final WebAccountStore store;
+
+  @override
+  State<_WebActivationPage> createState() => _WebActivationPageState();
+}
+
+class _WebActivationPageState extends State<_WebActivationPage> {
+  final TextEditingController _activation = TextEditingController();
+  final TextEditingController _name = TextEditingController();
+  final TextEditingController _password = TextEditingController();
+  bool _showPassword = false;
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.store.activate(
+        activationCode: _activation.text,
+        accountName: _name.text,
+        password: _password.text,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _activation.dispose();
+    _name.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('激活新账号')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              TextField(
+                controller: _activation,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: '激活码',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: '账号名',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _password,
+                obscureText: !_showPassword,
+                decoration: InputDecoration(
+                  labelText: '密码',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => _showPassword = !_showPassword),
+                    icon: Icon(
+                      _showPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: _busy ? null : _submit,
+                child: _busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('激活并登录'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebLoginPage extends StatefulWidget {
+  const _WebLoginPage({required this.store});
+
+  final WebAccountStore store;
+
+  @override
+  State<_WebLoginPage> createState() => _WebLoginPageState();
+}
+
+class _WebLoginPageState extends State<_WebLoginPage> {
+  late final TextEditingController _name;
+  final TextEditingController _password = TextEditingController();
+  bool _showPassword = false;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.store.accountName ?? '');
+  }
+
+  Future<void> _login() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final ok = await widget.store.unlock(
+        accountName: _name.text,
+        password: _password.text,
+      );
+      if (!ok && mounted) {
+        setState(() => _error = '账号名或密码不正确。');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('从这个浏览器移除账号？'),
+        content: const Text('只移除网页登录记录，不会影响安卓、Windows 或其他设备上的账号。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await widget.store.removeSelectedLocalAccount();
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '登录',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: '账号名',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _password,
+                obscureText: !_showPassword,
+                onSubmitted: (_) => _login(),
+                decoration: InputDecoration(
+                  labelText: '密码',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => _showPassword = !_showPassword),
+                    icon: Icon(
+                      _showPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: _busy ? null : _login,
+                child: _busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('登录'),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _busy ? null : widget.store.returnToAccountChooser,
+                icon: const Icon(Icons.swap_horiz_rounded),
+                label: const Text('使用其他账号'),
+              ),
+              TextButton.icon(
+                onPressed: _busy ? null : _remove,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('从这个浏览器移除账号'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebRevokedPage extends StatelessWidget {
+  const _WebRevokedPage({required this.store});
+
+  final WebAccountStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.phonelink_erase_rounded, size: 52),
+                const SizedBox(height: 16),
+                Text(
+                  '这个网页设备已被解绑',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '当前浏览器里的这个账号不能继续作为已授权设备使用。你可以移除本地记录，再从新的完整备份重新加入。',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                FilledButton(
+                  onPressed: store.removeSelectedLocalAccount,
+                  child: const Text('移除本地账号'),
+                ),
+                TextButton(
+                  onPressed: store.returnToAccountChooser,
+                  child: const Text('返回账号列表'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _WebWorkspace extends StatefulWidget {
   const _WebWorkspace({
     required this.accountStore,
