@@ -168,6 +168,7 @@ class SyncCoordinator extends ChangeNotifier {
   bool _syncPaused = false;
   bool _removingLocalAccount = false;
   bool _pollQueued = false;
+  bool _awaitingInitialRemoteWorkspace = false;
   Timer? _changeDebounce;
   Timer? _pollTimer;
   Future<void> _tail = Future<void>.value();
@@ -431,9 +432,13 @@ class SyncCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> initialize({bool seedLocalSettings = true}) async {
+  Future<void> initialize({
+    bool seedLocalWorkspace = true,
+    bool seedLocalSettings = true,
+  }) async {
     if (_initialized || _disposed) return;
 
+    _awaitingInitialRemoteWorkspace = !seedLocalWorkspace;
     await _loadSyncPauseState();
 
     if (_hasRestoredSyncBaseline) {
@@ -1027,7 +1032,9 @@ class SyncCoordinator extends ChangeNotifier {
     // cannot apply an older disk snapshot over a just-edited store.
     _changeDebounce?.cancel();
     await _syncAccountState();
-    await _flushLocalEntityChanges();
+    if (!_awaitingInitialRemoteWorkspace) {
+      await _flushLocalEntityChanges();
+    }
     final accountAfterSync = accountStore.syncSnapshot;
     if (accountAfterSync == null ||
         accountAfterSync.accountId != accountId ||
@@ -1045,7 +1052,7 @@ class SyncCoordinator extends ChangeNotifier {
       recordsByKind[kind] = records;
     }
 
-    if (seedMissing) {
+    if (seedMissing && !_awaitingInitialRemoteWorkspace) {
       final localEntities = _captureEntities();
       for (final kind in SyncEntityKind.values) {
         if (kind == SyncEntityKind.settings && !seedSettings) continue;
@@ -1071,6 +1078,14 @@ class SyncCoordinator extends ChangeNotifier {
     _lastEntityValues = _captureEntities();
     for (final kind in SyncEntityKind.values) {
       _lastFlushedRecords[kind] = recordsByKind[kind]!;
+    }
+    if (_awaitingInitialRemoteWorkspace) {
+      final hasRemoteSettings =
+          recordsByKind[SyncEntityKind.settings]!.containsKey(settingsRecordId);
+      final hasRemotePresets = recordsByKind[SyncEntityKind.nodePreset]!.isNotEmpty;
+      if (hasRemoteSettings && hasRemotePresets) {
+        _awaitingInitialRemoteWorkspace = false;
+      }
     }
     _hasRestoredSyncBaseline = false;
     _conflicts = _collectConflicts(recordsByKind);
