@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
@@ -122,7 +121,7 @@ class FeatureTogglePage extends StatelessWidget {
                     title: '视图切换',
                     subtitle: '控制列表视图与卡片视图之间的切换入口。',
                   ),
-                  if (!Platform.isWindows)
+                  if (!kIsWeb && defaultTargetPlatform != TargetPlatform.windows)
                     _FeatureSwitch(
                       store: store,
                       feature: AppFeature.deadlineReminders,
