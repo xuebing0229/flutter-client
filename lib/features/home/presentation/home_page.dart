@@ -676,7 +676,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _refreshDesktopCollectionRootIfNeeded() {
     // Do not throw the user out of an open detail/editor when settings arrive
     // from the other device. Refresh the retained root as soon as they return.
-    if (_desktopContentHasNestedRoute) {
+    if (_desktopContentHasNestedRoute || _desktopToolSelection != null) {
       _desktopRootRefreshPending = true;
       return;
     }
@@ -688,9 +688,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_desktopContentHasNestedRoute != hasNestedRoute) {
       setState(() => _desktopContentHasNestedRoute = hasNestedRoute);
     }
-    if (!hasNestedRoute && _desktopRootRefreshPending) {
+    if (!hasNestedRoute &&
+        _desktopRootRefreshPending &&
+        _desktopToolSelection == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _desktopContentHasNestedRoute) return;
+        if (!mounted ||
+            _desktopContentHasNestedRoute ||
+            _desktopToolSelection != null) {
+          return;
+        }
         setState(_replaceDesktopContentNavigator);
       });
     }
