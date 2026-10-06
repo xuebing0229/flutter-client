@@ -373,7 +373,10 @@ class SyncCoordinator extends ChangeNotifier {
 
       _lastEntityValues = _captureEntities();
 
-      await _reconcileFromSyncDirectory(seedMissing: false);
+      // Older complete backups can legitimately predate the settings entity.
+      // Re-seed anything absent after applying the imported workspace so a
+      // restore cannot silently leave UI settings outside the sync graph.
+      await _reconcileFromSyncDirectory(seedMissing: true);
       if (_transportPrepared) {
         await _bridge.requestScan(accountId: accountId);
       }
