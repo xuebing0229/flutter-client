@@ -534,7 +534,12 @@ class AccountStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> touchCurrentDevice({bool notify = true}) async {
+  Future<void> touchCurrentDevice({
+    bool notify = true,
+    int? appBuild,
+    int? syncProtocolVersion,
+    int? minSyncProtocolVersion,
+  }) async {
     final record = _selectedRecord;
     if (record == null || record.syncState.isRevoked(record.currentDeviceId)) {
       return;
@@ -546,6 +551,9 @@ class AccountStore extends ChangeNotifier {
     final devices = <String, AccountDevice>{...record.syncState.devices};
     devices[record.currentDeviceId] = current.copyWith(
       lastSeenAt: DateTime.now().toUtc(),
+      appBuild: appBuild,
+      syncProtocolVersion: syncProtocolVersion,
+      minSyncProtocolVersion: minSyncProtocolVersion,
     );
 
     _accounts[record.syncState.accountId] = record.copyWith(
