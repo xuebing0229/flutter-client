@@ -266,7 +266,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _hideFeatureToggleForAbstractSession() {
-    if (!mounted || !widget.featureStore.abstractMode) return;
+    if (!mounted ||
+        !widget.featureStore.abstractMode ||
+        !widget.featureStore.abstractEffects) {
+      return;
+    }
     setState(() {
       _abstractFeatureToggleHidden = true;
       if (_desktopToolSelection == AppToolMenu.featureToggleTool) {
@@ -1025,6 +1029,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onShowTutorial: () => unawaited(_showTutorial()),
               showFeatureToggle:
                   !widget.featureStore.abstractMode ||
+                  !widget.featureStore.abstractEffects ||
                   !_abstractFeatureToggleHidden,
               onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
             )
@@ -1109,6 +1114,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                         unawaited(_showTutorial()),
                                     showFeatureToggle:
                                         !widget.featureStore.abstractMode ||
+                                        !widget.featureStore.abstractEffects ||
                                         !_abstractFeatureToggleHidden,
                                     onHideFeatureToggle:
                                         _hideFeatureToggleForAbstractSession,
