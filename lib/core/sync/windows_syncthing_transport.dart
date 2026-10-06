@@ -127,16 +127,95 @@ class WindowsSyncthingTransport {
       }
 
       String? folderState;
+      Map<String, dynamic>? syncProgress;
       if (folderId.isNotEmpty) {
+        final encodedFolder = Uri.encodeQueryComponent(folderId);
+        final candidates = <Map<String, dynamic>>[];
         final body = await _requestOptional(
           'GET',
-          '/rest/db/status?folder=${Uri.encodeQueryComponent(folderId)}',
+          '/rest/db/status?folder=$encodedFolder',
           apiKey: apiKey,
         );
         if (body != null) {
           final map = _jsonMap(body);
           final raw = map['state']?.toString();
           if (raw != null && raw.isNotEmpty) folderState = raw;
+
+          final globalBytes = (map['globalBytes'] as num?)?.toInt() ?? 0;
+          final needBytes = (map['needBytes'] as num?)?.toInt() ?? 0;
+          final globalItems =
+              (map['globalTotalItems'] as num?)?.toInt() ??
+              (map['globalFiles'] as num?)?.toInt() ??
+              0;
+          final needItems =
+              (map['needTotalItems'] as num?)?.toInt() ??
+              (map['needFiles'] as num?)?.toInt() ??
+              0;
+          final completion = globalBytes > 0
+              ? ((globalBytes - needBytes) / globalBytes * 100)
+                    .clamp(0, 100)
+                    .toDouble()
+              : globalItems > 0
+              ? ((globalItems - needItems) / globalItems * 100)
+                    .clamp(0, 100)
+                    .toDouble()
+              : 100.0;
+          candidates.add(<String, dynamic>{
+            'deviceId': '',
+            'deviceName': '本机',
+            'direction': 'receiving',
+            'completion': completion,
+            'globalBytes': globalBytes,
+            'needBytes': needBytes,
+            'globalItems': globalItems,
+            'needItems': needItems,
+          });
+        }
+
+        for (final remoteId in connectedDeviceIds) {
+          final completionBody = await _requestOptional(
+            'GET',
+            '/rest/db/completion?folder=$encodedFolder'
+                '&device=${Uri.encodeQueryComponent(remoteId)}',
+            apiKey: apiKey,
+          );
+          if (completionBody == null) continue;
+          final completionMap = _jsonMap(completionBody);
+          final rawCompletion = completionMap['completion'];
+          if (rawCompletion is! num) continue;
+
+          var remoteName = remoteId.length > 7
+              ? remoteId.substring(0, 7)
+              : remoteId;
+          for (final device in configuredDevices) {
+            if (device['deviceId'] == remoteId) {
+              final configuredName = device['name']?.toString().trim() ?? '';
+              if (configuredName.isNotEmpty) remoteName = configuredName;
+              break;
+            }
+          }
+
+          candidates.add(<String, dynamic>{
+            'deviceId': remoteId,
+            'deviceName': remoteName,
+            'direction': 'sending',
+            'completion': rawCompletion.toDouble().clamp(0, 100),
+            'globalBytes':
+                (completionMap['globalBytes'] as num?)?.toInt() ?? 0,
+            'needBytes': (completionMap['needBytes'] as num?)?.toInt() ?? 0,
+            'globalItems':
+                (completionMap['globalItems'] as num?)?.toInt() ?? 0,
+            'needItems': (completionMap['needItems'] as num?)?.toInt() ?? 0,
+          });
+        }
+
+        if (candidates.isNotEmpty) {
+          candidates.sort(
+            (left, right) => (left['completion'] as double).compareTo(
+              right['completion'] as double,
+            ),
+          );
+          syncProgress = candidates.first;
         }
       }
 
@@ -148,6 +227,7 @@ class WindowsSyncthingTransport {
         'connectedDeviceIds': connectedDeviceIds,
         'configuredDevices': configuredDevices,
         'folderState': folderState,
+        'syncProgress': syncProgress,
       };
     } catch (error) {
       return <Object?, Object?>{
