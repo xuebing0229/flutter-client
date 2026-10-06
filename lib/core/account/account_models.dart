@@ -222,6 +222,9 @@ class AccountSyncState {
         // Syncthing identity is a device binding, not mutable profile data.
         // Once known, a newer activity snapshot must not silently remap it.
         syncTransportId: local.syncTransportId ?? incoming.syncTransportId,
+        appBuild: activitySource.appBuild,
+        syncProtocolVersion: activitySource.syncProtocolVersion,
+        minSyncProtocolVersion: activitySource.minSyncProtocolVersion,
       );
     }
 
