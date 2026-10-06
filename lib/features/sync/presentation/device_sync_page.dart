@@ -190,6 +190,10 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                         good: status.folderState == 'idle',
                       ),
                     ],
+                    if (_hasVisibleSyncProgress(status.syncProgress)) ...[
+                      const SizedBox(height: 14),
+                      _SyncTransferProgress(progress: status.syncProgress!),
+                    ],
                     const SizedBox(height: 8),
                     _StatusRow(
                       label: '数据冲突',
@@ -293,6 +297,96 @@ class _StatusRow extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SyncTransferProgress extends StatelessWidget {
+  const _SyncTransferProgress({required this.progress});
+
+  final Map<String, dynamic> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final completion = ((progress['completion'] as num?)?.toDouble() ?? 0)
+        .clamp(0, 100)
+        .toDouble();
+    final globalBytes = (progress['globalBytes'] as num?)?.toInt() ?? 0;
+    final needBytes = (progress['needBytes'] as num?)?.toInt() ?? 0;
+    final completedBytes = globalBytes > needBytes
+        ? globalBytes - needBytes
+        : 0;
+    final deviceName = progress['deviceName']?.toString().trim() ?? '';
+    final direction = progress['direction']?.toString();
+    final completed = completion >= 99.95 && needBytes <= 0;
+    final title = completed
+        ? '数据已同步'
+        : direction == 'sending'
+        ? '正在同步到${deviceName.isEmpty ? '另一台设备' : '「$deviceName」'}'
+        : '本机正在接收数据';
+    final percentText = completion >= 99.95
+        ? '100%'
+        : '${completion.toStringAsFixed(1)}%';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text(
+                percentText,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: completion / 100),
+          if (globalBytes > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${_formatBytes(completedBytes)} / ${_formatBytes(globalBytes)}'
+              '${needBytes > 0 ? ' · 剩余 ${_formatBytes(needBytes)}' : ''}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+bool _hasVisibleSyncProgress(Map<String, dynamic>? progress) {
+  if (progress == null) return false;
+  final globalBytes = (progress['globalBytes'] as num?)?.toInt() ?? 0;
+  final globalItems = (progress['globalItems'] as num?)?.toInt() ?? 0;
+  return globalBytes > 0 || globalItems > 0;
+}
+
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  const units = <String>['KB', 'MB', 'GB', 'TB'];
+  var value = bytes / 1024;
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  final digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return '${value.toStringAsFixed(digits)} ${units[unitIndex]}';
 }
 
 class _ConflictTile extends StatelessWidget {
