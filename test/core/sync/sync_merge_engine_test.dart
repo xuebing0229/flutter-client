@@ -183,6 +183,39 @@ void main() {
     expect(merged.operations.values.every((item) => item.compacted), isTrue);
   });
 
+  test('compaction does not manufacture a delete conflict', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'order-delete-after-ack',
+      'supplementAmount': 0.0,
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-delete-after-ack',
+      values: values,
+      deviceId: 'phone',
+    );
+    final changed = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'supplementAmount': 100.0},
+      deviceId: 'phone',
+    );
+
+    final compacted = engine.compactAcknowledgedOperations(
+      changed,
+      deviceId: 'desktop',
+    );
+    final deletedOnStalePeer = engine.markDeleted(
+      changed,
+      deviceId: 'phone',
+    );
+    final merged = engine.merge(deletedOnStalePeer, compacted);
+
+    expect(merged.isDeleted, isTrue);
+    expect(merged.conflicts, isEmpty);
+  });
+
   test('independent feature settings merge without a conflict', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
