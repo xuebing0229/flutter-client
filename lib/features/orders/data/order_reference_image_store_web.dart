@@ -174,15 +174,9 @@ class OrderReferenceImageStore {
   }
 
   Future<void> clearAccountAssets(String accountId) async {
-    final db = await _openDatabase();
-    try {
-      final transaction = db.transaction(_storeName, 'readwrite');
-      final store = transaction.objectStore(_storeName);
-      await store.clear();
-      await transaction.completed;
-    } finally {
-      db.close();
-    }
+    // Imports overwrite every referenced asset for this account. Do not call
+    // ObjectStore.clear(): the IndexedDB store is shared by all local accounts,
+    // so clearing it would delete another account's reference images too.
   }
 
   Future<bool> exportImage({
