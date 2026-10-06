@@ -913,7 +913,12 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   Future<void> _flushLocalEntityChanges() async {
-    if (_disposed || _applyingRemote || _applyingAccount) return;
+    if (_disposed ||
+        _applyingRemote ||
+        _applyingAccount ||
+        _awaitingInitialRemoteWorkspace) {
+      return;
+    }
 
     final accountAfterSync = accountStore.syncSnapshot;
     if (accountAfterSync == null ||
