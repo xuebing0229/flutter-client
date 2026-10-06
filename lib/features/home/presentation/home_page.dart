@@ -1092,7 +1092,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               !_localDataHealthy ||
               _desktopToolSelection != null ||
               (useDesktopLayout &&
-                  (_desktopAddEditorOpen || _desktopContentHasNestedRoute))
+                  (_desktopAddEditorOpen ||
+                      _desktopContentHasNestedRoute ||
+                      _desktopRootRefreshPending))
           ? null
           : switch (current.label) {
               '排单' => FloatingActionButton.extended(
