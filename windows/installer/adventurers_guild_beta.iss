@@ -45,6 +45,7 @@ Name: "{autodesktop}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; W
 [InstallDelete]
 Type: files; Name: "{autodesktop}\冒险者公会 Beta.lnk"; Tasks: desktopicon
 Type: files; Name: "{autoprograms}\冒险者公会 Beta.lnk"
+Type: files; Name: "{app}\app_icon_*.ico"
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\refresh_app_shortcuts.ps1"" -ExePath ""{app}\{#MyAppExeName}"""; Flags: runhidden; StatusMsg: "正在刷新应用快捷方式和图标…"
