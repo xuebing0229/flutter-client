@@ -218,7 +218,53 @@ function Restore-Backup {
   }
 }
 
-function Get-EmbeddedSyncthingProcesses {,function Get-EmbeddedSyncthingProcesses {,  if (-not (Test-Path -LiteralPath $SyncthingPath -PathType Leaf)) {,    return @(),  },,  $ExpectedPath = [IO.Path]::GetFullPath($SyncthingPath),  @(Get-Process -Name 'syncthing' -ErrorAction SilentlyContinue |,    Where-Object {,      try {,        $ProcessPath = $_.Path,        $ProcessPath -and,          [IO.Path]::GetFullPath($ProcessPath).Equals(,            $ExpectedPath,,            [StringComparison]::OrdinalIgnoreCase,          ),      } catch {,        $false,      },    }),},,function Stop-EmbeddedSyncthing {,  $Deadline = (Get-Date).AddSeconds(15),  while ($true) {,    $Processes = @(Get-EmbeddedSyncthingProcesses),    foreach ($Process in $Processes) {,      try {,        Write-UpdateLog ("Stopping embedded Syncthing process " + $Process.Id + '.'),        Stop-Process -Id $Process.Id -Force -ErrorAction Stop,      } catch {,        if ((Get-Date) -ge $Deadline) {,          throw "无法停止内置同步核心：$($_.Exception.Message)",        },      },    },,    if (@(Get-EmbeddedSyncthingProcesses).Count -eq 0) {,      return,    },    if ((Get-Date) -ge $Deadline) {,      throw '内置同步核心仍在运行，无法替换 syncthing.exe。',    },    Start-Sleep -Milliseconds 250,  },},,try {
+function Get-EmbeddedSyncthingProcesses {
+  if (-not (Test-Path -LiteralPath $SyncthingPath -PathType Leaf)) {
+    return @()
+  }
+
+  $ExpectedPath = [IO.Path]::GetFullPath($SyncthingPath)
+  @(Get-Process -Name 'syncthing' -ErrorAction SilentlyContinue |
+    Where-Object {
+      try {
+        $ProcessPath = $_.Path
+        $ProcessPath -and
+          [IO.Path]::GetFullPath($ProcessPath).Equals(
+            $ExpectedPath,
+            [StringComparison]::OrdinalIgnoreCase
+          )
+      } catch {
+        $false
+      }
+    })
+}
+
+function Stop-EmbeddedSyncthing {
+  $Deadline = (Get-Date).AddSeconds(15)
+  while ($true) {
+    $Processes = @(Get-EmbeddedSyncthingProcesses)
+    foreach ($Process in $Processes) {
+      try {
+        Write-UpdateLog ("Stopping embedded Syncthing process " + $Process.Id + '.')
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+      } catch {
+        if ((Get-Date) -ge $Deadline) {
+          throw "无法停止内置同步核心：$($_.Exception.Message)"
+        }
+      }
+    }
+
+    if (@(Get-EmbeddedSyncthingProcesses).Count -eq 0) {
+      return
+    }
+    if ((Get-Date) -ge $Deadline) {
+      throw '内置同步核心仍在运行，无法替换 syncthing.exe。'
+    }
+    Start-Sleep -Milliseconds 250
+  }
+}
+
+try {
   Write-UpdateLog "Updater started. Parent PID: $ParentPid"
 
   if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
