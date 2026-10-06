@@ -188,7 +188,10 @@ class AppToolMenu extends StatelessWidget {
           onTap: () => _open(
             context,
             featureToggleTool,
-            FeatureTogglePage(store: featureStore),
+            FeatureTogglePage(
+              store: featureStore,
+              accountId: syncCoordinator.accountId,
+            ),
           ),
         ),
         _item(
