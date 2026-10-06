@@ -638,7 +638,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         }
       }
 
-      final oldAccountId = _accountId;
       _accountState = backup.accountSyncState;
       _accountId = targetAccountId;
       backup.restoreInto(
@@ -648,11 +647,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       );
       await _applySettings(backup.settings);
       await _persistWorkspace();
-
-      if (oldAccountId != targetAccountId &&
-          oldAccountId != _fallbackAccountId) {
-        unawaited(_referenceImageStore.clearAccountAssets(oldAccountId));
-      }
 
       if (!context.mounted) return;
       setState(() {
