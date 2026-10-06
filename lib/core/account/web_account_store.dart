@@ -153,6 +153,10 @@ class WebAccountStore extends ChangeNotifier {
           item.map((key, value) => MapEntry(key.toString(), value)),
         );
         _accounts[record.syncState.accountId] = record;
+        _rememberDeviceId(
+          record.syncState.accountId,
+          record.currentDeviceId,
+        );
       }
 
       final selected = decoded['selectedAccountId'];
@@ -207,7 +211,7 @@ class WebAccountStore extends ChangeNotifier {
     }
 
     final now = DateTime.now().toUtc();
-    final deviceId = _randomDeviceId();
+    final deviceId = _deviceIdForAccount(license.accountId);
     final state = AccountSyncState(
       accountId: license.accountId,
       accountName: trimmedName,
@@ -255,7 +259,7 @@ class WebAccountStore extends ChangeNotifier {
         stayLoggedIn: stayLoggedIn,
       );
     } else {
-      final deviceId = _randomDeviceId();
+      final deviceId = _deviceIdForAccount(incoming.accountId);
       _accounts[incoming.accountId] = _WebAccountRecord(
         syncState: _touchDevice(incoming, deviceId, createIfMissing: true),
         currentDeviceId: deviceId,
@@ -358,6 +362,15 @@ class WebAccountStore extends ChangeNotifier {
   Future<void> removeSelectedLocalAccount() async {
     final id = _selectedAccountId;
     if (id == null) return;
+    final record = _accounts[id];
+    if (record != null) {
+      _rememberDeviceId(id, record.currentDeviceId);
+    }
+    try {
+      html.window.localStorage.remove(
+        'adventurers-guild.web.workspace.v2.$id',
+      );
+    } catch (_) {}
     _accounts.remove(id);
     _selectedAccountId = null;
     status = WebAccountStatus.unactivated;
@@ -397,6 +410,27 @@ class WebAccountStore extends ChangeNotifier {
       result |= a.codeUnitAt(index) ^ b.codeUnitAt(index);
     }
     return result == 0;
+  }
+
+  String _deviceIdForAccount(String accountId) {
+    final key = 'adventurers-guild.web.device.v1.$accountId';
+    try {
+      final existing = html.window.localStorage[key];
+      if (existing != null && existing.trim().isNotEmpty) {
+        return existing.trim();
+      }
+    } catch (_) {}
+    final next = _randomDeviceId();
+    _rememberDeviceId(accountId, next);
+    return next;
+  }
+
+  void _rememberDeviceId(String accountId, String deviceId) {
+    try {
+      html.window.localStorage[
+        'adventurers-guild.web.device.v1.$accountId'
+      ] = deviceId;
+    } catch (_) {}
   }
 
   String _randomDeviceId() {
