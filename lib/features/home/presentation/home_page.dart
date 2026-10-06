@@ -79,6 +79,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _desktopToolSelection;
   GlobalKey<NavigatorState> _desktopContentNavigatorKey =
       GlobalKey<NavigatorState>();
+  late _DesktopContentNavigatorObserver _desktopContentNavigatorObserver;
+  bool _desktopContentHasNestedRoute = false;
+  bool _desktopRootRefreshPending = false;
   bool _desktopAddEditorOpen = false;
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
@@ -94,6 +97,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _desktopContentNavigatorObserver = _DesktopContentNavigatorObserver(
+      _onDesktopNavigatorNestedStateChanged,
+    );
     _accountSyncSnapshot = widget.accountStore.syncSnapshot;
 
     var deviceName = '本机';
@@ -594,6 +600,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
 
+    _desktopContentNavigatorObserver.deactivate();
     _syncCoordinator.dispose();
     _orderStore.dispose();
     _productStore.dispose();
@@ -653,10 +660,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     Navigator.of(context).push(route);
   }
 
-  void _refreshDesktopCollectionRootIfNeeded() {
-    // Harmless on mobile (the key is unused there) and avoids depending on
-    // MediaQuery while account settings are restored during initialization.
+  void _replaceDesktopContentNavigator() {
+    _desktopContentNavigatorObserver.deactivate();
     _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+    _desktopContentNavigatorObserver = _DesktopContentNavigatorObserver(
+      _onDesktopNavigatorNestedStateChanged,
+    );
+    _desktopContentHasNestedRoute = false;
+    _desktopRootRefreshPending = false;
+  }
+
+  void _refreshDesktopCollectionRootIfNeeded() {
+    // Do not throw the user out of an open detail/editor when settings arrive
+    // from the other device. Refresh the retained root as soon as they return.
+    if (_desktopContentHasNestedRoute) {
+      _desktopRootRefreshPending = true;
+      return;
+    }
+    _replaceDesktopContentNavigator();
+  }
+
+  void _onDesktopNavigatorNestedStateChanged(bool hasNestedRoute) {
+    if (!mounted) return;
+    if (_desktopContentHasNestedRoute != hasNestedRoute) {
+      setState(() => _desktopContentHasNestedRoute = hasNestedRoute);
+    }
+    if (!hasNestedRoute && _desktopRootRefreshPending) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _desktopContentHasNestedRoute) return;
+        setState(_replaceDesktopContentNavigator);
+      });
+    }
   }
 
   void _setOrderCardView(bool value) {
@@ -712,7 +746,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _index = value;
       _desktopToolSelection = null;
       _desktopAddEditorOpen = false;
-      _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+      _replaceDesktopContentNavigator();
     });
   }
 
@@ -721,7 +755,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _desktopToolSelection = tool;
       _desktopAddEditorOpen = false;
-      _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+      _replaceDesktopContentNavigator();
     });
   }
 
@@ -888,6 +922,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final desktopContent = Navigator(
       key: _desktopContentNavigatorKey,
+      observers: <NavigatorObserver>[_desktopContentNavigatorObserver],
       onGenerateRoute: (_) => MaterialPageRoute<void>(
         builder: (_) => _desktopToolSelection == null
             ? tabBody
@@ -1031,7 +1066,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           !_ready ||
               !_localDataHealthy ||
               _desktopToolSelection != null ||
-              (useDesktopLayout && _desktopAddEditorOpen)
+              (useDesktopLayout &&
+                  (_desktopAddEditorOpen || _desktopContentHasNestedRoute))
           ? null
           : switch (current.label) {
               '排单' => FloatingActionButton.extended(
@@ -1064,6 +1100,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ],
             ),
     );
+  }
+}
+
+class _DesktopContentNavigatorObserver extends NavigatorObserver {
+  _DesktopContentNavigatorObserver(this.onNestedStateChanged);
+
+  final ValueChanged<bool> onNestedStateChanged;
+  int _routeCount = 0;
+  bool _active = true;
+
+  void deactivate() {
+    _active = false;
+  }
+
+  void _notify() {
+    if (_active) onNestedStateChanged(_routeCount > 1);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _routeCount += 1;
+    _notify();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (_routeCount > 0) _routeCount -= 1;
+    _notify();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (_routeCount > 0) _routeCount -= 1;
+    _notify();
+  }
+
+  @override
+  void didReplace({
+    Route<dynamic>? newRoute,
+    Route<dynamic>? oldRoute,
+  }) {
+    _notify();
   }
 }
 
