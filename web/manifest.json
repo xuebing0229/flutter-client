@@ -6,5 +6,12 @@
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "description": "画师排单、成品、日程与收入管理网页版",
-  "orientation": "portrait-primary"
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "app-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
 }
