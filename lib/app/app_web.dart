@@ -778,6 +778,9 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           await _persistWorkspace();
           html.window.localStorage.remove(_legacyWorkspaceKey);
         }
+      } else {
+        await widget.themeStore.resetToDefaults();
+        await widget.featureStore.resetToDefaults();
       }
     } catch (error) {
       if (mounted) {
@@ -1300,6 +1303,24 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                     ),
                   ],
                 ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(
+                  widget.accountStore.accountName ?? '当前账号',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text('网页本地账号'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout_rounded),
+                title: const Text('退出登录'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await _persistWorkspace();
+                  await widget.accountStore.lock();
+                },
               ),
               const Divider(height: 1),
               ListTile(
