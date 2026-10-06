@@ -67,6 +67,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   static const _orderSortModeSettingKey = 'orderSortMode';
   static const _productSortModeSettingKey = 'productSortMode';
   static const _desktopNavigationOpenSettingKey = 'desktopNavigationOpen';
+  static const _featureSettingPrefix = 'feature.';
 
   int _index = 0;
   bool _ready = false;
@@ -146,32 +147,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           nodePresetStore: _nodePresetStore,
         );
 
-        final savedOrderCardView = backup.settings[_orderCardViewSettingKey];
-        if (savedOrderCardView is bool) {
-          _orderCardView = savedOrderCardView;
-        }
-        final savedProductCardView =
-            backup.settings[_productCardViewSettingKey];
-        if (savedProductCardView is bool) {
-          _productCardView = savedProductCardView;
-        }
-        final savedOrderSortMode = backup.settings[_orderSortModeSettingKey];
-        final restoredOrderSortMode = _normalizeOrderSortMode(
-          savedOrderSortMode,
-        );
-        if (restoredOrderSortMode != null) {
-          _orderSortMode = restoredOrderSortMode;
-        }
-        final savedProductSortMode =
-            backup.settings[_productSortModeSettingKey];
-        if (savedProductSortMode is String && savedProductSortMode.isNotEmpty) {
-          _productSortMode = savedProductSortMode;
-        }
-        final savedDesktopNavigationOpen =
-            backup.settings[_desktopNavigationOpenSettingKey];
-        if (savedDesktopNavigationOpen is bool) {
-          _desktopNavigationOpen = savedDesktopNavigationOpen;
-        }
+        // Theme, feature switches and layout belong to the account workspace.
+        // Restore all of them before sync starts so switching accounts cannot
+        // leak the previous account's in-memory settings into this one.
+        await _applySyncSettings(backup.settings);
 
         if (backup.accountSyncState != null) {
           await widget.accountStore.mergeSyncedState(backup.accountSyncState!);
@@ -188,7 +167,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _nodePresetStore.addListener(_scheduleSave);
 
     if (_localDataHealthy) {
-      await _syncCoordinator.initialize();
+      if (isNewAccount) {
+        await widget.themeStore.resetToDefaults();
+        await widget.featureStore.resetToDefaults();
+      }
+      await _syncCoordinator.initialize(seedLocalSettings: !isNewAccount);
       if (consumedPortableSyncHistory) {
         // The portable history is a one-time handoff. Persist the materialized
         // workspace again without embedding it, otherwise every launch would
@@ -333,11 +316,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Map<String, dynamic> _captureSyncSettings() {
+    final features = widget.featureStore.toJson();
     return <String, dynamic>{
       'id': SyncCoordinator.settingsRecordId,
       'themeMode': widget.themeStore.mode.name,
       'themePaletteId': widget.themeStore.paletteId,
-      'features': widget.featureStore.toJson(),
+      for (final entry in features.entries)
+        '$_featureSettingPrefix${entry.key}': entry.value,
       _orderCardViewSettingKey: _orderCardView,
       _productCardViewSettingKey: _productCardView,
       _orderSortModeSettingKey: _orderSortMode,
@@ -365,8 +350,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       throw const FormatException('同步主题色无效。');
     }
 
-    if (settings.containsKey('features')) {
-      await widget.featureStore.applyJson(settings['features']);
+    // New settings records keep each feature as its own CRDT field so two
+    // devices can toggle different switches without manufacturing a conflict.
+    // Accept the old aggregate map when importing an earlier local backup.
+    final legacyFeatures = settings['features'];
+    if (legacyFeatures is Map) {
+      await widget.featureStore.applyJson(legacyFeatures);
+    } else if (legacyFeatures != null) {
+      throw const FormatException('同步功能开关设置无效。');
+    }
+
+    final nextFeatures = widget.featureStore.toJson();
+    var hasFeatureFields = false;
+    for (final feature in AppFeature.values) {
+      final key = '$_featureSettingPrefix${feature.name}';
+      if (!settings.containsKey(key)) continue;
+      final value = settings[key];
+      if (value is! bool) {
+        throw FormatException('同步功能开关 ${feature.name} 格式无效。');
+      }
+      nextFeatures[feature.name] = value;
+      hasFeatureFields = true;
+    }
+    if (hasFeatureFields) {
+      await widget.featureStore.applyJson(nextFeatures);
     }
 
     var layoutChanged = false;
@@ -647,7 +654,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _refreshDesktopCollectionRootIfNeeded() {
-    if (MediaQuery.sizeOf(context).width < 900) return;
+    // Harmless on mobile (the key is unused there) and avoids depending on
+    // MediaQuery while account settings are restored during initialization.
     _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
   }
 
