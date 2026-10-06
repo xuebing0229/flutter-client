@@ -121,11 +121,21 @@ function Write-UpdateLog {
 function Refresh-AppShortcuts {
   param(
     [Parameter(Mandatory = $true)][string]$ExePath,
-    [Parameter(Mandatory = $true)][string]$InstallDir
+    [Parameter(Mandatory = $true)][string]$InstallDir,
+    [Parameter(Mandatory = $false)][string]$IconPath
   )
 
   try {
-    $IconPath = Join-Path $InstallDir 'app_icon.ico'
+    if ([string]::IsNullOrWhiteSpace($IconPath) -or
+        -not (Test-Path -LiteralPath $IconPath -PathType Leaf)) {
+      $IconPath = Get-ChildItem -LiteralPath $InstallDir -Filter 'app_icon_*.ico' -File |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -ExpandProperty FullName -First 1
+    }
+    if ([string]::IsNullOrWhiteSpace($IconPath) -or
+        -not (Test-Path -LiteralPath $IconPath -PathType Leaf)) {
+      $IconPath = Join-Path $InstallDir 'app_icon.ico'
+    }
     if (-not (Test-Path -LiteralPath $IconPath -PathType Leaf)) {
       $IconPath = $ExePath
     }
@@ -292,6 +302,8 @@ try {
   }
 
   $SourceRoot = $Executable.Directory.FullName
+  $IconItem = Get-ChildItem -LiteralPath $SourceRoot -Filter 'app_icon_*.ico' -File |
+    Select-Object -First 1
   $SourceItems = @(Get-ChildItem -LiteralPath $SourceRoot -Force)
 
   if ($SourceItems.Count -eq 0) {
@@ -332,7 +344,12 @@ try {
   }
 
   Write-UpdateLog 'Refreshing shortcuts and shell icon cache.'
-  Refresh-AppShortcuts -ExePath $NewExecutable -InstallDir $InstallDir
+  $InstalledIconPath = if ($null -ne $IconItem) {
+    Join-Path $InstallDir $IconItem.Name
+  } else {
+    $null
+  }
+  Refresh-AppShortcuts -ExePath $NewExecutable -InstallDir $InstallDir -IconPath $InstalledIconPath
 
   Write-UpdateLog 'Update applied successfully. Restarting application.'
   Start-Process -FilePath $NewExecutable -WorkingDirectory $InstallDir
