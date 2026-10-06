@@ -38,7 +38,13 @@ class AppFeatureStore extends ChangeNotifier {
   bool get statistics => enabled(AppFeature.statistics);
   bool get deadlineReminders => enabled(AppFeature.deadlineReminders);
   bool get abstractMode => enabled(AppFeature.abstractMode);
-  bool get abstractEffects => enabled(AppFeature.abstractEffects);
+
+  /// Effective abstract behavior. The preference may stay enabled while the
+  /// user is in normal mode, but abstract effects must never leak into normal
+  /// mode. Any abstract-only UI/behavior should read this getter rather than
+  /// the raw feature value.
+  bool get abstractEffects =>
+      abstractMode && enabled(AppFeature.abstractEffects);
 
   Future<File> _file() async {
     final dir = await getApplicationSupportDirectory();
