@@ -28,9 +28,14 @@ class CollectionCardGrid extends StatelessWidget {
         const horizontalPadding = 24.0;
         // Base the grid on the actual content pane, not the whole desktop
         // window. The 320 px side navigation can otherwise leave four cards
-        // squeezed into a phone-width pane.
-        final desktop = constraints.maxWidth >= 900;
-        final columns = desktop ? 4 : 2;
+        // squeezed into a phone-width pane. Use three columns in the middle
+        // instead of jumping straight from a desktop grid to two huge cards.
+        final columns = constraints.maxWidth >= 900
+            ? 4
+            : constraints.maxWidth >= 680
+            ? 3
+            : 2;
+        final desktop = columns >= 3;
         final cardWidth =
             (constraints.maxWidth -
                 horizontalPadding -
