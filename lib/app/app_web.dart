@@ -200,11 +200,24 @@ class _WebAccountGateState extends State<_WebAccountGate> {
       }
 
       final accountId = state.accountId;
-      html.window.localStorage[
-        'adventurers-guild.web.workspace.v2.$accountId'
-      ] = imported.backup.encode(pretty: false);
+      final workspaceKey = 'adventurers-guild.web.workspace.v2.$accountId';
 
       if (imported.includesAssets) {
+        final previousSource = html.window.localStorage[workspaceKey];
+        if (previousSource != null && previousSource.trim().isNotEmpty) {
+          try {
+            final previous = AppBackupData.decode(previousSource);
+            await _referenceImageStore.deleteImages(
+              accountId: accountId,
+              images: [
+                for (final order in previous.orders)
+                  ...order.referenceImages,
+              ],
+            );
+          } catch (_) {
+            // A damaged old workspace must not block a valid replacement.
+          }
+        }
         for (final order in imported.backup.orders) {
           for (final image in order.referenceImages) {
             final bytes = imported.assets[image.relativePath];
@@ -219,6 +232,9 @@ class _WebAccountGateState extends State<_WebAccountGate> {
           }
         }
       }
+
+      html.window.localStorage[workspaceKey] =
+          imported.backup.encode(pretty: false);
 
       await widget.accountStore.importAccountState(
         state,
@@ -1146,7 +1162,13 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       if (confirmed != true) return;
 
       if (imported.includesAssets) {
-        await _referenceImageStore.clearAccountAssets(_accountId);
+        await _referenceImageStore.deleteImages(
+          accountId: _accountId,
+          images: [
+            for (final order in _orderStore.orders)
+              ...order.referenceImages,
+          ],
+        );
         for (final order in backup.orders) {
           for (final image in order.referenceImages) {
             final bytes = imported.assets[image.relativePath];
