@@ -11,6 +11,7 @@ import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_protocol.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
@@ -91,6 +92,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _localDataHealthy = true;
   bool _syncConflictPromptVisible = false;
   String? _lastPromptedConflictSignature;
+  bool _syncVersionPromptVisible = false;
+  String? _lastPromptedSyncVersionSignature;
   AccountSyncState? _accountSyncSnapshot;
 
   @override
@@ -249,10 +252,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (snapshot?.accountId != widget.accountId) return;
     _accountSyncSnapshot = snapshot;
     _scheduleSave();
+    _maybePromptSyncVersionNotice();
   }
 
   void _onSyncCoordinatorChanged() {
     if (!mounted || !_ready) return;
+
+    _maybePromptSyncVersionNotice();
+    if (_syncVersionPromptVisible) return;
 
     final conflicts = _syncCoordinator.conflicts;
     if (conflicts.isEmpty) {
@@ -279,6 +286,106 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       unawaited(_showSyncConflictPrompt());
     });
+  }
+
+  void _maybePromptSyncVersionNotice() {
+    if (!mounted ||
+        !_ready ||
+        _syncVersionPromptVisible ||
+        _syncConflictPromptVisible) {
+      return;
+    }
+
+    final notices = syncDeviceVersionNotices(
+      state: widget.accountStore.syncSnapshot,
+      currentDeviceId: widget.accountStore.currentDeviceId,
+    );
+    if (notices.isEmpty) {
+      _lastPromptedSyncVersionSignature = null;
+      return;
+    }
+
+    final signature = notices.map((item) => item.signature).join('||');
+    if (signature == _lastPromptedSyncVersionSignature) return;
+
+    _lastPromptedSyncVersionSignature = signature;
+    _syncVersionPromptVisible = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _syncVersionPromptVisible = false;
+        return;
+      }
+      unawaited(_showSyncVersionPrompt(notices));
+    });
+  }
+
+  Future<void> _showSyncVersionPrompt(
+    List<SyncDeviceVersionNotice> notices,
+  ) async {
+    try {
+      final incompatible = notices.any(
+        (item) => item.status == SyncVersionStatus.incompatible,
+      );
+      final legacy = notices.any(
+        (item) => item.status == SyncVersionStatus.legacyUnknown,
+      );
+      final title = incompatible
+          ? '设备版本不兼容'
+          : legacy
+          ? '检测到旧版设备'
+          : '设备版本不同';
+
+      final openSyncPage = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(title),
+          content: Text(
+            notices.map(_syncVersionNoticeText).join('\n\n'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('知道了'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('查看同步'),
+            ),
+          ],
+        ),
+      );
+
+      if (openSyncPage == true && mounted) {
+        if (MediaQuery.sizeOf(context).width >= 900) {
+          _selectDesktopTool(AppToolMenu.syncTool);
+        } else {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => DeviceSyncPage(coordinator: _syncCoordinator),
+            ),
+          );
+        }
+      }
+    } finally {
+      _syncVersionPromptVisible = false;
+      if (mounted) _onSyncCoordinatorChanged();
+    }
+  }
+
+  String _syncVersionNoticeText(SyncDeviceVersionNotice notice) {
+    final device = notice.device;
+    return switch (notice.status) {
+      SyncVersionStatus.differentBuild =>
+        '${device.name} 为 Beta ${device.appBuild}，本机为 Beta '
+            '${notice.localBuild}。当前同步协议兼容，可以继续同步；'
+            '建议更新到同一版本。',
+      SyncVersionStatus.legacyUnknown =>
+        '${device.name} 尚未上报同步协议版本，可能正在使用较旧版本。'
+            '当前不会阻止同步，但建议尽快更新该设备。',
+      SyncVersionStatus.incompatible =>
+        '${device.name} 的同步协议与本机不兼容。'
+            '为避免数据异常，请先把两台设备更新到兼容版本。',
+    };
   }
 
   Future<void> _showSyncConflictPrompt() async {
@@ -317,6 +424,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     } finally {
       _syncConflictPromptVisible = false;
+      if (mounted) _maybePromptSyncVersionNotice();
     }
   }
 
