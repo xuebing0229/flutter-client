@@ -16,52 +16,115 @@ class _AbstractGuideSection {
 
 const _sections = <_AbstractGuideSection>[
   _AbstractGuideSection(
-    icon: Icons.auto_awesome_rounded,
-    title: '你已进入抽象版',
-    body: '抽象版会把部分文案、提示和交互换成更抽象的表现，但工作数据还是同一份。',
+    icon: Icons.dashboard_outlined,
+    title: '先认识界面',
+    body: '主工作区按排单、成品、日程、统计组织工作。',
     bullets: [
-      '排单、成品、日程、统计、归档和设备同步的数据规则不会因为切换抽象版而变成另一套。',
-      '切换抽象版不会复制、清空或重建现有数据。',
-      '觉得过于抽象时，可以随时切回普通版。',
+      '手机端从底部或菜单切换板块；桌面端从左侧导航切换。',
+      '桌面端展开工具栏后，节点预设、归档、同步、账号与设置会在右侧工作区切换。',
+      '排单和成品页右下角的“新增”按钮分别用于创建记录。',
     ],
   ),
   _AbstractGuideSection(
-    icon: Icons.extension_outlined,
-    title: '功能突然不见了？先看附加功能开关',
-    body: '附加功能关闭后，对应入口会直接消失，看起来会像“被吃掉了”。',
+    icon: Icons.manage_accounts_outlined,
+    title: '账号与首次登录',
+    body: '账号是本地优先的工作空间身份。',
     bullets: [
-      '想重新打开时，进入左侧菜单的“附加功能开关”。',
-      '成品、日程、统计、搜索、排序、视图切换等都可能因为开关关闭而隐藏。',
-      '关闭入口只会隐藏功能，不会删除里面已经存在的数据。',
+      '首次注册需要激活码；注册完成后，日常登录只需要账号名和密码。',
+      '账号名、密码和工作数据保存在应用本地，并通过设备同步迁移。',
+      '忘记密码时，可在仍登录的设备“账号与设备”里查看或修改凭据。',
     ],
   ),
   _AbstractGuideSection(
-    icon: Icons.school_outlined,
-    title: '抽象版有自己的使用教程',
-    body: '只要抽象版处于开启状态，左侧菜单里的“使用教程”就会打开这份抽象版教程。',
+    icon: Icons.playlist_add_check_rounded,
+    title: '排单：从接稿到推进',
+    body: '一笔排单就是一份从接稿到交付的工作记录。',
     bullets: [
-      '切回普通版以后，“使用教程”会自动恢复成普通版教程。',
-      '第一次主动开启抽象版时，本教程会强制打开一次，避免打开后完全不知道发生了什么。',
-      '以后想重看，直接从“使用教程”入口打开即可。',
+      '新增时填写排单名、平台、稿费、截稿日期、备注、平台手续费、补款/减款和节点。',
+      '卡片上的“－/＋”调整当前节点小进度；完成后点“确认节点”进入下一节点。',
+      '开启附加功能后，顶部可以搜索或排序；长按卡片可置顶、归档、删除，也可以批量处理。',
+    ],
+  ),
+  _AbstractGuideSection(
+    icon: Icons.account_tree_outlined,
+    title: '节点预设：复用常用流程',
+    body: '把常用的工作阶段保存下来，新排单可以直接套用。',
+    bullets: [
+      '打开“节点预设”，新增一套节点并按实际顺序命名。',
+      '后续新增排单时选择对应预设，再按这笔稿件的情况调整。',
+      '修改后的预设会用于之后新建的排单；已有排单继续使用原来的节点配置。',
+    ],
+  ),
+  _AbstractGuideSection(
+    icon: Icons.image_outlined,
+    title: '成品、日程与统计',
+    body: '成品适合记录可重复售卖的作品，日程集中查看日期，统计汇总收入。',
+    bullets: [
+      '新增成品时可填写图名、平台、原始稿价、单次/多次售卖方式和描述。',
+      '在成品详情里记录售出；售出记录会出现在日程对应日期。',
+      '排单或成稿归档后，相关收入才会进入统计；成品也可以单独归档和恢复。',
+    ],
+  ),
+  _AbstractGuideSection(
+    icon: Icons.archive_outlined,
+    title: '归档与快捷操作',
+    body: '归档会把记录移出工作列表，并保留在归档页中。',
+    bullets: [
+      '长按排单或成品可以快速归档；批量归档也可以一次选择多条。',
+      '排单归档时可按节点结算，或按实际情况选择完整收入、补款/减款等结算方式。',
+      '归档页可以查看并恢复；删除会从本地数据移除，不能从归档页恢复。',
+    ],
+  ),
+  _AbstractGuideSection(
+    icon: Icons.tune_outlined,
+    title: '附加功能与截稿提醒',
+    body: '“附加功能开关”用于按工作习惯收起不常用入口。',
+    bullets: [
+      '可以开启搜索、排序、成品、日程、统计和截稿通知提醒；基础字段始终保留。',
+      '如您已丢失您的附加功能开关，可回到普通版寻找。',
+      '截稿提醒默认在截止前 7 天和 1 天发出本地通知。首次开启时按引导打开通知、精确闹钟和后台运行权限。',
+      '提醒异常时，去“设置 → 截稿提醒”查看状态并运行测试提醒。',
     ],
   ),
   _AbstractGuideSection(
     icon: Icons.sync_alt_rounded,
-    title: '同步和备份还是认真的',
-    body: '抽象的是表现，不是你的稿费和同步数据。',
+    title: '设备同步：首次配对',
+    body: '同步通过设备到设备的端到端通道进行，可以跨网络连接已配对设备。',
     bullets: [
-      '设备同步仍按原来的字段级合并和冲突处理规则工作。',
-      '抽象版开关本身属于界面设置，会和其他界面设置一起同步。',
-      '完整备份仍然包含排单、成品、节点预设、账号设备信息和界面设置。',
+      '两台设备先登录同一个账号，再从“账号与设备 → 添加设备”开始。',
+      '可以扫码、选择二维码图片，或复制粘贴配对码；新设备生成回应二维码/回应码后，还要回到原设备确认。',
+      '首次配对时按页面提示保持两边页面打开；显示“首次绑定完成”后，日常同步直接从“设备同步”页进行。',
     ],
   ),
   _AbstractGuideSection(
-    icon: Icons.undo_rounded,
-    title: '想回普通版',
-    body: '路径很简单：附加功能开关 → 抽象版 → 关闭。',
+    icon: Icons.pause_circle_outline_rounded,
+    title: '设备同步：日常控制与冲突',
+    body: '“设备同步”页同时显示同步开关、连接状态和冲突处理。',
     bullets: [
-      '关闭后立即回到普通版表现。',
-      '以后再次开启不会重复强制弹教程；需要时可以手动从“使用教程”重看。',
+      '开关打开时，前台和后台都会自动交换设备数据；手机可能显示持续同步通知，这是后台同步服务的运行状态。',
+      '开关关闭时，前台和后台都暂停交换数据，本地编辑会保留；重新打开后再继续同步。',
+      '“等待其他设备”表示本机同步核心已经就绪，正在等待已配对设备上线连接。',
+      '出现数据冲突时，在同步页逐项选择要保留的设备版本，确认后才会继续合并。',
+    ],
+  ),
+  _AbstractGuideSection(
+    icon: Icons.devices_other_outlined,
+    title: '账号与设备管理',
+    body: '这里管理账号资料、设备名称和设备授权关系。',
+    bullets: [
+      '可以修改账号名、密码和头像，也可以给设备改名。',
+      '解绑设备会把它从使用中设备移除；在线设备会退出账号，离线设备在下次上线后收到解绑记录。',
+      '登录页的“移除本机账号记录”会清理当前设备保存的数据和同步目录，其他设备继续保留各自的数据。',
+    ],
+  ),
+  _AbstractGuideSection(
+    icon: Icons.inventory_2_outlined,
+    title: '设置、备份与恢复',
+    body: '同步之外，设置页还提供一份可搬运的完整备份。',
+    bullets: [
+      '“导出完整备份”包含排单、成品、节点预设、账号设备记录、归档状态和稿费数据。',
+      '“导入完整备份”会覆盖当前本地数据；导入前确认文件属于当前激活账号，并保留一份最新备份。',
+      '外观主题和功能开关也会随完整备份恢复；设备同步仍可在“设备同步”页单独暂停或恢复。',
     ],
   ),
 ];
@@ -95,7 +158,7 @@ Future<void> showAbstractModeGuide(
                   child: Row(
                     children: [
                       Icon(
-                        Icons.auto_awesome_rounded,
+                        Icons.school_outlined,
                         color: Theme.of(context).colorScheme.primary,
                       ),
                       const SizedBox(width: 12),
@@ -104,7 +167,7 @@ Future<void> showAbstractModeGuide(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '抽象版使用教程',
+                              '画师工作台（抽象版）使用教程',
                               style: Theme.of(context)
                                   .textTheme
                                   .titleLarge
@@ -112,7 +175,7 @@ Future<void> showAbstractModeGuide(
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '先看完再抽象，至少知道东西去哪了。',
+                              '从接稿、交付到双端同步，按需要查看对应模块。',
                               style: TextStyle(
                                 color: Theme.of(context)
                                     .colorScheme
@@ -220,8 +283,12 @@ Future<void> showAbstractModeGuide(
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
                       onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: Text(forced ? '我知道了，进入抽象版' : '知道了'),
+                      child: const Text('签订契约'),
                     ),
                   ),
                 ),
