@@ -273,6 +273,7 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
+  json['archivedAt'] ??= null;
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
   return json;
@@ -469,6 +470,7 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
       for (final soldAt in product.saleRecords)
         soldAt.toUtc().toIso8601String(),
     ],
+    'archivedAt': product.archivedAt?.toUtc().toIso8601String(),
     'isArchived': product.isArchived,
     'isPinned': product.isPinned,
   };
@@ -524,6 +526,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       for (final item in _asList(json['saleRecords'], 'product.saleRecords'))
         _asDateTime(item, 'product.saleRecords'),
     ],
+    archivedAt: _asNullableDateTime(json['archivedAt'], 'product.archivedAt'),
     isArchived: _asBool(json['isArchived'], 'product.isArchived'),
     isPinned: _asBool(json['isPinned'], 'product.isPinned'),
   );
