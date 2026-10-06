@@ -20,7 +20,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputBaseFilename=app-windows-beta-setup
 SetupIconFile=..\runner\resources\app_icon.ico
-UninstallDisplayIcon={app}\app_icon.ico
+UninstallDisplayIcon={app}\app_icon_{#MyAppVersion}.ico
 ChangesAssociations=yes
 Compression=lzma2
 SolidCompression=yes
@@ -34,12 +34,17 @@ UsePreviousTasks=yes
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "快捷方式："; Flags: unchecked
 
 [Files]
-Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\build\windows\x64\runner\Release\app_icon_{#MyAppVersion}.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Excludes: "app_icon*.ico"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autoprograms}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon_{#MyAppVersion}.ico"
 Name: "{autoprograms}\卸载冒险者公会 Beta"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"; Tasks: desktopicon
+Name: "{autodesktop}\冒险者公会 Beta"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon_{#MyAppVersion}.ico"; Tasks: desktopicon
+
+[InstallDelete]
+Type: files; Name: "{autodesktop}\冒险者公会 Beta.lnk"
+Type: files; Name: "{autoprograms}\冒险者公会 Beta.lnk"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "启动冒险者公会 Beta"; Flags: nowait postinstall skipifsilent
