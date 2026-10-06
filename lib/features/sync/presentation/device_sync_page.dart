@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_models.dart';
 
 class DeviceSyncPage extends StatefulWidget {
   const DeviceSyncPage({
@@ -532,12 +533,149 @@ String _shortDeviceId(String value) {
   return '${value.substring(0, 7)}…${value.substring(value.length - 4)}';
 }
 
-String _formatValue(Object? value) {
+String _deviceLabel(SyncCoordinator coordinator, String deviceId) {
+  final device = coordinator.accountStore.syncSnapshot?.devices[deviceId];
+  if (device == null) {
+    return '未知设备（${_shortDeviceId(deviceId)}）';
+  }
+
+  final platform = switch (device.platform.toLowerCase()) {
+    'windows' => '电脑',
+    'android' || 'ios' => '手机',
+    'macos' || 'linux' => '电脑',
+    _ => device.platform,
+  };
+  final local = deviceId == coordinator.deviceId ? ' · 本机' : '';
+  return '${device.name} · $platform$local';
+}
+
+String _conflictSubject(
+  SyncCoordinator coordinator,
+  SyncConflictView view,
+) {
+  switch (view.kind) {
+    case SyncEntityKind.settings:
+      return '界面设置 · ${view.fieldLabel}';
+    case SyncEntityKind.nodePreset:
+      for (final preset in coordinator.nodePresetStore.presets) {
+        if (preset.id == view.recordId) {
+          return '节点预设「${preset.name}」 · ${view.fieldLabel}';
+        }
+      }
+      return '节点预设 · ${view.fieldLabel}';
+    case SyncEntityKind.order:
+      for (final order in coordinator.orderStore.orders) {
+        if (order.id == view.recordId) {
+          return '排单「${order.title}」 · ${view.fieldLabel}';
+        }
+      }
+      return '排单 · ${view.fieldLabel}';
+    case SyncEntityKind.product:
+      for (final product in coordinator.productStore.products) {
+        if (product.id == view.recordId) {
+          return '成品「${product.title}」 · ${view.fieldLabel}';
+        }
+      }
+      return '成品 · ${view.fieldLabel}';
+  }
+}
+
+String _formatConflictValue(String field, Object? value) {
   if (value == null) return '未设置';
-  if (value is bool) return value ? '开启 / 是' : '关闭 / 否';
-  final text = value is String ? value : jsonEncode(value);
-  if (text.length <= 120) return text;
-  return '${text.substring(0, 117)}…';
+
+  if (value is bool) {
+    return switch (field) {
+      'orderCardView' || 'productCardView' =>
+        value ? '使用卡片视图' : '使用列表视图',
+      'desktopNavigationOpen' => value ? '导航栏展开' : '导航栏收起',
+      'isPinned' => value ? '已置顶' : '未置顶',
+      'isArchived' => value ? '已归档' : '未归档',
+      SyncRecord.deletedField => value ? '删除这条数据' : '保留这条数据',
+      _ => value ? '开启' : '关闭',
+    };
+  }
+
+  if (field == 'themeMode' && value is String) {
+    return switch (value) {
+      'light' => '浅色模式',
+      'dark' => '深色模式',
+      'system' => '跟随系统',
+      _ => value,
+    };
+  }
+
+  if ((field == 'orderSortMode' || field == 'productSortMode') &&
+      value is String) {
+    return switch (value) {
+      'defaultOrder' => '默认排序',
+      'income' => '按收入金额',
+      'deadline' => '按截稿时间',
+      'soldCount' => '按售出数量',
+      _ => value,
+    };
+  }
+
+  if (field == 'nodes' && value is List) {
+    return _formatNodeList(value);
+  }
+
+  if (field == 'nodePresetSnapshot' && value is Map) {
+    final name = value['name']?.toString().trim();
+    final nodes = value['nodes'];
+    final nodeText = nodes is List ? _formatNodeList(nodes) : '节点内容已修改';
+    return name == null || name.isEmpty ? nodeText : '$name：$nodeText';
+  }
+
+  if (field == 'referenceImages' && value is List) {
+    return '${value.length} 张参考图';
+  }
+  if (field == 'saleRecords' && value is List) {
+    return '${value.length} 条售出记录';
+  }
+
+  if (value is String) {
+    if (value.isEmpty) return '空';
+    if (<String>{'deadline', 'completedAt', 'settledAt'}.contains(field)) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) {
+        final local = parsed.toLocal();
+        String two(int number) => number.toString().padLeft(2, '0');
+        return '${local.year}-${two(local.month)}-${two(local.day)} '
+            '${two(local.hour)}:${two(local.minute)}';
+      }
+    }
+    return value;
+  }
+
+  if (value is num) {
+    return switch (field) {
+      'price' ||
+      'supplementAmount' ||
+      'deductionAmount' ||
+      'settledIncome' ||
+      'customRefundAmount' => '¥$value',
+      'onlinePercent' || 'currentNodeProgress' => '$value%',
+      _ => value.toString(),
+    };
+  }
+
+  if (value is List) return '${value.length} 项内容';
+  if (value is Map) return '一组设置（${value.length} 项）';
+
+  final text = jsonEncode(value);
+  return text.length <= 120 ? text : '${text.substring(0, 117)}…';
+}
+
+String _formatNodeList(List<dynamic> nodes) {
+  final parts = <String>[];
+  for (final item in nodes) {
+    if (item is! Map) continue;
+    final name = item['name']?.toString().trim();
+    final progress = item['progressPercent'];
+    if (name == null || name.isEmpty) continue;
+    parts.add(progress is num ? '$name ${progress.toInt()}%' : name);
+  }
+  return parts.isEmpty ? '节点列表为空' : parts.join(' → ');
 }
 
 String _folderStateLabel(String value) {
