@@ -218,6 +218,7 @@ class AppToolMenu extends StatelessWidget {
               productStore: productStore,
               nodePresetStore: nodePresetStore,
               featureStore: featureStore,
+              syncCoordinator: syncCoordinator,
             ),
           ),
         ),
