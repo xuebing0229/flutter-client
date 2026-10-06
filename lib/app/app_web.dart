@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -10,8 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/account/account_models.dart';
+import '../core/account/web_account_store.dart';
 import '../core/features/app_feature_store.dart';
 import '../core/portability/app_backup_data.dart';
+import '../core/portability/web_backup_reader.dart';
 import '../core/sync/sync_entity_codec.dart';
 import '../core/sync/sync_models.dart';
 import '../core/sync/sync_ui_coordinator.dart';
@@ -42,6 +43,7 @@ class App extends StatefulWidget {
 class _AppState extends State<App> {
   final AppThemeStore _themeStore = AppThemeStore();
   final AppFeatureStore _featureStore = AppFeatureStore();
+  final WebAccountStore _accountStore = WebAccountStore();
 
   @override
   void initState() {
@@ -53,6 +55,7 @@ class _AppState extends State<App> {
     await Future.wait<void>([
       _themeStore.load(),
       _featureStore.load(),
+      _accountStore.load(),
     ]);
     if (mounted) setState(() {});
   }
@@ -61,6 +64,7 @@ class _AppState extends State<App> {
   void dispose() {
     _themeStore.dispose();
     _featureStore.dispose();
+    _accountStore.dispose();
     super.dispose();
   }
 
@@ -132,7 +136,10 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _themeStore,
+      animation: Listenable.merge(<Listenable>[
+        _themeStore,
+        _accountStore,
+      ]),
       builder: (context, _) {
         return MaterialApp(
           title: '冒险者公会',
@@ -147,7 +154,8 @@ class _AppState extends State<App> {
           themeMode: _themeStore.mode,
           theme: _theme(Brightness.light),
           darkTheme: _theme(Brightness.dark),
-          home: _WebWorkspace(
+          home: _WebAccountGate(
+            accountStore: _accountStore,
             themeStore: _themeStore,
             featureStore: _featureStore,
           ),
@@ -159,10 +167,12 @@ class _AppState extends State<App> {
 
 class _WebWorkspace extends StatefulWidget {
   const _WebWorkspace({
+    required this.accountStore,
     required this.themeStore,
     required this.featureStore,
   });
 
+  final WebAccountStore accountStore;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
 
