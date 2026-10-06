@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
-import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_ui_coordinator.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../domain/finished_product.dart';
@@ -34,7 +34,7 @@ class ProductPage extends StatefulWidget {
 
   final ProductStore store;
   final AppFeatureStore featureStore;
-  final SyncCoordinator syncCoordinator;
+  final SyncUiCoordinator syncCoordinator;
   final bool cardView;
   final ValueChanged<bool> onCardViewChanged;
   final String sortModeName;
@@ -440,10 +440,9 @@ class _ProductPageState extends State<ProductPage> {
                             final product = products[index];
                             return ProductSummaryCard(
                               product: product,
-                              hasSyncConflict: widget.syncCoordinator.conflicts
-                                  .any((item) =>
-                                      item.kind.name == 'product' &&
-                                      item.recordId == product.id),
+                              hasSyncConflict: widget.syncCoordinator
+                                  .conflictedProductIds
+                                  .contains(product.id),
                               onTap: () => _openProduct(product),
                               onLongPress: () =>
                                   _showQuickActions(product),
