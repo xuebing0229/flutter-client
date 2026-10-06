@@ -125,7 +125,18 @@ jobs:
 
       - name: Bundle current Windows icon
         shell: pwsh
-        run: Copy-Item "windows/runner/resources/app_icon.ico" "build/windows/x64/runner/Release/app_icon.ico" -Force
+        run: |
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = ($versionLine -split ':', 2)[1].Trim()
+          $releaseDir = "build/windows/x64/runner/Release"
+          $sourceIcon = "windows/runner/resources/app_icon.ico"
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon.ico") -Force
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon_$version.ico") -Force
 
       - name: Package Windows Beta
         shell: pwsh
