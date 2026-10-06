@@ -67,6 +67,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   static const _orderSortModeSettingKey = 'orderSortMode';
   static const _productSortModeSettingKey = 'productSortMode';
   static const _desktopNavigationOpenSettingKey = 'desktopNavigationOpen';
+  static const _featureSettingPrefix = 'feature.';
 
   int _index = 0;
   bool _ready = false;
@@ -78,6 +79,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _desktopToolSelection;
   GlobalKey<NavigatorState> _desktopContentNavigatorKey =
       GlobalKey<NavigatorState>();
+  late _DesktopContentNavigatorObserver _desktopContentNavigatorObserver;
+  bool _desktopContentHasNestedRoute = false;
+  bool _desktopRootRefreshPending = false;
   bool _desktopAddEditorOpen = false;
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
@@ -93,6 +97,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _desktopContentNavigatorObserver = _DesktopContentNavigatorObserver(
+      _onDesktopNavigatorNestedStateChanged,
+    );
     _accountSyncSnapshot = widget.accountStore.syncSnapshot;
 
     var deviceName = '本机';
@@ -125,11 +132,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _restoreLocalData() async {
     String? errorMessage;
     var isNewAccount = false;
+    var hasWorkspaceSettings = false;
     var consumedPortableSyncHistory = false;
 
     try {
       final backup = await _persistence.load(accountId: widget.accountId);
       isNewAccount = backup == null;
+      final bootstrapOnly = backup?.settings['bootstrapOnly'] == true;
+      hasWorkspaceSettings =
+          backup != null &&
+          !bootstrapOnly &&
+          (backup.settings.containsKey('themeMode') ||
+              backup.settings.containsKey('features') ||
+              backup.settings.keys.any(
+                (key) => key.startsWith(_featureSettingPrefix),
+              ));
       if (backup != null) {
         _syncCoordinator.restoreSyncBaseline(
           backup.settings['syncBaselineRecords'],
@@ -146,31 +163,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           nodePresetStore: _nodePresetStore,
         );
 
-        final savedOrderCardView = backup.settings[_orderCardViewSettingKey];
-        if (savedOrderCardView is bool) {
-          _orderCardView = savedOrderCardView;
-        }
-        final savedProductCardView =
-            backup.settings[_productCardViewSettingKey];
-        if (savedProductCardView is bool) {
-          _productCardView = savedProductCardView;
-        }
-        final savedOrderSortMode = backup.settings[_orderSortModeSettingKey];
-        final restoredOrderSortMode = _normalizeOrderSortMode(
-          savedOrderSortMode,
-        );
-        if (restoredOrderSortMode != null) {
-          _orderSortMode = restoredOrderSortMode;
-        }
-        final savedProductSortMode =
-            backup.settings[_productSortModeSettingKey];
-        if (savedProductSortMode is String && savedProductSortMode.isNotEmpty) {
-          _productSortMode = savedProductSortMode;
-        }
-        final savedDesktopNavigationOpen =
-            backup.settings[_desktopNavigationOpenSettingKey];
-        if (savedDesktopNavigationOpen is bool) {
-          _desktopNavigationOpen = savedDesktopNavigationOpen;
+        // A bootstrap-only package deliberately contains account identity but no
+        // workspace settings. Do not treat it as authoritative local state.
+        if (hasWorkspaceSettings) {
+          // Theme, feature switches and layout belong to the account workspace.
+          // Restore all of them before sync starts so switching accounts cannot
+          // leak the previous account's in-memory settings into this one.
+          await _applySyncSettings(backup.settings);
         }
 
         if (backup.accountSyncState != null) {
@@ -188,7 +187,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _nodePresetStore.addListener(_scheduleSave);
 
     if (_localDataHealthy) {
-      await _syncCoordinator.initialize();
+      if (!hasWorkspaceSettings) {
+        await widget.themeStore.resetToDefaults();
+        await widget.featureStore.resetToDefaults();
+      }
+      await _syncCoordinator.initialize(
+        seedLocalSettings: hasWorkspaceSettings,
+      );
       if (consumedPortableSyncHistory) {
         // The portable history is a one-time handoff. Persist the materialized
         // workspace again without embedding it, otherwise every launch would
@@ -320,7 +325,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!widget.featureStore.deadlineReminders) {
       _notificationPermissionChecked = false;
     }
-    setState(() => _index = 0);
+    setState(() {
+      _index = 0;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _scheduleReminderSync();
     _syncCoordinator.notifySettingsChanged();
@@ -333,11 +341,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Map<String, dynamic> _captureSyncSettings() {
+    final features = widget.featureStore.toJson();
     return <String, dynamic>{
       'id': SyncCoordinator.settingsRecordId,
       'themeMode': widget.themeStore.mode.name,
       'themePaletteId': widget.themeStore.paletteId,
-      'features': widget.featureStore.toJson(),
+      for (final entry in features.entries)
+        '$_featureSettingPrefix${entry.key}': entry.value,
       _orderCardViewSettingKey: _orderCardView,
       _productCardViewSettingKey: _productCardView,
       _orderSortModeSettingKey: _orderSortMode,
@@ -365,8 +375,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       throw const FormatException('同步主题色无效。');
     }
 
-    if (settings.containsKey('features')) {
-      await widget.featureStore.applyJson(settings['features']);
+    // New settings records keep each feature as its own CRDT field so two
+    // devices can toggle different switches without manufacturing a conflict.
+    // Accept the old aggregate map when importing an earlier local backup.
+    final legacyFeatures = settings['features'];
+    if (legacyFeatures is Map) {
+      await widget.featureStore.applyJson(legacyFeatures);
+    } else if (legacyFeatures != null) {
+      throw const FormatException('同步功能开关设置无效。');
+    }
+
+    final nextFeatures = widget.featureStore.toJson();
+    var hasFeatureFields = false;
+    for (final feature in AppFeature.values) {
+      final key = '$_featureSettingPrefix${feature.name}';
+      if (!settings.containsKey(key)) continue;
+      final value = settings[key];
+      if (value is! bool) {
+        throw FormatException('同步功能开关 ${feature.name} 格式无效。');
+      }
+      nextFeatures[feature.name] = value;
+      hasFeatureFields = true;
+    }
+    if (hasFeatureFields) {
+      await widget.featureStore.applyJson(nextFeatures);
     }
 
     var layoutChanged = false;
@@ -407,7 +439,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     if (layoutChanged && mounted) {
-      setState(() {});
+      setState(() {
+        _refreshDesktopCollectionRootIfNeeded();
+      });
       _scheduleSave();
     }
   }
@@ -585,6 +619,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
 
+    _desktopContentNavigatorObserver.deactivate();
     _syncCoordinator.dispose();
     _orderStore.dispose();
     _productStore.dispose();
@@ -644,30 +679,81 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     Navigator.of(context).push(route);
   }
 
+  void _replaceDesktopContentNavigator() {
+    _desktopContentNavigatorObserver.deactivate();
+    _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+    _desktopContentNavigatorObserver = _DesktopContentNavigatorObserver(
+      _onDesktopNavigatorNestedStateChanged,
+    );
+    _desktopContentHasNestedRoute = false;
+    _desktopRootRefreshPending = false;
+  }
+
+  void _refreshDesktopCollectionRootIfNeeded() {
+    // Do not throw the user out of an open detail/editor when settings arrive
+    // from the other device. Refresh the retained root as soon as they return.
+    if (_desktopContentHasNestedRoute || _desktopToolSelection != null) {
+      _desktopRootRefreshPending = true;
+      return;
+    }
+    _replaceDesktopContentNavigator();
+  }
+
+  void _onDesktopNavigatorNestedStateChanged(bool hasNestedRoute) {
+    if (!mounted) return;
+    if (_desktopContentHasNestedRoute != hasNestedRoute) {
+      setState(() => _desktopContentHasNestedRoute = hasNestedRoute);
+    }
+    if (!hasNestedRoute &&
+        _desktopRootRefreshPending &&
+        _desktopToolSelection == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            _desktopContentHasNestedRoute ||
+            _desktopToolSelection != null) {
+          return;
+        }
+        setState(_replaceDesktopContentNavigator);
+      });
+    }
+  }
+
   void _setOrderCardView(bool value) {
     if (_orderCardView == value) return;
-    setState(() => _orderCardView = value);
+    setState(() {
+      _orderCardView = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductCardView(bool value) {
     if (_productCardView == value) return;
-    setState(() => _productCardView = value);
+    setState(() {
+      _productCardView = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
 
   void _setOrderSortMode(String value) {
     if (_orderSortMode == value) return;
-    setState(() => _orderSortMode = value);
+    setState(() {
+      _orderSortMode = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductSortMode(String value) {
     if (_productSortMode == value) return;
-    setState(() => _productSortMode = value);
+    setState(() {
+      _productSortMode = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
@@ -685,7 +771,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _index = value;
       _desktopToolSelection = null;
       _desktopAddEditorOpen = false;
-      _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+      _replaceDesktopContentNavigator();
     });
   }
 
@@ -694,7 +780,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _desktopToolSelection = tool;
       _desktopAddEditorOpen = false;
-      _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+      _replaceDesktopContentNavigator();
     });
   }
 
@@ -861,6 +947,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final desktopContent = Navigator(
       key: _desktopContentNavigatorKey,
+      observers: <NavigatorObserver>[_desktopContentNavigatorObserver],
       onGenerateRoute: (_) => MaterialPageRoute<void>(
         builder: (_) => _desktopToolSelection == null
             ? tabBody
@@ -1004,7 +1091,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           !_ready ||
               !_localDataHealthy ||
               _desktopToolSelection != null ||
-              (useDesktopLayout && _desktopAddEditorOpen)
+              (useDesktopLayout &&
+                  (_desktopAddEditorOpen ||
+                      _desktopContentHasNestedRoute ||
+                      _desktopRootRefreshPending))
           ? null
           : switch (current.label) {
               '排单' => FloatingActionButton.extended(
@@ -1037,6 +1127,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ],
             ),
     );
+  }
+}
+
+class _DesktopContentNavigatorObserver extends NavigatorObserver {
+  _DesktopContentNavigatorObserver(this.onNestedStateChanged);
+
+  final ValueChanged<bool> onNestedStateChanged;
+  int _routeCount = 0;
+  bool _active = true;
+
+  void deactivate() {
+    _active = false;
+  }
+
+  void _notify() {
+    if (_active) onNestedStateChanged(_routeCount > 1);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _routeCount += 1;
+    _notify();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (_routeCount > 0) _routeCount -= 1;
+    _notify();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (_routeCount > 0) _routeCount -= 1;
+    _notify();
+  }
+
+  @override
+  void didReplace({
+    Route<dynamic>? newRoute,
+    Route<dynamic>? oldRoute,
+  }) {
+    _notify();
   }
 }
 

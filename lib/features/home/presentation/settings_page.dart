@@ -497,17 +497,18 @@ class _SettingsPageState extends State<SettingsPage>
       await widget.syncCoordinator.restorePortableBackupForCurrentWorkspace(
         backup: backup,
         assetSourceDirectory: importedBundle.assetDirectory,
-        applyWorkspace: () => backup.restoreInto(
-          orderStore: widget.orderStore,
-          productStore: widget.productStore,
-          nodePresetStore: widget.nodePresetStore,
-        ),
+        applyWorkspace: () async {
+          backup.restoreInto(
+            orderStore: widget.orderStore,
+            productStore: widget.productStore,
+            nodePresetStore: widget.nodePresetStore,
+          );
+          // Apply settings inside the coordinator's restore transaction. This
+          // makes the post-restore baseline describe the imported workspace,
+          // rather than briefly seeding the pre-import UI state.
+          await widget.onApplyWorkspaceSettings(backup.settings);
+        },
       );
-
-      // Keep backup restore on the same settings application path as device
-      // sync. This restores layout/sort/navigation settings as well as theme
-      // and feature switches, without maintaining a second partial importer.
-      await widget.onApplyWorkspaceSettings(backup.settings);
 
       if (backup.accountSyncState != null) {
         await widget.accountStore.mergeSyncedState(backup.accountSyncState!);

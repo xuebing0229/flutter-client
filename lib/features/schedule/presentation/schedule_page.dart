@@ -387,7 +387,7 @@ class _MonthGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final desktop = MediaQuery.sizeOf(context).width >= 900;
+        final desktop = constraints.maxWidth >= 900;
         // Desktop cells have much more horizontal room than a phone. Keep the
         // month compact vertically and spend that room on readable labels.
         final cellHeight = desktop
@@ -422,6 +422,7 @@ class _MonthGrid extends StatelessWidget {
               sold: sold,
               selected: selected,
               today: today,
+              desktop: desktop,
               onTap: () => onSelect(date),
             );
           },
@@ -439,6 +440,7 @@ class _CalendarCell extends StatelessWidget {
     required this.sold,
     required this.selected,
     required this.today,
+    required this.desktop,
     required this.onTap,
   });
 
@@ -448,11 +450,11 @@ class _CalendarCell extends StatelessWidget {
   final int sold;
   final bool selected;
   final bool today;
+  final bool desktop;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final desktop = MediaQuery.sizeOf(context).width >= 900;
     final colors = Theme.of(context).colorScheme;
 
     return Padding(
@@ -501,38 +503,87 @@ class _CalendarCell extends StatelessWidget {
                     ),
                   ),
                   SizedBox(height: desktop ? 1 : 3),
-                  if (pending > 0)
-                    Text(
-                      '待 $pending',
-                      style: TextStyle(
-                        color: colors.error,
-                        fontSize: desktop ? 13 : 10,
-                        fontWeight: FontWeight.w700,
+                  if (desktop)
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (pending > 0)
+                            _CalendarCountLabel(
+                              text: '待 $pending',
+                              color: colors.error,
+                            ),
+                          if (pending > 0 && (completed > 0 || sold > 0))
+                            const SizedBox(width: 6),
+                          if (completed > 0)
+                            _CalendarCountLabel(
+                              text: '已 $completed',
+                              color: colors.onSurface,
+                            ),
+                          if (completed > 0 && sold > 0)
+                            const SizedBox(width: 6),
+                          if (sold > 0)
+                            _CalendarCountLabel(
+                              text: '售 $sold',
+                              color: colors.primary,
+                            ),
+                        ],
                       ),
-                    ),
-                  if (completed > 0)
-                    Text(
-                      '已 $completed',
-                      style: TextStyle(
-                        color: colors.onSurface,
-                        fontSize: desktop ? 13 : 10,
-                        fontWeight: FontWeight.w700,
+                    )
+                  else ...[
+                    if (pending > 0)
+                      Text(
+                        '待 $pending',
+                        style: TextStyle(
+                          color: colors.error,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                  if (sold > 0)
-                    Text(
-                      '售 $sold',
-                      style: TextStyle(
-                        color: colors.primary,
-                        fontSize: desktop ? 13 : 10,
-                        fontWeight: FontWeight.w700,
+                    if (completed > 0)
+                      Text(
+                        '已 $completed',
+                        style: TextStyle(
+                          color: colors.onSurface,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
+                    if (sold > 0)
+                      Text(
+                        '售 $sold',
+                        style: TextStyle(
+                          color: colors.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CalendarCountLabel extends StatelessWidget {
+  const _CalendarCountLabel({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: color,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
       ),
     );
   }

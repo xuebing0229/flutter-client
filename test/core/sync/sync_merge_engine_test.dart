@@ -113,4 +113,40 @@ void main() {
       <String>['sale-1'],
     );
   });
+
+  test('independent feature settings merge without a conflict', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'app',
+      'feature.search': true,
+      'feature.sorting': true,
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.settings,
+      id: 'app',
+      values: values,
+      deviceId: 'phone',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'feature.search': false},
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'feature.sorting': false},
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    final materialized = engine.materialize(merged)!;
+
+    expect(materialized['feature.search'], isFalse);
+    expect(materialized['feature.sorting'], isFalse);
+    expect(merged.conflicts, isEmpty);
+  });
+
 }

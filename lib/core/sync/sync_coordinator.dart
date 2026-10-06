@@ -100,6 +100,16 @@ String syncFieldLabel(String field) {
     'themeMode' => '主题模式',
     'themePaletteId' => '主题色',
     'features' => '功能开关',
+    'feature.clientInfo' => '显示单主信息',
+    'feature.nodeProgress' => '节点小进度',
+    'feature.search' => '搜索',
+    'feature.sorting' => '排序',
+    'feature.viewSwitch' => '列表 / 卡片视图切换',
+    'feature.products' => '成品',
+    'feature.schedule' => '日程',
+    'feature.statistics' => '统计',
+    'feature.deadlineReminders' => '截稿提醒',
+    'feature.abstractMode' => '抽象版',
     'orderCardView' => '排单卡片视图',
     'productCardView' => '成品卡片视图',
     'orderSortMode' => '排单排序',
@@ -356,7 +366,7 @@ class SyncCoordinator extends ChangeNotifier {
 
   Future<void> restorePortableBackupForCurrentWorkspace({
     required AppBackupData backup,
-    required void Function() applyWorkspace,
+    required Future<void> Function() applyWorkspace,
     Directory? assetSourceDirectory,
   }) {
     if (_disposed || !_initialized) {
@@ -373,7 +383,10 @@ class SyncCoordinator extends ChangeNotifier {
 
       _lastEntityValues = _captureEntities();
 
-      await _reconcileFromSyncDirectory(seedMissing: false);
+      // Older complete backups can legitimately predate the settings entity.
+      // Re-seed anything absent after applying the imported workspace so a
+      // restore cannot silently leave UI settings outside the sync graph.
+      await _reconcileFromSyncDirectory(seedMissing: true);
       if (_transportPrepared) {
         await _bridge.requestScan(accountId: accountId);
       }
@@ -382,7 +395,7 @@ class SyncCoordinator extends ChangeNotifier {
 
   Future<void> _restorePortableBackup({
     required AppBackupData backup,
-    required void Function()? applyWorkspace,
+    required Future<void> Function()? applyWorkspace,
     Directory? assetSourceDirectory,
   }) async {
     PortableSyncWorkspaceValidator.validateBackup(
@@ -411,14 +424,14 @@ class SyncCoordinator extends ChangeNotifier {
     if (applyWorkspace != null) {
       _applyingRemote = true;
       try {
-        applyWorkspace();
+        await applyWorkspace();
       } finally {
         _applyingRemote = false;
       }
     }
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize({bool seedLocalSettings = true}) async {
     if (_initialized || _disposed) return;
 
     await _loadSyncPauseState();
@@ -436,7 +449,10 @@ class SyncCoordinator extends ChangeNotifier {
 
     await _enqueue(() async {
       await _syncAccountState();
-      await _reconcileFromSyncDirectory(seedMissing: true);
+      await _reconcileFromSyncDirectory(
+        seedMissing: true,
+        seedSettings: seedLocalSettings,
+      );
     });
 
     if (_disposed) return;
@@ -1000,7 +1016,10 @@ class SyncCoordinator extends ChangeNotifier {
     return wrote;
   }
 
-  Future<void> _reconcileFromSyncDirectory({required bool seedMissing}) async {
+  Future<void> _reconcileFromSyncDirectory({
+    required bool seedMissing,
+    bool seedSettings = true,
+  }) async {
     if (_disposed) return;
 
     // The poller and the 220 ms local debounce share the same queue. Flush
@@ -1029,6 +1048,7 @@ class SyncCoordinator extends ChangeNotifier {
     if (seedMissing) {
       final localEntities = _captureEntities();
       for (final kind in SyncEntityKind.values) {
+        if (kind == SyncEntityKind.settings && !seedSettings) continue;
         await _seedMissing(
           kind: kind,
           local: localEntities[kind]!,
@@ -1036,6 +1056,8 @@ class SyncCoordinator extends ChangeNotifier {
         );
       }
     }
+
+    await _migrateLegacyFeatureSettings(recordsByKind[SyncEntityKind.settings]!);
 
     _applyingRemote = true;
     try {
@@ -1232,6 +1254,53 @@ class SyncCoordinator extends ChangeNotifier {
     }
   }
 
+  Map<String, dynamic> _normalizeMaterializedSettings(
+    Map<String, dynamic> settings,
+  ) {
+    final hasFieldLevelFeatures = settings.keys.any(
+      (key) => key.startsWith('feature.'),
+    );
+    if (!hasFieldLevelFeatures || !settings.containsKey('features')) {
+      return settings;
+    }
+    return <String, dynamic>{...settings}..remove('features');
+  }
+
+  Future<void> _migrateLegacyFeatureSettings(
+    Map<String, SyncRecord> records,
+  ) async {
+    final record = records[settingsRecordId];
+    if (record == null) return;
+
+    final legacy = record.fields['features']?.value;
+    if (legacy is! Map) return;
+
+    final before = _mergeEngine.materialize(record);
+    if (before == null) return;
+    final next = <String, dynamic>{...before};
+    var changed = false;
+
+    for (final entry in legacy.entries) {
+      final name = entry.key;
+      final value = entry.value;
+      if (name is! String || value is! bool) continue;
+      final field = 'feature.$name';
+      if (record.fields.containsKey(field)) continue;
+      next[field] = value;
+      changed = true;
+    }
+    if (!changed) return;
+
+    final migrated = _mergeEngine.applyLocalSnapshot(
+      record: record,
+      previousValues: before,
+      nextValues: next,
+      deviceId: deviceId,
+    );
+    await _recordStore.write(accountId: accountId, record: migrated);
+    records[settingsRecordId] = migrated;
+  }
+
   Future<void> _applyEntityRecords(
     SyncEntityKind kind,
     Map<String, SyncRecord> records,
@@ -1259,10 +1328,13 @@ class SyncCoordinator extends ChangeNotifier {
       record,
       local,
     );
-    if (settings == null || syncJsonEquals(settings, local)) return;
+    if (settings == null) return;
+
+    final normalized = _normalizeMaterializedSettings(settings);
+    if (syncJsonEquals(normalized, local)) return;
 
     try {
-      await applySettings(settings);
+      await applySettings(normalized);
     } catch (error) {
       _lastError = '应用远端界面设置失败：$error';
     }

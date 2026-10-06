@@ -55,6 +55,13 @@ class AppFeatureStore extends ChangeNotifier {
     }
   }
 
+  Future<void> resetToDefaults() {
+    return applyJson(<String, dynamic>{
+      for (final feature in AppFeature.values)
+        feature.name: feature != AppFeature.abstractMode,
+    });
+  }
+
   Future<void> setEnabled(AppFeature feature, bool value) async {
     if (_values[feature] == value) return;
     _values[feature] = value;

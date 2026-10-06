@@ -118,8 +118,13 @@ class PortableSyncWorkspaceValidator {
         if (local == null) {
           if (materialized != null) return false;
         } else {
-          if (materialized == null ||
-              !syncJsonEquals(local, materialized)) {
+          if (materialized == null) return false;
+          final comparable = record.kind == SyncEntityKind.settings &&
+                  !local.containsKey('features') &&
+                  materialized.containsKey('features')
+              ? (<String, dynamic>{...materialized}..remove('features'))
+              : materialized;
+          if (!syncJsonEquals(local, comparable)) {
             return false;
           }
           seen[record.kind]!.add(record.id);
