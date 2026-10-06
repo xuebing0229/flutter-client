@@ -1254,6 +1254,18 @@ class SyncCoordinator extends ChangeNotifier {
     }
   }
 
+  Map<String, dynamic> _normalizeMaterializedSettings(
+    Map<String, dynamic> settings,
+  ) {
+    final hasFieldLevelFeatures = settings.keys.any(
+      (key) => key.startsWith('feature.'),
+    );
+    if (!hasFieldLevelFeatures || !settings.containsKey('features')) {
+      return settings;
+    }
+    return <String, dynamic>{...settings}..remove('features');
+  }
+
   Future<void> _migrateLegacyFeatureSettings(
     Map<String, SyncRecord> records,
   ) async {
@@ -1316,10 +1328,13 @@ class SyncCoordinator extends ChangeNotifier {
       record,
       local,
     );
-    if (settings == null || syncJsonEquals(settings, local)) return;
+    if (settings == null) return;
+
+    final normalized = _normalizeMaterializedSettings(settings);
+    if (syncJsonEquals(normalized, local)) return;
 
     try {
-      await applySettings(settings);
+      await applySettings(normalized);
     } catch (error) {
       _lastError = '应用远端界面设置失败：$error';
     }
