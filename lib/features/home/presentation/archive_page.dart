@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/sync/sync_coordinator.dart';
 import '../../orders/data/node_presets.dart';
+import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_summary_card.dart';
@@ -12,13 +14,14 @@ import '../../products/presentation/product_summary_card.dart';
 import '../../products/state/product_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
-class ArchivePage extends StatelessWidget {
+class ArchivePage extends StatefulWidget {
   const ArchivePage({
     required this.accountId,
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
     required this.featureStore,
+    required this.syncCoordinator,
     super.key,
   });
 
@@ -27,16 +30,27 @@ class ArchivePage extends StatelessWidget {
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
   final AppFeatureStore featureStore;
+  final SyncCoordinator syncCoordinator;
+
+  @override
+  State<ArchivePage> createState() => _ArchivePageState();
+}
+
+class _ArchivePageState extends State<ArchivePage> {
+  final OrderReferenceImageStore _referenceImageStore =
+      OrderReferenceImageStore();
+
+  bool _cleaning = false;
 
   void _openOrder(BuildContext context, String orderId) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => OrderDetailPage(
-          accountId: accountId,
-          store: orderStore,
+          accountId: widget.accountId,
+          store: widget.orderStore,
           orderId: orderId,
-          nodePresetStore: nodePresetStore,
-          featureStore: featureStore,
+          nodePresetStore: widget.nodePresetStore,
+          featureStore: widget.featureStore,
         ),
       ),
     );
@@ -46,9 +60,9 @@ class ArchivePage extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ProductDetailPage(
-          store: productStore,
+          store: widget.productStore,
           productId: productId,
-          featureStore: featureStore,
+          featureStore: widget.featureStore,
         ),
       ),
     );
@@ -86,6 +100,175 @@ class ArchivePage extends StatelessWidget {
         : value.toStringAsFixed(2);
   }
 
+  DateTime? _orderArchiveTime(QueueOrder order) {
+    return order.settledAt ?? order.completedAt;
+  }
+
+  bool _insideRange(DateTime value, DateTimeRange range) {
+    final start = DateTime(
+      range.start.year,
+      range.start.month,
+      range.start.day,
+    );
+    final endExclusive = DateTime(
+      range.end.year,
+      range.end.month,
+      range.end.day,
+    ).add(const Duration(days: 1));
+    return !value.isBefore(start) && value.isBefore(endExclusive);
+  }
+
+  String _formatDate(DateTime date) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${date.year}-${two(date.month)}-${two(date.day)}';
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    const units = <String>['KB', 'MB', 'GB', 'TB'];
+    var value = bytes / 1024;
+    var unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex++;
+    }
+    final digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+    return '${value.toStringAsFixed(digits)} ${units[unitIndex]}';
+  }
+
+  Future<void> _cleanupArchivedRange() async {
+    if (_cleaning) return;
+
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: now,
+      initialDateRange: DateTimeRange(
+        start: DateTime(now.year - 1, now.month, now.day),
+        end: now,
+      ),
+      helpText: '选择要永久删除的归档时间',
+      saveText: '下一步',
+      cancelText: '取消',
+      confirmText: '确定',
+      fieldStartHintText: '开始日期',
+      fieldEndHintText: '结束日期',
+    );
+    if (range == null || !mounted) return;
+
+    final orders = <QueueOrder>[
+      for (final order in widget.orderStore.orders)
+        if (order.isArchived &&
+            _orderArchiveTime(order) != null &&
+            _insideRange(_orderArchiveTime(order)!, range))
+          order,
+    ];
+    final products = <FinishedProduct>[
+      for (final product in widget.productStore.products)
+        if (product.isArchived &&
+            product.archivedAt != null &&
+            _insideRange(product.archivedAt!, range))
+          product,
+    ];
+    final undatedLegacyProducts = widget.productStore.products
+        .where((product) => product.isArchived && product.archivedAt == null)
+        .length;
+
+    final images = <OrderReferenceImage>[
+      for (final order in orders) ...order.referenceImages,
+    ];
+    final imageBytes = images.fold<int>(
+      0,
+      (sum, image) => sum + image.sizeBytes,
+    );
+
+    if (orders.isEmpty && products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            undatedLegacyProducts == 0
+                ? '这个时间范围内没有可清理的归档内容。'
+                : '这个时间范围内没有带归档日期的内容；'
+                    '另有 $undatedLegacyProducts 个旧版成品没有归档日期，未自动删除。',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('永久删除这段时间的归档？'),
+          content: Text(
+            '归档时间：${_formatDate(range.start)} ～ '
+            '${_formatDate(range.end)}\n\n'
+            '排单：${orders.length} 个\n'
+            '成品：${products.length} 个\n'
+            '参考图：${images.length} 张'
+            '${imageBytes > 0 ? '（约 ${_formatBytes(imageBytes)}）' : ''}'
+            '${undatedLegacyProducts > 0 ? '\n\n有 $undatedLegacyProducts 个旧版成品没有归档日期，'
+                '本次不会删除。' : ''}'
+            '\n\n删除后无法从归档恢复，并会同步删除到其他设备。'
+            '如需长期留存，建议先导出完整备份。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('永久删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cleaning = true);
+    String? syncWarning;
+    try {
+      await _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: images,
+      );
+
+      widget.orderStore.deleteOrders(orders.map((order) => order.id));
+      widget.productStore.deleteProducts(
+        products.map((product) => product.id),
+      );
+
+      try {
+        await widget.syncCoordinator.flushNow();
+      } catch (_) {
+        syncWarning = '本机已删除，但这次同步没有立即完成，之后联网会继续同步删除记录。';
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            syncWarning ??
+                '已永久删除 ${orders.length} 个排单、${products.length} 个成品'
+                    '${images.isEmpty ? '' : '和 ${images.length} 张参考图'}。',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _cleaning = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,26 +277,51 @@ class ArchivePage extends StatelessWidget {
           '归档',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            tooltip: '按时间清理归档',
+            onPressed: _cleaning ? null : _cleanupArchivedRange,
+            icon: _cleaning
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_sweep_outlined),
+          ),
+        ],
       ),
       body: AnimatedBuilder(
         animation: Listenable.merge([
-          orderStore,
-          productStore,
-          featureStore,
+          widget.orderStore,
+          widget.productStore,
+          widget.featureStore,
         ]),
         builder: (context, _) {
-          final orders = orderStore.orders
+          final orders = widget.orderStore.orders
               .where((order) => order.isArchived)
               .toList();
-          final products = featureStore.products
-              ? productStore.products
+          final products = widget.featureStore.products
+              ? widget.productStore.products
                   .where((product) => product.isArchived)
                   .toList()
               : const <FinishedProduct>[];
 
           if (orders.isEmpty && products.isEmpty) {
-            return const Center(
-              child: Text('还没有归档内容'),
+            return ListView(
+              padding: AppLayoutSpacing.pageScrollPadding(
+                context,
+                left: 14,
+                top: 10,
+                right: 14,
+              ),
+              children: [
+                _CleanupCard(
+                  busy: _cleaning,
+                  onPressed: _cleanupArchivedRange,
+                ),
+                const SizedBox(height: 80),
+                const Center(child: Text('还没有归档内容')),
+              ],
             );
           }
 
@@ -125,14 +333,19 @@ class ArchivePage extends StatelessWidget {
               right: 14,
             ),
             children: [
+              _CleanupCard(
+                busy: _cleaning,
+                onPressed: _cleanupArchivedRange,
+              ),
+              const SizedBox(height: 14),
               if (orders.isNotEmpty) ...[
                 const _SectionTitle('排单'),
                 for (final order in orders) ...[
                   OrderSummaryCard(
                     order: order,
                     onTap: () => _openOrder(context, order.id),
-                    showClient: featureStore.clientInfo,
-                    showNodeProgress: featureStore.nodeProgress,
+                    showClient: widget.featureStore.clientInfo,
+                    showNodeProgress: widget.featureStore.nodeProgress,
                   ),
                   SwitchListTile(
                     contentPadding:
@@ -142,7 +355,7 @@ class ArchivePage extends StatelessWidget {
                     value: true,
                     onChanged: (value) {
                       if (!value) {
-                        orderStore.restoreArchivedOrder(order.id);
+                        widget.orderStore.restoreArchivedOrder(order.id);
                       }
                     },
                   ),
@@ -164,7 +377,7 @@ class ArchivePage extends StatelessWidget {
                     subtitle: const Text('关闭后恢复到成品列表'),
                     value: true,
                     onChanged: (value) {
-                      productStore.setArchived(product.id, value);
+                      widget.productStore.setArchived(product.id, value);
                     },
                   ),
                   const SizedBox(height: 10),
@@ -173,6 +386,40 @@ class ArchivePage extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _CleanupCard extends StatelessWidget {
+  const _CleanupCard({
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(16),
+      child: ListTile(
+        leading: const Icon(Icons.delete_sweep_outlined),
+        title: const Text(
+          '清理旧归档',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: const Text('自选归档时间范围，永久删除对应记录及排单参考图。'),
+        trailing: busy
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.chevron_right_rounded),
+        onTap: busy ? null : onPressed,
       ),
     );
   }
