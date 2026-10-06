@@ -183,6 +183,53 @@ function Stop-EmbeddedSyncthing {
   }
 }
 
+function Get-InstalledAppProcesses {
+  $InstalledExe = Join-Path $InstallDir $ExeName
+  if (-not (Test-Path -LiteralPath $InstalledExe -PathType Leaf)) {
+    return @()
+  }
+
+  $ExpectedPath = [IO.Path]::GetFullPath($InstalledExe)
+  @(Get-Process -ErrorAction SilentlyContinue |
+    Where-Object {
+      try {
+        $ProcessPath = $_.Path
+        $ProcessPath -and
+          [IO.Path]::GetFullPath($ProcessPath).Equals(
+            $ExpectedPath,
+            [StringComparison]::OrdinalIgnoreCase
+          )
+      } catch {
+        $false
+      }
+    })
+}
+
+function Stop-OtherAppInstances {
+  $Deadline = (Get-Date).AddSeconds(15)
+  while ($true) {
+    $Processes = @(Get-InstalledAppProcesses)
+    foreach ($Process in $Processes) {
+      try {
+        Write-UpdateLog ("Stopping stale app process " + $Process.Id + '.')
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+      } catch {
+        if ((Get-Date) -ge $Deadline) {
+          throw "无法关闭旧版冒险者公会进程：$($_.Exception.Message)"
+        }
+      }
+    }
+
+    if (@(Get-InstalledAppProcesses).Count -eq 0) {
+      return
+    }
+    if ((Get-Date) -ge $Deadline) {
+      throw '仍有旧版冒险者公会进程在运行，无法安全覆盖更新。'
+    }
+    Start-Sleep -Milliseconds 250
+  }
+}
+
 try {
   Write-UpdateLog "Updater started. Parent PID: $ParentPid"
 
@@ -198,6 +245,10 @@ try {
     Start-Sleep -Milliseconds 250
   }
 
+  # Builds before the single-instance fix could leave more than one copy of
+  # the same executable alive. Kill every stale copy from this install path
+  # before replacing files so an upgrade cannot inherit those old windows.
+  Stop-OtherAppInstances
   Stop-EmbeddedSyncthing
   Write-UpdateLog 'Application exited. Extracting update archive.'
   New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
