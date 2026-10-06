@@ -1,7 +1,10 @@
 class LegacyDeviceWarningCopy {
   const LegacyDeviceWarningCopy._();
 
-  static const title = '检测到设备版本较旧';
+  static String title(String deviceName) {
+    final name = deviceName.trim().isEmpty ? '未知设备' : deviceName.trim();
+    return '检测到「$name」版本较旧';
+  }
 
   static String message(String deviceName) {
     final name = deviceName.trim().isEmpty ? '未知设备' : deviceName.trim();
