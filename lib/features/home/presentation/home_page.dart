@@ -644,30 +644,47 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     Navigator.of(context).push(route);
   }
 
+  void _refreshDesktopCollectionRootIfNeeded() {
+    if (MediaQuery.sizeOf(context).width < 900) return;
+    _desktopContentNavigatorKey = GlobalKey<NavigatorState>();
+  }
+
   void _setOrderCardView(bool value) {
     if (_orderCardView == value) return;
-    setState(() => _orderCardView = value);
+    setState(() {
+      _orderCardView = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductCardView(bool value) {
     if (_productCardView == value) return;
-    setState(() => _productCardView = value);
+    setState(() {
+      _productCardView = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
 
   void _setOrderSortMode(String value) {
     if (_orderSortMode == value) return;
-    setState(() => _orderSortMode = value);
+    setState(() {
+      _orderSortMode = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
 
   void _setProductSortMode(String value) {
     if (_productSortMode == value) return;
-    setState(() => _productSortMode = value);
+    setState(() {
+      _productSortMode = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
   }
