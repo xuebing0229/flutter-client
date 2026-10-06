@@ -273,7 +273,6 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
-  json['archivedAt'] ??= null;
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
   return json;
