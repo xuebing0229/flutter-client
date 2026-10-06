@@ -128,6 +128,28 @@ class SyncRecordStore {
     await _atomicWrite(file, bound.encode());
   }
 
+  Future<void> deleteRecord({
+    required String accountId,
+    required SyncEntityKind kind,
+    required String recordId,
+  }) async {
+    requireValidAccountId(accountId);
+    final groups = await _readGroups(accountId, kind);
+    final variants = groups[recordId];
+    if (variants == null) return;
+
+    for (final variant in variants) {
+      try {
+        if (await variant.file.exists()) {
+          await variant.file.delete();
+        }
+      } catch (_) {
+        // A peer or antivirus can briefly retain the file. The next GC pass
+        // will retry without risking the rest of the sync directory.
+      }
+    }
+  }
+
   Future<List<Map<String, dynamic>>> exportPortableRecords({
     required String accountId,
   }) async {
