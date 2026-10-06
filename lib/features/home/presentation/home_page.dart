@@ -320,10 +320,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!widget.featureStore.deadlineReminders) {
       _notificationPermissionChecked = false;
     }
-    setState(() {
-      _index = 0;
-      _refreshDesktopCollectionRootIfNeeded();
-    });
+    setState(() => _index = 0);
     _scheduleSave();
     _scheduleReminderSync();
     _syncCoordinator.notifySettingsChanged();
