@@ -95,6 +95,25 @@ class SyncGcAckStore {
     await atomicWriteString(file, encoded);
   }
 
+  Future<void> pruneDevices({
+    required String accountId,
+    required Set<String> activeDeviceIds,
+  }) async {
+    final directory = await _directory(accountId);
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        final deviceId = decoded is Map ? decoded['deviceId'] : null;
+        if (deviceId is String && !activeDeviceIds.contains(deviceId)) {
+          await entity.delete();
+        }
+      } catch (_) {
+        // Leave unreadable/in-flight files for the next pass.
+      }
+    }
+  }
+
   Future<Map<String, Map<String, String>>> readAll(String accountId) async {
     final directory = await _directory(accountId);
     final result = <String, Map<String, String>>{};
