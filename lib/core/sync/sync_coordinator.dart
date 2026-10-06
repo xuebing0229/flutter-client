@@ -1192,6 +1192,10 @@ class SyncCoordinator extends ChangeNotifier {
     };
     if (activeDeviceIds.isEmpty) return false;
 
+    await _gcAckStore.pruneDevices(
+      accountId: accountId,
+      activeDeviceIds: activeDeviceIds,
+    );
     final acknowledgements = await _gcAckStore.readAll(accountId);
     if (!activeDeviceIds.every(acknowledgements.containsKey)) {
       // An old/offline active device has not joined the GC protocol yet.
