@@ -22,12 +22,14 @@ class CollectionCardGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final desktop = MediaQuery.sizeOf(context).width >= 900;
-
     return LayoutBuilder(
       builder: (context, constraints) {
         const spacing = 10.0;
         const horizontalPadding = 24.0;
+        // Base the grid on the actual content pane, not the whole desktop
+        // window. The 320 px side navigation can otherwise leave four cards
+        // squeezed into a phone-width pane.
+        final desktop = constraints.maxWidth >= 900;
         final columns = desktop ? 4 : 2;
         final cardWidth =
             (constraints.maxWidth -
