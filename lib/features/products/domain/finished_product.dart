@@ -27,6 +27,7 @@ class FinishedProduct {
     this.defaultOrder = 0,
     this.soldCount = 0,
     this.saleRecords = const <DateTime>[],
+    this.archivedAt,
     this.isArchived = false,
     this.isPinned = false,
   });
@@ -57,6 +58,9 @@ class FinishedProduct {
 
   /// Timestamp for each recorded sale.
   final List<DateTime> saleRecords;
+
+  /// Timestamp when this product was moved into the archive.
+  final DateTime? archivedAt;
 
   final bool isArchived;
   final bool isPinned;
@@ -122,6 +126,8 @@ class FinishedProduct {
     int? defaultOrder,
     int? soldCount,
     List<DateTime>? saleRecords,
+    DateTime? archivedAt,
+    bool clearArchivedAt = false,
     bool? isArchived,
     bool? isPinned,
   }) {
@@ -151,6 +157,7 @@ class FinishedProduct {
       defaultOrder: defaultOrder ?? this.defaultOrder,
       soldCount: nextSoldCount,
       saleRecords: saleRecords ?? this.saleRecords,
+      archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       isArchived: isArchived ?? this.isArchived,
       isPinned: isPinned ?? this.isPinned,
     );
