@@ -63,6 +63,11 @@ class AppThemeStore extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  Future<void> resetToDefaults() async {
+    await setMode(ThemeMode.system);
+    await setPaletteId(AppThemePalettes.guildOriginal.id);
+  }
+
   Future<void> setMode(ThemeMode mode) async {
     if (_mode == mode) return;
 
