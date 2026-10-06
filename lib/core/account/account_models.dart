@@ -96,6 +96,17 @@ class AccountDevice {
         (syncTransportId is! String || syncTransportId.trim().length < 20)) {
       throw const FormatException('设备同步身份格式无效。');
     }
+    if (appBuild != null && (appBuild is! int || appBuild < 1)) {
+      throw const FormatException('设备版本号格式无效。');
+    }
+    if (syncProtocolVersion != null &&
+        (syncProtocolVersion is! int || syncProtocolVersion < 1)) {
+      throw const FormatException('设备同步协议版本格式无效。');
+    }
+    if (minSyncProtocolVersion != null &&
+        (minSyncProtocolVersion is! int || minSyncProtocolVersion < 1)) {
+      throw const FormatException('设备最低同步协议版本格式无效。');
+    }
     return AccountDevice(
       id: id,
       name: name,
@@ -104,6 +115,9 @@ class AccountDevice {
       lastSeenAt: _date(json['lastSeenAt']),
       nameUpdatedAt: nameUpdatedAt == null ? null : _date(nameUpdatedAt),
       syncTransportId: syncTransportId?.trim(),
+      appBuild: appBuild as int?,
+      syncProtocolVersion: syncProtocolVersion as int?,
+      minSyncProtocolVersion: minSyncProtocolVersion as int?,
     );
   }
 }
