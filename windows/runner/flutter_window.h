@@ -8,7 +8,9 @@
 
 #include "win32_window.h"
 
-// A window that does nothing but host a Flutter view.
+// A window that hosts the Flutter view and owns the Windows notification-area
+// icon. Closing the window hides it to the tray; the tray menu provides the
+// explicit application exit path.
 class FlutterWindow : public Win32Window {
  public:
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
@@ -23,11 +25,25 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  static constexpr UINT kTrayCallbackMessage = WM_APP + 1;
+  static constexpr UINT kTrayIconId = 1;
+  static constexpr UINT kTrayOpenCommand = 1001;
+  static constexpr UINT kTrayExitCommand = 1002;
+
+  void AddTrayIcon();
+  void RemoveTrayIcon();
+  void RestoreFromTray();
+  void ShowTrayMenu();
+
   // The project to run.
   flutter::DartProject project_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  UINT taskbar_created_message_ = 0;
+  bool tray_icon_added_ = false;
+  bool exiting_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
