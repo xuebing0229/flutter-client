@@ -320,7 +320,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!widget.featureStore.deadlineReminders) {
       _notificationPermissionChecked = false;
     }
-    setState(() => _index = 0);
+    setState(() {
+      _index = 0;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
     _scheduleSave();
     _scheduleReminderSync();
     _syncCoordinator.notifySettingsChanged();
@@ -407,7 +410,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     if (layoutChanged && mounted) {
-      setState(() {});
+      setState(() {
+        _refreshDesktopCollectionRootIfNeeded();
+      });
       _scheduleSave();
     }
   }
