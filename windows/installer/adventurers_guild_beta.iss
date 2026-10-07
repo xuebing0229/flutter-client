@@ -70,6 +70,7 @@ begin
     Exit;
 
   InstallDir := ExpandConstant('{app}');
+  StringChangeEx(InstallDir, '''', '''''', True);
   Command :=
     '$targets = @([IO.Path]::GetFullPath(''' + InstallDir +
     '\{#MyAppExeName}''), [IO.Path]::GetFullPath(''' + InstallDir +
@@ -130,4 +131,3 @@ begin
       DelTree(UpdateDir, True, True, True);
   end;
 end;
-

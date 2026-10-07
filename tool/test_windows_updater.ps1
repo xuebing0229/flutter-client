@@ -4,7 +4,6 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $FixtureRoot = Join-Path $PSScriptRoot ('windows-updater-fixture-' + [Guid]::NewGuid().ToString('N'))
 $PowerShellPath = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
 $FixtureExe = Join-Path $FixtureRoot 'fixture.exe'
-$InstallCases = New-Object 'Collections.Generic.List[object]'
 
 function Assert-Test {
   param([bool]$Condition, [string]$Message)
@@ -39,7 +38,6 @@ function New-TestInstall {
     Archive = (Join-Path $Work 'update.zip')
     Log = (Join-Path $Work 'windows-update.log')
   }
-  $InstallCases.Add($Case)
   return $Case
 }
 
@@ -136,13 +134,17 @@ try {
   # substituting only Inno Setup's resolved installation directory and macro.
   $Installer = [IO.File]::ReadAllText((Join-Path $RepoRoot 'windows/installer/adventurers_guild_beta.iss'))
   $CommandSection = [regex]::Match($Installer, '(?s)Command :=\s*(.*?)\s*Parameters :=').Groups[1].Value
-  $Install = New-TestInstall 'installer upgrade'
+  $Install = New-TestInstall "installer's upgrade"
   $InstalledOne = Start-Fixture $Install.Exe
   $InstalledTwo = Start-Fixture $Install.Exe
   $InstalledSync = Start-Fixture $Install.Syncthing
   $Parts = [regex]::Matches($CommandSection, "'(?:[^']|'')*'|\bInstallDir\b")
+  $InstallerDirectory = $Install.Install
+  if ($Installer.Contains("StringChangeEx(InstallDir, '''', '''''', True);")) {
+    $InstallerDirectory = $InstallerDirectory.Replace("'", "''")
+  }
   $Command = ($Parts | ForEach-Object {
-    if ($_.Value -eq 'InstallDir') { $Install.Install }
+    if ($_.Value -eq 'InstallDir') { $InstallerDirectory }
     else { $_.Value.Substring(1, $_.Value.Length - 2).Replace("''", "'") }
   }) -join ''
   $Command = $Command.Replace('{#MyAppExeName}', 'adventurers_guild.exe')
