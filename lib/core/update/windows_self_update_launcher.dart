@@ -190,7 +190,8 @@ function Get-InstalledAppProcesses {
   }
 
   $ExpectedPath = [IO.Path]::GetFullPath($InstalledExe)
-  @(Get-Process -ErrorAction SilentlyContinue |
+  $ProcessName = [IO.Path]::GetFileNameWithoutExtension($ExeName)
+  @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
     Where-Object {
       try {
         $ProcessPath = $_.Path
@@ -323,14 +324,22 @@ catch {
   $Message = $_.Exception.Message
   Write-UpdateLog ("Update failed: " + $Message)
 
+  $BackupRestored = $true
   try {
     Restore-Backup
   } catch {
+    $BackupRestored = $false
     Write-UpdateLog ("Rollback failed: " + $_.Exception.Message)
   }
 
   $ExistingExecutable = Join-Path $InstallDir $ExeName
-  if (Test-Path -LiteralPath $ExistingExecutable -PathType Leaf) {
+  # A failed shutdown must not create yet another instance holding the same
+  # files. A failed rollback must not launch a partially replaced installation.
+  if (@(Get-InstalledAppProcesses).Count -gt 0) {
+    Write-UpdateLog 'An application instance is still running; skipping duplicate restart.'
+  } elseif (-not $BackupRestored) {
+    Write-UpdateLog 'Rollback did not complete; skipping application restart.'
+  } elseif (Test-Path -LiteralPath $ExistingExecutable -PathType Leaf) {
     try {
       Start-Process -FilePath $ExistingExecutable -WorkingDirectory $InstallDir
     } catch {

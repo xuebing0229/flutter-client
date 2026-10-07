@@ -102,6 +102,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Test Windows updater and installer process shutdown
+        shell: powershell
+        run: ./tool/test_windows_updater.ps1
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.5'
