@@ -6,6 +6,7 @@ import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
     private lateinit var backupFileBridge: BackupFileBridge
+    private lateinit var feedbackLinkBridge: FeedbackLinkBridge
     private lateinit var orderReminderBridge: OrderReminderBridge
     private lateinit var syncthingBridge: SyncthingBridge
 
@@ -13,6 +14,9 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         backupFileBridge = BackupFileBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
+        feedbackLinkBridge = FeedbackLinkBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
         orderReminderBridge = OrderReminderBridge(this).also {
