@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/adventurer-news-20261008
+      - fix/adventurer-news-inline-20261008
   workflow_dispatch:
 
 permissions:
@@ -26,6 +27,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
       - name: Verify cumulative news and version ranges
-        run: flutter test test/core/adventurer_news_test.dart
+        run: flutter test test/core/adventurer_news_test.dart test/features/home/adventurer_news_dialog_test.dart
       - name: Analyze application
         run: flutter analyze
