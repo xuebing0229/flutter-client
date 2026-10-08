@@ -16,6 +16,21 @@ void main() {
     expect(preselectImportPlatform(['进行中', '2026-10-31']).platform, isNull);
   });
 
+  test('MiHuashi list screen headers auto-select even when logo is cropped', () {
+    final guess = preselectImportPlatform([
+      '进行中', '默认', '截稿时间', '接单时间', '购买时间',
+      '【常驻】 黑白摸鱼头3.0', '添加备注',
+    ]);
+    expect(guess.platform, CommissionPlatform.mihuashi);
+  });
+
+  test('a cropped screenshot with insufficient platform cues stays unset', () {
+    final guess = preselectImportPlatform([
+      '【常驻】 黑白摸鱼头3.0', '2026-10-31', '60%',
+    ]);
+    expect(guess.platform, isNull);
+  });
+
   test('import normalization does not strip the real order name', () {
     const title = '【常驻】 黑白摸鱼头3.0';
     expect(normalizedImportTitle(title), '【常驻】 黑白摸鱼头3.0');
