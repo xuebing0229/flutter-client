@@ -15,6 +15,9 @@ class ScreenshotImportDraft {
     required this.detectedDate,
     required this.recognizedPercent,
     this.sourceHasClock = false,
+    this.sourceImagePath,
+    this.sourceStartY,
+    this.sourceEndY,
     required this.presetId,
     required this.nodeId,
     this.deadline,
@@ -26,6 +29,9 @@ class ScreenshotImportDraft {
 
   final String id;
   final String sourceImageId;
+  final String? sourceImagePath;
+  final double? sourceStartY;
+  final double? sourceEndY;
   String title;
   String clientName;
   double? price;
