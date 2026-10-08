@@ -3,18 +3,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../domain/screenshot_layout_parser.dart';
-
-class ScreenshotOcrResult {
-  const ScreenshotOcrResult({
-    required this.width,
-    required this.height,
-    required this.lines,
-  });
-
-  final double width;
-  final double height;
-  final List<ScreenshotTextLine> lines;
-}
+import 'screenshot_ocr_result.dart';
+import 'windows_tesseract_ocr.dart';
 
 /// The native recognizer only sends recognized line text and boxes.
 /// No screenshot or OCR output is uploaded to a remote service.
@@ -23,9 +13,12 @@ class ScreenshotOcrService {
 
   static const MethodChannel _channel = MethodChannel('app.screenshot_ocr');
 
-  bool get supported => Platform.isAndroid;
+  bool get supported => Platform.isAndroid || Platform.isWindows;
 
   Future<ScreenshotOcrResult> recognize(String imagePath) async {
+    if (Platform.isWindows) {
+      return const WindowsTesseractOcr().recognize(imagePath);
+    }
     if (!supported) {
       throw UnsupportedError('当前平台尚未接入本地截图识别引擎');
     }
