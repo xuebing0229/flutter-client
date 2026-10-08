@@ -42,7 +42,8 @@ jobs:
           gradle-version: '9.3.1'
       - name: Generate local Flutter/Android paths for Gradle
         run: |
-          printf 'flutter.sdk=%s\\nsdk.dir=%s\\n' "$FLUTTER_ROOT" "$ANDROID_HOME" > android/local.properties
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
           cat android/local.properties
       - name: Enable hardware acceleration for GitHub hosted runner
         run: |
