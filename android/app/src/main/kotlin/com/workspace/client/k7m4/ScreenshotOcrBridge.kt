@@ -83,7 +83,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 it.text.contains("等待对方收稿")
         }
 
-    private val moneyFragment = Regex("""^(?:[¥￥]\s*)?\d{1,7}(?:[.,]\d{1,2})?$|^[¥￥]$""")
+    private val moneyFragment = Regex("""^(?:[¥￥yY]\s*)?\d{1,7}(?:[.,]\d{1,2})?$|^[¥￥]$""")
 
     private fun looksLikeMiHuashiDetail(lines: List<OcrLine>, height: Int): Boolean {
         val hasCenteredOrderHeader = lines.any {

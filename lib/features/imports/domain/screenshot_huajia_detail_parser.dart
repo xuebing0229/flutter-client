@@ -25,13 +25,14 @@ bool isHuajiaOrderDetailScreenshot({
   }
   final status = visible.any((line) =>
       line.centerY < imageHeight * 0.17 &&
-      (line.text.contains('订单已完成') ||
+      (RegExp(r'订单[已己]完成').hasMatch(line.text) ||
           line.text.contains('订单进行中') ||
           line.text.contains('订单已取消') ||
           line.text.contains('订单已中断')));
   final history = text.contains('改价历史');
   final movement = text.contains('订单动态');
-  final huajiaBadge = text.contains('真爱永恒');
+  final huajiaBadge = text.contains('真爱永恒') ||
+      text.contains('真愛永恒') || text.contains('真愛永恆');
   final tabs = visible.any((line) =>
       line.centerY > imageHeight * 0.26 &&
       line.centerY < imageHeight * 0.64 &&
@@ -181,7 +182,9 @@ class ScreenshotHuajiaDetailParser {
         line.centerY < contentBottom).toList();
     (double, ScreenshotTextLine)? fee;
     for (final line in amountLines) {
-      final match = _money.firstMatch(line.text);
+      final match = _money.firstMatch(line.text.trim().replaceFirst(
+        RegExp(r'^[yY](?=\s*\d)'), '¥',
+      ));
       if (match == null) continue;
       final value = double.tryParse(match.group(1)!);
       if (value != null) {
@@ -206,7 +209,7 @@ class ScreenshotHuajiaDetailParser {
     }
     final finished = prepared.any((line) =>
         line.centerY < imageHeight * 0.17 &&
-        line.text.contains('订单已完成'));
+        RegExp(r'订单[已己]完成').hasMatch(line.text));
     final percentage = prepared.where((line) =>
         line.centerY < contentBottom &&
         line.text.contains('当前交付节点')).map((line) =>
