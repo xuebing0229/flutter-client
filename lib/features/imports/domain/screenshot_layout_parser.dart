@@ -611,7 +611,8 @@ class ScreenshotLayoutParser {
     final text = source.trim();
     if (text.length < 2 || _date.hasMatch(text) ||
         _money.hasMatch(text) || _percent.hasMatch(text) ||
-        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) ||
+        RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {
       return false;
     }
     const ignore = [
@@ -635,7 +636,8 @@ class ScreenshotLayoutParser {
     final text = source.trim();
     if (text.isEmpty || _date.hasMatch(text) ||
         _money.hasMatch(text) || _percent.hasMatch(text) ||
-        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) ||
+        RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {
       return false;
     }
     if (<String>{

@@ -152,7 +152,8 @@ class ScreenshotHuajiaDetailParser {
           !text.contains('历史') &&
           !text.contains('参考信息') &&
           !text.contains('Lv1') &&
-          !RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text);
+          !RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) &&
+          !RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text);
     }).toList()
       ..sort((a, b) => b.centerY.compareTo(a.centerY));
     final title = candidates.isEmpty ? null : candidates.first;
