@@ -15,6 +15,7 @@ class OrderSummaryCard extends StatelessWidget {
     this.onIncreaseNodeProgress,
     this.showPlatform = true,
     this.showClient = true,
+    this.showTags = false,
     this.showNodeProgress = true,
     this.compact = false,
     this.hasSyncConflict = false,
@@ -29,6 +30,7 @@ class OrderSummaryCard extends StatelessWidget {
   final VoidCallback? onIncreaseNodeProgress;
   final bool showPlatform;
   final bool showClient;
+  final bool showTags;
   final bool showNodeProgress;
   final bool compact;
   final bool hasSyncConflict;
@@ -54,6 +56,15 @@ class OrderSummaryCard extends StatelessWidget {
                         text: order.platform.label,
                         compact: true,
                       ),
+                    if (showTags && order.tags.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: SummaryTag(
+                          text: '#'+order.tags.first,
+                          compact: true,
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     if (hasSyncConflict) ...[
                       const Tooltip(
@@ -128,6 +139,17 @@ class OrderSummaryCard extends StatelessWidget {
                     _DeadlineStatusBadge(order: order),
                   ],
                 ),
+              if (!compact && showTags && order.tags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 5,
+                  children: [
+                    for (final tag in order.tags)
+                      SummaryTag(text: '#'+tag),
+                  ],
+                ),
+              ],
               if (showClient) ...[
                 SizedBox(height: compact ? 10 : 13),
                 Row(
