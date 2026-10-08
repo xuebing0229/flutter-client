@@ -80,7 +80,7 @@ void main() {
     // No matching 55% node; do not jump to the nearest one.
     expect(state.byId('third').nodeId, 'first');
     expect(state.pendingPresetChoices[
-      orderPresetMemoryKey(CommissionPlatform.mihuashi, '【常驻】 黑白摸鱼头3.0'),
+      orderPresetMemoryKey(CommissionPlatform.mihuashi, '【常驻】 黑白摸鱼头3.0')
     ], special.id);
     state.dispose();
   });
