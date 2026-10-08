@@ -15,8 +15,8 @@ class WindowsRapidOcrOnnx {
       throw UnsupportedError('Windows OCR only');
     }
     final root = File(Platform.resolvedExecutable).parent.path;
-    final engine = File('${root}\\rapidocr\\RapidOcrOnnx.exe');
-    final models = Directory('${root}\\rapidocr\\models');
+    final engine = File('$root\\rapidocr\\RapidOcrOnnx.exe');
+    final models = Directory('$root\\rapidocr\\models');
     if (!await engine.exists() || !await models.exists()) {
       throw StateError('离线中文 OCR 组件缺失，请安装完整 Windows 版本');
     }
