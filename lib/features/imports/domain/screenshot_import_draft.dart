@@ -46,6 +46,9 @@ class ScreenshotImportDraft {
   bool feeEnabled;
   ProductSaleType saleType;
   bool selected = true;
+  /// Explicitly reselected a suspected duplicate; never auto-uncheck again.
+  bool duplicateReviewed = false;
+  bool duplicateAutoSkipped = false;
   bool presetManuallyChanged = false;
   bool nodeManuallyChanged = false;
   String presetId;
