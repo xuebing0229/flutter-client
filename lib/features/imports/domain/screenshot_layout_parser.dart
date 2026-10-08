@@ -55,15 +55,17 @@ class ScreenshotOrderCandidate {
   /// deadlines. This is a visible, editable suggestion only; it is NOT an
   /// OCR-confirmed deadline and cannot be written without user approval.
   ///
-  /// 'isQuickCommission' takes precedence because quick commissions can use
-  /// other time rules. When the listing type is unknown the UI must call out
-  /// that the suggestion needs verification.
+  /// Only known ordinary day-based commissions get this suggestion. The
+  /// screenshot may belong to a quick/relative-after-acceptance listing, and
+  /// an "X days remaining" label is not enough to recover its exact time.
+  /// null = not determined; true = relative/quick; false = confirmed ordinary.
   DateTime? suggestedDeadline({
     required CommissionPlatform platform,
-    bool isQuickCommission = false,
+    bool? isQuickCommission,
   }) {
     if (deadlineHasTime) return detectedDate;
-    if (platform != CommissionPlatform.mihuashi || isQuickCommission) {
+    if (platform != CommissionPlatform.mihuashi ||
+        isQuickCommission != false) {
       return null;
     }
     return deadlineWithChosenTime(hour: 23, minute: 59);
