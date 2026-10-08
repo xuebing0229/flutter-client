@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
@@ -65,6 +66,36 @@ class DataPortabilityFileBridge {
     }
 
     throw UnsupportedError('当前平台暂未接入系统文件导出。');
+  }
+
+  /// Save a generated PNG through the platform's normal Save As picker.
+  Future<bool> exportImage({
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    if (Platform.isAndroid) {
+      final saved = await _channel.invokeMethod<bool>(
+        'exportImage',
+        <String, dynamic>{'fileName': fileName, 'bytes': bytes},
+      );
+      if (saved == null) throw StateError('图片导出没有返回结果。');
+      return saved;
+    }
+
+    if (Platform.isWindows) {
+      const typeGroup = XTypeGroup(
+        label: 'PNG image',
+        extensions: <String>['png'],
+      );
+      final location = await getSaveLocation(
+        suggestedName: fileName,
+        acceptedTypeGroups: const <XTypeGroup>[typeGroup],
+      );
+      if (location == null) return false;
+      await File(location.path).writeAsBytes(bytes, flush: true);
+      return true;
+    }
+    throw UnsupportedError('当前平台暂未支持保存反馈图片。');
   }
 
   Future<String?> importBackup() async {
