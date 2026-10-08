@@ -114,6 +114,41 @@ void main() {
     expect(entries.single.price, isNull);
     expect(entries.single.title, '邀请您企目表中的Xhead气球');
   });
+  test('date and clock recognized as separate nearby boxes are joined', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1000,
+      lines: [
+        at('17:05', 28, x: 30),
+        at('买家乙', 190, x: 60),
+        at('【常驻】草稿', 310, x: 210),
+        at('2026-10-31', 530, x: 250),
+        at('23:59', 545, x: 395),
+      ],
+    );
+    expect(entries.length, 1);
+    expect(entries.single.importReadyDeadline,
+        DateTime(2026, 10, 31, 23, 59));
+    expect(entries.single.needsDeadlineTimeConfirmation, isFalse);
+  });
+
+  test('phone or distant clock is never borrowed for a date-only order', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1000,
+      lines: [
+        at('05:17', 30, x: 30),
+        at('买家乙', 190, x: 60),
+        at('【常驻】草稿', 310, x: 210),
+        at('2026-10-31', 530, x: 250),
+        at('21:05', 725, x: 300),
+      ],
+    );
+    expect(entries.length, 1);
+    expect(entries.single.importReadyDeadline, isNull);
+    expect(entries.single.needsDeadlineTimeConfirmation, isTrue);
+  });
+
   test('quick commission without date is kept but cannot infer a deadline', () {
     final entries = const ScreenshotLayoutParser().parse(
       imageWidth: 690,
