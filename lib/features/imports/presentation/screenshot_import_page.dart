@@ -168,6 +168,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       price: price,
       platform: platform,
       detectedDate: date,
+      sourceHasClock: hasTime,
       recognizedPercent: percentage,
       relativeDeadline: relative,
       deadline: hasTime ? date : null,
@@ -214,7 +215,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           row.clientName.trim().isNotEmpty &&
           row.detectedDate != null &&
           order.deadline != null &&
-          _sameDay(order.deadline!, row.detectedDate!));
+          (row.sourceHasClock
+              ? _sameMinute(order.deadline!, row.detectedDate!)
+              : _sameDay(order.deadline!, row.detectedDate!)));
       var acrossScreenshots = false;
       for (final other in _rows.take(index)) {
         if (other.platform == null || other.platform != platform) continue;
@@ -226,7 +229,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             imageInstanceId: row.sourceImageId,
             cardInstanceId: row.id,
             sourceDate: row.detectedDate,
-            datePrecision: row.deadlineConfirmed
+            datePrecision: row.sourceHasClock
                 ? ScreenshotDatePrecision.minute
                 : ScreenshotDatePrecision.day,
           ),
@@ -237,7 +240,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             imageInstanceId: other.sourceImageId,
             cardInstanceId: other.id,
             sourceDate: other.detectedDate,
-            datePrecision: other.deadlineConfirmed
+            datePrecision: other.sourceHasClock
                 ? ScreenshotDatePrecision.minute
                 : ScreenshotDatePrecision.day,
           ),
@@ -258,6 +261,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  bool _sameMinute(DateTime a, DateTime b) =>
+      _sameDay(a, b) && a.hour == b.hour && a.minute == b.minute;
 
   Future<void> _bulkCompleteMissingTimes() async {
     final targets = _rows.where((row) =>
