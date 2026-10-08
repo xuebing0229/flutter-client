@@ -5,6 +5,7 @@ on:
     branches:
       - feat/adventurer-news-20261008
       - fix/adventurer-news-inline-20261008
+      - fix/ocr-source-recovery-20261009
       - build/beta-108-ocr-diagnostics
       - fix/ocr-feedback-20261009
   workflow_dispatch:
