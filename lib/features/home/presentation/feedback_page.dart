@@ -118,7 +118,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
           Text(
-            '使用中遇到 Bug、显示异常，或有新功能建议？欢迎通过问卷告诉我们。',
+            '使用中遇到 Bug、显示异常，或有功能建议，欢迎向我们反馈。',
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 20),
@@ -131,7 +131,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: AspectRatio(
-                    aspectRatio: 1,
+                    aspectRatio: 360 / 460,
                     child: FittedBox(
                       fit: BoxFit.contain,
                       child: RepaintBoundary(
@@ -147,7 +147,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
           const SizedBox(height: 8),
           Center(
             child: Text(
-              '点击图片可放大；也可以保存后用其他设备扫码',
+              '点击图片可放大，也可以保存后用其他设备扫码',
               style: TextStyle(color: colors.onSurfaceVariant),
             ),
           ),
@@ -180,100 +180,135 @@ class _FeedbackPageState extends State<FeedbackPage> {
   }
 }
 
-/// Offline rendition of the supplied blue feedback poster, with a live,
-/// scannable QR code so its destination always matches the direct-open button.
+/// The same theme-aware QR card is displayed in the app and exported at
+/// 3x resolution (1080×1380 PNG). Using a fixed layout inside the scalable
+/// preview keeps the saved image predictable across phone sizes/text scales.
+/// The QR remains black-on-white for reliable scanning in both theme modes.
 class FeedbackPoster extends StatelessWidget {
   const FeedbackPoster({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const blue = Color(0xFF2C4AFF);
-    final decorationColor = Colors.white.withValues(alpha: 0.07);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return SizedBox(
       width: 360,
-      height: 360,
-      child: ColoredBox(
-        color: blue,
-        child: Stack(
-          children: [
-            Positioned(
-              left: -15,
-              top: 175,
-              child: Transform.rotate(
-                angle: 0.3,
-                child: Icon(Icons.edit_outlined, size: 104, color: decorationColor),
+      height: 460,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colors.primaryContainer,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(11),
+                      child: Icon(
+                        Icons.rate_review_outlined,
+                        size: 26,
+                        color: colors.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '冒险者公会',
+                          textScaler: TextScaler.noScaling,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 14,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '问题反馈',
+                          textScaler: TextScaler.noScaling,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontSize: 27,
+                            fontWeight: FontWeight.w700,
+                            color: colors.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-            Positioned(
-              right: 10,
-              top: 170,
-              child: Icon(Icons.trending_up_rounded, size: 84, color: decorationColor),
-            ),
-            Positioned(
-              left: 55,
-              bottom: 78,
-              child: Icon(Icons.search_rounded, size: 80, color: decorationColor),
-            ),
-            Positioned(
-              right: 85,
-              bottom: 82,
-              child: Icon(Icons.thumb_up_outlined, size: 58, color: decorationColor),
-            ),
-            Positioned(
-              right: 15,
-              bottom: 12,
-              child: Icon(Icons.checklist_rounded, size: 108, color: decorationColor),
-            ),
-            Positioned(
-              left: 20,
-              bottom: 0,
-              child: Icon(Icons.discount_outlined, size: 92, color: decorationColor),
-            ),
-            const Positioned(
-              top: 35,
-              left: 0,
-              right: 0,
-              child: Text(
-                '冒险者公会问题反馈',
-                textAlign: TextAlign.center,
-                textScaler: TextScaler.noScaling,
-                maxLines: 1,
-                style: TextStyle(
+              const SizedBox(height: 18),
+              Divider(height: 1, color: colors.outlineVariant),
+              const SizedBox(height: 20),
+              DecoratedBox(
+                decoration: BoxDecoration(
                   color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w300,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              ),
-            ),
-            Positioned(
-              top: 118,
-              left: 126,
-              child: ColoredBox(
-                color: Colors.white,
                 child: Padding(
-                  padding: const EdgeInsets.all(13),
+                  padding: const EdgeInsets.all(16),
                   child: QrImageView(
                     data: feedbackFormUrl,
                     version: QrVersions.auto,
-                    size: 82,
+                    size: 184,
                     padding: EdgeInsets.zero,
                     backgroundColor: Colors.white,
                   ),
                 ),
               ),
-            ),
-            const Positioned(
-              top: 237,
-              left: 0,
-              right: 0,
-              child: Text(
-                '长按图片扫码',
-                textAlign: TextAlign.center,
+              const SizedBox(height: 17),
+              Text(
+                '扫码填写反馈问卷',
                 textScaler: TextScaler.noScaling,
-                style: TextStyle(color: Colors.white, fontSize: 16),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: colors.onSurface,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 7),
+              Text(
+                '也可在 App 内直接打开问卷',
+                textScaler: TextScaler.noScaling,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontSize: 13,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 9,
+                  ),
+                  child: Text(
+                    '感谢你的意见与建议',
+                    textScaler: TextScaler.noScaling,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontSize: 13,
+                      color: colors.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
