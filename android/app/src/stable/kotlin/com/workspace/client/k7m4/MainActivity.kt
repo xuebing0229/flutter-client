@@ -9,6 +9,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var feedbackLinkBridge: FeedbackLinkBridge
     private lateinit var orderReminderBridge: OrderReminderBridge
     private lateinit var syncthingBridge: SyncthingBridge
+    private lateinit var screenshotOcrBridge: ScreenshotOcrBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -23,6 +24,9 @@ class MainActivity : FlutterActivity() {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
         syncthingBridge = SyncthingBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
+        screenshotOcrBridge = ScreenshotOcrBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
     }
