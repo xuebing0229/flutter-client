@@ -23,6 +23,17 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
     return const PlatformGuess(CommissionPlatform.huajia, 1);
   }
 
+  // MiHuashi's ORDER detail screen may not spell out the platform name.
+  // Distinctive tab names and actions identify it even when there are
+  // additional upload timestamps or no storefront/list header.
+  final mihuashiDetail = <String>['稿件夹', '进程动态', '参考信息',
+    '联系企划方', '上传稿件', '创作节点', '约稿完成'];
+  if (text.contains('订单') &&
+      mihuashiDetail.where(text.contains).length >= 2 &&
+      !text.contains('我卖出的')) {
+    return const PlatformGuess(CommissionPlatform.mihuashi, 0.95);
+  }
+
   final huajia = <String>['我卖出的', '当前交付节点', '等待对方收稿', '待交稿']
       .where(text.contains).length;
   var mihuashi = <String>['企划方名称', '企划内容', '购买时间', '定向企划']
