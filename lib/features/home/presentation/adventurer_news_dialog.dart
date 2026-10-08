@@ -30,7 +30,7 @@ Future<bool> showAdventurerNewsDialog(
               ],
             ),
             content: SizedBox(
-              width: math.min(540, size.width - 100),
+              width: math.max(0.0, math.min(540.0, size.width - 100)),
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxHeight: size.height * 0.58),
                 child: SingleChildScrollView(
