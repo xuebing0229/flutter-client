@@ -9,6 +9,7 @@ class ScreenshotImportDraft {
   ScreenshotImportDraft({
     required this.id,
     required this.sourceImageId,
+    this.sourceFingerprint,
     required this.title,
     required this.clientName,
     required this.price,
@@ -36,6 +37,7 @@ class ScreenshotImportDraft {
 
   final String id;
   final String sourceImageId;
+  final String? sourceFingerprint;
   final String? sourceImagePath;
   final double? sourceStartY;
   final double? sourceEndY;
