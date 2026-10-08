@@ -1,9 +1,11 @@
 package com.workspace.client.k7m4
 
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import io.flutter.embedding.android.FlutterActivity
@@ -104,29 +106,84 @@ class BackupFileBridge(
         call: MethodCall,
         result: MethodChannel.Result,
     ) {
-        if (isFileDialogBusy()) {
-            result.error("FILE_DIALOG_BUSY", "A file dialog is already open.", null)
-            return
-        }
         val bytes = call.argument<ByteArray>("bytes")
         if (bytes == null || bytes.isEmpty()) {
             result.error("MISSING_IMAGE", "No feedback image was provided.", null)
             return
         }
-        val fileName = call.argument<String>("fileName")
+        val name = call.argument<String>("fileName")
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
             ?.trim()
             .orEmpty()
             .ifBlank { "feedback.png" }
+            .let { if (it.endsWith(".png", ignoreCase = true)) it else "$it.png" }
 
+        // MediaStore can create app-owned pictures without storage permission
+        // on Android 10+, and the system Gallery indexes them automatically.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Thread {
+                val resolver = activity.contentResolver
+                var savedUri: Uri? = null
+                try {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                        put(
+                            MediaStore.Images.Media.RELATIVE_PATH,
+                            "${Environment.DIRECTORY_PICTURES}/冒险者公会",
+                        )
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                    savedUri = resolver.insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        values,
+                    ) ?: throw IllegalStateException("Unable to create gallery image.")
+                    resolver.openOutputStream(savedUri!!, "w")?.use {
+                        it.write(bytes)
+                    } ?: throw IllegalStateException("Unable to write gallery image.")
+                    resolver.update(
+                        savedUri!!,
+                        ContentValues().apply {
+                            put(MediaStore.Images.Media.IS_PENDING, 0)
+                        },
+                        null,
+                        null,
+                    )
+                    activity.runOnUiThread { result.success(true) }
+                } catch (error: Exception) {
+                    savedUri?.let { uri ->
+                        runCatching { resolver.delete(uri, null, null) }
+                    }
+                    activity.runOnUiThread {
+                        result.error(
+                            "GALLERY_SAVE_FAILED",
+                            error.message ?: "Unable to save image to gallery.",
+                            null,
+                        )
+                    }
+                }
+            }.start()
+            return
+        }
+
+        // Pre-Android 10 requires a storage permission for direct gallery
+        // insertion. Keep the existing no-permission Save As fallback there.
+        if (isFileDialogBusy()) {
+            result.error("FILE_DIALOG_BUSY", "A file dialog is already open.", null)
+            return
+        }
         pendingExport = result
         pendingExportContent = null
         pendingExportBytes = bytes
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/png"
-            putExtra(Intent.EXTRA_TITLE, fileName)
-        }
-        activity.startActivityForResult(intent, REQUEST_EXPORT)
+        activity.startActivityForResult(
+            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/png"
+                putExtra(Intent.EXTRA_TITLE, name)
+            },
+            REQUEST_EXPORT,
+        )
     }
 
     private fun handleImport(result: MethodChannel.Result) {
