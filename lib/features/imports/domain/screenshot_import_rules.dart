@@ -86,19 +86,26 @@ NodeDefinition resolveImportNode({
     throw StateError('节点预设不可为空');
   }
 
+  // Percentage is the user's primary matching rule. A conflicting node name
+  // must not override an exact percent, and no approximate jumps are allowed.
   final rawNodeName = recognizedNodeName?.trim();
+  if (recognizedPercent != null) {
+    final matches = preset.nodes
+        .where((node) => node.progressPercent == recognizedPercent)
+        .toList();
+    if (matches.length == 1) return matches.single;
+    if (matches.length > 1 && rawNodeName != null) {
+      final named = matches
+          .where((node) => node.name.trim() == rawNodeName)
+          .toList();
+      if (named.length == 1) return named.single;
+    }
+    return preset.nodes.first;
+  }
+
   if (rawNodeName != null && rawNodeName.isNotEmpty) {
     final matches = preset.nodes
         .where((node) => node.name.trim() == rawNodeName)
-        .toList();
-    if (matches.length == 1) return matches.single;
-  }
-
-  if (recognizedPercent != null &&
-      recognizedPercent >= 0 &&
-      recognizedPercent <= 100) {
-    final matches = preset.nodes
-        .where((node) => node.progressPercent == recognizedPercent)
         .toList();
     if (matches.length == 1) return matches.single;
   }
