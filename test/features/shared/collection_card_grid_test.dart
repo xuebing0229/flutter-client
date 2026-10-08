@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/features/shared/presentation/collection_card_grid.dart';
 
 void main() {
-  Widget harness(double paneWidth) {
+  Widget harness(double paneWidth, {double minimumCardWidth = 0}) {
     return MaterialApp(
       home: Scaffold(
         body: Align(
@@ -16,7 +16,12 @@ void main() {
               mobileAspectRatio: 0.5,
               desktopMinHeight: 260,
               desktopAspectRatio: 1.1,
-              itemBuilder: (_, index) => Text('item-$index'),
+              minimumCardWidth: minimumCardWidth,
+              itemBuilder: (_, index) => SizedBox(
+                key: Key('item-$index'),
+                height: index.isEven ? 80 : 140,
+                child: Text('item-$index'),
+              ),
             ),
           ),
         ),
@@ -24,43 +29,38 @@ void main() {
     );
   }
 
-  testWidgets('uses two columns when the desktop content pane is narrow', (
-    tester,
-  ) async {
+  testWidgets('two-column rows keep individual card heights', (tester) async {
     await tester.pumpWidget(harness(580));
-
-    final grid = tester.widget<GridView>(find.byType(GridView));
-    final delegate =
-        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-
-    expect(delegate.crossAxisCount, 2);
-    expect(delegate.mainAxisExtent, isNull);
+    expect(tester.getSize(find.byKey(const Key('item-0'))).height, 80);
+    expect(tester.getSize(find.byKey(const Key('item-1'))).height, 140);
+    expect(tester.getTopLeft(find.byKey(const Key('item-0'))).dy,
+        tester.getTopLeft(find.byKey(const Key('item-1'))).dy);
+    expect(tester.getTopLeft(find.byKey(const Key('item-2'))).dy,
+        tester.getBottomLeft(find.byKey(const Key('item-1'))).dy + 10);
   });
 
-  testWidgets('uses four columns when the content pane itself is wide', (
-    tester,
-  ) async {
+  testWidgets('wide content pane uses four columns', (tester) async {
     await tester.pumpWidget(harness(920));
-
-    final grid = tester.widget<GridView>(find.byType(GridView));
-    final delegate =
-        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-
-    expect(delegate.crossAxisCount, 4);
-    expect(delegate.mainAxisExtent, isNotNull);
+    for (var index = 0; index < 4; index++) {
+      expect(tester.getTopLeft(find.byKey(Key('item-$index'))).dy,
+          tester.getTopLeft(find.byKey(const Key('item-0'))).dy);
+    }
+    expect(tester.getTopLeft(find.byKey(const Key('item-4'))).dy,
+        tester.getBottomLeft(find.byKey(const Key('item-1'))).dy + 10);
   });
 
-  testWidgets('uses three columns for a medium desktop content pane', (
-    tester,
-  ) async {
+  testWidgets('medium content pane uses three columns', (tester) async {
     await tester.pumpWidget(harness(760));
-
-    final grid = tester.widget<GridView>(find.byType(GridView));
-    final delegate =
-        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-
-    expect(delegate.crossAxisCount, 3);
-    expect(delegate.mainAxisExtent, isNotNull);
+    expect(tester.getTopLeft(find.byKey(const Key('item-2'))).dy,
+        tester.getTopLeft(find.byKey(const Key('item-0'))).dy);
+    expect(tester.getTopLeft(find.byKey(const Key('item-3'))).dy,
+        tester.getBottomLeft(find.byKey(const Key('item-1'))).dy + 10);
   });
 
+  testWidgets('respects minimum space needed by large card controls',
+      (tester) async {
+    await tester.pumpWidget(harness(360, minimumCardWidth: 300));
+    expect(tester.getTopLeft(find.byKey(const Key('item-1'))).dy,
+        tester.getBottomLeft(find.byKey(const Key('item-0'))).dy + 10);
+  });
 }
