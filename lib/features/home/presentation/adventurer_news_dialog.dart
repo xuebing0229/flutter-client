@@ -23,9 +23,10 @@ Future<bool> showAdventurerNewsDialog(
                 Icon(Icons.auto_stories_rounded, color: colors.primary),
                 const SizedBox(width: 10),
                 const Flexible(
-                  child: Text('冒险者新见闻', style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                  )),
+                  child: Text(
+                    '冒险者新见闻',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
               ],
             ),
@@ -40,26 +41,55 @@ Future<bool> showAdventurerNewsDialog(
                     children: [
                       Text(
                         history
-                            ? '公会历次更新记录'
-                            : '从 ${notice.previousBuild} 号版本升级到 ${notice.currentBuild} 号版本',
+                            ? '公会历次新增与优化'
+                            : '${notice.previousBuild} → ${notice.currentBuild} · 本次新增 ${notice.entries.length} 项',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       if (notice.entries.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Text(
-                            '本次版本暂无单独登记的新功能。',
+                            '本次暂无单独登记的新见闻。',
                             style: theme.textTheme.bodyLarge,
                           ),
                         )
                       else
-                        for (final entry in notice.entries) ...[
-                          _NewsCard(entry: entry),
-                          const SizedBox(height: 10),
-                        ],
+                        DecoratedBox(
+                          key: const ValueKey('adventurer-news-unified-content'),
+                          decoration: BoxDecoration(
+                            color: colors.surfaceContainerHighest
+                                .withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (var index = 0;
+                                    index < notice.entries.length;
+                                    index++) ...[
+                                  if (index != 0)
+                                    const SizedBox(height: 20),
+                                  Text(
+                                    notice.entries[index].title,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    notice.entries[index].description,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -75,44 +105,4 @@ Future<bool> showAdventurerNewsDialog(
         },
       ) ??
       false;
-}
-
-class _NewsCard extends StatelessWidget {
-  const _NewsCard({required this.entry});
-
-  final AdventurerNewsEntry entry;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Material(
-      color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '版本 ${entry.introducedBuild}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: colors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              entry.title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(entry.description, style: theme.textTheme.bodyMedium),
-          ],
-        ),
-      ),
-    );
-  }
 }
