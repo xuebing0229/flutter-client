@@ -4,7 +4,7 @@ import 'package:flutter_app/features/imports/domain/screenshot_product_layout_pa
 
 void main() {
   ScreenshotTextLine line(
-    String content, int y, {double x = 70, double width = 320},
+    String content, int y, {double x = 70, double width = 320}
   ) => ScreenshotTextLine(
     text: content,
     top: y.toDouble(),
