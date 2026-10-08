@@ -21,6 +21,6 @@ jobs:
       - name: Install
         run: flutter pub get
       - name: Test import domain
-        run: flutter test test/features/screenshot_import_rules_test.dart test/features/screenshot_layout_parser_test.dart test/features/import_batch_preset_state_test.dart test/features/screenshot_duplicate_review_test.dart
+        run: flutter test test/features/screenshot_import_rules_test.dart test/features/screenshot_layout_parser_test.dart test/features/import_batch_preset_state_test.dart test/features/screenshot_duplicate_review_test.dart test/features/screenshot_product_dedup_test.dart
       - name: Static analysis
         run: flutter analyze lib/features/imports
