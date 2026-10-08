@@ -246,7 +246,11 @@ void main() {
         at('距截稿时间还有23天', 365),
       ],
     );
-    expect(entries, isEmpty);
+    // The title is still a valid undated candidate, but the remaining-days
+    // UI label is not evidence that the acceptance time is known.
+    expect(entries.length, 1);
+    expect(entries.single.relativeDeadlineText, isNull);
+    expect(entries.single.importReadyDeadline, isNull);
   });
 
   test('a dated order and a quick order without date are both found', () {
