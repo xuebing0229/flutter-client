@@ -13,6 +13,7 @@ import '../../products/state/product_store.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'archive_page.dart';
 import 'feature_toggle_page.dart';
+import 'feedback_page.dart';
 import 'settings_page.dart';
 
 Future<String> buildAccountTransferPackage(AccountStore accountStore) async {
@@ -99,6 +100,7 @@ class AppToolMenu extends StatelessWidget {
   static const featureToggleTool = 'featureToggle';
   static const archiveTool = 'archive';
   static const syncTool = 'sync';
+  static const feedbackTool = 'feedback';
   static const accountTool = 'account';
   static const settingsTool = 'settings';
   static const themeColorTool = 'themeColor';
@@ -235,6 +237,16 @@ class AppToolMenu extends StatelessWidget {
               onShowTutorial();
             }
           },
+        ),
+        _item(
+          icon: Icons.feedback_outlined,
+          title: '问题反馈',
+          tool: feedbackTool,
+          onTap: () => _open(
+            context,
+            feedbackTool,
+            const FeedbackPage(),
+          ),
         ),
         _item(
           icon: Icons.sync_alt_rounded,
