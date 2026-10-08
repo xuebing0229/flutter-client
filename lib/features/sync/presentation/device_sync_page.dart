@@ -626,6 +626,9 @@ String _formatConflictValue(String field, Object? value) {
     return name == null || name.isEmpty ? nodeText : '$name：$nodeText';
   }
 
+  if (field == 'tags' && value is List) {
+    return value.isEmpty ? '无标签' : value.join('、');
+  }
   if (field == 'referenceImages' && value is List) {
     return '${value.length} 张参考图';
   }

@@ -58,6 +58,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String _searchField = 'all';
+  final Set<String> _selectedTags = <String>{};
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -70,6 +71,53 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     super.dispose();
   }
 
+  Future<void> _showTagFilterDialog(List<String> tags) async {
+    final draft = <String>{..._selectedTags};
+    final next = await showDialog<Set<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, refreshDialog) => AlertDialog(
+          title: const Text('筛选自定义标签'),
+          content: SizedBox(
+            width: 320,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final tag in tags)
+                    CheckboxListTile(
+                      title: Text(tag),
+                      value: draft.contains(tag),
+                      onChanged: (checked) => refreshDialog(() {
+                        if (checked == true) {
+                          draft.add(tag);
+                        } else {
+                          draft.remove(tag);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(<String>{}),
+              child: const Text('清空'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(draft),
+              child: const Text('完成'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || next == null) return;
+    setState(() => _selectedTags..clear()..addAll(next));
+  }
+
   List<QueueOrder> _visibleOrders() {
     final query = widget.featureStore.search ? _query.trim().toLowerCase() : '';
 
@@ -78,11 +126,23 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         ? 'all'
         : _searchField;
 
+    // The filter does not remain active after its last order disappears.
+    final activeTagFilters = widget.featureStore.customTags
+        ? _selectedTags.intersection(widget.store.orders
+            .where((order) => !order.isArchived)
+            .expand((order) => order.tags)
+            .toSet())
+        : <String>{};
+
     final filtered = widget.store.orders.where((order) {
       if (order.isArchived) {
         return false;
       }
 
+      if (activeTagFilters.isNotEmpty &&
+          !order.tags.any(activeTagFilters.contains)) {
+        return false;
+      }
       if (query.isEmpty) return true;
 
       final currentNode = order.currentNode;
@@ -733,6 +793,12 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       ]),
       builder: (context, _) {
         final orders = _visibleOrders();
+        final availableTags = widget.store.orders
+            .where((order) => !order.isArchived)
+            .expand((order) => order.tags)
+            .toSet()
+            .toList()
+          ..sort();
         final useCardView = widget.featureStore.viewSwitch && widget.cardView;
 
         return Column(
@@ -762,6 +828,44 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                     _searchField = 'all';
                   });
                 },
+              ),
+            if (widget.featureStore.customTags && availableTags.isNotEmpty)
+              SizedBox(
+                height: 52,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  children: [
+                    const Center(child: Text('标签筛选')),
+                    const SizedBox(width: 8),
+                    Center(
+                      child: FilterChip(
+                        label: const Text('全部'),
+                        selected: _selectedTags.isEmpty,
+                        onSelected: (_) => setState(_selectedTags.clear),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '自定义筛选标签',
+                      onPressed: () => _showTagFilterDialog(availableTags),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                    ),
+                    for (final tag in availableTags) ...[
+                      const SizedBox(width: 5),
+                      Center(
+                        child: FilterChip(
+                          label: Text(tag),
+                          selected: _selectedTags.contains(tag),
+                          onSelected: (_) => setState(() {
+                            if (!_selectedTags.remove(tag)) {
+                              _selectedTags.add(tag);
+                            }
+                          }),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             if (widget.featureStore.sorting || widget.featureStore.viewSwitch)
               CollectionToolbar(
@@ -813,7 +917,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
               child: orders.isEmpty
                   ? Center(
                       child: Text(
-                        widget.featureStore.search && _query.trim().isNotEmpty
+                        (widget.featureStore.search && _query.trim().isNotEmpty) ||
+                                (widget.featureStore.customTags && _selectedTags.isNotEmpty)
                             ? '没有找到匹配的排单'
                             : '还没有排单，点右下角「新增排单」开始记录',
                       ),
@@ -845,6 +950,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           onTap: () => _openOrder(order),
                           onLongPress: () => _showQuickActions(order),
                           showClient: widget.featureStore.clientInfo,
+                          showTags: widget.featureStore.customTags,
                           showNodeProgress: widget.featureStore.nodeProgress,
                           onConfirmNode:
                               order.isCompleted ||
@@ -891,6 +997,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           onTap: () => _openOrder(order),
                           onLongPress: () => _showQuickActions(order),
                           showClient: widget.featureStore.clientInfo,
+                          showTags: widget.featureStore.customTags,
                           showNodeProgress: widget.featureStore.nodeProgress,
                           onConfirmNode:
                               order.isCompleted ||
