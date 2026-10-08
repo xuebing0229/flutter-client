@@ -32,7 +32,7 @@ Future<bool> showAdventurerNewsDialog(
             content: SizedBox(
               width: math.max(0.0, math.min(540.0, size.width - 100)),
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: size.height * 0.58),
+                constraints: BoxConstraints(maxHeight: size.height * 0.62),
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -41,7 +41,7 @@ Future<bool> showAdventurerNewsDialog(
                       Text(
                         history
                             ? '公会历次更新记录'
-                            : '从 ${notice.previousBuild} 号版本升级到 ${notice.currentBuild} 号版本',
+                            : '${notice.previousBuild} → ${notice.currentBuild} · 本次更新内容',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
@@ -56,10 +56,8 @@ Future<bool> showAdventurerNewsDialog(
                           ),
                         )
                       else
-                        for (final entry in notice.entries) ...[
-                          _NewsCard(entry: entry),
-                          const SizedBox(height: 10),
-                        ],
+                        for (final entry in notice.entries)
+                          _NewsEntry(entry: entry),
                     ],
                   ),
                 ),
@@ -77,8 +75,10 @@ Future<bool> showAdventurerNewsDialog(
       false;
 }
 
-class _NewsCard extends StatelessWidget {
-  const _NewsCard({required this.entry});
+/// One continuous reading surface; the catalog remains versioned but the
+/// interface must not display each entry inside another separate card.
+class _NewsEntry extends StatelessWidget {
+  const _NewsEntry({required this.entry});
 
   final AdventurerNewsEntry entry;
 
@@ -86,32 +86,35 @@ class _NewsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return Material(
-      color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '版本 ${entry.introducedBuild}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: colors.primary,
-                fontWeight: FontWeight.w700,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: Text(
+                  entry.title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              entry.title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
+              const SizedBox(width: 8),
+              Text(
+                'v${entry.introducedBuild}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant.withValues(alpha: 0.75),
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(entry.description, style: theme.textTheme.bodyMedium),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(entry.description, style: theme.textTheme.bodyMedium),
+        ],
       ),
     );
   }
