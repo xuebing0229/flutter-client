@@ -67,9 +67,13 @@ class WindowsTesseractOcr {
         continue;
       }
       if (level != 5 || left == null || top == null ||
-          w == null || h == null || w <= 0 || h <= 0) continue;
+          w == null || h == null || w <= 0 || h <= 0) {
+        continue;
+      }
       final text = columns.sublist(11).join('\t').trim();
-      if (text.isEmpty) continue;
+      if (text.isEmpty) {
+        continue;
+      }
       final key = columns.sublist(1, 5).join('/');
       final line = grouped.putIfAbsent(key, () => _WindowsTesseractLine());
       line.add(text, left.toDouble(), top.toDouble(),
