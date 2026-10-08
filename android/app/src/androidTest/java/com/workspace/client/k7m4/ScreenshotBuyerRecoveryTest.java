@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions;
@@ -85,16 +86,27 @@ public final class ScreenshotBuyerRecoveryTest {
             retry.setAccessible(true);
             CountDownLatch latch = new CountDownLatch(1);
             AtomicReference<List<?>> result = new AtomicReference<>();
-            retry.invoke(bridge, bitmap, engine, firstPass,
-                new Function1<List<?>, Unit>() {
-                    @Override public Unit invoke(List<?> lines) {
-                        result.set(lines);
-                        latch.countDown();
-                        return Unit.INSTANCE;
-                    }
+            // The native Task callback uses the main Looper, not the JUnit
+            // instrumentation worker thread. Never block the main thread.
+            AtomicReference<Throwable> invocationError = new AtomicReference<>();
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                try {
+                    retry.invoke(bridge, bitmap, engine, firstPass,
+                        new Function1<List<?>, Unit>() {
+                            @Override public Unit invoke(List<?> lines) {
+                                result.set(lines);
+                                latch.countDown();
+                                return Unit.INSTANCE;
+                            }
+                        }
+                    );
+                } catch (Throwable error) {
+                    invocationError.set(error);
+                    latch.countDown();
                 }
-            );
+            });
             assertTrue("Buyer crop timed out", latch.await(70, TimeUnit.SECONDS));
+            assertNull("Invocation failed", invocationError.get());
             assertNotNull(result.get());
             assertEquals("The retry must add precisely one missing buyer",
                 firstPass.size() + 1, result.get().size());
