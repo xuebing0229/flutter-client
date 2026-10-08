@@ -33,6 +33,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '冒险者新见闻',
     description: '更新后首次进入公会，会自动汇总你上次使用版本以来的新功能；跨版本升级也不会漏掉中间的见闻。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 108,
+    title: '新见闻阅读优化',
+    description: '把跨版本新增内容整合成一份连续的更新说明，阅读更清爽，不再按版本分成多张卡片。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
