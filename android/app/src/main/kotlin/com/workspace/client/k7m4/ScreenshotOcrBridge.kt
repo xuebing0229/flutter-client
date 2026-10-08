@@ -207,6 +207,122 @@ class ScreenshotOcrBridge(private val activity: Activity) {
 
 
 
+
+    /**
+     * MiHuashi listing OCR regularly loses one small buyer name, even when
+     * the artwork title, fee and deadline are recognized perfectly.
+     * Retry only the tiny buyer band above titles WITHOUT a buyer text box.
+     * Unlike a full-image second pass, this never duplicates amounts/dates.
+     */
+    private fun looksLikeMiHuashiList(lines: List<OcrLine>): Boolean {
+        if (looksLikeHuajia(lines)) return false
+        val combined = lines.joinToString(" ") { it.text }
+        return (combined.contains("购买时间") &&
+            (combined.contains("截稿时间") || combined.contains("默认") ||
+             combined.contains("接单时间"))) ||
+            (combined.contains("定向企划") &&
+             (combined.contains("全额支付") || combined.contains("企划名称")))
+    }
+
+    private fun possibleMiHuashiBuyer(text: String): Boolean {
+        val value = text.trim()
+        if (value.length < 2 || value.length > 32) return false
+        if (Regex("""\d{4}[-/.年]\d|[¥￥]|[0-9]+%""").containsMatchIn(value)) return false
+        return !listOf(
+            "默认", "进行中", "已完成", "已中断", "添加备注", "全额支付",
+            "接单时间", "购买时间", "截稿时间", "定向企划",
+            "企划名称", "企划内容", "搜索", "待支付",
+        ).any { value.contains(it) } && !value.contains("【") &&
+            !value.contains("黑白摸鱼") && !value.contains("￥")
+    }
+
+    private fun retryMissingMiHuashiBuyers(
+        bitmap: Bitmap,
+        recognizer: com.google.mlkit.vision.text.TextRecognizer,
+        initial: List<OcrLine>,
+        done: (List<OcrLine>) -> Unit,
+    ) {
+        if (!looksLikeMiHuashiList(initial)) {
+            done(initial)
+            return
+        }
+        val width = bitmap.width
+        val height = bitmap.height
+        val artworkTitles = initial.filter { line ->
+            line.centerY > height * 0.16 && line.centerY < height * 0.96 &&
+                (line.text.trim().startsWith("【") ||
+                    line.text.contains("定向企划")) &&
+                line.text.length >= 8 &&
+                line.right > width * 0.28
+        }.sortedBy { it.centerY }
+        // Keep the number of extra native OCR passes bounded on huge lists.
+        val missing = artworkTitles.filter { title ->
+            initial.none { line ->
+                line.left < width * 0.42 &&
+                    line.centerY >= title.centerY - 210 &&
+                    line.centerY <= title.centerY - 58 &&
+                    possibleMiHuashiBuyer(line.text)
+            }
+        }.take(7)
+        if (missing.isEmpty()) {
+            done(initial)
+            return
+        }
+        val recovered = initial.toMutableList()
+        fun retryAt(index: Int) {
+            if (index >= missing.size) {
+                done(recovered)
+                return
+            }
+            val title = missing[index]
+            val cropX = (width * 0.10).roundToInt()
+            val cropY = (title.centerY - 190).roundToInt().coerceIn(0, height - 1)
+            val cropRight = (width * 0.48).roundToInt().coerceAtMost(width)
+            val cropBottom = (title.centerY - 55).roundToInt().coerceIn(cropY + 1, height)
+            val cropWidth = cropRight - cropX
+            val cropHeight = cropBottom - cropY
+            if (cropWidth < 20 || cropHeight < 20) {
+                retryAt(index + 1)
+                return
+            }
+            var scaled: Bitmap? = null
+            try {
+                val crop = Bitmap.createBitmap(bitmap, cropX, cropY, cropWidth, cropHeight)
+                scaled = Bitmap.createScaledBitmap(
+                    crop, cropWidth * 3, cropHeight * 3, true,
+                )
+                if (crop !== scaled) crop.recycle()
+                val zoom = scaled ?: throw IllegalStateException("Empty buyer crop")
+                recognizer.process(InputImage.fromBitmap(zoom, 0))
+                    .addOnSuccessListener { detected ->
+                        val candidates = extractLines(
+                            detected, horizontalOffset = cropX.toDouble(),
+                            verticalOffset = cropY.toDouble(), scale = 3.0,
+                        ).filter { line ->
+                            line.left < width * 0.42 &&
+                                line.centerY > title.centerY - 200 &&
+                                line.centerY < title.centerY - 55 &&
+                                possibleMiHuashiBuyer(line.text)
+                        }
+                        val best = candidates.minByOrNull {
+                            abs(it.centerY - (title.centerY - 112))
+                        }
+                        if (best != null && recovered.none { line ->
+                            abs(line.centerY - best.centerY) < 26 &&
+                                line.left < width * 0.42
+                        }) recovered.add(best)
+                        retryAt(index + 1)
+                    }
+                    .addOnFailureListener { retryAt(index + 1) }
+                    .addOnCompleteListener { zoom.recycle() }
+            } catch (_: Exception) {
+                scaled?.recycle()
+                retryAt(index + 1)
+            }
+        }
+        retryAt(0)
+    }
+
     private fun recognize(path: String, result: MethodChannel.Result) {
         val file = File(path)
         if (!file.isFile || !file.canRead()) {
@@ -253,6 +369,13 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                     retryMiHuashiHeader(
                         bitmap, recognizer, originalLines,
                     ) { updatedLines -> finish(updatedLines) }
+                    return@addOnSuccessListener
+                }
+                if (bitmap.width >= 300 && bitmap.height <= 4200 &&
+                    looksLikeMiHuashiList(originalLines)) {
+                    retryMissingMiHuashiBuyers(
+                        bitmap, recognizer, originalLines,
+                    ) { recovered -> finish(recovered) }
                     return@addOnSuccessListener
                 }
                 if (!looksLikeHuajia(originalLines) || bitmap.width < 300 ||
