@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../core/account/account_models.dart';
-import '../../core/storage/atomic_file.dart';
+import '../../../core/account/account_models.dart';
+import '../../../core/storage/atomic_file.dart';
 
 /// A fingerprint is attached to ONE recognized card, not an entire
 /// screenshot. Importing only some rows must not hide the other rows later.
