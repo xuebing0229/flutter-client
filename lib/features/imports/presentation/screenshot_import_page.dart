@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/portability/data_portability_file_bridge.dart';
@@ -115,6 +116,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 relative: candidate.relativeDeadlineText,
                 sourceStartY: candidate.sourceStartY,
                 sourceEndY: candidate.sourceEndY,
+                imageWidth: recognized.width,
+                imageHeight: recognized.height,
+                titleBox: candidate.titleBox,
+                clientBox: candidate.clientBox,
+                priceBox: candidate.priceBox,
+                deadlineBox: candidate.deadlineBox,
               ));
             }
           }
@@ -146,6 +153,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     String? imagePath,
     double? sourceStartY,
     double? sourceEndY,
+    double? imageWidth,
+    double? imageHeight,
+    ScreenshotTextLine? titleBox,
+    ScreenshotTextLine? clientBox,
+    ScreenshotTextLine? priceBox,
+    ScreenshotTextLine? deadlineBox,
     required String title,
     required String client,
     required double? price,
@@ -188,6 +201,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       sourceImagePath: imagePath,
       sourceStartY: sourceStartY,
       sourceEndY: sourceEndY,
+      sourceImageWidth: imageWidth,
+      sourceImageHeight: imageHeight,
+      titleBox: titleBox,
+      clientBox: clientBox,
+      priceBox: priceBox,
+      deadlineBox: deadlineBox,
       title: title,
       clientName: client,
       price: price,
