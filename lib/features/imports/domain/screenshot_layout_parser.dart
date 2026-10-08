@@ -448,6 +448,10 @@ class ScreenshotLayoutParser {
         .whereType<int>()
         .where((value) => value <= 100)
         .firstOrNull;
+    // A completed commission page may not show a separate progress widget;
+    // the status "约稿完成" itself explicitly means the final 100% node.
+    final isFinished = payment.any((line) =>
+        line.text.contains('约稿完成'));
     return ScreenshotOrderCandidate(
       title: titleLine == null ? '' : _stripKnownUiLabel(titleLine.text),
       clientName: buyerLine == null ? '' : _cleanBuyerName(buyerLine.text),
@@ -455,7 +459,7 @@ class ScreenshotLayoutParser {
       deadlineHasTime: deadline?.$3 ?? false,
       relativeDeadlineText: null,
       price: amount?.$1,
-      progressPercent: progress,
+      progressPercent: progress ?? (isFinished ? 100 : null),
       // Preserve the full screenshot for preview inspection, but never turn
       // upload metadata below the tabs into a second commission.
       sourceLines: List.unmodifiable(prepared),
