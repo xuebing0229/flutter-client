@@ -269,6 +269,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         }
         continue;
       }
+      final comparisonDate = row.deadline ?? row.detectedDate;
       final existing = widget.orderStore.orders.any((order) =>
           order.platform == platform &&
           normalizedImportTitle(order.title) ==
@@ -276,11 +277,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           normalizedImportTitle(order.clientName) ==
               normalizedImportTitle(row.clientName) &&
           row.clientName.trim().isNotEmpty &&
-          row.detectedDate != null &&
+          comparisonDate != null &&
           order.deadline != null &&
           (row.sourceHasClock
-              ? _sameMinute(order.deadline!, row.detectedDate!)
-              : _sameDay(order.deadline!, row.detectedDate!)));
+              ? _sameMinute(order.deadline!, comparisonDate)
+              : _sameDay(order.deadline!, comparisonDate)));
       var acrossScreenshots = false;
       for (final other in _rows.take(index)) {
         if (other.platform == null || other.platform != platform) continue;
@@ -291,7 +292,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             clientName: row.clientName,
             imageInstanceId: row.sourceImageId,
             cardInstanceId: row.id,
-            sourceDate: row.detectedDate,
+            sourceDate: comparisonDate,
             datePrecision: row.sourceHasClock
                 ? ScreenshotDatePrecision.minute
                 : ScreenshotDatePrecision.day,
