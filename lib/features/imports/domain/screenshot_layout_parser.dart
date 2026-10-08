@@ -105,11 +105,11 @@ class ScreenshotLayoutParser {
       // Keep some headroom for cards with a large portrait area.
       final previousDateY = i == 0 ? 0.0 : dates[i - 1].$1.centerY;
       final startY = (anchor.centerY - 370).clamp(
-        previousDateY + (i == 0 ? 0 : 24), anchor.centerY);
+        previousDateY + (i == 0 ? 0 : 24), anchor.centerY).toDouble();
       final nextDateY =
           i + 1 < dates.length ? dates[i + 1].$1.centerY : imageHeight;
       final endY = (anchor.centerY + 115).clamp(
-        anchor.centerY, (anchor.centerY + nextDateY) / 2);
+        anchor.centerY, (anchor.centerY + nextDateY) / 2).toDouble();
 
       final preceding = prepared.where((line) =>
           line.centerY >= startY &&
