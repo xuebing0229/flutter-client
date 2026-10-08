@@ -1,0 +1,238 @@
+name: OCR Preview 106 (manual testing only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'build/ocr-preview-106'
+    paths:
+      - '.github/workflows/ocr-preview-106.yml'
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
+  BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java with Gradle cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Set up Go for embedded Syncthing
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.2'
+          cache: true
+
+      - name: Cache embedded Syncthing binaries
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/sync/jniLibs
+          key: embedded-syncthing-v2.1.5-${{ runner.os }}-android
+
+      - name: Build embedded Syncthing core
+        env:
+          SYNCTHING_VERSION: v2.1.5
+        run: bash tool/build_syncthing_android.sh
+
+      - name: Restore fixed Beta signing bundle
+        run: |
+          test -n "$BETA_SIGNING_BUNDLE_BASE64"
+          BUNDLE="$RUNNER_TEMP/beta-signing-bundle.zip"
+          printf '%s' "$BETA_SIGNING_BUNDLE_BASE64" | base64 --decode > "$BUNDLE"
+          unzip -q "$BUNDLE" -d android
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build signed Beta APK
+        run: |
+          flutter build apk \
+            --release \
+            --flavor beta \
+            --dart-define=APP_CHANNEL=beta
+          cp build/app/outputs/flutter-apk/app-beta-release.apk app-ocr-preview-106.apk
+
+      - name: Upload Android Beta package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-preview-android-106
+          path: app-ocr-preview-106.apk
+          retention-days: 14
+          if-no-files-found: error
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Test Windows updater and installer process shutdown
+        shell: powershell
+        run: ./tool/test_windows_updater.ps1
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        shell: pwsh
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows Beta
+        shell: pwsh
+        run: flutter build windows --release --dart-define=APP_CHANNEL=beta
+
+      - name: Bundle embedded Syncthing core
+        shell: pwsh
+        run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.5
+
+      - name: Bundle PaddleOCR ONNX Chinese screenshot recognition
+        shell: pwsh
+        run: ./tool/bundle_windows_rapidocr.ps1
+
+      - name: Bundle current Windows icon
+        shell: pwsh
+        run: |
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = ($versionLine -split ':', 2)[1].Trim()
+          $releaseDir = "build/windows/x64/runner/Release"
+          $sourceIcon = "windows/runner/resources/app_icon.ico"
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon.ico") -Force
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon_$version.ico") -Force
+          Copy-Item -LiteralPath "windows/installer/refresh_app_shortcuts.ps1" -Destination $releaseDir -Force
+
+      - name: Package Windows Beta
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "build/windows/x64/runner/Release/*" `
+            -DestinationPath "app-windows-ocr-preview-106.zip" `
+            -Force
+
+      - name: Build Windows Beta installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = ($versionLine -split ':', 2)[1].Trim()
+
+          & $iscc `
+            "/DMyAppVersion=$version" `
+            "/O$PWD" `
+            "/Fapp-windows-ocr-preview-106-setup" `
+            "windows\installer\adventurers_guild_beta.iss"
+
+          if (-not (Test-Path "app-windows-ocr-preview-106-setup.exe")) {
+            throw "Windows Beta installer was not created."
+          }
+
+      - name: Upload Windows Beta package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-preview-windows-106
+          path: |
+            app-windows-ocr-preview-106.zip
+            app-windows-ocr-preview-106-setup.exe
+          retention-days: 14
+          if-no-files-found: error
+
+  # Deliberately publish a PRE-RELEASE under a separate tag.
+  # Never update release-files/version.json, do not mark latest and do not
+  # trigger the normal app's automatic Beta update channel.
+  publish-preview:
+    needs:
+      - android
+      - windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download signed Android preview
+        uses: actions/download-artifact@v4
+        with:
+          name: ocr-preview-android-106
+          path: dist
+      - name: Download Windows preview
+        uses: actions/download-artifact@v4
+        with:
+          name: ocr-preview-windows-106
+          path: dist
+      - name: Verify packages
+        shell: bash
+        run: |
+          test -s dist/app-ocr-preview-106.apk
+          test -s dist/app-windows-ocr-preview-106.zip
+          test -s dist/app-windows-ocr-preview-106-setup.exe
+          ls -lh dist
+      - name: Publish isolated manual-test prerelease
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
+        shell: bash
+        run: |
+          test -n "$GH_TOKEN"
+          TAG="ocr-preview-106-run${GITHUB_RUN_ID}"
+          gh release create "$TAG" \
+            "dist/app-ocr-preview-106.apk#app-ocr-preview-106.apk" \
+            "dist/app-windows-ocr-preview-106.zip#app-windows-ocr-preview-106.zip" \
+            "dist/app-windows-ocr-preview-106-setup.exe#app-windows-ocr-preview-106-setup.exe" \
+            --repo xuebing0229/release-files \
+            --title "OCR screenshot import preview +106" \
+            --notes "Manual Android/Windows OCR screenshot import test build. Source: xuebing0229/flutter-client build/ocr-preview-106. Does NOT update the automatic Beta version manifest. IMPORTANT: Manually installing these builds upgrades the locally installed Beta app; back up your data first." \
+            --prerelease \
+            --latest=false
