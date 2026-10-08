@@ -216,6 +216,22 @@ void main() {
     expect(entries.single.importReadyDeadline, isNull);
   });
 
+  test('unprefixed order title with progress remains visible without date', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 692,
+      imageHeight: 1200,
+      lines: [
+        at('买家A', 260, x: 65),
+        at('黑白摸鱼头3.0', 410, x: 290),
+        at('60%', 490, x: 310),
+      ],
+    );
+    expect(rows.length, 1);
+    expect(rows.single.title, '黑白摸鱼头3.0');
+    expect(rows.single.detectedDate, isNull);
+    expect(rows.single.progressPercent, 60);
+  });
+
   test('two undated orders with recognized headers remain separate', () {
     final entries = const ScreenshotLayoutParser().parse(
       imageWidth: 690,
