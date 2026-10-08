@@ -14,6 +14,7 @@ class ScreenshotImportDraft {
     required this.platform,
     required this.detectedDate,
     required this.recognizedPercent,
+    this.sourceHasClock = false,
     required this.presetId,
     required this.nodeId,
     this.deadline,
@@ -30,6 +31,8 @@ class ScreenshotImportDraft {
   double? price;
   CommissionPlatform? platform;
   final DateTime? detectedDate;
+  /// Whether the actual screenshot contained HH:mm, not a user guess.
+  final bool sourceHasClock;
   final int? recognizedPercent;
   final String? relativeDeadline;
   DateTime? deadline;
