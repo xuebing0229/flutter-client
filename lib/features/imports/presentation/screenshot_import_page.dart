@@ -532,7 +532,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   }
 
   Future<void> _confirm() async {
+    // Titles and buyers can change in the editable preview. Recheck against
+    // both local records and all other screenshot rows just before writing.
+    final previouslySelected = _rows.where((row) => row.selected).length;
+    setState(_refreshDuplicateWarnings);
     final selected = _rows.where((row) => row.selected).toList();
+    if (selected.length < previouslySelected) {
+      _message('发现新的疑似重复项，已标注并默认取消勾选，请检查后再次确认。');
+      return;
+    }
     if (selected.isEmpty) {
       _message('没有选中要导入的记录');
       return;
