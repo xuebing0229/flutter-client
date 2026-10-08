@@ -728,6 +728,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (useDesktopLayout && _desktopAddEditorOpen) return;
     final route = MaterialPageRoute<void>(
       builder: (_) => ScreenshotImportPage(
+        accountId: widget.accountId,
         kind: products
             ? ScreenshotImportKind.products
             : ScreenshotImportKind.orders,
