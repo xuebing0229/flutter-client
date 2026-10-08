@@ -132,4 +132,36 @@ void main() {
       imageSha256: sha, cardIndex: 0, products: true,
     ), isNot(first));
   });
+  test('A nearby progress icon cannot make date-only deadline midnight', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 692, imageHeight: 1200,
+      lines: [
+        at('买家甲', 225, x: 115),
+        at('【常驻】 虚构稿', 344, x: 270),
+        at('94', 388, x: 280),
+        at('2026-10-31', 480, x: 277),
+        at('00:00', 518, x: 296), // Misread node/progress icon below date.
+      ],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.needsDeadlineTimeConfirmation, isTrue);
+    expect(rows.single.importReadyDeadline, isNull);
+  });
+
+  test('Huajia navigation arrow is not included in buyer nickname', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 692, imageHeight: 1040,
+      lines: [
+        at('我卖出的', 110, x: 260),
+        at('客户甲 >', 252, x: 55),
+        at('虚构草稿盒', 334, x: 190),
+        at('截稿时间：2026-10-08 16:48', 397, x: 190),
+        at('30', 450, x: 645),
+      ],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.clientName, '客户甲');
+    expect(rows.single.price, 30);
+  });
+
 }
