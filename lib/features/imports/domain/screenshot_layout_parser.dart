@@ -174,8 +174,11 @@ class ScreenshotLayoutParser {
         // A distant phone status bar clock must not fill an order deadline.
         final clocks = prepared.where((candidate) =>
             !identical(candidate, line) &&
-            (candidate.centerY - line.centerY).abs() < 42 &&
-            (candidate.left - line.left).abs() < imageWidth * 0.55 &&
+            // A node/icon line below the date is not the deadline clock.
+            // Split date+clock belongs on the SAME horizontal text row.
+            (candidate.centerY - line.centerY).abs() <= 20 &&
+            candidate.left >= line.left + 60 &&
+            candidate.left <= line.right + 100 &&
             _clock.hasMatch(candidate.text.trim())).toList()
           ..sort((a, b) => (a.centerY - line.centerY).abs()
               .compareTo((b.centerY - line.centerY).abs()));
@@ -333,7 +336,8 @@ class ScreenshotLayoutParser {
           line.left < imageWidth * 0.65 &&
           _plausibleBuyer(line.text)).toList()
         ..sort((a, b) => b.centerY.compareTo(a.centerY));
-      final buyer = buyers.isEmpty ? '' : buyers.first.text.trim();
+      final buyer = buyers.isEmpty ? '' :
+          _cleanBuyerName(buyers.first.text);
 
       final cardArea = prepared.where((line) =>
           line.centerY >= titleLine.centerY - 12 &&
@@ -419,7 +423,8 @@ class ScreenshotLayoutParser {
     }
     return ScreenshotOrderCandidate(
       title: normalizedTitle,
-      clientName: buyers.isEmpty ? '' : buyers.first.text.trim(),
+      clientName: buyers.isEmpty ? '' :
+          _cleanBuyerName(buyers.first.text),
       detectedDate: deadlineDate,
       deadlineHasTime: hasDeadlineTime,
       relativeDeadlineText: null,
@@ -494,6 +499,12 @@ class ScreenshotLayoutParser {
       return false;
     }
     return true;
+  }
+
+  static String _cleanBuyerName(String source) {
+    // Huajia renders a chevron after the customer name; its glyph is not
+    // part of the person's username.
+    return source.trim().replaceFirst(RegExp(r'\\s*[›＞>]\\s*$'), '').trim();
   }
 
   static bool _plausibleBuyer(String source) {
