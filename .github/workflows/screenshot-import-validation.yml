@@ -1,0 +1,26 @@
+name: Screenshot Import Validation
+on:
+  push:
+    branches:
+      - feat/screenshot-order-import-20261008
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Install
+        run: flutter pub get
+      - name: Test import domain
+        run: flutter test test/features/screenshot_import_rules_test.dart
+      - name: Static analysis
+        run: flutter analyze lib/features/imports
