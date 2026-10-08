@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/adventurer-news-inline-20261008
+      - fix/ocr-source-recovery-20261009
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
