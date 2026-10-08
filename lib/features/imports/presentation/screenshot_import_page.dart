@@ -81,6 +81,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
       final generated = <ScreenshotImportDraft>[];
       var unreadable = 0;
+      String? firstError;
       for (final image in selected) {
         final imageId = 'shot-' + (++_imageSerial).toString();
         try {
@@ -133,8 +134,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ));
             }
           }
-        } catch (_) {
+        } catch (error) {
           unreadable++;
+          firstError ??= error.toString();
         }
       }
 
@@ -145,7 +147,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         _working = false;
       });
       if (generated.isEmpty) {
-        _message('没有提取到可确认的单子，请换一张清晰的完整列表截图。');
+        _message(firstError == null
+            ? '没有识别到订单卡片，可以补充漏识别条目或换张完整截图。'
+            : '离线识别失败：$firstError');
       } else if (unreadable > 0) {
         _message('有 ' + unreadable.toString() + ' 张截图识别失败，其余已保留。');
       }
