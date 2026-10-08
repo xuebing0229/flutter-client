@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/account/account_store.dart';
+import '../../../core/changelog/adventurer_news.dart';
 import '../../../core/build/build_channel.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
@@ -20,6 +21,7 @@ import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
+import 'adventurer_news_dialog.dart';
 import 'reminder_background_guide.dart';
 import 'theme_color_page.dart';
 
@@ -94,6 +96,20 @@ class _SettingsPageState extends State<SettingsPage>
     if (state == AppLifecycleState.resumed) {
       _refreshReminderDiagnostics();
     }
+  }
+
+  Future<void> _showNewsHistory() async {
+    final build = await const AdventurerNewsStore().installedBuild();
+    if (!mounted) return;
+    await showAdventurerNewsDialog(
+      context,
+      history: true,
+      notice: AdventurerNewsNotice(
+        previousBuild: 0,
+        currentBuild: build,
+        entries: newsBetweenBuilds(0, build),
+      ),
+    );
   }
 
   Future<void> _loadInstalledVersion() async {
@@ -763,6 +779,18 @@ class _SettingsPageState extends State<SettingsPage>
             const SizedBox(height: 14),
             _buildReminderDiagnosticsCard(),
           ],
+          const SizedBox(height: 14),
+          _SettingsCard(
+            title: '冒险者新见闻',
+            icon: Icons.auto_stories_rounded,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('查看更新日志'),
+              subtitle: const Text('回顾已经加入公会的新功能'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _showNewsHistory(),
+            ),
+          ),
           if (updater != null) ...[
             const SizedBox(height: 14),
             _SettingsCard(
