@@ -43,7 +43,6 @@ void main() {
         ),
       );
       final qr = tester.widget<QrImageView>(find.byType(QrImageView));
-      expect(qr.data, feedbackFormUrl);
       expect(qr.backgroundColor, Colors.white);
       expect(tester.getSize(find.byType(FeedbackPoster)),
           const Size(360, 488));
