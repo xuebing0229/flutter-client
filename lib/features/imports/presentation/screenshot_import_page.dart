@@ -367,37 +367,95 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     });
   }
 
-  Future<void> _inspectScreenshot(ScreenshotImportDraft row) async {
+
+  Future<void> _inspectScreenshot(
+    ScreenshotImportDraft row, {
+    ScreenshotTextLine? highlight,
+  }) async {
     final path = row.sourceImagePath;
     if (path == null) return;
+    final imageWidth = row.sourceImageWidth;
+    final imageHeight = row.sourceImageHeight;
     await showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 740, maxHeight: 740),
+      builder: (dialogContext) => Dialog(
+        child: SizedBox(
+          width: math.min(MediaQuery.sizeOf(dialogContext).width * 0.93, 740),
+          height: math.min(MediaQuery.sizeOf(dialogContext).height * 0.84, 820),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                title: const Text('查看 OCR 原始截图'),
-                subtitle: Text(row.title, maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                title: const Text('OCR 原始截图'),
+                subtitle: Text(row.title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: IconButton(
                   tooltip: '关闭',
                   icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                 ),
               ),
-              Flexible(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 6,
-                  child: Image.file(File(path), fit: BoxFit.contain),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (_, constraints) {
+                    if (imageWidth == null || imageHeight == null ||
+                        imageWidth <= 0 || imageHeight <= 0) {
+                      return InteractiveViewer(
+                        minScale: 0.5,
+                        maxScale: 6,
+                        child: Image.file(File(path), fit: BoxFit.contain),
+                      );
+                    }
+                    final scale = math.min(
+                      constraints.maxWidth / imageWidth,
+                      constraints.maxHeight / imageHeight,
+                    );
+                    return InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 6,
+                      child: Center(
+                        child: SizedBox(
+                          width: imageWidth * scale,
+                          height: imageHeight * scale,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Image.file(File(path),
+                                    fit: BoxFit.fill),
+                              ),
+                              if (highlight != null)
+                                Positioned(
+                                  left: highlight.left * scale,
+                                  top: highlight.top * scale,
+                                  width: math.max(1,
+                                      (highlight.right - highlight.left) * scale),
+                                  height: math.max(1,
+                                      (highlight.bottom - highlight.top) * scale),
+                                  child: IgnorePointer(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(dialogContext)
+                                            .colorScheme.primary
+                                            .withValues(alpha: 0.16),
+                                        border: Border.all(
+                                          color: Theme.of(dialogContext)
+                                              .colorScheme.primary,
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('双指缩放或拖动图片核对识别字段'),
+                child: Text('已框选 OCR 来源文字，可双指缩放核对'),
               ),
             ],
           ),
@@ -784,8 +842,16 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               key: ValueKey(row.id + '-title'),
               initialValue: row.title,
               maxLines: 1,
-              decoration: const InputDecoration(
-                labelText: '图名', isDense: true,
+              decoration: InputDecoration(
+                labelText: '图名',
+                isDense: true,
+                suffixIcon: row.titleBox == null ? null : IconButton(
+                  tooltip: '在原图定位图名',
+                  icon: const Icon(Icons.image_search_rounded),
+                  onPressed: () => unawaited(_inspectScreenshot(
+                    row, highlight: row.titleBox,
+                  )),
+                ),
               ),
               onChanged: (value) => row.title = value,
             ),
@@ -798,8 +864,16 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     child: TextFormField(
                       key: ValueKey(row.id + '-client'),
                       initialValue: row.clientName,
-                      decoration: const InputDecoration(
-                        labelText: '单主', isDense: true,
+                      decoration: InputDecoration(
+                        labelText: '单主',
+                        isDense: true,
+                        suffixIcon: row.clientBox == null ? null : IconButton(
+                          tooltip: '在原图定位单主',
+                          icon: const Icon(Icons.image_search_rounded),
+                          onPressed: () => unawaited(_inspectScreenshot(
+                            row, highlight: row.clientBox,
+                          )),
+                        ),
                       ),
                       onChanged: (value) => row.clientName = value,
                     ),
@@ -813,8 +887,16 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(
-                      labelText: '稿价 ¥', isDense: true,
+                    decoration: InputDecoration(
+                      labelText: '稿价 ¥',
+                      isDense: true,
+                      suffixIcon: row.priceBox == null ? null : IconButton(
+                        tooltip: '在原图定位稿价',
+                        icon: const Icon(Icons.image_search_rounded),
+                        onPressed: () => unawaited(_inspectScreenshot(
+                          row, highlight: row.priceBox,
+                        )),
+                      ),
                     ),
                     onChanged: (value) => row.price =
                         double.tryParse(value.trim()),
@@ -880,6 +962,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     icon: const Icon(Icons.calendar_month_outlined, size: 16),
                     label: Text(dateLabel),
                   ),
+                  if (row.deadlineBox != null)
+                    IconButton(
+                      tooltip: '在原图定位截稿日期',
+                      icon: const Icon(Icons.image_search_rounded),
+                      onPressed: () => unawaited(_inspectScreenshot(
+                        row, highlight: row.deadlineBox,
+                      )),
+                    ),
                   if (!row.deadlineConfirmed &&
                       row.detectedDate != null &&
                       row.relativeDeadline == null &&
