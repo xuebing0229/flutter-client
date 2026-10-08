@@ -393,11 +393,15 @@ class ScreenshotLayoutParser {
         r.$1.centerY < latestDeadlineY &&
         r.$1.centerY > imageHeight * 0.09).toList();
     int priority(ScreenshotTextLine line) {
-      if (line.text.contains('截稿')) return 0;
+      if (line.text.contains('截稿')) {
+        return 0;
+      }
       if (prepared.any((label) =>
           label.text.contains('截稿') &&
           (label.centerY - line.centerY).abs() < 42 &&
-          label.centerY < tabY)) return 1;
+          label.centerY < tabY)) {
+        return 1;
+      }
       return 2;
     }
     eligibleDates.sort((a, b) {
