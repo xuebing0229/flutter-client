@@ -114,6 +114,87 @@ void main() {
     expect(entries.single.price, isNull);
     expect(entries.single.title, '邀请您企目表中的Xhead气球');
   });
+  test('quick commission without date is kept but cannot infer a deadline', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1000,
+      lines: [
+        at('16:34', 30),
+        at('买家甲', 260, x: 60),
+        at('【快速】三天速约', 355, x: 200),
+        at('¥94', 408, x: 270),
+        at('接单后3天', 505, x: 290),
+        at('60%', 540, x: 300),
+      ],
+    );
+    expect(entries.length, 1);
+    final quick = entries.single;
+    expect(quick.title, '【快速】三天速约');
+    expect(quick.clientName, '买家甲');
+    expect(quick.relativeDeadlineText, '接单后3天');
+    expect(quick.needsDeadlineDateConfirmation, isTrue);
+    expect(quick.importReadyDeadline, isNull);
+    expect(quick.suggestedDeadline(
+      platform: CommissionPlatform.mihuashi,
+      isQuickCommission: false,
+    ), isNull);
+    expect(() => quick.deadlineWithChosenTime(hour: 23, minute: 59),
+        throwsStateError);
+  });
+
+  test('quick label near a full timestamp produces one order, not two', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 900,
+      lines: [
+        at('买家乙', 150),
+        at('【快速】表情包', 260),
+        at('截稿时间 2026-10-31 21:05', 385),
+        at('接单后3天', 421),
+      ],
+    );
+    expect(entries.length, 1);
+    expect(entries.single.relativeDeadlineText, '接单后3天');
+    expect(entries.single.importReadyDeadline,
+        DateTime(2026, 10, 31, 21, 5));
+    expect(entries.single.suggestedDeadline(
+      platform: CommissionPlatform.mihuashi,
+    ), DateTime(2026, 10, 31, 21, 5));
+  });
+
+  test('ordinary remaining-days label is not a quick deadline anchor', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 900,
+      lines: [
+        at('买家丙', 170),
+        at('【常驻】摸鱼', 260),
+        at('距截稿时间还有23天', 365),
+      ],
+    );
+    expect(entries, isEmpty);
+  });
+
+  test('a dated order and a quick order without date are both found', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1380,
+      lines: [
+        at('买家甲', 190, x: 50),
+        at('【常驻】稿件', 280, x: 210),
+        at('2026-10-31', 470, x: 220),
+        at('买家乙', 720, x: 50),
+        at('【快速】稿件', 820, x: 210),
+        at('接单后48小时', 970, x: 220),
+      ],
+    );
+    expect(entries.length, 2);
+    expect(entries.first.detectedDate, DateTime(2026, 10, 31));
+    expect(entries.last.title, '【快速】稿件');
+    expect(entries.last.detectedDate, isNull);
+    expect(entries.last.relativeDeadlineText, '接单后48小时');
+  });
+
   test('date-only deadline requires an explicit valid clock time', () {
     final entries = const ScreenshotLayoutParser().parse(
       imageWidth: 690,
