@@ -1,6 +1,7 @@
 import '../../orders/domain/queue_order.dart';
 import '../../products/domain/finished_product.dart';
 import 'screenshot_import_rules.dart';
+import 'screenshot_layout_parser.dart';
 
 /// A mutable item held only by the import preview; no writes happen until
 /// validate-and-commit. Separate cards retain their own stable preview IDs.
@@ -18,6 +19,12 @@ class ScreenshotImportDraft {
     this.sourceImagePath,
     this.sourceStartY,
     this.sourceEndY,
+    this.sourceImageWidth,
+    this.sourceImageHeight,
+    this.titleBox,
+    this.clientBox,
+    this.priceBox,
+    this.deadlineBox,
     required this.presetId,
     required this.nodeId,
     this.deadline,
@@ -32,6 +39,12 @@ class ScreenshotImportDraft {
   final String? sourceImagePath;
   final double? sourceStartY;
   final double? sourceEndY;
+  final double? sourceImageWidth;
+  final double? sourceImageHeight;
+  final ScreenshotTextLine? titleBox;
+  final ScreenshotTextLine? clientBox;
+  final ScreenshotTextLine? priceBox;
+  final ScreenshotTextLine? deadlineBox;
   String title;
   String clientName;
   double? price;
