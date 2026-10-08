@@ -96,6 +96,13 @@ class FeatureTogglePage extends StatelessWidget {
                   ),
                   _FeatureSwitch(
                     store: store,
+                    feature: AppFeature.customTags,
+                    icon: Icons.label_outline_rounded,
+                    title: '自定义标签',
+                    subtitle: '创建和编辑排单时添加标签，并在排单页按标签筛选。关闭后隐藏入口，保留原标签。',
+                  ),
+                  _FeatureSwitch(
+                    store: store,
                     feature: AppFeature.nodeProgress,
                     icon: Icons.stacked_line_chart_rounded,
                     title: '节点小进度',

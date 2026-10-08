@@ -162,6 +162,7 @@ class QueueOrder {
     this.deductionAmount = 0,
     this.deductionFeeEnabled = false,
     this.description = '',
+    this.tags = const <String>[],
     this.defaultOrder = 0,
     this.referenceImages = const <OrderReferenceImage>[],
     this.completedAt,
@@ -204,6 +205,9 @@ class QueueOrder {
   final bool deductionFeeEnabled;
 
   final String description;
+
+  /// User-defined labels belong to the order, not to a device's UI state.
+  final List<String> tags;
 
   /// Stable cross-device order used by the default list sort.
   ///
@@ -311,6 +315,7 @@ class QueueOrder {
     double? deductionAmount,
     bool? deductionFeeEnabled,
     String? description,
+    List<String>? tags,
     int? defaultOrder,
     List<OrderReferenceImage>? referenceImages,
     DateTime? completedAt,
@@ -350,6 +355,7 @@ class QueueOrder {
       deductionFeeEnabled:
           deductionFeeEnabled ?? this.deductionFeeEnabled,
       description: description ?? this.description,
+      tags: tags ?? this.tags,
       defaultOrder: defaultOrder ?? this.defaultOrder,
       referenceImages: referenceImages ?? this.referenceImages,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
@@ -368,4 +374,17 @@ class QueueOrder {
       isPinned: isPinned ?? this.isPinned,
     );
   }
+}
+
+
+/// Canonicalize labels while keeping the original display spelling/order.
+List<String> normalizeOrderTags(Iterable<String> values) {
+  final seen = <String>{};
+  final result = <String>[];
+  for (final raw in values) {
+    final value = raw.trim();
+    if (value.isEmpty || !seen.add(value.toLowerCase())) continue;
+    result.add(value);
+  }
+  return List<String>.unmodifiable(result);
 }

@@ -244,6 +244,7 @@ Map<String, dynamic> _normalizeLegacyOrder(Map<String, dynamic> source) {
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
+  json['tags'] ??= <dynamic>[];
   json['defaultOrder'] ??= 0;
   json['referenceImages'] ??= <dynamic>[];
   json['isArchived'] ??= false;
@@ -317,6 +318,7 @@ Map<String, dynamic> _orderToJson(QueueOrder order) {
     'deductionAmount': order.deductionAmount,
     'deductionFeeEnabled': order.deductionFeeEnabled,
     'description': order.description,
+    'tags': order.tags,
     if (order.defaultOrder != 0) 'defaultOrder': order.defaultOrder,
     'referenceImages': [
       for (final image in order.referenceImages)
@@ -394,6 +396,10 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       'order.deductionFeeEnabled',
     ),
     description: _asText(json['description'], 'order.description'),
+    tags: normalizeOrderTags(<String>[
+      for (final item in _asList(json['tags'] ?? <dynamic>[], 'order.tags'))
+        _asString(item, 'order.tag'),
+    ]),
     defaultOrder: json['defaultOrder'] == null
         ? 0
         : _asInt(json['defaultOrder'], 'order.defaultOrder'),

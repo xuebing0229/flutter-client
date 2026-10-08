@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 enum AppFeature {
   clientInfo,
   nodeProgress,
+  customTags,
   search,
   sorting,
   viewSwitch,
@@ -30,6 +31,7 @@ class AppFeatureStore extends ChangeNotifier {
 
   bool get clientInfo => enabled(AppFeature.clientInfo);
   bool get nodeProgress => enabled(AppFeature.nodeProgress);
+  bool get customTags => enabled(AppFeature.customTags);
   bool get search => enabled(AppFeature.search);
   bool get sorting => enabled(AppFeature.sorting);
   bool get viewSwitch => enabled(AppFeature.viewSwitch);
@@ -96,6 +98,7 @@ class AppFeatureStore extends ChangeNotifier {
     // settings do not have this field; default them to enabled so upgrading
     // does not silently disable abstract-version effects.
     normalized.putIfAbsent(AppFeature.abstractEffects.name, () => true);
+    normalized.putIfAbsent(AppFeature.customTags.name, () => true);
 
     for (final feature in AppFeature.values) {
       if (normalized[feature.name] is! bool) {
