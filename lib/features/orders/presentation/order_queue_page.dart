@@ -5,6 +5,7 @@ import '../../shared/presentation/layout_spacing.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../shared/presentation/collection_card_grid.dart';
+import '../../shared/presentation/summary_card_widgets.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../data/node_presets.dart';
 import '../domain/queue_order.dart';
@@ -820,6 +821,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   : useCardView
                   ? CollectionCardGrid(
                       itemCount: orders.length,
+                       minimumCardWidth:
+                           ResponsiveCardActionButton.minimumCardWidth(
+                             context,
+                             '确认节点',
+                           ),
                       mobileAspectRatio: widget.featureStore.nodeProgress
                           ? 0.43
                           : 0.52,
