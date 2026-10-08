@@ -225,8 +225,17 @@ class ScreenshotLayoutParser {
     // title in its own card. They still require a human-filled deadline.
     for (final line in prepared) {
       final title = line.text.trim();
+      final hasNearbyOrderField = line.left > imageWidth * 0.26 &&
+          prepared.any((field) =>
+              field.centerY > line.centerY &&
+              field.centerY - line.centerY < 165 &&
+              field.left > imageWidth * 0.24 &&
+              (_money.hasMatch(field.text) ||
+                  _percent.hasMatch(field.text)));
       final looksLikeCardTitle =
-          title.startsWith('【') || title.startsWith('定向企划 ');
+          title.startsWith('【') ||
+          title.startsWith('定向企划 ') ||
+          hasNearbyOrderField;
       if (!looksLikeCardTitle || !_plausibleTitle(title)) continue;
       if (anchors.any((anchor) =>
           anchor.line.centerY >= line.centerY &&
