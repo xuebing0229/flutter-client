@@ -98,7 +98,17 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           final guess = preselectImportPlatform(
             recognized.lines.map((line) => line.text),
           );
-          final platform = guess.platform;
+          // Layout is more reliable than partially recognized tab captions
+          // on MiHuashi's single-order detail screens. The generic text-only
+          // guess often reports "unknown" for these pages.
+          final platform = !_products &&
+                  isMiHuashiOrderDetailScreenshot(
+                    lines: recognized.lines,
+                    imageWidth: recognized.width,
+                    imageHeight: recognized.height,
+                  )
+              ? CommissionPlatform.mihuashi
+              : guess.platform;
           if (_products) {
             final found = _productsParser.parse(
               lines: recognized.lines,
