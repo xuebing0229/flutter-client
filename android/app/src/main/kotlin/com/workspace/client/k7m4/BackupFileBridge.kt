@@ -33,12 +33,14 @@ class BackupFileBridge(
     private var pendingLocalFileExport: MethodChannel.Result? = null
     private var pendingBackupFile: MethodChannel.Result? = null
     private var pendingExportContent: String? = null
+    private var pendingExportBytes: ByteArray? = null
     private var pendingLocalFilePath: String? = null
 
     fun configure(messenger: BinaryMessenger) {
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "exportBackup" -> handleExport(call, result)
+                "exportImage" -> handleExportImage(call, result)
                 "importBackup" -> handleImport(result)
                 "pickBackupFile" -> handleBackupFile(result)
                 "pickQrImage" -> handleQrImage(result)
@@ -87,6 +89,7 @@ class BackupFileBridge(
 
         pendingExport = result
         pendingExportContent = content
+        pendingExportBytes = null
 
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -94,6 +97,35 @@ class BackupFileBridge(
             putExtra(Intent.EXTRA_TITLE, fileName)
         }
 
+        activity.startActivityForResult(intent, REQUEST_EXPORT)
+    }
+
+    private fun handleExportImage(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
+        if (isFileDialogBusy()) {
+            result.error("FILE_DIALOG_BUSY", "A file dialog is already open.", null)
+            return
+        }
+        val bytes = call.argument<ByteArray>("bytes")
+        if (bytes == null || bytes.isEmpty()) {
+            result.error("MISSING_IMAGE", "No feedback image was provided.", null)
+            return
+        }
+        val fileName = call.argument<String>("fileName")
+            ?.trim()
+            .orEmpty()
+            .ifBlank { "feedback.png" }
+
+        pendingExport = result
+        pendingExportContent = null
+        pendingExportBytes = bytes
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/png"
+            putExtra(Intent.EXTRA_TITLE, fileName)
+        }
         activity.startActivityForResult(intent, REQUEST_EXPORT)
     }
 
@@ -283,27 +315,29 @@ class BackupFileBridge(
         pendingExport = null
 
         val content = pendingExportContent
+        val bytes = pendingExportBytes
         pendingExportContent = null
+        pendingExportBytes = null
 
         if (resultCode != Activity.RESULT_OK || uri == null) {
             result.success(false)
             return
         }
 
-        if (content == null) {
-            result.error(
-                "MISSING_CONTENT",
-                "Backup content was lost before saving.",
-                null,
-            )
+        if (content == null && bytes == null) {
+            result.error("MISSING_CONTENT", "Export content was lost.", null)
             return
         }
 
         try {
             val stream = activity.contentResolver.openOutputStream(uri, "wt")
-                ?: throw IllegalStateException("Unable to open backup destination.")
-            stream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write(content)
+                ?: throw IllegalStateException("Unable to open export destination.")
+            stream.use { output ->
+                if (bytes != null) {
+                    output.write(bytes)
+                } else {
+                    output.write(content!!.toByteArray(Charsets.UTF_8))
+                }
             }
             result.success(true)
         } catch (error: Exception) {
