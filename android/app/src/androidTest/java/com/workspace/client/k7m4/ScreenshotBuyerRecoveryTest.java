@@ -78,7 +78,6 @@ public final class ScreenshotBuyerRecoveryTest {
         TextRecognizer engine = TextRecognition.getClient(
             new ChineseTextRecognizerOptions.Builder().build());
         try {
-            ScreenshotOcrBridge bridge = new ScreenshotOcrBridge(new Activity());
             Method retry = ScreenshotOcrBridge.class.getDeclaredMethod(
                 "retryMissingMiHuashiBuyers",
                 Bitmap.class, TextRecognizer.class, List.class, Function1.class
@@ -91,6 +90,10 @@ public final class ScreenshotBuyerRecoveryTest {
             AtomicReference<Throwable> invocationError = new AtomicReference<>();
             InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
                 try {
+                    // Activity allocates an Android Handler during construction.
+                    // Both its construction and the async ML Kit call belong
+                    // on the main Looper, never the instrumentation worker.
+                    ScreenshotOcrBridge bridge = new ScreenshotOcrBridge(new Activity());
                     retry.invoke(bridge, bitmap, engine, firstPass,
                         new Function1<List<?>, Unit>() {
                             @Override public Unit invoke(List<?> lines) {
