@@ -23,14 +23,19 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
     return const PlatformGuess(CommissionPlatform.huajia, 1);
   }
 
-  // MiHuashi's ORDER detail screen may not spell out the platform name.
-  // Distinctive tab names and actions identify it even when there are
-  // additional upload timestamps or no storefront/list header.
-  final mihuashiDetail = <String>['稿件夹', '进程动态', '参考信息',
-    '联系企划方', '上传稿件', '创作节点', '约稿完成'];
-  if (text.contains('订单') &&
-      mihuashiDetail.where(text.contains).length >= 2 &&
-      !text.contains('我卖出的')) {
+  // Both platforms have order DETAILS. Shared words such as "订单",
+  // "稿件" and "参考信息" never prove that a page is MiHuashi.
+  final huajiaDetail = <String>['订单动态', '改价历史', '真爱永恒']
+      .where(text.contains).length;
+  if (huajiaDetail >= 2 &&
+      (text.contains('订单已完成') || text.contains('稿件'))) {
+    return const PlatformGuess(CommissionPlatform.huajia, 0.95);
+  }
+  final miSpecific = <String>['稿件夹', '进程动态',
+    '联系企划方', '上传稿件', '约稿完成', '创作节点']
+      .where(text.contains).length;
+  if (miSpecific >= 2 && !text.contains('我卖出的') &&
+      !text.contains('改价历史')) {
     return const PlatformGuess(CommissionPlatform.mihuashi, 0.95);
   }
 
