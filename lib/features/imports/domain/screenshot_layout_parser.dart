@@ -170,7 +170,9 @@ class ScreenshotLayoutParser {
   static bool _plausibleTitle(String source) {
     final text = source.trim();
     if (text.length < 2 || _date.hasMatch(text) ||
-        _money.hasMatch(text) || _percent.hasMatch(text)) return false;
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
     const ignore = [
       '当前交付节点', '截稿时间', '购买时间', '添加备注',
       '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
@@ -185,11 +187,15 @@ class ScreenshotLayoutParser {
   static bool _plausibleBuyer(String source) {
     final text = source.trim();
     if (text.isEmpty || _date.hasMatch(text) ||
-        _money.hasMatch(text) || _percent.hasMatch(text)) return false;
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
     if (<String>{
       '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
       '全部', '默认', '返回', '全额支付', '定向企划',
-    }.contains(text)) return false;
+    }.contains(text)) {
+      return false;
+    }
     if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
       return false;
     }
