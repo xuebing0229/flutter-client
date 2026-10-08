@@ -654,7 +654,18 @@ bool isMiHuashiOrderDetailScreenshot({
   if (imageWidth <= 0 || imageHeight <= 0) return false;
   final prepared = lines.toList();
   final combined = prepared.map((line) => line.text).join(' ');
-  if (combined.contains('我卖出的')) return false;
+  // "订单" / "参考信息" / "已支付" appear in multiple platforms.
+  // Do not use those generic labels to silently assign MiHuashi.
+  if (combined.contains('我卖出的') ||
+      combined.contains('改价历史') ||
+      combined.contains('订单动态') ||
+      combined.contains('真爱永恒')) {
+    return false;
+  }
+  final miSpecific = <String>[
+    '稿件夹', '进程动态', '联系企划方', '上传稿件', '约稿完成',
+  ].any(combined.contains);
+  if (!miSpecific) return false;
   final centeredHeader = prepared.any((line) =>
       line.centerY < imageHeight * 0.135 &&
       line.centerY > imageHeight * 0.025 &&
