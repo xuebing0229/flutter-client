@@ -5,6 +5,10 @@ on:
       - feat/screenshot-order-import-20261008
   workflow_dispatch:
 
+concurrency:
+  group: screenshot-import-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
