@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/portability/data_portability_file_bridge.dart';
@@ -45,6 +43,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   final _productsParser = const ScreenshotProductLayoutParser();
   final List<ScreenshotImportDraft> _rows = [];
   int _imageSerial = 0;
+  int _rowSerial = 0;
   bool _working = false;
   ProductSaleType _defaultSaleType = ProductSaleType.single;
 
@@ -161,8 +160,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     );
     return ScreenshotImportDraft(
       id: 'preview-' + DateTime.now().microsecondsSinceEpoch.toString() +
-          '-' + (_rows.length + _imageSerial).toString() +
-          '-' + title.hashCode.toString(),
+          '-' + (++_rowSerial).toString(),
       sourceImageId: imageId,
       title: title,
       clientName: client,
@@ -305,7 +303,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
   Future<void> _confirm() async {
     final selected = _rows.where((row) => row.selected).toList();
-    if (selected.isEmpty) return _message('没有选中要导入的记录');
+    if (selected.isEmpty) {
+      _message('没有选中要导入的记录');
+      return;
+    }
     for (final row in selected) {
       final issue = row.validate(importingProducts: _products);
       if (issue != null) {
