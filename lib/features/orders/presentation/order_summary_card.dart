@@ -60,7 +60,7 @@ class OrderSummaryCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Flexible(
                         child: SummaryTag(
-                          text: '#'+order.tags.first,
+                          text: '#${order.tags.first}',
                           compact: true,
                         ),
                       ),
@@ -146,7 +146,7 @@ class OrderSummaryCard extends StatelessWidget {
                   runSpacing: 5,
                   children: [
                     for (final tag in order.tags)
-                      SummaryTag(text: '#'+tag),
+                      SummaryTag(text: '#$tag'),
                   ],
                 ),
               ],
