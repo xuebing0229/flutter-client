@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - fix/adventurer-news-inline-20261008
-      - fix/ocr-product-price-regression-20261008
-      - fix/ocr-real-verification-20261008
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
