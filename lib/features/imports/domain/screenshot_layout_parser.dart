@@ -299,18 +299,17 @@ class ScreenshotLayoutParser {
       final nextDateY = i + 1 < anchors.length
           ? anchors[i + 1].line.centerY
           : imageHeight;
-      // Only bisect when there really IS a next deadline anchor.
-      // Otherwise a price at the bottom of a partly visible last card can
-      // be cut off, even though it belongs to the current order.
-      final endY =
-          (anchor.centerY + (deadlineAnchor.isTitleAnchor ? 270 : 115))
-              .clamp(
-                anchor.centerY,
-                i + 1 < anchors.length
-                    ? (anchor.centerY + nextDateY) / 2
-                    : imageHeight,
-              )
-              .toDouble();
+      // 画加 places the amount in the far bottom-right of each card. It can
+      // be well over 115 OCR pixels below the deadline after scaling or text
+      // line grouping. Use the space until the NEXT card, not a fixed 115px.
+      // Keep a bounded tail on partially visible final cards.
+      final maximumEnd = i + 1 < anchors.length
+          ? (anchor.centerY + nextDateY) / 2
+          : imageHeight;
+      final endY = (anchor.centerY +
+              (deadlineAnchor.isTitleAnchor ? 270 : 260))
+          .clamp(anchor.centerY, maximumEnd)
+          .toDouble();
 
       final preceding = prepared.where((line) =>
           line.centerY >= startY &&
@@ -451,37 +450,209 @@ class ScreenshotLayoutParser {
     required double imageWidth,
     bool detail = false,
   }) {
-    for (final line in lines) {
-      final match = _money.firstMatch(line.text);
-      if (match != null) {
-        final value = double.tryParse(match.group(1)!);
-        if (value != null) return (value, line);
-      }
-    }
+    // Full OCR passes may return one ¥30 token; right-side high-resolution
+    // retries can return separate ¥ and 30 tokens. Match *within this card*
+    // and never borrow digits from the deadline row itself.
     final currency = lines.where((line) =>
-        RegExp(r'^[¥￥]$').hasMatch(line.text.trim())).toList();
-    final candidates = lines.where((line) =>
-        RegExp(r'^\d{1,7}(?:\.\d{1,2})?$')
-            .hasMatch(line.text.trim())).toList();
-    for (final line in candidates) {
-      final value = double.tryParse(line.text.trim());
-      if (value == null) continue;
+        RegExp(r'^[¥￥]
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _cleanBuyerName(String source) {
+    // Huajia renders a chevron after the customer name; its glyph is not
+    // part of the person's username.
+    return source.trim().replaceFirst(RegExp(r'\s*[›＞>]\s*$'), '').trim();
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(line.text.trim())).toList();
+    final candidates = <(double, ScreenshotTextLine, int)>[];
+    for (final line in lines) {
+      final cleaned = line.text.trim();
+      final explicit = _money.firstMatch(cleaned);
+      final hasExplicitMoney = explicit != null;
+      final bare = RegExp(r'^\d{1,7}(?:\.\d{1,2})?
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _cleanBuyerName(String source) {
+    // Huajia renders a chevron after the customer name; its glyph is not
+    // part of the person's username.
+    return source.trim().replaceFirst(RegExp(r'\s*[›＞>]\s*$'), '').trim();
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+)
+          .firstMatch(cleaned);
+      final value = double.tryParse(
+        hasExplicitMoney ? explicit.group(1)! : (bare?.group(0) ?? ''),
+      );
+      if (value == null || value < 0) continue;
       final adjacentYen = currency.any((symbol) =>
           (symbol.centerY - line.centerY).abs() < 28 &&
           (line.left - symbol.right).abs() < 90);
-      final rightHandPrice = line.left >= imageWidth * 0.74;
-      final belowTitle = line.centerY > titleLine.centerY + 10 &&
+      // Exclude "48" and other fragments cut from the deadline date/clock,
+      // even if the date's right edge is in the price column.
+      final belowDeadline = line.centerY > deadlineLine.centerY + 12;
+      final priceRight = line.left >= imageWidth * 0.69;
+      final huajiaPricePosition = belowDeadline && priceRight;
+      final mihuashiPricePosition =
+          line.centerY > titleLine.centerY + 10 &&
           line.centerY < deadlineLine.centerY - 8 &&
           (line.left - titleLine.left).abs() < imageWidth * 0.19 &&
-          line.text.trim().length >= 2;
+          cleaned.length >= 2;
       final detailFee = detail && lines.any((label) =>
           (label.text.contains('稿酬') || label.text.contains('支付')) &&
           (label.centerY - line.centerY).abs() < 30);
-      if (adjacentYen || rightHandPrice || belowTitle || detailFee) {
-        return (value, line);
+      // The right column alone is not enough when the text is just a
+      // date/clock fragment; a bare number must be spatially price-like.
+      if (!hasExplicitMoney && !adjacentYen &&
+          !huajiaPricePosition && !mihuashiPricePosition && !detailFee) {
+        continue;
       }
+      // Prefer actual currency evidence to position-only guesses.
+      final strength = hasExplicitMoney ? 3 : adjacentYen ? 2 : 1;
+      candidates.add((value, line, strength));
     }
-    return null;
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final byStrength = b.$3.compareTo(a.$3);
+      if (byStrength != 0) return byStrength;
+      // Huajia labels its amount below the date, MiHuashi above it.
+      // If both full-size OCR and the cropped pass find the same number,
+      // return the first stable match.
+      return a.$2.centerY.compareTo(b.$2.centerY);
+    });
+    final best = candidates.first;
+    return (best.$1, best.$2);
   }
 
   static bool _plausibleTitle(String source) {
