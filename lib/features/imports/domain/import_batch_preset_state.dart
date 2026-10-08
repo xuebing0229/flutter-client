@@ -99,9 +99,10 @@ class ImportBatchPresetState extends ChangeNotifier {
   ImportPresetDraft byId(String id) =>
       _rows.firstWhere((row) => row.id == id);
 
-  /// Editing an earlier row immediately updates the later rows with the same
-  /// platform and complete title, unless a later row was edited individually.
-  /// Each row resolves its own recognized percentage against the new preset.
+  /// Editing ANY row immediately proposes the chosen preset to every other
+  /// row with the same platform + complete title, regardless of list position.
+  /// Explicit per-row preset/node overrides are never silently overwritten.
+  /// Each eligible row independently matches its own OCR percentage.
   void selectPreset(String rowId, String presetId) {
     final preset = _presets[presetId];
     if (preset == null || preset.nodes.isEmpty) {
@@ -117,14 +118,15 @@ class ImportBatchPresetState extends ChangeNotifier {
     _batchChoices[key] = presetId;
     _rows[index] = _withPreset(source, preset, manuallyChanged: true);
 
-    for (var i = index + 1; i < _rows.length; i++) {
-      final next = _rows[i];
-      if (orderPresetMemoryKey(next.platform, next.title) != key ||
-          next.presetManuallyChanged ||
-          next.nodeManuallyChanged) {
+    for (var i = 0; i < _rows.length; i++) {
+      if (i == index) continue;
+      final candidate = _rows[i];
+      if (orderPresetMemoryKey(candidate.platform, candidate.title) != key ||
+          candidate.presetManuallyChanged ||
+          candidate.nodeManuallyChanged) {
         continue;
       }
-      _rows[i] = _withPreset(next, preset, manuallyChanged: false);
+      _rows[i] = _withPreset(candidate, preset, manuallyChanged: false);
     }
     notifyListeners();
   }
