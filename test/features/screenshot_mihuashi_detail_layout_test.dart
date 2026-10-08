@@ -87,6 +87,51 @@ void main() {
     expect(found.single.clientName, isNot('订单'));
   });
 
+  test('ML Kit drops centered order heading and attachment filename', () {
+    final lines = [
+      box('【这是】虚构盒子', 183, x: 183),
+      box('截稿时间 2026-07-13 21:05', 266, x: 172),
+      box('买家甲', 367, x: 109),
+      box('约稿完成！稿酬 ￥88', 478, x: 32),
+      box('稿件夹', 585, x: 33),
+      box('进程动态', 585, x: 187),
+      box('参考信息', 585, x: 328),
+      // Upload filename may vanish entirely in native OCR, but its date
+      // still exists and must never be imported as another commission.
+      box('2026-07-10 11:55', 770, x: 186),
+    ];
+    expect(isMiHuashiOrderDetailScreenshot(
+      lines: lines, imageWidth: 698, imageHeight: 1536,
+    ), isTrue);
+    final rows = const ScreenshotLayoutParser().parse(
+      lines: lines, imageWidth: 698, imageHeight: 1536,
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.clientName, '买家甲');
+    expect(rows.single.price, 88);
+    expect(rows.single.detectedDate, DateTime(2026, 7, 13, 21, 5));
+  });
+
+  test('missing order heading and tabs, but uploaded PNG remains', () {
+    final lines = [
+      box('【这是】虚构盒子', 180, x: 185),
+      box('截稿时间 2026-07-13 21:05', 265, x: 175),
+      box('买家乙', 369, x: 108),
+      box('约稿完成！稿酬 ￥88', 474, x: 32),
+      box('插画34.png', 741, x: 188),
+      box('2026-07-10 11:55', 776, x: 184),
+    ];
+    expect(isMiHuashiOrderDetailScreenshot(
+      lines: lines, imageWidth: 698, imageHeight: 1536,
+    ), isTrue);
+    final rows = const ScreenshotLayoutParser().parse(
+      lines: lines, imageWidth: 698, imageHeight: 1536,
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.title, '【这是】虚构盒子');
+    expect(rows.single.detectedDate, DateTime(2026, 7, 13, 21, 5));
+  });
+
   test('normal vertically stacked commission list is not a detail page', () {
     final lines = [
       box('进行中', 115, x: 167),

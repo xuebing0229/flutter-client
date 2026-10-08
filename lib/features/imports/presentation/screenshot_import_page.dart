@@ -193,6 +193,60 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         }
       }
 
+      // Reconcile titles across the ENTIRE multi-image selection as well as
+      // within individual screenshots. Otherwise two matching cards in one
+      // screenshot and an OCR-variant in another never share a preset.
+      // Only newly recognized, unedited draft titles are eligible.
+      if (!_products) {
+        final miRows = generated.where(
+          (row) => row.platform == CommissionPlatform.mihuashi,
+        ).toList();
+        final candidates = [
+          for (final row in miRows)
+            ScreenshotOrderCandidate(
+              title: row.title,
+              clientName: row.clientName,
+              detectedDate: row.detectedDate,
+              deadlineHasTime: row.sourceHasClock,
+              relativeDeadlineText: row.relativeDeadline,
+              price: row.price,
+              progressPercent: row.recognizedPercent,
+              sourceLines: const [],
+              sourceStartY: 0,
+              sourceEndY: 0,
+            ),
+        ];
+        final titles = reconcileMiHuashiScreenshotTitles(candidates);
+        for (var index = 0; index < miRows.length; index++) {
+          final row = miRows[index];
+          if (row.title == titles[index]) continue;
+          row.title = titles[index];
+          // The OCR correction must happen before a same-title preset is
+          // resolved; merely changing the preview label leaves the wrong
+          // workflow bound to the record.
+          var preset = resolveImportPreset(
+            platform: CommissionPlatform.mihuashi,
+            title: row.title,
+            presets: widget.presetStore.presets,
+            existingOrders: widget.orderStore.orders,
+          );
+          final key = orderPresetMemoryKey(CommissionPlatform.mihuashi, row.title);
+          for (final previous in _rows.reversed) {
+            if (previous.platform == CommissionPlatform.mihuashi &&
+                previous.presetManuallyChanged &&
+                orderPresetMemoryKey(CommissionPlatform.mihuashi, previous.title) == key) {
+              preset = widget.presetStore.byId(previous.presetId);
+              break;
+            }
+          }
+          row.presetId = preset.id;
+          row.nodeId = resolveImportNode(
+            preset: preset,
+            recognizedPercent: row.recognizedPercent,
+          ).id;
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _rows.addAll(generated);

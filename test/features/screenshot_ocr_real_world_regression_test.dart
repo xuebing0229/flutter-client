@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/features/imports/domain/screenshot_layout_parser.dart';
+import 'package:flutter_app/features/imports/domain/screenshot_huajia_detail_parser.dart';
 import 'package:flutter_app/features/imports/domain/screenshot_import_rules.dart';
 import 'package:flutter_app/features/imports/data/screenshot_import_history.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
@@ -113,6 +114,56 @@ void main() {
     expect(rows.length, 1);
     expect(rows.single.price, 94);
     expect(rows.single.importReadyDeadline, DateTime(2026, 10, 31, 23, 59));
+  });
+
+  test('real ML Kit output: MiHuashi Y94 fee and split-month date', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 692, imageHeight: 1536,
+      lines: [
+        at('测试买家甲', 296, x: 115),
+        at('【常驻】黑白摸鱼头3.0', 397, x: 285),
+        at('y94', 443, x: 278),
+        at('2026-10-31', 513, x: 309),
+        at('60%', 554, x: 341),
+        at('测试买家', 753, x: 116),
+        at('【常驻】黑白摸鱼头3.0', 851, x: 284),
+        at('Y94', 898, x: 278),
+        at('2026-1 0-31', 968, x: 309),
+        at('60%', 1009, x: 341),
+        at('测试买家丙', 1200, x: 115),
+        at('【常驻】黑白模鱼头3.0', 1304, x: 296),
+        at('y94', 1348, x: 278),
+        at('2026-10-31', 1418, x: 309),
+      ],
+    );
+    expect(rows, hasLength(3));
+    expect(rows.map((row) => row.price), [94, 94, 94]);
+    expect(rows.every((row) => row.detectedDate?.month == 10), isTrue);
+    expect(rows.map((row) => row.clientName),
+        ['测试买家甲', '测试买家', '测试买家丙']);
+  });
+
+  test('real ML Kit output: Huajia detail has y40, 己完成 and 载稿时间', () {
+    final screenshot = [
+      at('订单己完成', 107, x: 247),
+      at('虚构用户', 254, x: 104),
+      at('真愛永恒M', 258, x: 319),
+      at('【24h】速食短打+赠捡手', 339, x: 220),
+      at('y40', 390, x: 198),
+      at('载稿时间:2025-04-27 16:37', 428, x: 188),
+      at('稿件6 订单动态改价历史参考信息', 569, x: 26),
+      at('2025-04-27', 1010, x: 41),
+    ];
+    final details = const ScreenshotHuajiaDetailParser().parse(
+      lines: screenshot, imageWidth: 692, imageHeight: 1536,
+    );
+    expect(details, hasLength(1));
+    expect(details.single.title, '【24h】速食短打+赠捡手');
+    expect(details.single.clientName, '虚构用户');
+    expect(details.single.price, 40);
+    expect(details.single.progressPercent, 100);
+    expect(details.single.importReadyDeadline,
+        DateTime(2025, 4, 27, 16, 37));
   });
 
   test('same file different card index is independent; repeated card matches', () {

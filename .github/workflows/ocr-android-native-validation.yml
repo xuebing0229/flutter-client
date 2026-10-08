@@ -4,10 +4,13 @@ on:
   push:
     branches:
       - fix/adventurer-news-inline-20261008
+      - fix/ocr-real-verification-20261008
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
       - '.github/workflows/ocr-android-native-validation.yml'
+      - 'lib/features/imports/**'
+      - 'test/features/screenshot_*'
   workflow_dispatch:
 
 permissions:
@@ -65,14 +68,35 @@ jobs:
           heap-size: 512M
           disable-animations: true
           emulator-boot-timeout: 900
-          script: bash -lc 'cd android && gradle :app:connectedBetaDebugAndroidTest --no-daemon --console=plain --stacktrace'
+          # The fixtures are synthetic, but all their pixels go through the
+          # real bundled ML Kit recognizer. Preserve the actual recognized
+          # lines in CI logs for reviewing price/title omissions.
+          script: bash -lc 'cd android; gradle :app:connectedBetaDebugAndroidTest --no-daemon --console=plain --stacktrace; status=$?; adb logcat -d -s AG_REAL_OCR:I "*:S" | tail -n 250; exit "$status"'
       - name: Upload instrumentation reports only
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: chinese-mlkit-real-pixel-tests
           path: |
-            android/app/build/outputs/androidTest-results/connected/**
-            android/app/build/reports/androidTests/connected/**
+            build/app/outputs/androidTest-results/connected/**
+            build/app/reports/androidTests/connected/**
           if-no-files-found: ignore
           retention-days: 7
+
+  dart-import-regressions:
+    name: Screenshot field parsing and title/preset regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Run screenshot import parser tests (not a release)
+        run: |
+          flutter test test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_title_reconciliation_test.dart test/features/screenshot_layout_parser_test.dart test/features/screenshot_ocr_real_world_regression_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/import_batch_preset_state_test.dart
+      - name: Analyze import sources
+        run: flutter analyze lib/features/imports

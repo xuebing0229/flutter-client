@@ -25,13 +25,14 @@ bool isHuajiaOrderDetailScreenshot({
   }
   final status = visible.any((line) =>
       line.centerY < imageHeight * 0.17 &&
-      (line.text.contains('订单已完成') ||
+      (RegExp(r'订单[已己]完成').hasMatch(line.text) ||
           line.text.contains('订单进行中') ||
           line.text.contains('订单已取消') ||
           line.text.contains('订单已中断')));
   final history = text.contains('改价历史');
   final movement = text.contains('订单动态');
-  final huajiaBadge = text.contains('真爱永恒');
+  final huajiaBadge = text.contains('真爱永恒') ||
+      text.contains('真愛永恒') || text.contains('真愛永恆');
   final tabs = visible.any((line) =>
       line.centerY > imageHeight * 0.26 &&
       line.centerY < imageHeight * 0.64 &&
@@ -50,6 +51,7 @@ class ScreenshotHuajiaDetailParser {
       r'(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:日)?'
       r'(?:\s+(\d{1,2}):(\d{2}))?');
   static final _money = RegExp(r'[¥￥]\s*(\d+(?:\.\d{1,2})?)');
+  static final _clock = RegExp(r'^([01]?\d|2[0-3]):([0-5]\d)$');
   static final _node = RegExp(r'(\d{1,3})\s*%');
   static final _image = RegExp(r'\.(?:png|jpe?g|webp)\b', caseSensitive: false);
 
@@ -91,8 +93,28 @@ class ScreenshotHuajiaDetailParser {
       final year = int.parse(match.group(1)!);
       final month = int.parse(match.group(2)!);
       final day = int.parse(match.group(3)!);
-      final hour = int.tryParse(match.group(4) ?? '') ?? 0;
-      final minute = int.tryParse(match.group(5) ?? '') ?? 0;
+      var hour = int.tryParse(match.group(4) ?? '') ?? 0;
+      var minute = int.tryParse(match.group(5) ?? '') ?? 0;
+      var hasTime = match.group(4) != null;
+      if (!hasTime) {
+        // Chinese ML Kit sometimes emits the date and HH:mm as separate
+        // boxes. Only a clock on the SAME deadline row is authoritative;
+        // a clock in the status bar or file list must not be reused.
+        final clocks = prepared.where((other) =>
+            !identical(other, line) &&
+            (other.centerY - line.centerY).abs() <= 20 &&
+            other.left >= line.left + 55 &&
+            other.left <= line.right + 100 &&
+            _clock.hasMatch(other.text.trim())).toList()
+          ..sort((a, b) => (a.centerY - line.centerY).abs()
+              .compareTo((b.centerY - line.centerY).abs()));
+        if (clocks.isNotEmpty) {
+          final clock = _clock.firstMatch(clocks.first.text.trim())!;
+          hour = int.parse(clock.group(1)!);
+          minute = int.parse(clock.group(2)!);
+          hasTime = true;
+        }
+      }
       if (month < 1 || month > 12 || day < 1 || day > 31 ||
           hour > 23 || minute > 59) {
         continue;
@@ -101,7 +123,7 @@ class ScreenshotHuajiaDetailParser {
       if (date.year != year || date.month != month || date.day != day) {
         continue;
       }
-      dates.add((line, date, match.group(4) != null));
+      dates.add((line, date, hasTime));
     }
     dates.sort((a, b) {
       final aScore = a.$1.text.contains('截稿') ? 0 : 1;
@@ -130,7 +152,8 @@ class ScreenshotHuajiaDetailParser {
           !text.contains('历史') &&
           !text.contains('参考信息') &&
           !text.contains('Lv1') &&
-          !RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text);
+          !RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) &&
+          !RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text);
     }).toList()
       ..sort((a, b) => b.centerY.compareTo(a.centerY));
     final title = candidates.isEmpty ? null : candidates.first;
@@ -160,7 +183,9 @@ class ScreenshotHuajiaDetailParser {
         line.centerY < contentBottom).toList();
     (double, ScreenshotTextLine)? fee;
     for (final line in amountLines) {
-      final match = _money.firstMatch(line.text);
+      final match = _money.firstMatch(line.text.trim().replaceFirst(
+        RegExp(r'^[yY](?=\s*\d)'), '¥',
+      ));
       if (match == null) continue;
       final value = double.tryParse(match.group(1)!);
       if (value != null) {
@@ -185,7 +210,7 @@ class ScreenshotHuajiaDetailParser {
     }
     final finished = prepared.any((line) =>
         line.centerY < imageHeight * 0.17 &&
-        line.text.contains('订单已完成'));
+        RegExp(r'订单[已己]完成').hasMatch(line.text));
     final percentage = prepared.where((line) =>
         line.centerY < contentBottom &&
         line.text.contains('当前交付节点')).map((line) =>
@@ -196,7 +221,8 @@ class ScreenshotHuajiaDetailParser {
     return [
       ScreenshotOrderCandidate(
         title: title?.text.trim() ?? '',
-        clientName: buyer?.text.trim() ?? '',
+        clientName: (buyer?.text ?? '').trim()
+            .replaceFirst(RegExp(r'\s*[›＞>]\s*$'), '').trim(),
         detectedDate: deadline?.$2,
         deadlineHasTime: deadline?.$3 ?? false,
         relativeDeadlineText: null,

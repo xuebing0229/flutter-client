@@ -130,6 +130,14 @@ class ScreenshotLayoutParser {
     r'(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:日)?'
     r'(?:\s+(\d{1,2}):(\d{2}))?',
   );
+  // Fix ONLY whitespace splitting two digits of a year-month token. For
+  // example native ML Kit can read "2026-10-31" as "2026-1 0-31".
+  // Never infer a completely missing date or an absent deadline clock.
+  static String _repairDateMonthOcr(String value) => value.replaceAllMapped(
+    RegExp(r'(20\d{2}[-/.年])([01])\s+(\d)([-/.月])'),
+    (m) => m.group(1)! + m.group(2)! + m.group(3)! + m.group(4)!,
+  );
+
   static final RegExp _clock = RegExp(r'^([01]?\d|2[0-3]):([0-5]\d)$');
   static final RegExp _money = RegExp(r'[¥￥]\s*(\d+(?:\.\d{1,2})?)');
   static final RegExp _percent = RegExp(r'(\d{1,3})\s*%');
@@ -168,7 +176,7 @@ class ScreenshotLayoutParser {
 
     final dates = <(ScreenshotTextLine, DateTime, bool)>[];
     for (final line in prepared) {
-      final match = _date.firstMatch(line.text);
+      final match = _date.firstMatch(_repairDateMonthOcr(line.text));
       if (match == null) continue;
       final year = int.parse(match.group(1)!);
       final month = int.parse(match.group(2)!);
@@ -483,7 +491,9 @@ class ScreenshotLayoutParser {
     final nearby = lines.where((line) =>
         (line.centerY - paymentY).abs() < 40).toList();
     for (final line in nearby) {
-      final matched = _money.firstMatch(line.text);
+      final matched = _money.firstMatch(line.text.trim().replaceFirst(
+        RegExp(r'^[yY](?=\s*\d)'), '¥',
+      ));
       if (matched != null) {
         final value = double.tryParse(matched.group(1)!);
         if (value != null) return (value, line);
@@ -547,7 +557,14 @@ class ScreenshotLayoutParser {
     final candidates = <(double, ScreenshotTextLine, int)>[];
     for (final line in lines) {
       final cleaned = line.text.trim();
-      final explicit = _money.firstMatch(cleaned);
+      // The real Chinese ML Kit pass sometimes reads ¥94 as y94 / Y94.
+      // Accept that confusable glyph ONLY when geometry proves a fee row;
+      // never reinterpret ordinary artwork/title text as money.
+      final looksLikeMisreadYen = RegExp(r'^[yY]\s*\d').hasMatch(cleaned);
+      final currencyText = looksLikeMisreadYen
+          ? cleaned.replaceFirst(RegExp(r'^[yY]'), '¥')
+          : cleaned;
+      final explicit = _money.firstMatch(currencyText);
       final bare = RegExp(r'^\d{1,7}(?:\.\d{1,2})?$')
           .firstMatch(cleaned);
       final value = double.tryParse(
@@ -569,6 +586,10 @@ class ScreenshotLayoutParser {
       final detailFee = detail && lines.any((label) =>
           (label.text.contains('稿酬') || label.text.contains('支付')) &&
           (label.centerY - line.centerY).abs() < 30);
+      if (looksLikeMisreadYen &&
+          !huajiaPricePosition && !mihuashiPricePosition && !detailFee) {
+        continue;
+      }
       if (explicit == null && !adjacentYen &&
           !huajiaPricePosition && !mihuashiPricePosition && !detailFee) {
         continue;
@@ -590,7 +611,8 @@ class ScreenshotLayoutParser {
     final text = source.trim();
     if (text.length < 2 || _date.hasMatch(text) ||
         _money.hasMatch(text) || _percent.hasMatch(text) ||
-        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) ||
+        RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {
       return false;
     }
     const ignore = [
@@ -614,7 +636,8 @@ class ScreenshotLayoutParser {
     final text = source.trim();
     if (text.isEmpty || _date.hasMatch(text) ||
         _money.hasMatch(text) || _percent.hasMatch(text) ||
-        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) ||
+        RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {
       return false;
     }
     if (<String>{
@@ -696,7 +719,11 @@ bool isMiHuashiOrderDetailScreenshot({
       (strongTab || paymentRow || attachment)) {
     return true;
   }
-  if (deadlineTop && strongTab && paymentRow && attachment) return true;
+  // ML Kit can miss the small centered "订单" heading or attachment filename.
+  // The deadline, payment status and MiHuashi-specific tab form three
+  // independent signals. Never mistake a file timestamp for another order.
+  if (deadlineTop && paymentRow && (strongTab || attachment)) return true;
+  if (strongTab && paymentRow && attachment) return true;
   // If the deadline was not recognized at all, still preserve this page as
   // one editable order rather than manufacturing orders from upload times.
   return centeredHeader && paymentRow && strongTab && attachment;
