@@ -205,16 +205,27 @@ class ScreenshotLayoutParser {
       dates.add((line, value, hasTime));
     }
 
-    // A MiHuashi order detail page is one business record even when its
-    // attachment list contains more timestamps than the deadline section.
-    // Detect layout first; do not let generic date-based card splitting run.
-    if (isMiHuashiOrderDetailScreenshot(
+    // Distinguish the platform-specific detail layouts BEFORE counting
+    // dates: upload dates inside attachments never create another order.
+    // "订单" and "参考信息" are shared UI terms, not platform identifiers.
+    final detailPlatform = classifyScreenshotOrderDetail(
       lines: prepared,
       imageWidth: imageWidth,
       imageHeight: imageHeight,
-    )) {
+    );
+    if (detailPlatform == CommissionPlatform.mihuashi) {
       return [
         _parseOrderDetail(
+          prepared: prepared,
+          dates: dates,
+          imageWidth: imageWidth,
+          imageHeight: imageHeight,
+        ),
+      ];
+    }
+    if (detailPlatform == CommissionPlatform.huajia) {
+      return [
+        _parseHuajiaOrderDetail(
           prepared: prepared,
           dates: dates,
           imageWidth: imageWidth,
@@ -370,6 +381,456 @@ class ScreenshotLayoutParser {
       ));
     }
     return List.unmodifiable(result);
+  }
+
+  ScreenshotOrderCandidate _parseHuajiaOrderDetail({
+    required List<ScreenshotTextLine> prepared,
+    required List<(ScreenshotTextLine, DateTime, bool)> dates,
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    // Huajia uses a dark profile header ABOVE its artwork/fee/deadline card.
+    // Its "稿件" pane below the tabs contains upload dates, not deadlines.
+    final tabs = prepared.where((line) =>
+        line.centerY > imageHeight * 0.25 &&
+        line.centerY < imageHeight * 0.68 &&
+        RegExp(r'稿件|订单动态|改价历史|参考信息')
+            .hasMatch(line.text)).toList();
+    final tabY = tabs.isEmpty
+        ? imageHeight * 0.48
+        : tabs.map((line) => line.centerY).reduce(math.min);
+    final headerEnd = math.min(tabY - 14, imageHeight * 0.46);
+
+    final deadlineCandidates = dates.where((row) =>
+        row.$1.centerY > imageHeight * 0.19 &&
+        row.$1.centerY < headerEnd).toList()
+      ..sort((a, b) {
+        final aLabel = a.$1.text.contains('截稿') ? 0 : 1;
+        final bLabel = b.$1.text.contains('截稿') ? 0 : 1;
+        final compared = aLabel.compareTo(bLabel);
+        return compared != 0
+            ? compared : b.$1.centerY.compareTo(a.$1.centerY);
+      });
+    // An unrecognized order deadline is left empty; never copy a date from
+    // the attachment list or from the phone status bar.
+    final deadline = deadlineCandidates.isEmpty
+        ? null : deadlineCandidates.first;
+    final dateY = deadline?.$1.centerY ?? headerEnd;
+
+    // Locate the main cover-card title to the right of its thumbnail.
+    // Exclude tabs, account badges, price and date labels.
+    final headings = prepared.where((line) =>
+        line.centerY > imageHeight * 0.17 &&
+        line.centerY < dateY - 15 &&
+        line.left >= imageWidth * 0.24 &&
+        !line.text.contains('截稿') &&
+        !line.text.contains('真爱永恒') &&
+        !line.text.contains('已实名') &&
+        !line.text.contains('订单已完成') &&
+        !RegExp(r'^Lv\\d+', caseSensitive: false).hasMatch(line.text) &&
+        _plausibleDetailTitle(line.text)).toList()
+      ..sort((a, b) => b.centerY.compareTo(a.centerY));
+
+    // Some OCR passes leave "¥40" between title and deadline; ensure the
+    // title selection never treats the amount as a second card title.
+    final title = headings.isEmpty ? null : headings.first;
+    final titleY = title?.centerY ?? imageHeight * 0.225;
+
+    final clients = prepared.where((line) =>
+        line.centerY > imageHeight * 0.115 &&
+        line.centerY < math.min(titleY - 25, imageHeight * 0.26) &&
+        line.left < imageWidth * 0.38 &&
+        _plausibleDetailBuyer(line.text) &&
+        !line.text.contains('订单') &&
+        !line.text.contains('实名') &&
+        !line.text.contains('真爱') &&
+        !RegExp(r'^Lv\\d+', caseSensitive: false).hasMatch(line.text)).toList()
+      ..sort((a, b) => b.centerY.compareTo(a.centerY));
+    final buyer = clients.isEmpty ? null : clients.first;
+
+    final cardArea = prepared.where((line) =>
+        line.centerY > math.max(titleY + 12, imageHeight * 0.18) &&
+        line.centerY < math.min(tabY - 15, imageHeight * 0.45)).toList();
+    (double, ScreenshotTextLine)? price;
+    for (final line in cardArea) {
+      final m = _money.firstMatch(line.text);
+      if (m == null) continue;
+      final value = double.tryParse(m.group(1)!);
+      if (value == null) continue;
+      price = (value, line);
+      break;
+    }
+    if (price == null) {
+      final yen = cardArea.where((line) =>
+          RegExp(r'^[¥￥]
+    required List<ScreenshotTextLine> prepared,
+    required List<(ScreenshotTextLine, DateTime, bool)> dates,
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    // A date in the attachment section is an UPLOAD date, not an order
+    // deadline. Only inspect the header above the first attachment/tab area.
+    final tabs = prepared.where((line) =>
+        _detailTab.hasMatch(line.text.trim()) &&
+        line.centerY > imageHeight * 0.24 &&
+        line.centerY < imageHeight * 0.68).toList();
+    final tabY = tabs.isEmpty
+        ? imageHeight * 0.53
+        : tabs.map((line) => line.centerY).reduce(math.min);
+    final latestDeadlineY = math.min(tabY - 14, imageHeight * 0.41);
+
+    final eligibleDates = dates.where((r) =>
+        r.$1.centerY < latestDeadlineY &&
+        r.$1.centerY > imageHeight * 0.09).toList();
+    int priority(ScreenshotTextLine line) {
+      if (line.text.contains('截稿')) {
+        return 0;
+      }
+      if (prepared.any((label) =>
+          label.text.contains('截稿') &&
+          (label.centerY - line.centerY).abs() < 42 &&
+          label.centerY < tabY)) {
+        return 1;
+      }
+      return 2;
+    }
+    eligibleDates.sort((a, b) {
+      final prioritized = priority(a.$1).compareTo(priority(b.$1));
+      return prioritized != 0
+          ? prioritized : a.$1.centerY.compareTo(b.$1.centerY);
+    });
+    final deadline = eligibleDates.isEmpty ? null : eligibleDates.first;
+    final deadlineLine = deadline?.$1;
+    final deadlineY = deadlineLine?.centerY ?? imageHeight * 0.19;
+
+    // The actual work title is to the RIGHT of the artwork thumbnail, above
+    // its deadline. The page navigation "订单" must never be a buyer/title.
+    final titles = prepared.where((line) =>
+        line.centerY > imageHeight * 0.08 &&
+        line.centerY < math.min(deadlineY - 8, imageHeight * 0.32) &&
+        line.left >= imageWidth * 0.22 &&
+        _plausibleDetailTitle(line.text)).toList()
+      ..sort((a, b) => b.centerY.compareTo(a.centerY));
+    final titleLine = titles.isEmpty ? null : titles.first;
+
+    // Buyer sits in its own row BETWEEN deadline and payment status.
+    // The upload filename/KB/date below 稿件夹 is never buyer information.
+    final payment = prepared.where((line) =>
+        line.centerY > deadlineY + 25 &&
+        line.centerY < tabY &&
+        _detailPayment.hasMatch(line.text)).toList()
+      ..sort((a, b) => a.centerY.compareTo(b.centerY));
+    final paymentY = payment.isEmpty
+        ? math.min(tabY - 12, deadlineY + imageHeight * 0.19)
+        : payment.first.centerY;
+    final buyers = prepared.where((line) =>
+        line.centerY > deadlineY + 22 &&
+        line.centerY < math.min(paymentY - 18, deadlineY + imageHeight * 0.16) &&
+        line.left < imageWidth * 0.75 &&
+        _plausibleDetailBuyer(line.text)).toList()
+      ..sort((a, b) => a.centerY.compareTo(b.centerY));
+    final buyerLine = buyers.isEmpty ? null : buyers.first;
+
+    final cardLines = prepared.where((line) =>
+        line.centerY >= (titleLine?.centerY ?? imageHeight * 0.1) - 14 &&
+        line.centerY < tabY).toList();
+    final amount = _findDetailPrice(cardLines, paymentY: paymentY);
+    final progress = cardLines
+        .map((line) => _percent.firstMatch(line.text))
+        .whereType<RegExpMatch>()
+        .map((match) => int.tryParse(match.group(1)!))
+        .whereType<int>()
+        .where((value) => value <= 100)
+        .firstOrNull;
+    // A completed commission page may not show a separate progress widget;
+    // the status "约稿完成" itself explicitly means the final 100% node.
+    final isFinished = payment.any((line) =>
+        line.text.contains('约稿完成'));
+    return ScreenshotOrderCandidate(
+      title: titleLine == null ? '' : _stripKnownUiLabel(titleLine.text),
+      clientName: buyerLine == null ? '' : _cleanBuyerName(buyerLine.text),
+      detectedDate: deadline?.$2,
+      deadlineHasTime: deadline?.$3 ?? false,
+      relativeDeadlineText: null,
+      price: amount?.$1,
+      progressPercent: progress ?? (isFinished ? 100 : null),
+      // Preserve the full screenshot for preview inspection, but never turn
+      // upload metadata below the tabs into a second commission.
+      sourceLines: List.unmodifiable(prepared),
+      sourceStartY: 0,
+      sourceEndY: imageHeight,
+      titleBox: titleLine,
+      clientBox: buyerLine,
+      priceBox: amount?.$2,
+      deadlineBox: deadlineLine,
+    );
+  }
+
+  static (double, ScreenshotTextLine)? _findDetailPrice(
+    List<ScreenshotTextLine> lines, {required double paymentY}) {
+    // Prefer a currency token in the payment/status row, not a number from
+    // the thumbnail or file-size line. Some OCR runs separate ¥ and 88.
+    final nearby = lines.where((line) =>
+        (line.centerY - paymentY).abs() < 40).toList();
+    for (final line in nearby) {
+      final matched = _money.firstMatch(line.text);
+      if (matched != null) {
+        final value = double.tryParse(matched.group(1)!);
+        if (value != null) return (value, line);
+      }
+    }
+    final currencyMarks = nearby.where(
+      (line) => RegExp(r'^[¥￥]$').hasMatch(line.text.trim()),
+    ).toList();
+    for (final line in nearby) {
+      final value = double.tryParse(line.text.trim());
+      if (value == null || value < 0 || value > 10000000) continue;
+      final paired = currencyMarks.any((symbol) =>
+          (symbol.centerY - line.centerY).abs() < 27 &&
+          (line.left - symbol.right).abs() < 90);
+      // OCR can drop the currency glyph but preserve the fee number.
+      final feeLabel = nearby.any((label) =>
+          _detailPayment.hasMatch(label.text) &&
+          (label.centerY - line.centerY).abs() < 25 &&
+          label.left <= line.left);
+      if (paired || feeLabel) return (value, line);
+    }
+    return null;
+  }
+
+  static bool _plausibleDetailTitle(String text) {
+    if (!_plausibleTitle(text)) return false;
+    final name = text.trim();
+    if (_detailTab.hasMatch(name) || _detailPayment.hasMatch(name) ||
+        name.contains('截稿') || name.contains('上传') ||
+        name == '订单' || name.contains('文件')) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleDetailBuyer(String text) {
+    final name = text.trim();
+    if (!_plausibleBuyer(name) || _detailTab.hasMatch(name) ||
+        _detailPayment.hasMatch(name) || name.contains('截稿') ||
+        name == '订单' || name.contains('文件') ||
+        name.contains('.png') || name.contains('.jpg') ||
+        name.contains('KB') || name.contains('GB')) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Find amounts even when OCR separates the currency glyph from its digits.
+  /// Standalone digits are trusted only in a known price location.
+  static (double, ScreenshotTextLine)? _findCardPrice(
+    List<ScreenshotTextLine> lines, {
+    required ScreenshotTextLine titleLine,
+    required ScreenshotTextLine deadlineLine,
+    required double imageWidth,
+    bool detail = false,
+  }) {
+    // Full-image OCR may return ¥30, a zoomed crop may return ¥ and 30.
+    // Both are valid, but only inside the current card.
+    final currency = lines.where((line) =>
+        RegExp(r'^[¥￥]$').hasMatch(line.text.trim())).toList();
+    final candidates = <(double, ScreenshotTextLine, int)>[];
+    for (final line in lines) {
+      final cleaned = line.text.trim();
+      final explicit = _money.firstMatch(cleaned);
+      final bare = RegExp(r'^\d{1,7}(?:\.\d{1,2})?$')
+          .firstMatch(cleaned);
+      final value = double.tryParse(
+        explicit != null ? explicit.group(1)! : (bare?.group(0) ?? ''),
+      );
+      if (value == null || value < 0) continue;
+      final adjacentYen = currency.any((symbol) =>
+          (symbol.centerY - line.centerY).abs() < 28 &&
+          (line.left - symbol.right).abs() < 90);
+      // Never mistake a cropped right-end fragment of 16:48 for a fee.
+      final belowDeadline = line.centerY > deadlineLine.centerY + 12;
+      final huajiaPricePosition = belowDeadline &&
+          line.left >= imageWidth * 0.69;
+      final mihuashiPricePosition =
+          line.centerY > titleLine.centerY + 10 &&
+          line.centerY < deadlineLine.centerY - 8 &&
+          (line.left - titleLine.left).abs() < imageWidth * 0.19 &&
+          cleaned.length >= 2;
+      final detailFee = detail && lines.any((label) =>
+          (label.text.contains('稿酬') || label.text.contains('支付')) &&
+          (label.centerY - line.centerY).abs() < 30);
+      if (explicit == null && !adjacentYen &&
+          !huajiaPricePosition && !mihuashiPricePosition && !detailFee) {
+        continue;
+      }
+      final strength = explicit != null ? 3 : adjacentYen ? 2 : 1;
+      candidates.add((value, line, strength));
+    }
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final byStrength = b.$3.compareTo(a.$3);
+      if (byStrength != 0) return byStrength;
+      return a.$2.centerY.compareTo(b.$2.centerY);
+    });
+    final best = candidates.first;
+    return (best.$1, best.$2);
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _cleanBuyerName(String source) {
+    // Huajia renders a chevron after the customer name; its glyph is not
+    // part of the person's username.
+    return source.trim().replaceFirst(RegExp(r'\s*[›＞>]\s*$'), '').trim();
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划', '订单',
+      '稿件夹', '进程动态', '参考信息', '联系企划方', '上传稿件',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+
+/// An order detail is a SINGLE transaction; its lower half can contain many
+/// file timestamps. Use geometry plus page-specific landmarks, not an exact
+/// list of OCR spellings (small tab captions are frequently omitted by ML Kit).
+bool isMiHuashiOrderDetailScreenshot({
+  required Iterable<ScreenshotTextLine> lines,
+  required double imageWidth,
+  required double imageHeight,
+}) {
+  if (imageWidth <= 0 || imageHeight <= 0) return false;
+  final prepared = lines.toList();
+  final combined = prepared.map((line) => line.text).join(' ');
+  if (combined.contains('我卖出的')) return false;
+  final centeredHeader = prepared.any((line) =>
+      line.centerY < imageHeight * 0.135 &&
+      line.centerY > imageHeight * 0.025 &&
+      line.left >= imageWidth * 0.3 &&
+      line.right <= imageWidth * 0.78 &&
+      line.text.trim() == '订单');
+  final deadlineTop = prepared.any((line) =>
+      line.centerY > imageHeight * 0.115 &&
+      line.centerY < imageHeight * 0.42 &&
+      ScreenshotLayoutParser._date.hasMatch(line.text));
+  final strongTab = prepared.any((line) =>
+      line.centerY > imageHeight * 0.30 &&
+      line.centerY < imageHeight * 0.72 &&
+      ScreenshotLayoutParser._detailTab.hasMatch(line.text));
+  final paymentRow = prepared.any((line) =>
+      line.centerY > imageHeight * 0.23 &&
+      line.centerY < imageHeight * 0.60 &&
+      ScreenshotLayoutParser._detailPayment.hasMatch(line.text));
+  final attachment = prepared.any((line) =>
+      line.centerY > imageHeight * 0.36 &&
+      (RegExp(r'\.(png|jpe?g|webp)\b', caseSensitive: false)
+          .hasMatch(line.text) ||
+       line.text.contains('企划方已下载')));
+  // Header + order date + one independent confirmation suffices. If the
+  // "订单" glyph is lost, require BOTH the payment line and attachment/tab.
+  if (centeredHeader && deadlineTop &&
+      (strongTab || paymentRow || attachment)) {
+    return true;
+  }
+  if (deadlineTop && strongTab && paymentRow && attachment) return true;
+  // If the deadline was not recognized at all, still preserve this page as
+  // one editable order rather than manufacturing orders from upload times.
+  return centeredHeader && paymentRow && strongTab && attachment;
+}
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(line.text.trim())).toList();
+      for (final line in cardArea) {
+        final value = double.tryParse(line.text.trim());
+        if (value == null) continue;
+        if (yen.any((symbol) =>
+            (symbol.centerY - line.centerY).abs() < 25 &&
+            (symbol.right - line.left).abs() < 85)) {
+          price = (value, line);
+          break;
+        }
+      }
+    }
+
+    final finished = prepared.any((line) =>
+        line.centerY < imageHeight * 0.16 &&
+        (line.text.contains('订单已完成') ||
+            line.text.contains('订单完成')));
+    return ScreenshotOrderCandidate(
+      title: title == null ? '' : _stripKnownUiLabel(title.text),
+      clientName: buyer == null ? '' : _cleanBuyerName(buyer.text),
+      detectedDate: deadline?.$2,
+      deadlineHasTime: deadline?.$3 ?? false,
+      relativeDeadlineText: null,
+      price: price?.$1,
+      // A finished Huajia order no longer has an ongoing node.
+      progressPercent: finished ? 100 : null,
+      sourceLines: List.unmodifiable(prepared),
+      sourceStartY: 0,
+      sourceEndY: imageHeight,
+      titleBox: title,
+      clientBox: buyer,
+      priceBox: price?.$2,
+      deadlineBox: deadline?.$1,
+    );
   }
 
   ScreenshotOrderCandidate _parseOrderDetail({
