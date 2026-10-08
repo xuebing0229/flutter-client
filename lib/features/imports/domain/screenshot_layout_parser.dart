@@ -35,6 +35,10 @@ class ScreenshotOrderCandidate {
     required this.sourceLines,
     required this.sourceStartY,
     required this.sourceEndY,
+    this.titleBox,
+    this.clientBox,
+    this.priceBox,
+    this.deadlineBox,
   });
 
   final String title;
@@ -108,6 +112,10 @@ class ScreenshotOrderCandidate {
   final List<ScreenshotTextLine> sourceLines;
   final double sourceStartY;
   final double sourceEndY;
+  final ScreenshotTextLine? titleBox;
+  final ScreenshotTextLine? clientBox;
+  final ScreenshotTextLine? priceBox;
+  final ScreenshotTextLine? deadlineBox;
 }
 
 /// Early deterministic card extraction prototype for vertically stacked list
@@ -294,11 +302,13 @@ class ScreenshotLayoutParser {
           line.centerY >= titleLine.centerY - 12 &&
           line.centerY <= endY).toList();
       double? price;
+      ScreenshotTextLine? priceBox;
       int? progress;
       for (final line in cardArea) {
         final money = _money.firstMatch(line.text);
         if (money != null && price == null) {
           price = double.tryParse(money.group(1)!);
+          priceBox = line;
         }
         final matched = _percent.firstMatch(line.text);
         if (matched != null && progress == null) {
@@ -318,6 +328,10 @@ class ScreenshotLayoutParser {
         sourceLines: List.unmodifiable(cardArea),
         sourceStartY: startY,
         sourceEndY: endY,
+        titleBox: titleLine,
+        clientBox: buyers.isEmpty ? null : buyers.first,
+        priceBox: priceBox,
+        deadlineBox: deadlineAnchor.isTitleAnchor ? null : anchor,
       ));
     }
     return List.unmodifiable(result);
