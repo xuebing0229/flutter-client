@@ -194,6 +194,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   void _refreshDuplicateWarnings() {
     for (final row in _rows) {
       row.duplicateWarning = null;
+      if (row.duplicateAutoSkipped) {
+        row.selected = true;
+        row.duplicateAutoSkipped = false;
+      }
     }
     for (var index = 0; index < _rows.length; index++) {
       final row = _rows[index];
@@ -213,7 +217,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         if (duplicateInStore || duplicateInPreview) {
           row.duplicateWarning = duplicateInStore
               ? '已有同名成品，默认跳过' : '本批次同名橱窗，默认跳过';
-          row.selected = false;
+          if (!row.duplicateReviewed) {
+            row.selected = false;
+            row.duplicateAutoSkipped = true;
+          }
         }
         continue;
       }
@@ -265,7 +272,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       if (existing || acrossScreenshots) {
         row.duplicateWarning = existing
             ? '与已有排单疑似重复' : '与其他截图的排单疑似重复';
-        row.selected = false;
+        if (!row.duplicateReviewed) {
+          row.selected = false;
+          row.duplicateAutoSkipped = true;
+        }
       }
     }
   }
@@ -654,7 +664,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           value: row.selected,
           visualDensity: VisualDensity.compact,
           onChanged: (value) =>
-              setState(() => row.selected = value ?? false),
+              setState(() {
+                row.selected = value ?? false;
+                row.duplicateReviewed = true;
+                row.duplicateAutoSkipped = false;
+              }),
         ),
         title: Text(
           row.title.isEmpty ? '未识别图名' : row.title,
