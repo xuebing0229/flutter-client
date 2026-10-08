@@ -3,11 +3,13 @@ import 'package:flutter_app/features/imports/domain/screenshot_layout_parser.dar
 import 'package:flutter_app/features/imports/domain/screenshot_product_layout_parser.dart';
 
 void main() {
-  ScreenshotTextLine line(String content, int y) => ScreenshotTextLine(
+  ScreenshotTextLine line(
+    String content, int y, {double x = 70, double width = 320},
+  ) => ScreenshotTextLine(
     text: content,
     top: y.toDouble(),
-    left: 70,
-    right: 390,
+    left: x,
+    right: x + width,
     bottom: y + 24.0,
   );
 
@@ -77,5 +79,22 @@ void main() {
     expect(items.first.title, '【常驻】 yy94原创头像');
     expect(items.first.price, isNull);
     expect(items.last.price, 60);
+  });
+
+  test('split currency and digits are one price, without inventing bare fees', () {
+    final items = const ScreenshotProductLayoutParser().parse(
+      imageHeight: 1100,
+      lines: [
+        line('【常驻】头像', 200, x: 193, width: 200),
+        line('¥', 270, x: 586, width: 21),
+        line('94', 270, x: 610, width: 28),
+        line('【常驻】另一个盒子', 580, x: 190, width: 210),
+        line('88', 645, x: 644, width: 26),
+      ],
+    );
+    expect(items, hasLength(2));
+    expect(items.map((e) => e.title).toList(),
+        ['【常驻】头像', '【常驻】另一个盒子']);
+    expect(items.map((e) => e.price).toList(), [94, null]);
   });
 }
