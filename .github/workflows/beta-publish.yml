@@ -127,9 +127,9 @@ jobs:
         shell: pwsh
         run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.5
 
-      - name: Bundle offline Chinese screenshot OCR
+      - name: Bundle PaddleOCR ONNX Chinese screenshot recognition
         shell: pwsh
-        run: ./tool/bundle_windows_ocr.ps1
+        run: ./tool/bundle_windows_rapidocr.ps1
 
       - name: Bundle current Windows icon
         shell: pwsh
