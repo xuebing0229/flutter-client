@@ -67,7 +67,8 @@ class DataPortabilityFileBridge {
     throw UnsupportedError('当前平台暂未接入系统文件导出。');
   }
 
-  /// Save a generated PNG through the platform's normal Save As picker.
+  /// Save PNG directly to the Android gallery (Android 10+) or via Save As
+  /// on Windows and older Android versions.
   Future<bool> exportImage({
     required String fileName,
     required Uint8List bytes,
