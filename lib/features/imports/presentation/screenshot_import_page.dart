@@ -686,39 +686,86 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       onPressed: () => unawaited(_bulkCompleteMissingTimes()),
                       child: const Text('批量补时间'),
                     ),
-                  PopupMenuButton<CommissionPlatform>(
-                    tooltip: '批量设置平台',
+                  PopupMenuButton<String>(
+                    tooltip: '批量修改平台、预设和手续费',
                     onSelected: (value) => setState(() {
-                      for (final row in _rows) {
-                        row.platform = value;
-                        row.feeEnabled = value.defaultFeeEnabled;
-                        if (!_products && !row.presetManuallyChanged &&
-                            !row.nodeManuallyChanged) {
-                          final preset = resolveImportPreset(
-                            platform: value,
-                            title: row.title,
-                            presets: widget.presetStore.presets,
-                            existingOrders: widget.orderStore.orders,
-                          );
+                      if (value.startsWith('platform:')) {
+                        final p = CommissionPlatform.values.firstWhere(
+                          (candidate) => candidate.name ==
+                              value.substring('platform:'.length),
+                        );
+                        for (final row in _rows) {
+                          row.platform = p;
+                          row.feeEnabled = p.defaultFeeEnabled;
+                          if (!_products && !row.presetManuallyChanged &&
+                              !row.nodeManuallyChanged) {
+                            final preset = resolveImportPreset(
+                              platform: p,
+                              title: row.title,
+                              presets: widget.presetStore.presets,
+                              existingOrders: widget.orderStore.orders,
+                            );
+                            row.presetId = preset.id;
+                            row.nodeId = resolveImportNode(
+                              preset: preset,
+                              recognizedPercent: row.recognizedPercent,
+                            ).id;
+                          }
+                        }
+                        _refreshDuplicateWarnings();
+                      } else if (value.startsWith('preset:')) {
+                        final preset = widget.presetStore.byId(
+                          value.substring('preset:'.length),
+                        );
+                        for (final row in _rows) {
+                          if (!row.selected) continue;
                           row.presetId = preset.id;
                           row.nodeId = resolveImportNode(
                             preset: preset,
                             recognizedPercent: row.recognizedPercent,
                           ).id;
+                          row.presetManuallyChanged = true;
+                          row.nodeManuallyChanged = false;
+                        }
+                      } else if (value == 'fee:on' || value == 'fee:off') {
+                        for (final row in _rows) {
+                          if (row.selected) {
+                            row.feeEnabled = value == 'fee:on';
+                          }
                         }
                       }
-                      _refreshDuplicateWarnings();
                     }),
-                    itemBuilder: (context) => [
-                      for (final platform in CommissionPlatform.values)
+                    itemBuilder: (_) => [
+                      const PopupMenuItem<String>(
+                        enabled: false, child: Text('批量选择平台'),
+                      ),
+                      for (final p in CommissionPlatform.values)
                         PopupMenuItem(
-                          value: platform,
-                          child: Text(platform.label),
+                          value: 'platform:${p.name}',
+                          child: Text(p.label),
                         ),
+                      if (!_products) ...[
+                        const PopupMenuDivider(),
+                        const PopupMenuItem<String>(
+                          enabled: false, child: Text('批量选择节点预设'),
+                        ),
+                        for (final preset in widget.presetStore.presets)
+                          PopupMenuItem(
+                            value: 'preset:${preset.id}',
+                            child: Text(preset.name),
+                          ),
+                      ],
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'fee:on', child: Text('已选项：开启手续费'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'fee:off', child: Text('已选项：关闭手续费'),
+                      ),
                     ],
                     child: const Padding(
                       padding: EdgeInsets.all(8),
-                      child: Text('批量设平台 ▾'),
+                      child: Text('批量设置 ▾'),
                     ),
                   ),
                 ],
