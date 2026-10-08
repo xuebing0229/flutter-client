@@ -696,7 +696,11 @@ bool isMiHuashiOrderDetailScreenshot({
       (strongTab || paymentRow || attachment)) {
     return true;
   }
-  if (deadlineTop && strongTab && paymentRow && attachment) return true;
+  // ML Kit can miss the small centered "订单" heading or attachment filename.
+  // The deadline, payment status and MiHuashi-specific tab form three
+  // independent signals. Never mistake a file timestamp for another order.
+  if (deadlineTop && paymentRow && (strongTab || attachment)) return true;
+  if (strongTab && paymentRow && attachment) return true;
   // If the deadline was not recognized at all, still preserve this page as
   // one editable order rather than manufacturing orders from upload times.
   return centeredHeader && paymentRow && strongTab && attachment;
