@@ -195,6 +195,22 @@ class ScreenshotLayoutParser {
       dates.add((line, value, hasTime));
     }
 
+    // MiHuashi order DETAIL pages put the buyer and settlement BELOW the
+    // timestamp, unlike their list cards. Use a separate geometry path to
+    // avoid losing the buyer, fee and node progress on detail screenshots.
+    if (dates.length == 1 &&
+        prepared.any((line) => line.text.trim() == '订单')) {
+      final detail = _parseOrderDetail(
+        prepared: prepared,
+        deadlineLine: dates.single.$1,
+        deadlineDate: dates.single.$2,
+        hasDeadlineTime: dates.single.$3,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+      );
+      if (detail != null) return List.unmodifiable([detail]);
+    }
+
     // A card with only "接单后X天" has no calendar date. Preserve it as an
     // editable candidate, rather than silently dropping it from the import.
     // Explicit date anchors take precedence if a quick label belongs to the
@@ -268,9 +284,17 @@ class ScreenshotLayoutParser {
       final nextDateY = i + 1 < anchors.length
           ? anchors[i + 1].line.centerY
           : imageHeight;
+      // Only bisect when there really IS a next deadline anchor.
+      // Otherwise a price at the bottom of a partly visible last card can
+      // be cut off, even though it belongs to the current order.
       final endY =
           (anchor.centerY + (deadlineAnchor.isTitleAnchor ? 270 : 115))
-              .clamp(anchor.centerY, (anchor.centerY + nextDateY) / 2)
+              .clamp(
+                anchor.centerY,
+                i + 1 < anchors.length
+                    ? (anchor.centerY + nextDateY) / 2
+                    : imageHeight,
+              )
               .toDouble();
 
       final preceding = prepared.where((line) =>
@@ -335,6 +359,69 @@ class ScreenshotLayoutParser {
       ));
     }
     return List.unmodifiable(result);
+  }
+
+  ScreenshotOrderCandidate? _parseOrderDetail({
+    required List<ScreenshotTextLine> prepared,
+    required ScreenshotTextLine deadlineLine,
+    required DateTime deadlineDate,
+    required bool hasDeadlineTime,
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    final titles = prepared.where((line) =>
+        line.centerY < deadlineLine.centerY - 7 &&
+        line.centerY >= deadlineLine.centerY - 260 &&
+        line.text.trim() != '订单' &&
+        _plausibleTitle(line.text)).toList()
+      ..sort((a, b) => b.centerY.compareTo(a.centerY));
+    if (titles.isEmpty) return null;
+    final title = titles.first;
+    final normalizedTitle = _stripKnownUiLabel(title.text);
+    if (normalizedTitle.isEmpty) return null;
+
+    final buyers = prepared.where((line) =>
+        line.centerY > deadlineLine.centerY + 15 &&
+        line.centerY < deadlineLine.centerY + 175 &&
+        line.left < imageWidth * 0.65 &&
+        _plausibleBuyer(line.text)).toList()
+      ..sort((a, b) => a.centerY.compareTo(b.centerY));
+    final cardEnd = (deadlineLine.centerY + 330)
+        .clamp(deadlineLine.centerY, imageHeight).toDouble();
+    final cardLines = prepared.where((line) =>
+        line.centerY >= title.centerY - 12 &&
+        line.centerY <= cardEnd).toList();
+    double? price;
+    ScreenshotTextLine? priceBox;
+    int? progress;
+    for (final line in cardLines) {
+      final money = _money.firstMatch(line.text);
+      if (price == null && money != null) {
+        price = double.tryParse(money.group(1)!);
+        priceBox = line;
+      }
+      final percent = _percent.firstMatch(line.text);
+      if (progress == null && percent != null) {
+        final parsed = int.tryParse(percent.group(1)!);
+        if (parsed != null && parsed <= 100) progress = parsed;
+      }
+    }
+    return ScreenshotOrderCandidate(
+      title: normalizedTitle,
+      clientName: buyers.isEmpty ? '' : buyers.first.text.trim(),
+      detectedDate: deadlineDate,
+      deadlineHasTime: hasDeadlineTime,
+      relativeDeadlineText: null,
+      price: price,
+      progressPercent: progress,
+      sourceLines: List.unmodifiable(cardLines),
+      sourceStartY: title.centerY,
+      sourceEndY: cardEnd,
+      titleBox: title,
+      clientBox: buyers.isEmpty ? null : buyers.first,
+      priceBox: priceBox,
+      deadlineBox: deadlineLine,
+    );
   }
 
   static bool _plausibleTitle(String source) {
