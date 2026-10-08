@@ -83,7 +83,9 @@ class ScreenshotHuajiaDetailParser {
     final dates = <(ScreenshotTextLine, DateTime, bool)>[];
     for (final line in prepared) {
       if (line.centerY <= imageHeight * 0.19 ||
-          line.centerY >= contentBottom) continue;
+          line.centerY >= contentBottom) {
+        continue;
+      }
       final match = _date.firstMatch(line.text);
       if (match == null) continue;
       final year = int.parse(match.group(1)!);
@@ -92,7 +94,9 @@ class ScreenshotHuajiaDetailParser {
       final hour = int.tryParse(match.group(4) ?? '') ?? 0;
       final minute = int.tryParse(match.group(5) ?? '') ?? 0;
       if (month < 1 || month > 12 || day < 1 || day > 31 ||
-          hour > 23 || minute > 59) continue;
+          hour > 23 || minute > 59) {
+        continue;
+      }
       final date = DateTime(year, month, day, hour, minute);
       if (date.year != year || date.month != month || date.day != day) {
         continue;
