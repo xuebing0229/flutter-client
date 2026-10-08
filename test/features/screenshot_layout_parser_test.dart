@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/features/imports/domain/screenshot_layout_parser.dart';
+import 'package:flutter_app/features/orders/domain/queue_order.dart';
 
 void main() {
   ScreenshotTextLine at(String text, double y, {double x = 80}) =>
@@ -37,6 +38,21 @@ void main() {
     expect(entries.first.needsDeadlineTimeConfirmation, isTrue);
     expect(entries.first.importReadyDeadline, isNull);
     expect(
+      entries.first.suggestedDeadline(platform: CommissionPlatform.mihuashi),
+      DateTime(2026, 10, 31, 23, 59),
+    );
+    expect(
+      entries.first.suggestedDeadline(
+        platform: CommissionPlatform.mihuashi,
+        isQuickCommission: true,
+      ),
+      isNull,
+    );
+    expect(
+      entries.first.suggestedDeadline(platform: CommissionPlatform.huajia),
+      isNull,
+    );
+    expect(
       entries.first.deadlineWithChosenTime(hour: 21, minute: 30),
       DateTime(2026, 10, 31, 21, 30),
     );
@@ -68,6 +84,10 @@ void main() {
     expect(entries.last.price, 88);
     expect(entries.first.needsDeadlineTimeConfirmation, isFalse);
     expect(entries.first.importReadyDeadline, DateTime(2026, 10, 8, 16, 48));
+    expect(
+      entries.first.suggestedDeadline(platform: CommissionPlatform.mihuashi),
+      DateTime(2026, 10, 8, 16, 48),
+    );
     expect(entries.last.progressPercent, 100);
   });
 
