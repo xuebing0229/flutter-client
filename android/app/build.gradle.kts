@@ -132,6 +132,8 @@ kotlin {
 
 dependencies {
     implementation("androidx.work:work-runtime:2.11.0")
+    // Bundled recognizer: OCR works offline without Google Play Services.
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 }
 
 flutter {
