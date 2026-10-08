@@ -182,9 +182,17 @@ class ScreenshotLayoutParser {
     ];
     for (final line in prepared) {
       if (!_relativeDeadline.hasMatch(line.text)) continue;
-      if (anchors.any((item) =>
+      final nearbyDateIndex = anchors.indexWhere((item) =>
           item.date != null &&
-          (item.line.centerY - line.centerY).abs() < 105)) {
+          (item.line.centerY - line.centerY).abs() < 90);
+      if (nearbyDateIndex != -1) {
+        final dateAnchor = anchors[nearbyDateIndex];
+        anchors[nearbyDateIndex] = _ScreenshotDeadlineAnchor(
+          line: dateAnchor.line,
+          date: dateAnchor.date,
+          hasTime: dateAnchor.hasTime,
+          relativeText: line.text.trim(),
+        );
         continue;
       }
       anchors.add(_ScreenshotDeadlineAnchor(
