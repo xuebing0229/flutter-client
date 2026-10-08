@@ -514,36 +514,64 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             dateValue.minute.toString().padLeft(2, '0');
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 7),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(9, 5, 9, 10),
-        child: Column(
+      key: ValueKey(row.id),
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ExpansionTile(
+        dense: true,
+        tilePadding: const EdgeInsets.fromLTRB(3, 0, 3, 0),
+        childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+        leading: Checkbox(
+          value: row.selected,
+          visualDensity: VisualDensity.compact,
+          onChanged: (value) =>
+              setState(() => row.selected = value ?? false),
+        ),
+        title: Text(
+          row.title.isEmpty ? '未识别图名' : row.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyMedium,
+        ),
+        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Checkbox(
-                  value: row.selected,
-                  visualDensity: VisualDensity.compact,
-                  onChanged: (checked) =>
-                      setState(() => row.selected = checked ?? false),
-                ),
-                Expanded(
-                  child: Text(
-                    '识别 ' + (index + 1).toString() +
-                        (row.duplicateWarning == null
-                            ? ' · 待确认' : ' · 疑似重复'),
-                    style: theme.textTheme.labelSmall,
-                  ),
-                ),
-                IconButton(
-                  tooltip: '删除这条识别结果',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() => _rows.remove(row)),
-                  icon: const Icon(Icons.close_rounded, size: 19),
-                ),
-              ],
+            Text(
+              _products
+                  ? '${row.platform?.label ?? '待选平台'} · ${row.price == null ? '待填价格' : '¥${row.price}'} · ${row.saleType.label}'
+                  : '${row.clientName.isEmpty ? '待填单主' : row.clientName} · ${row.platform?.label ?? '待选平台'} · ${row.price == null ? '待填稿价' : '¥${row.price}'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
             ),
+            if (!_products)
+              Text(
+                dateLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall,
+              ),
+            if (row.duplicateWarning != null)
+              Text(
+                row.duplicateWarning!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.error,
+                ),
+              ),
+          ],
+        ),
+        trailing: IconButton(
+          tooltip: '删除这条识别结果',
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.close_rounded, size: 19),
+          onPressed: () => setState(() {
+            _rows.remove(row);
+            _refreshDuplicateWarnings();
+          }),
+        ),
+        children: [
             if (row.duplicateWarning != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -750,8 +778,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       style: theme.textTheme.labelSmall),
               ],
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
