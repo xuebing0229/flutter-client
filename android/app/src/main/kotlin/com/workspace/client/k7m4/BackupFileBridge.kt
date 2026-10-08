@@ -135,21 +135,25 @@ class BackupFileBridge(
                         )
                         put(MediaStore.Images.Media.IS_PENDING, 1)
                     }
-                    savedUri = resolver.insert(
+                    val uri = resolver.insert(
                         MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                         values,
                     ) ?: throw IllegalStateException("Unable to create gallery image.")
-                    resolver.openOutputStream(savedUri!!, "w")?.use {
+                    savedUri = uri
+                    resolver.openOutputStream(uri, "w")?.use {
                         it.write(bytes)
                     } ?: throw IllegalStateException("Unable to write gallery image.")
-                    resolver.update(
-                        savedUri!!,
+                    val published = resolver.update(
+                        uri,
                         ContentValues().apply {
                             put(MediaStore.Images.Media.IS_PENDING, 0)
                         },
                         null,
                         null,
                     )
+                    if (published != 1) {
+                        throw IllegalStateException("Unable to publish image to gallery.")
+                    }
                     activity.runOnUiThread { result.success(true) }
                 } catch (error: Exception) {
                     savedUri?.let { uri ->
