@@ -128,7 +128,7 @@ class ScreenshotLayoutParser {
 
   static final RegExp _date = RegExp(
     r'(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:日)?'
-    r'(?:\s+(\d{1,2}):(\d{2}))?',
+    r'(?:\s*(\d{1,2}):(\d{2}))?',
   );
   // Fix ONLY whitespace splitting two digits of a year-month token. For
   // example native ML Kit can read "2026-10-31" as "2026-1 0-31".
