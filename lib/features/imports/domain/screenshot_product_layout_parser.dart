@@ -58,53 +58,24 @@ class ScreenshotProductLayoutParser {
       if (looksLikeTitle) titles.add(line);
     }
 
-    // If a platform's title lacks words such as 稿/画/橱窗, anchor it to a
-    // nearby price in the same card. Names with no recognizable signals stay
-    // reviewable via the manual-add action in the preview.
+    // Keep names without obvious title keywords when positioned above price.
+    // The preview remains editable; no amount or title is silently trusted.
     for (final priceLine in filtered.where(
       (line) => _money.hasMatch(line.text),
     )) {
-      final options = filtered.where((line) =>
+      final candidates = filtered.where((line) =>
           line.centerY < priceLine.centerY &&
-          priceLine.centerY - line.centerY <= 185 &&
+          priceLine.centerY - line.centerY < 185 &&
           line.text.trim().length >= 3 &&
-          line.text.trim().length < 85 &&
+          line.text.trim().length <= 85 &&
           !_money.hasMatch(line.text) &&
           !_date.hasMatch(line.text) &&
           !_ui.contains(line.text.trim()) &&
-          !RegExp(r'^\\d+(?:\\.\\d+)?%
-    for (final titleLine in titles) {
-      final nextTitleY = titles.where(
-        (line) => line.centerY > titleLine.centerY,
-      ).map((line) => line.centerY).fold<double>(
-        imageHeight,
-        (minY, y) => y < minY ? y : minY,
-      );
-      final priceCandidates = filtered.where((line) =>
-          line.centerY >= titleLine.centerY &&
-          line.centerY < nextTitleY &&
-          line.centerY - titleLine.centerY < 230 &&
-          _money.hasMatch(line.text)).toList()
-        ..sort((a, b) => a.centerY.compareTo(b.centerY));
-      final priceMatch = priceCandidates.isEmpty
-          ? null : _money.firstMatch(priceCandidates.first.text);
-      final raw = titleLine.text.trim();
-      final cleaned = raw.startsWith('定向企划 ')
-          ? raw.substring('定向企划 '.length).trim() : raw;
-      results.add(ScreenshotProductTextCandidate(
-        title: cleaned,
-        price: priceMatch == null
-            ? null : double.tryParse(priceMatch.group(1)!),
-      ));
-    }
-    return List.unmodifiable(results);
-  }
-}
-)
-              .hasMatch(line.text.trim())).toList()
+          !RegExp(r'^\d+(?:\.\d+)?%$').hasMatch(line.text.trim())
+      ).toList()
         ..sort((a, b) => b.centerY.compareTo(a.centerY));
-      if (options.isNotEmpty && !titles.contains(options.first)) {
-        titles.add(options.first);
+      if (candidates.isNotEmpty && !titles.contains(candidates.first)) {
+        titles.add(candidates.first);
       }
     }
     titles.sort((a, b) => a.centerY.compareTo(b.centerY));
