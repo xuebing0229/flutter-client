@@ -163,8 +163,22 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             presets: widget.presetStore.presets,
             existingOrders: widget.orderStore.orders,
           );
+    // An unsaved preset choice in this preview should also apply to
+    // screenshots selected *after* the user edited an earlier batch row.
+    var presetForRow = suggestedPreset;
+    if (platform != null) {
+      final key = orderPresetMemoryKey(platform, title);
+      for (final existingDraft in _rows.reversed) {
+        if (existingDraft.presetManuallyChanged &&
+            existingDraft.platform == platform &&
+            orderPresetMemoryKey(platform, existingDraft.title) == key) {
+          presetForRow = widget.presetStore.byId(existingDraft.presetId);
+          break;
+        }
+      }
+    }
     final selectedNode = resolveImportNode(
-      preset: suggestedPreset,
+      preset: presetForRow,
       recognizedPercent: percentage,
     );
     return ScreenshotImportDraft(
@@ -186,7 +200,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       deadlineConfirmed: hasTime,
       feeEnabled: platform?.defaultFeeEnabled ?? false,
       saleType: _defaultSaleType,
-      presetId: suggestedPreset.id,
+      presetId: presetForRow.id,
       nodeId: selectedNode.id,
     );
   }
@@ -580,6 +594,20 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       for (final row in _rows) {
                         row.platform = value;
                         row.feeEnabled = value.defaultFeeEnabled;
+                        if (!_products && !row.presetManuallyChanged &&
+                            !row.nodeManuallyChanged) {
+                          final preset = resolveImportPreset(
+                            platform: value,
+                            title: row.title,
+                            presets: widget.presetStore.presets,
+                            existingOrders: widget.orderStore.orders,
+                          );
+                          row.presetId = preset.id;
+                          row.nodeId = resolveImportNode(
+                            preset: preset,
+                            recognizedPercent: row.recognizedPercent,
+                          ).id;
+                        }
                       }
                       _refreshDuplicateWarnings();
                     }),
