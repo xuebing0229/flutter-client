@@ -103,7 +103,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 it.text.contains("联系企划方")
         }
         val hasAttachment = lines.any {
-            Regex("""\\.(?:png|jpe?g|webp)\\b""", RegexOption.IGNORE_CASE)
+            Regex("""\.(?:png|jpe?g|webp)\b""", RegexOption.IGNORE_CASE)
                 .containsMatchIn(it.text)
         }
         // A truncated OCR header must not disable the only high-resolution
