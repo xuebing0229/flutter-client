@@ -51,6 +51,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -134,6 +135,8 @@ dependencies {
     implementation("androidx.work:work-runtime:2.11.0")
     // Bundled recognizer: OCR works offline without Google Play Services.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
 flutter {
