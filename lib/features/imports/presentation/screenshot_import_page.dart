@@ -1,5 +1,6 @@
 // ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/portability/data_portability_file_bridge.dart';
@@ -87,6 +88,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             for (final candidate in found) {
               generated.add(_draft(
                 imageId: imageId,
+                imagePath: image.path,
                 title: candidate.title,
                 client: '',
                 price: candidate.price,
@@ -102,6 +104,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             for (final candidate in found) {
               generated.add(_draft(
                 imageId: imageId,
+                imagePath: image.path,
                 title: candidate.title,
                 client: candidate.clientName,
                 price: candidate.price,
@@ -110,6 +113,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 hasTime: candidate.deadlineHasTime,
                 percentage: candidate.progressPercent,
                 relative: candidate.relativeDeadlineText,
+                sourceStartY: candidate.sourceStartY,
+                sourceEndY: candidate.sourceEndY,
               ));
             }
           }
@@ -138,6 +143,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
   ScreenshotImportDraft _draft({
     required String imageId,
+    String? imagePath,
+    double? sourceStartY,
+    double? sourceEndY,
     required String title,
     required String client,
     required double? price,
@@ -163,6 +171,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       id: 'preview-' + DateTime.now().microsecondsSinceEpoch.toString() +
           '-' + (++_rowSerial).toString(),
       sourceImageId: imageId,
+      sourceImagePath: imagePath,
+      sourceStartY: sourceStartY,
+      sourceEndY: sourceEndY,
       title: title,
       clientName: client,
       price: price,
@@ -311,6 +322,45 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         row.deadlineConfirmed = true;
       }
     });
+  }
+
+  Future<void> _inspectScreenshot(ScreenshotImportDraft row) async {
+    final path = row.sourceImagePath;
+    if (path == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 740, maxHeight: 740),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('查看 OCR 原始截图'),
+                subtitle: Text(row.title, maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                trailing: IconButton(
+                  tooltip: '关闭',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              Flexible(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 6,
+                  child: Image.file(File(path), fit: BoxFit.contain),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text('双指缩放或拖动图片核对识别字段'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _addManualPreviewRow() {
@@ -652,6 +702,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           }),
         ),
         children: [
+            if (row.sourceImagePath != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => unawaited(_inspectScreenshot(row)),
+                  icon: const Icon(Icons.image_search_rounded),
+                  label: const Text('核对原始截图'),
+                ),
+              ),
             if (row.duplicateWarning != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
