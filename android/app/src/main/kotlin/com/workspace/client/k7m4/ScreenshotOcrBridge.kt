@@ -94,8 +94,23 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 it.text.contains("稿件夹") || it.text.contains("上传稿件") ||
                 it.text.contains("联系企划方")
         }
-        return hasCenteredOrderHeader && hasDetailContent &&
-            !looksLikeHuajia(lines)
+        val hasPayment = lines.any {
+            it.text.contains("稿酬") || it.text.contains("约稿完成") ||
+                it.text.contains("已全额支付")
+        }
+        val hasMiTab = lines.any {
+            it.text.contains("稿件夹") || it.text.contains("进程动态") ||
+                it.text.contains("联系企划方")
+        }
+        val hasAttachment = lines.any {
+            Regex("""\\.(?:png|jpe?g|webp)\\b""", RegexOption.IGNORE_CASE)
+                .containsMatchIn(it.text)
+        }
+        // A truncated OCR header must not disable the only high-resolution
+        // retry that can recover its artwork title and payment amount.
+        return !looksLikeHuajia(lines) &&
+            ((hasCenteredOrderHeader && hasDetailContent) ||
+                (hasPayment && hasMiTab && hasAttachment))
     }
 
     private fun headingCandidate(
