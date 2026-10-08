@@ -162,6 +162,45 @@ void main() {
     ), DateTime(2026, 10, 31, 21, 5));
   });
 
+  test('an undated title-shaped card remains editable instead of being dropped', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1100,
+      lines: [
+        at('W落秋', 170, x: 55),
+        at('定向企划 邀请您企目表中的Xhead气球', 310, x: 210),
+        at('全额支付', 370, x: 500),
+        at('80%', 410, x: 280),
+      ],
+    );
+    expect(entries.length, 1);
+    expect(entries.single.title, '邀请您企目表中的Xhead气球');
+    expect(entries.single.clientName, 'W落秋');
+    expect(entries.single.needsDeadlineDateConfirmation, isTrue);
+    expect(entries.single.relativeDeadlineText, isNull);
+    expect(entries.single.importReadyDeadline, isNull);
+  });
+
+  test('two undated orders with recognized headers remain separate', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1500,
+      lines: [
+        at('买家甲', 100, x: 60),
+        at('【常驻】作品甲', 230, x: 250),
+        at('¥90', 270, x: 300),
+        at('买家乙', 730, x: 60),
+        at('【常驻】作品乙', 850, x: 250),
+        at('¥80', 890, x: 300),
+      ],
+    );
+    expect(entries.map((row) => row.title).toList(),
+        ['【常驻】作品甲', '【常驻】作品乙']);
+    expect(entries.first.price, 90);
+    expect(entries.last.price, 80);
+    expect(entries.every((row) => row.importReadyDeadline == null), isTrue);
+  });
+
   test('ordinary remaining-days label is not a quick deadline anchor', () {
     final entries = const ScreenshotLayoutParser().parse(
       imageWidth: 690,
