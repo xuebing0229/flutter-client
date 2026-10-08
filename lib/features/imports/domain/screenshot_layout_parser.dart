@@ -26,7 +26,7 @@ class ScreenshotOrderCandidate {
   const ScreenshotOrderCandidate({
     required this.title,
     required this.clientName,
-    required this.deadline,
+    required this.detectedDate,
     required this.deadlineHasTime,
     required this.price,
     required this.progressPercent,
@@ -37,8 +37,36 @@ class ScreenshotOrderCandidate {
 
   final String title;
   final String clientName;
-  final DateTime deadline;
+  /// For date-only OCR this is a calendar date, NOT a real midnight deadline.
+  /// Do not assign this value directly to QueueOrder.deadline.
+  final DateTime detectedDate;
   final bool deadlineHasTime;
+
+  bool get needsDeadlineTimeConfirmation => !deadlineHasTime;
+
+  /// Safe field for a future batch writer: null until a missing time is
+  /// explicitly supplied by the user. The current queue order model stores
+  /// a complete DateTime and cannot represent date-only deadlines.
+  DateTime? get importReadyDeadline =>
+      deadlineHasTime ? detectedDate : null;
+
+  /// Allows per-card or explicitly chosen batch time input while retaining
+  /// the date read from the image. Invalid clock values cannot be imported.
+  DateTime deadlineWithChosenTime({
+    required int hour,
+    required int minute,
+  }) {
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      throw RangeError('截稿时间超出有效范围');
+    }
+    return DateTime(
+      detectedDate.year,
+      detectedDate.month,
+      detectedDate.day,
+      hour,
+      minute,
+    );
+  }
   final double? price;
   final int? progressPercent;
   final List<ScreenshotTextLine> sourceLines;
@@ -155,7 +183,7 @@ class ScreenshotLayoutParser {
       result.add(ScreenshotOrderCandidate(
         title: title,
         clientName: buyer,
-        deadline: dates[i].$2,
+        detectedDate: dates[i].$2,
         deadlineHasTime: dates[i].$3,
         price: price,
         progressPercent: progress,
