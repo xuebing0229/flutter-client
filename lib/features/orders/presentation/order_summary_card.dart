@@ -201,10 +201,11 @@ class OrderSummaryCard extends StatelessWidget {
                 SizedBox(height: compact ? 10 : 12),
                 SizedBox(
                   width: double.infinity,
-                  child: FilledButton.tonalIcon(
+                  child: ResponsiveCardActionButton(
                     onPressed: onConfirmNode,
-                    icon: const Icon(Icons.check_circle_outline_rounded),
-                    label: const Text('确认节点'),
+                    icon: Icons.check_circle_outline_rounded,
+                    label: '确认节点',
+                    compact: compact,
                   ),
                 ),
               ],
