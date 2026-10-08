@@ -195,20 +195,43 @@ class ScreenshotLayoutParser {
       dates.add((line, value, hasTime));
     }
 
-    // MiHuashi order DETAIL pages put the buyer and settlement BELOW the
-    // timestamp, unlike their list cards. Use a separate geometry path to
-    // avoid losing the buyer, fee and node progress on detail screenshots.
-    if (dates.length == 1 &&
-        prepared.any((line) => line.text.trim() == '订单')) {
-      final detail = _parseOrderDetail(
-        prepared: prepared,
-        deadlineLine: dates.single.$1,
-        deadlineDate: dates.single.$2,
-        hasDeadlineTime: dates.single.$3,
-        imageWidth: imageWidth,
-        imageHeight: imageHeight,
-      );
-      if (detail != null) return List.unmodifiable([detail]);
+    // A MiHuashi detail page may contain another timestamp inside 稿件夹
+    // (a delivered file's upload date). That is never another commission.
+    // Recognize the page FIRST, then choose the labelled deadline alone.
+    final visible = prepared.map((line) => line.text).join(' ');
+    final looksLikeDetail = visible.contains('订单') &&
+        (<String>['稿件夹', '进程动态', '参考信息', '联系企划方',
+          '上传稿件', '约稿完成', '创作节点']
+            .where(visible.contains).length >= 2);
+    if (looksLikeDetail) {
+      final deadlineDates = dates.where((record) =>
+          record.$1.text.contains('截稿') ||
+          record.$1.text.contains('距截稿')).toList();
+      // Some engines emit "截稿时间" and its date as separate boxes.
+      if (deadlineDates.isEmpty) {
+        for (final record in dates) {
+          final hasLabel = prepared.any((line) =>
+              line.text.contains('截稿') &&
+              (line.centerY - record.$1.centerY).abs() < 28 &&
+              line.left < record.$1.right);
+          if (hasLabel) deadlineDates.add(record);
+        }
+      }
+      if (deadlineDates.isNotEmpty) {
+        final chosen = deadlineDates.first;
+        final detail = _parseOrderDetail(
+          prepared: prepared,
+          deadlineLine: chosen.$1,
+          deadlineDate: chosen.$2,
+          hasDeadlineTime: chosen.$3,
+          imageWidth: imageWidth,
+          imageHeight: imageHeight,
+        );
+        if (detail != null) return List.unmodifiable([detail]);
+      }
+      // An unmistakable detail page must NOT fall back to splitting the
+      // unrelated upload timestamps into multiple orders.
+      return const [];
     }
 
     // A card with only "接单后X天" has no calendar date. Preserve it as an
@@ -302,7 +325,13 @@ class ScreenshotLayoutParser {
           line.centerY < anchor.centerY - 7).toList();
       final titles = preceding.where((line) =>
           line.centerY > anchor.centerY - 260 &&
-          _plausibleTitle(line.text)).toList();
+          _plausibleTitle(line.text) &&
+          // Actual titles are on the right side of MiHuashi list cards.
+          // Exclude a buyer's nickname on the top-left if the title OCR
+          // happened to be incomplete.
+          (line.left >= imageWidth * 0.20 ||
+              line.text.trim().startsWith('【') ||
+              line.text.trim().startsWith('定向企划'))).toList();
       if (!deadlineAnchor.isTitleAnchor && titles.isEmpty) continue;
 
       // With no date anchor the header itself is the title; otherwise select
@@ -321,19 +350,20 @@ class ScreenshotLayoutParser {
         ..sort((a, b) => b.centerY.compareTo(a.centerY));
       final buyer = buyers.isEmpty ? '' : buyers.first.text.trim();
 
-      // Price can appear above the date (米画师) or below it (画加).
+      // Money can be a single OCR box, or the ¥ glyph and digits can be
+      // split. The MiHuashi amount sits just below the title, while a
+      // Huajia amount is right-aligned BELOW its date.
       final cardArea = prepared.where((line) =>
           line.centerY >= titleLine.centerY - 12 &&
           line.centerY <= endY).toList();
-      double? price;
-      ScreenshotTextLine? priceBox;
+      final amount = _findCardPrice(
+        cardArea, titleLine: titleLine, deadlineLine: anchor,
+        imageWidth: imageWidth,
+      );
+      final price = amount?.$1;
+      final priceBox = amount?.$2;
       int? progress;
       for (final line in cardArea) {
-        final money = _money.firstMatch(line.text);
-        if (money != null && price == null) {
-          price = double.tryParse(money.group(1)!);
-          priceBox = line;
-        }
         final matched = _percent.firstMatch(line.text);
         if (matched != null && progress == null) {
           progress = int.tryParse(matched.group(1)!);
@@ -391,15 +421,14 @@ class ScreenshotLayoutParser {
     final cardLines = prepared.where((line) =>
         line.centerY >= title.centerY - 12 &&
         line.centerY <= cardEnd).toList();
-    double? price;
-    ScreenshotTextLine? priceBox;
+    final amount = _findCardPrice(
+      cardLines, titleLine: title, deadlineLine: deadlineLine,
+      imageWidth: imageWidth, detail: true,
+    );
+    final price = amount?.$1;
+    final priceBox = amount?.$2;
     int? progress;
     for (final line in cardLines) {
-      final money = _money.firstMatch(line.text);
-      if (price == null && money != null) {
-        price = double.tryParse(money.group(1)!);
-        priceBox = line;
-      }
       final percent = _percent.firstMatch(line.text);
       if (progress == null && percent != null) {
         final parsed = int.tryParse(percent.group(1)!);
@@ -422,6 +451,808 @@ class ScreenshotLayoutParser {
       priceBox: priceBox,
       deadlineBox: deadlineLine,
     );
+  }
+
+  /// A confirmed amount always wins. An unadorned number counts as money
+  /// only when its position is money-like (not a date, node or user name).
+  /// This handles ML Kit splitting ￥ and 94 into separate OCR fragments.
+  static (double, ScreenshotTextLine)? _findCardPrice(
+    List<ScreenshotTextLine> lines, {
+    required ScreenshotTextLine titleLine,
+    required ScreenshotTextLine deadlineLine,
+    required double imageWidth,
+    bool detail = false,
+  }) {
+    for (final line in lines) {
+      final match = _money.firstMatch(line.text);
+      if (match != null) {
+        final value = double.tryParse(match.group(1)!);
+        if (value != null) return (value, line);
+      }
+    }
+    final currency = lines.where((line) =>
+        RegExp(r'^[¥￥]
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\\d+(?:\\.\\d+)?
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\\d+(?:\\.\\d+)?
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(line.text.trim())).toList();
+    final candidates = lines.where((line) =>
+        RegExp(r'^\\d{1,7}(?:\\.\\d{1,2})?
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+)
+            .hasMatch(line.text.trim())).toList();
+    for (final line in candidates) {
+      final number = double.tryParse(line.text.trim());
+      if (number == null) continue;
+      final hasYen = currency.any((marker) =>
+          (marker.centerY - line.centerY).abs() < 30 &&
+          marker.right <= line.right + 15 &&
+          (line.left - marker.right).abs() < 75);
+      final onRight = line.left > imageWidth * 0.74;
+      final belowTitleAboveDate = line.centerY > titleLine.centerY + 10 &&
+          line.centerY < deadlineLine.centerY - 8 &&
+          (line.left - titleLine.left).abs() < imageWidth * 0.18 &&
+          line.text.trim().length >= 2;
+      final labelledFee = detail && lines.any((label) =>
+          (label.text.contains('稿酬') || label.text.contains('支付')) &&
+          (label.centerY - line.centerY).abs() < 28);
+      if (hasYen || onRight || belowTitleAboveDate || labelledFee) {
+        return (number, line);
+      }
+    }
+    return null;
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(line.text.trim())).toList();
+    final candidates = lines.where((line) =>
+        RegExp(r'^\\d{1,7}(?:\\.\\d{1,2})?
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+)
+            .hasMatch(line.text.trim())).toList();
+    for (final line in candidates) {
+      final number = double.tryParse(line.text.trim());
+      if (number == null) continue;
+      final hasYen = currency.any((marker) =>
+          (marker.centerY - line.centerY).abs() < 30 &&
+          marker.right <= line.right + 15 &&
+          (line.left - marker.right).abs() < 75);
+      final onRight = line.left > imageWidth * 0.74;
+      final belowTitleAboveDate = line.centerY > titleLine.centerY + 10 &&
+          line.centerY < deadlineLine.centerY - 8 &&
+          (line.left - titleLine.left).abs() < imageWidth * 0.18 &&
+          line.text.trim().length >= 2;
+      final labelledFee = detail && lines.any((label) =>
+          (label.text.contains('稿酬') || label.text.contains('支付')) &&
+          (label.centerY - line.centerY).abs() < 28);
+      if (hasYen || onRight || belowTitleAboveDate || labelledFee) {
+        return (number, line);
+      }
+    }
+    return null;
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(line.text.trim())).toList();
+    final candidates = lines.where((line) =>
+        RegExp(r'^\\d{1,7}(?:\\.\\d{1,2})?
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+)
+            .hasMatch(line.text.trim())).toList();
+    for (final line in candidates) {
+      final number = double.tryParse(line.text.trim());
+      if (number == null) continue;
+      final hasYen = currency.any((marker) =>
+          (marker.centerY - line.centerY).abs() < 30 &&
+          marker.right <= line.right + 15 &&
+          (line.left - marker.right).abs() < 75);
+      final onRight = line.left > imageWidth * 0.74;
+      final belowTitleAboveDate = line.centerY > titleLine.centerY + 10 &&
+          line.centerY < deadlineLine.centerY - 8 &&
+          (line.left - titleLine.left).abs() < imageWidth * 0.18 &&
+          line.text.trim().length >= 2;
+      final labelledFee = detail && lines.any((label) =>
+          (label.text.contains('稿酬') || label.text.contains('支付')) &&
+          (label.centerY - line.centerY).abs() < 28);
+      if (hasYen || onRight || belowTitleAboveDate || labelledFee) {
+        return (number, line);
+      }
+    }
+    return null;
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(line.text.trim())).toList();
+    final candidates = lines.where((line) =>
+        RegExp(r'^\\d{1,7}(?:\\.\\d{1,2})?
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+)
+            .hasMatch(line.text.trim())).toList();
+    for (final line in candidates) {
+      final number = double.tryParse(line.text.trim());
+      if (number == null) continue;
+      final hasYen = currency.any((marker) =>
+          (marker.centerY - line.centerY).abs() < 30 &&
+          marker.right <= line.right + 15 &&
+          (line.left - marker.right).abs() < 75);
+      final onRight = line.left > imageWidth * 0.74;
+      final belowTitleAboveDate = line.centerY > titleLine.centerY + 10 &&
+          line.centerY < deadlineLine.centerY - 8 &&
+          (line.left - titleLine.left).abs() < imageWidth * 0.18 &&
+          line.text.trim().length >= 2;
+      final labelledFee = detail && lines.any((label) =>
+          (label.text.contains('稿酬') || label.text.contains('支付')) &&
+          (label.centerY - line.centerY).abs() < 28);
+      if (hasYen || onRight || belowTitleAboveDate || labelledFee) {
+        return (number, line);
+      }
+    }
+    return null;
   }
 
   static bool _plausibleTitle(String source) {
