@@ -29,6 +29,7 @@ class ScreenshotOrderCandidate {
     required this.clientName,
     required this.detectedDate,
     required this.deadlineHasTime,
+    required this.relativeDeadlineText,
     required this.price,
     required this.progressPercent,
     required this.sourceLines,
@@ -38,10 +39,18 @@ class ScreenshotOrderCandidate {
 
   final String title;
   final String clientName;
-  /// For date-only OCR this is a calendar date, NOT a real midnight deadline.
-  /// Do not assign this value directly to QueueOrder.deadline.
-  final DateTime detectedDate;
+
+  /// Date-only OCR is not a midnight deadline; null also represents a quick
+  /// order showing only an acceptance-relative duration.
+  final DateTime? detectedDate;
   final bool deadlineHasTime;
+
+  /// A raw, visible relative deadline (e.g. 接单后3天). Never transform it
+  /// into a concrete timestamp without the actual acceptance time.
+  final String? relativeDeadlineText;
+
+  bool get hasRelativeDeadline => relativeDeadlineText != null;
+  bool get needsDeadlineDateConfirmation => detectedDate == null;
 
   bool get needsDeadlineTimeConfirmation => !deadlineHasTime;
 
@@ -64,7 +73,9 @@ class ScreenshotOrderCandidate {
     bool? isQuickCommission,
   }) {
     if (deadlineHasTime) return detectedDate;
-    if (platform != CommissionPlatform.mihuashi ||
+    if (detectedDate == null ||
+        hasRelativeDeadline ||
+        platform != CommissionPlatform.mihuashi ||
         isQuickCommission != false) {
       return null;
     }
@@ -80,10 +91,14 @@ class ScreenshotOrderCandidate {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
       throw RangeError('截稿时间超出有效范围');
     }
+    final date = detectedDate;
+    if (date == null) {
+      throw StateError('截图未提供截稿日期，请手动选择完整日期时间');
+    }
     return DateTime(
-      detectedDate.year,
-      detectedDate.month,
-      detectedDate.day,
+      date.year,
+      date.month,
+      date.day,
       hour,
       minute,
     );
@@ -107,6 +122,13 @@ class ScreenshotLayoutParser {
   );
   static final RegExp _money = RegExp(r'[¥￥]\s*(\d+(?:\.\d{1,2})?)');
   static final RegExp _percent = RegExp(r'(\d{1,3})\s*%');
+
+  // Identifies ONLY an acceptance-relative quick deadline, not labels like
+  // "还有 23 天" which can appear on ordinary fixed-date commissions.
+  static final RegExp _relativeDeadline = RegExp(
+    r'(?:接单|接稿|成交|付款|支付|下单)\s*后\s*\d+\s*(?:天|日|小时|时)'
+    r'|\d+\s*(?:天|日|小时|时)\s*(?:内交稿|内截稿|速约)',
+  );
 
   List<ScreenshotOrderCandidate> parse({
     required List<ScreenshotTextLine> lines,
@@ -146,17 +168,46 @@ class ScreenshotLayoutParser {
       dates.add((line, value, match.group(4) != null));
     }
 
+    // A card with only "接单后X天" has no calendar date. Preserve it as an
+    // editable candidate, rather than silently dropping it from the import.
+    // Explicit date anchors take precedence if a quick label belongs to the
+    // very same card.
+    final anchors = <_ScreenshotDeadlineAnchor>[
+      for (final record in dates)
+        _ScreenshotDeadlineAnchor(
+          line: record.$1,
+          date: record.$2,
+          hasTime: record.$3,
+        ),
+    ];
+    for (final line in prepared) {
+      if (!_relativeDeadline.hasMatch(line.text)) continue;
+      if (anchors.any((item) =>
+          item.date != null &&
+          (item.line.centerY - line.centerY).abs() < 105)) {
+        continue;
+      }
+      anchors.add(_ScreenshotDeadlineAnchor(
+        line: line,
+        relativeText: line.text.trim(),
+      ));
+    }
+    anchors.sort((a, b) => a.line.centerY.compareTo(b.line.centerY));
+
     final result = <ScreenshotOrderCandidate>[];
-    for (var i = 0; i < dates.length; i++) {
-      final anchor = dates[i].$1;
+    for (var i = 0; i < anchors.length; i++) {
+      final deadlineAnchor = anchors[i];
+      final anchor = deadlineAnchor.line;
 
       // A previous order's deadline cannot become this card's title/client.
       // Keep some headroom for cards with a large portrait area.
-      final previousDateY = i == 0 ? 0.0 : dates[i - 1].$1.centerY;
+      final previousDateY =
+          i == 0 ? 0.0 : anchors[i - 1].line.centerY;
       final startY = (anchor.centerY - 370).clamp(
         previousDateY + (i == 0 ? 0 : 24), anchor.centerY).toDouble();
-      final nextDateY =
-          i + 1 < dates.length ? dates[i + 1].$1.centerY : imageHeight;
+      final nextDateY = i + 1 < anchors.length
+          ? anchors[i + 1].line.centerY
+          : imageHeight;
       final endY = (anchor.centerY + 115).clamp(
         anchor.centerY, (anchor.centerY + nextDateY) / 2).toDouble();
 
@@ -204,8 +255,9 @@ class ScreenshotLayoutParser {
       result.add(ScreenshotOrderCandidate(
         title: title,
         clientName: buyer,
-        detectedDate: dates[i].$2,
-        deadlineHasTime: dates[i].$3,
+        detectedDate: deadlineAnchor.date,
+        deadlineHasTime: deadlineAnchor.hasTime,
+        relativeDeadlineText: deadlineAnchor.relativeText,
         price: price,
         progressPercent: progress,
         sourceLines: List.unmodifiable(cardArea),
@@ -260,4 +312,21 @@ class ScreenshotLayoutParser {
     }
     return text.trim();
   }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
 }
