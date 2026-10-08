@@ -14,6 +14,7 @@ import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
+import '../../imports/presentation/screenshot_import_page.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
@@ -682,6 +683,72 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  Future<void> _chooseAddMethod({required bool products}) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (dialogContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_note_rounded),
+                title: const Text('手动导入'),
+                subtitle: const Text('逐项填写订单信息'),
+                onTap: () => Navigator.pop(dialogContext, 'manual'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.document_scanner_outlined),
+                title: const Text('截图导入'),
+                subtitle: const Text('从平台截图识别多条，检查后批量添加'),
+                onTap: () => Navigator.pop(dialogContext, 'screenshot'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+    if (picked == 'manual') {
+      if (products) {
+        _openAddProduct();
+      } else {
+        _openAddOrder();
+      }
+      return;
+    }
+    if (picked == 'screenshot') _openScreenshotImport(products: products);
+  }
+
+  void _openScreenshotImport({required bool products}) {
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    if (useDesktopLayout && _desktopAddEditorOpen) return;
+    final route = MaterialPageRoute<void>(
+      builder: (_) => ScreenshotImportPage(
+        kind: products
+            ? ScreenshotImportKind.products
+            : ScreenshotImportKind.orders,
+        orderStore: _orderStore,
+        productStore: _productStore,
+        presetStore: _nodePresetStore,
+      ),
+    );
+    final desktopNavigator = useDesktopLayout
+        ? _desktopContentNavigatorKey.currentState
+        : null;
+    if (desktopNavigator != null) {
+      setState(() => _desktopAddEditorOpen = true);
+      desktopNavigator.push(route).whenComplete(() {
+        if (mounted) setState(() => _desktopAddEditorOpen = false);
+      });
+    } else {
+      Navigator.of(context).push(route);
+    }
+  }
+
   void _openAddOrder() {
     FocusManager.instance.primaryFocus?.unfocus();
     final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
@@ -1168,12 +1235,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ? null
           : switch (current.label) {
               '排单' => FloatingActionButton.extended(
-                onPressed: _openAddOrder,
+                onPressed: () => unawaited(_chooseAddMethod(products: false)),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('新增排单'),
               ),
               '成品' => FloatingActionButton.extended(
-                onPressed: _openAddProduct,
+                onPressed: () => unawaited(_chooseAddMethod(products: true)),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('新增成品'),
               ),
