@@ -145,7 +145,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
             val crop = Bitmap.createBitmap(bitmap, cropX, cropY, cropWidth, cropHeight)
             zoom = Bitmap.createScaledBitmap(crop, cropWidth * 2, cropHeight * 2, true)
             if (crop !== zoom) crop.recycle()
-            val scaled = zoom
+            val scaled = zoom ?: throw IllegalStateException("Crop scaling failed")
             recognizer.process(InputImage.fromBitmap(scaled, 0))
                 .addOnSuccessListener { recognized ->
                     val corrected = original.toMutableList()
