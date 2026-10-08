@@ -11,6 +11,7 @@ import '../../orders/state/order_store.dart';
 import '../../products/domain/finished_product.dart';
 import '../../products/state/product_store.dart';
 import '../data/screenshot_ocr_service.dart';
+import '../data/screenshot_import_history.dart';
 import '../domain/screenshot_duplicate_review.dart';
 import '../domain/screenshot_import_draft.dart';
 import '../domain/screenshot_import_rules.dart';
@@ -24,6 +25,7 @@ enum ScreenshotImportKind { orders, products }
 class ScreenshotImportPage extends StatefulWidget {
   const ScreenshotImportPage({
     required this.kind,
+    required this.accountId,
     required this.orderStore,
     required this.productStore,
     required this.presetStore,
@@ -31,6 +33,7 @@ class ScreenshotImportPage extends StatefulWidget {
   });
 
   final ScreenshotImportKind kind;
+  final String accountId;
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore presetStore;
@@ -41,6 +44,8 @@ class ScreenshotImportPage extends StatefulWidget {
 
 class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   final _ocr = const ScreenshotOcrService();
+  final _history = const ScreenshotImportHistory();
+  Set<String> _importedFingerprints = <String>{};
   final _pick = const DataPortabilityFileBridge();
   final _ordersParser = const ScreenshotLayoutParser();
   final _productsParser = const ScreenshotProductLayoutParser();
@@ -78,6 +83,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       final selected = await _pick.pickImages();
       if (selected.isEmpty) return;
       setState(() => _working = true);
+      _importedFingerprints =
+          await _history.read(accountId: widget.accountId);
 
       final generated = <ScreenshotImportDraft>[];
       var unreadable = 0;
@@ -85,6 +92,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       for (final image in selected) {
         final imageId = 'shot-' + (++_imageSerial).toString();
         try {
+          final imageHash = await _history.hashImage(image.path);
           final recognized = await _ocr.recognize(image.path);
           final guess = preselectImportPlatform(
             recognized.lines.map((line) => line.text),
@@ -95,9 +103,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               lines: recognized.lines,
               imageHeight: recognized.height,
             );
-            for (final candidate in found) {
+            for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
+              final candidate = found[cardIndex];
               generated.add(_draft(
                 imageId: imageId,
+                fingerprint: screenshotCardFingerprint(
+                  imageSha256: imageHash,
+                  cardIndex: cardIndex,
+                  products: true,
+                ),
                 imagePath: image.path,
                 title: candidate.title,
                 client: '',
@@ -111,9 +125,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               imageHeight: recognized.height,
               imageWidth: recognized.width,
             );
-            for (final candidate in found) {
+            for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
+              final candidate = found[cardIndex];
               generated.add(_draft(
                 imageId: imageId,
+                fingerprint: screenshotCardFingerprint(
+                  imageSha256: imageHash,
+                  cardIndex: cardIndex,
+                  products: false,
+                ),
                 imagePath: image.path,
                 title: candidate.title,
                 client: candidate.clientName,
@@ -162,6 +182,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
   ScreenshotImportDraft _draft({
     required String imageId,
+    String? fingerprint,
     String? imagePath,
     double? sourceStartY,
     double? sourceEndY,
@@ -210,6 +231,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       id: 'preview-' + DateTime.now().microsecondsSinceEpoch.toString() +
           '-' + (++_rowSerial).toString(),
       sourceImageId: imageId,
+      sourceFingerprint: fingerprint,
       sourceImagePath: imagePath,
       sourceStartY: sourceStartY,
       sourceEndY: sourceEndY,
@@ -246,6 +268,25 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     }
     for (var index = 0; index < _rows.length; index++) {
       final row = _rows[index];
+      // Exact same screenshot + same card, including a repeated import
+      // after relaunch. Never hide other distinct cards in that screenshot.
+      final fingerprint = row.sourceFingerprint;
+      final wasImported = fingerprint != null &&
+          _importedFingerprints.contains(fingerprint);
+      final inThisBatch = fingerprint != null &&
+          _rows.take(index).any(
+            (previous) => previous.sourceFingerprint == fingerprint,
+          );
+      if (wasImported || inThisBatch) {
+        row.duplicateWarning = wasImported
+            ? '这张截图的这一条已导入过，默认跳过'
+            : '本批次重复选择了相同截图，默认跳过';
+        if (!row.duplicateReviewed) {
+          row.selected = false;
+          row.duplicateAutoSkipped = true;
+        }
+        continue;
+      }
       final platform = row.platform;
       if (platform == null || row.title.trim().isEmpty) continue;
       if (_products) {
@@ -270,6 +311,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         continue;
       }
       final comparisonDate = row.deadline ?? row.detectedDate;
+      // The image may omit a deadline, or the imported record may have one
+      // manually filled later. Same buyer+title+platform still merits REVIEW,
+      // never silently merging two genuinely independent purchases.
       final existing = widget.orderStore.orders.any((order) =>
           order.platform == platform &&
           normalizedImportTitle(order.title) ==
@@ -277,11 +321,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           normalizedImportTitle(order.clientName) ==
               normalizedImportTitle(row.clientName) &&
           row.clientName.trim().isNotEmpty &&
-          comparisonDate != null &&
-          order.deadline != null &&
-          (row.sourceHasClock
-              ? _sameMinute(order.deadline!, comparisonDate)
-              : _sameDay(order.deadline!, comparisonDate)));
+          (comparisonDate == null || order.deadline == null ||
+              (row.sourceHasClock
+                  ? _sameMinute(order.deadline!, comparisonDate)
+                  : _sameDay(order.deadline!, comparisonDate))));
       var acrossScreenshots = false;
       for (final other in _rows.take(index)) {
         if (other.platform == null || other.platform != platform) continue;
@@ -626,6 +669,21 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         ...widget.orderStore.orders,
         ...created,
       ]);
+    }
+    // The business write has succeeded. A failed provenance write must not
+    // lose an already imported order or pretend it was not committed.
+    try {
+      final fingerprints = selected
+          .map((row) => row.sourceFingerprint)
+          .whereType<String>();
+      await _history.markImported(
+        accountId: widget.accountId,
+        fingerprints: fingerprints,
+      );
+    } catch (_) {
+      if (mounted) {
+        _message('导入成功，但本机截图去重记录保存失败；下次请检查疑似重复提示。');
+      }
     }
     if (mounted) Navigator.of(context).pop();
   }
