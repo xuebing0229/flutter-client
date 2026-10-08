@@ -38,8 +38,17 @@ void main() {
     expect(entries.first.needsDeadlineTimeConfirmation, isTrue);
     expect(entries.first.importReadyDeadline, isNull);
     expect(
-      entries.first.suggestedDeadline(platform: CommissionPlatform.mihuashi),
+      entries.first.suggestedDeadline(
+        platform: CommissionPlatform.mihuashi,
+        isQuickCommission: false,
+      ),
       DateTime(2026, 10, 31, 23, 59),
+    );
+    expect(
+      entries.first.suggestedDeadline(
+        platform: CommissionPlatform.mihuashi,
+      ),
+      isNull,
     );
     expect(
       entries.first.suggestedDeadline(
