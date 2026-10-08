@@ -95,6 +95,51 @@ void main() {
     expect(orders.single.price, 40);
   });
 
+  test('split Huajia deadline clock stays precise; buyer chevron is UI', () {
+    final lines = [
+      box('订单已完成', 120, x: 260),
+      box('客户甲 >', 245, x: 90),
+      box('真爱永恒 Lv1', 245, x: 320),
+      box('【24h】虚构稿', 350, x: 204),
+      box('￥40', 390, x: 198),
+      box('截稿时间：2025-04-27', 430, x: 195),
+      box('16:37', 430, x: 340),
+      box('稿件 6', 570, x: 35),
+      box('订单动态', 570, x: 151),
+      box('改价历史', 570, x: 302),
+      box('2025-04-22 08:00', 1000, x: 40),
+    ];
+    final orders = const ScreenshotHuajiaDetailParser().parse(
+      lines: lines, imageWidth: 698, imageHeight: 1536,
+    );
+    expect(orders, hasLength(1));
+    expect(orders.single.clientName, '客户甲');
+    expect(orders.single.price, 40);
+    expect(orders.single.importReadyDeadline,
+        DateTime(2025, 4, 27, 16, 37));
+  });
+
+  test('Huajia missing clock never copies one from attachment section', () {
+    final lines = [
+      box('订单已完成', 120, x: 260),
+      box('客户乙', 245, x: 90),
+      box('真爱永恒 Lv1', 245, x: 320),
+      box('【24h】虚构稿', 350, x: 204),
+      box('¥40', 390, x: 198),
+      box('截稿时间：2025-04-27', 430, x: 195),
+      box('稿件 6', 570, x: 35),
+      box('订单动态', 570, x: 152),
+      box('改价历史', 570, x: 301),
+      box('16:37', 610, x: 340), // Separate from the deadline row.
+    ];
+    final orders = const ScreenshotHuajiaDetailParser().parse(
+      lines: lines, imageWidth: 698, imageHeight: 1536,
+    );
+    expect(orders, hasLength(1));
+    expect(orders.single.needsDeadlineTimeConfirmation, isTrue);
+    expect(orders.single.importReadyDeadline, isNull);
+  });
+
   test('generic details cannot be auto-labelled MiHuashi or Huajia', () {
     final screenshot = [
       box('订单', 120, x: 310),
