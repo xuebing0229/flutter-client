@@ -768,6 +768,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   Future<void> _restoreWorkspace() async {
+    var foundWorkspace = false;
     try {
       var source = html.window.localStorage[_workspaceKey];
       var migratedLegacy = false;
@@ -784,6 +785,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       }
 
       if (source != null && source.trim().isNotEmpty) {
+        foundWorkspace = true;
         final backup = AppBackupData.decode(source);
         final backupAccount = backup.accountSyncState;
         if (backupAccount != null && backupAccount.accountId != _accountId) {
@@ -824,9 +826,48 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       setState(() => _ready = true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        unawaited(_showDailyBackupReminder());
+        unawaited(
+          foundWorkspace
+              ? _showDailyBackupReminder()
+              : _showMissingWorkspaceRecoveryPrompt(),
+        );
       });
     }
+  }
+
+  Future<void> _showMissingWorkspaceRecoveryPrompt() async {
+    if (!mounted) return;
+    final restore = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('没有找到旧版数据'),
+        content: const Text(
+          '新版已经自动尝试读取当前浏览器里的旧数据，但没有找到这个账号的工作区。'
+          '如果你是刚换了新版 HTML，可以导入旧版导出的完整备份继续使用。\n\n'
+          '以后升级时，建议把“冒险者公会.html”固定放在“文件”里的同一个文件夹，'
+          '并用新版覆盖同名文件。这样浏览器如果仍把它识别为同一个本地来源，'
+          '数据会直接继承；识别失败时再用完整备份恢复。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('先空白使用'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.file_upload_outlined),
+            label: const Text('导入完整备份'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (restore == true) {
+      await _importBackup(context);
+      return;
+    }
+    await _showDailyBackupReminder();
   }
 
   Future<void> _showDailyBackupReminder() async {
