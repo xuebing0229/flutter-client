@@ -13,7 +13,13 @@ class ScreenshotProductTextCandidate {
 class ScreenshotProductLayoutParser {
   const ScreenshotProductLayoutParser();
 
-  static final _money = RegExp(r'[¥￥]\s*(\d+(?:\.\d{1,2})?)');
+  // ML Kit may mistake the tiny yen glyph for y/Y. Accept it only when
+  // the *entire* OCR line looks like a money token, not inside artwork names.
+  static final _money = RegExp(
+    r'[¥￥]\s*(\d+(?:\.\d{1,2})?)|^[yY]\s*(\d+(?:\.\d{1,2})?)$',
+  );
+  static final _bareMoney = RegExp(r'^\d{1,7}(?:\.\d{1,2})?$');
+  static final _currencySymbol = RegExp(r'^[¥￥]$');
   static final _date = RegExp(r'20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}');
   static const _ui = <String>{
     '进行中', '已完成', '已中断', '排序', '全部',
@@ -35,6 +41,31 @@ class ScreenshotProductLayoutParser {
           imageHeight: imageHeight,
         )).toList()
       ..sort((a, b) => a.centerY.compareTo(b.centerY));
+
+    // Chinese OCR can return currency and digits as neighboring boxes.
+    // Never promote a bare numeric label to a price without the ¥ symbol.
+    final amounts = <(ScreenshotTextLine, double)>[];
+    for (final line in filtered) {
+      final label = line.text.trim();
+      final matched = _money.firstMatch(label);
+      final explicit = double.tryParse(
+        matched?.group(1) ?? matched?.group(2) ?? '',
+      );
+      if (explicit != null) {
+        amounts.add((line, explicit));
+        continue;
+      }
+      if (!_bareMoney.hasMatch(label)) continue;
+      final numeric = double.tryParse(label);
+      if (numeric == null) continue;
+      final paired = filtered.any((symbol) {
+        if (!_currencySymbol.hasMatch(symbol.text.trim())) return false;
+        final gap = line.left - symbol.right;
+        return (line.centerY - symbol.centerY).abs() <= 20 &&
+            gap >= -16 && gap <= 90;
+      });
+      if (paired) amounts.add((line, numeric));
+    }
 
     final titles = <ScreenshotTextLine>[];
     for (final line in filtered) {
@@ -60,9 +91,8 @@ class ScreenshotProductLayoutParser {
 
     // Keep names without obvious title keywords when positioned above price.
     // The preview remains editable; no amount or title is silently trusted.
-    for (final priceLine in filtered.where(
-      (line) => _money.hasMatch(line.text),
-    )) {
+    for (final amount in amounts) {
+      final priceLine = amount.$1;
       final candidates = filtered.where((line) =>
           line.centerY < priceLine.centerY &&
           priceLine.centerY - line.centerY < 185 &&
@@ -94,21 +124,18 @@ class ScreenshotProductLayoutParser {
         imageHeight,
         (minY, y) => y < minY ? y : minY,
       );
-      final priceCandidates = filtered.where((line) =>
-          line.centerY >= titleLine.centerY &&
-          line.centerY < nextTitleY &&
-          line.centerY - titleLine.centerY < 230 &&
-          _money.hasMatch(line.text)).toList()
-        ..sort((a, b) => a.centerY.compareTo(b.centerY));
-      final priceMatch = priceCandidates.isEmpty
-          ? null : _money.firstMatch(priceCandidates.first.text);
+      final priceCandidates = amounts.where((entry) =>
+          entry.$1.centerY >= titleLine.centerY &&
+          entry.$1.centerY < nextTitleY &&
+          entry.$1.centerY - titleLine.centerY < 230).toList()
+        ..sort((a, b) => a.$1.centerY.compareTo(b.$1.centerY));
+      final price = priceCandidates.isEmpty ? null : priceCandidates.first.$2;
       final raw = titleLine.text.trim();
       final cleaned = raw.startsWith('定向企划 ')
           ? raw.substring('定向企划 '.length).trim() : raw;
       results.add(ScreenshotProductTextCandidate(
         title: cleaned,
-        price: priceMatch == null
-            ? null : double.tryParse(priceMatch.group(1)!),
+        price: price,
       ));
     }
     return List.unmodifiable(results);

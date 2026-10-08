@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - fix/adventurer-news-inline-20261008
-      - fix/ocr-real-verification-20261008
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
@@ -97,6 +96,6 @@ jobs:
       - run: flutter pub get
       - name: Run screenshot import parser tests (not a release)
         run: |
-          flutter test test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_title_reconciliation_test.dart test/features/screenshot_layout_parser_test.dart test/features/screenshot_ocr_real_world_regression_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/import_batch_preset_state_test.dart
+          flutter test test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_title_reconciliation_test.dart test/features/screenshot_layout_parser_test.dart test/features/screenshot_ocr_real_world_regression_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/import_batch_preset_state_test.dart test/features/screenshot_product_layout_parser_test.dart test/features/screenshot_product_dedup_test.dart
       - name: Analyze import sources
         run: flutter analyze lib/features/imports
