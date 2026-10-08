@@ -164,4 +164,65 @@ void main() {
     expect(rows.single.price, 30);
   });
 
+  test('Huajia right-corner OCR amount beyond the old 115px cutoff', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 692, imageHeight: 1536,
+      lines: [
+        at('我卖出的', 110, x: 310),
+        at('客户甲', 250, x: 60),
+        at('虚构草稿盒', 325, x: 195),
+        at('当前交付节点：终稿（100%）', 360, x: 197),
+        at('截稿时间：2026-10-08 16:48', 386, x: 194),
+        at('￥30', 485, x: 628),
+        at('客户乙', 598, x: 60),
+        at('虚构摸鱼盒', 696, x: 195),
+        at('当前交付节点：终稿（100%）', 735, x: 197),
+        at('截稿时间：2026-10-09 01:29', 768, x: 194),
+        at('￥88', 887, x: 633),
+        at('客户丙', 976, x: 60),
+        at('虚构草稿盒', 1065, x: 195),
+        at('当前交付节点：终稿（100%）', 1098, x: 197),
+        at('截稿时间：2026-10-17 18:01', 1130, x: 194),
+        at('￥', 1250, x: 622),
+        at('30', 1250, x: 649),
+        at('客户丁', 1320, x: 60),
+        at('虚构盒子', 1390, x: 195),
+        at('截稿时间：2026-10-21 10:25', 1470, x: 194),
+      ],
+    );
+    expect(rows.length, 4);
+    expect(rows.map((row) => row.price).toList(), [30, 88, 30, null]);
+  });
+
+  test('Right crop OCR fragment of deadline clock must not become a fee', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 692, imageHeight: 1070,
+      lines: [
+        at('我卖出的', 108, x: 300),
+        at('客户甲', 265, x: 60),
+        at('虚构草稿盒', 350, x: 205),
+        at('截稿时间：2026-10-08 16:48', 430, x: 206),
+        at('48', 432, x: 590),
+        // Price is not visible in the screenshot; never invent 48 yuan.
+      ],
+    );
+    expect(rows.length, 1);
+    expect(rows.single.price, isNull);
+  });
+
+  test('Right column bare amount is accepted below deadline when ¥ missed', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 692, imageHeight: 1120,
+      lines: [
+        at('我卖出的', 106, x: 310),
+        at('客户甲', 263, x: 64),
+        at('虚构草稿盒', 345, x: 204),
+        at('截稿时间：2026-10-08 16:48', 428, x: 204),
+        at('30', 579, x: 643),
+      ],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.price, 30);
+  });
+
 }
