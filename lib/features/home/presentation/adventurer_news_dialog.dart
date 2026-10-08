@@ -41,9 +41,7 @@ Future<bool> showAdventurerNewsDialog(
                       Text(
                         history
                             ? '公会历次更新记录'
-                            : '从 ' + notice.previousBuild.toString() +
-                                ' 号版本升级到 ' +
-                                notice.currentBuild.toString() + ' 号版本',
+                            : '从 ${notice.previousBuild} 号版本升级到 ${notice.currentBuild} 号版本',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
@@ -97,7 +95,7 @@ class _NewsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '版本 ' + entry.introducedBuild.toString(),
+              '版本 ${entry.introducedBuild}',
               style: theme.textTheme.labelMedium?.copyWith(
                 color: colors.primary,
                 fontWeight: FontWeight.w700,
