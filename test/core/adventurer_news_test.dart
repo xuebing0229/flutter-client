@@ -39,5 +39,7 @@ void main() {
     expect(newsBetweenBuilds(105, 106).single.title, '截图识别批量导入');
     expect(newsBetweenBuilds(106, 107).single.title, '冒险者新见闻');
     expect(newsBetweenBuilds(105, 107).length, 2);
+    expect(newsBetweenBuilds(105, 108).length, 3);
+    expect(newsBetweenBuilds(107, 108).single.title, '新见闻阅读优化');
   });
 }
