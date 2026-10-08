@@ -35,6 +35,15 @@ jobs:
           cache: true
       - name: Flutter dependencies
         run: flutter pub get
+      # The repository intentionally does not commit the gradlew shell wrapper.
+      # Use the exact pinned Gradle distribution instead of assuming it exists.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Generate local Flutter/Android paths for Gradle
+        run: |
+          printf 'flutter.sdk=%s\\nsdk.dir=%s\\n' "$FLUTTER_ROOT" "$ANDROID_HOME" > android/local.properties
+          cat android/local.properties
       - name: Enable hardware acceleration for GitHub hosted runner
         run: |
           if test -e /dev/kvm; then
@@ -55,7 +64,7 @@ jobs:
           heap-size: 512M
           disable-animations: true
           emulator-boot-timeout: 900
-          script: bash -lc 'cd android && chmod +x gradlew && ./gradlew :app:connectedBetaDebugAndroidTest --no-daemon --console=plain --stacktrace'
+          script: bash -lc 'cd android && gradle :app:connectedBetaDebugAndroidTest --no-daemon --console=plain --stacktrace'
       - name: Upload instrumentation reports only
         if: always()
         uses: actions/upload-artifact@v4
