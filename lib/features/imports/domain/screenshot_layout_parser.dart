@@ -664,6 +664,7 @@ bool isMiHuashiOrderDetailScreenshot({
   }
   final miSpecific = <String>[
     '稿件夹', '进程动态', '联系企划方', '上传稿件', '约稿完成',
+    '创作节点',
   ].any(combined.contains);
   if (!miSpecific) return false;
   final centeredHeader = prepared.any((line) =>
