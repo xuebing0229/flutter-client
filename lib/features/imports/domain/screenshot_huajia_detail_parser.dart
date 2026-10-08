@@ -172,7 +172,8 @@ class ScreenshotHuajiaDetailParser {
         if (number == null) continue;
         if (currency.any((y) =>
             (y.centerY - line.centerY).abs() < 27 &&
-            (line.left - y.right).abs() < 85)) {
+            ((line.left - y.right).abs() < 85 ||
+                (line.left - y.left).abs() < 85))) {
           fee = (number, line);
           break;
         }
