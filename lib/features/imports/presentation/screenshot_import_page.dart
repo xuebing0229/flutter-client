@@ -16,6 +16,7 @@ import '../domain/screenshot_duplicate_review.dart';
 import '../domain/screenshot_import_draft.dart';
 import '../domain/screenshot_import_rules.dart';
 import '../domain/screenshot_layout_parser.dart';
+import '../domain/screenshot_title_reconciliation.dart';
 import '../domain/screenshot_product_layout_parser.dart';
 
 enum ScreenshotImportKind { orders, products }
@@ -125,6 +126,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               imageHeight: recognized.height,
               imageWidth: recognized.width,
             );
+            // MiHuashi list cards often contain the same work sold to
+            // different buyers. Resolve tiny OCR spelling differences before
+            // selecting the same-title workflow preset for each draft.
+            final reconciledTitles = platform == CommissionPlatform.mihuashi
+                ? reconcileMiHuashiScreenshotTitles(found)
+                : [for (final candidate in found) candidate.title];
             for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
               final candidate = found[cardIndex];
               generated.add(_draft(
@@ -135,7 +142,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   products: false,
                 ),
                 imagePath: image.path,
-                title: candidate.title,
+                title: reconciledTitles[cardIndex],
                 client: candidate.clientName,
                 price: candidate.price,
                 platform: platform,
