@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../shared/presentation/layout_spacing.dart';
 
@@ -12,6 +13,7 @@ import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
 import '../state/order_store.dart';
 import 'order_reference_image_widgets.dart';
+import 'order_tags_editor.dart';
 
 class OrderDetailPage extends StatefulWidget {
   const OrderDetailPage({
@@ -36,6 +38,7 @@ class OrderDetailPage extends StatefulWidget {
 class _OrderDetailPageState extends State<OrderDetailPage> {
   final _referenceImageStore = OrderReferenceImageStore();
   final _referenceImages = <OrderReferenceImage>[];
+  final _tags = <String>[];
   final _sessionAddedReferenceImages = <OrderReferenceImage>[];
 
   bool _editing = false;
@@ -101,6 +104,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _clientController.text = order.clientName;
     _priceController.text = order.price == 0 ? '' : _formatPrice(order.price);
     _descriptionController.text = order.description;
+    _tags..clear()..addAll(order.tags);
     _referenceImages
       ..clear()
       ..addAll(order.referenceImages);
@@ -238,6 +242,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         _currentNodeId != _draftBaseline.currentNodeId || presetChanged;
     final descriptionChanged =
         _descriptionController.text.trim() != _draftBaseline.description;
+    final tagsChanged = widget.featureStore.customTags &&
+        !listEquals(_tags, _draftBaseline.tags);
     final priceChanged = price != _draftBaseline.price;
     final feeChanged = _feeEnabled != _draftBaseline.feeEnabled;
     final loveLevelChanged = _huajiaLoveLevel != _draftBaseline.huajiaLoveLevel;
@@ -282,6 +288,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       description: descriptionChanged
           ? _descriptionController.text.trim()
           : current.description,
+      tags: tagsChanged ? normalizeOrderTags(_tags) : current.tags,
       referenceImages: referenceImagesChanged
           ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
           : current.referenceImages,
@@ -395,6 +402,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                     value: order.clientName.isEmpty ? '未填写' : order.clientName,
                   ),
                 ReadOnlyDetailRow(label: '平台', value: order.platform.label),
+                if (widget.featureStore.customTags)
+                  ReadOnlyDetailRow(
+                    label: '自定义标签',
+                    value: order.tags.isEmpty ? '未设置' : order.tags.join('、'),
+                  ),
                 ReadOnlyDetailRow(
                   label: '截稿时间',
                   value: order.deadline == null
@@ -649,6 +661,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       : () => unawaited(_addReferenceImages()),
                   onRemove: _removeReferenceImage,
                 ),
+                if (widget.featureStore.customTags) ...[
+                  const SizedBox(height: 14),
+                  OrderTagsEditor(
+                    selectedTags: _tags,
+                    availableTags: widget.store.orders.expand((order) => order.tags),
+                    onChanged: (tags) => setState(() {
+                      _tags..clear()..addAll(tags);
+                    }),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 const FormFieldLabel('描述'),
                 TextField(

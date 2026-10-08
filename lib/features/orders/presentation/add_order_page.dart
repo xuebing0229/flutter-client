@@ -10,6 +10,7 @@ import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
 import '../state/order_store.dart';
 import 'order_reference_image_widgets.dart';
+import 'order_tags_editor.dart';
 
 class AddOrderPage extends StatefulWidget {
   const AddOrderPage({
@@ -32,6 +33,7 @@ class AddOrderPage extends StatefulWidget {
 class _AddOrderPageState extends State<AddOrderPage> {
   final _referenceImageStore = OrderReferenceImageStore();
   final _referenceImages = <OrderReferenceImage>[];
+  final _tags = <String>[];
 
   final _titleController = TextEditingController();
   final _clientController = TextEditingController();
@@ -175,6 +177,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
       supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
       deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
       description: _descriptionController.text.trim(),
+      tags: normalizeOrderTags(_tags),
       defaultOrder: DateTime.now().microsecondsSinceEpoch,
       referenceImages: List<OrderReferenceImage>.unmodifiable(
         _referenceImages,
@@ -313,6 +316,16 @@ class _AddOrderPageState extends State<AddOrderPage> {
                 : () => unawaited(_addReferenceImages()),
             onRemove: _removeReferenceImage,
           ),
+          if (widget.featureStore.customTags) ...[
+            const SizedBox(height: 14),
+            OrderTagsEditor(
+              selectedTags: _tags,
+              availableTags: widget.store.orders.expand((order) => order.tags),
+              onChanged: (tags) => setState(() {
+                _tags..clear()..addAll(tags);
+              }),
+            ),
+          ],
           const SizedBox(height: 14),
           const FormFieldLabel('描述'),
           TextField(
