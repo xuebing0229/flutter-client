@@ -539,7 +539,7 @@ class SyncCoordinator extends ChangeNotifier {
           await _enqueue<void>(() async {
             await _reconcileFromSyncDirectory(seedMissing: false);
             await _refreshTransportStatus();
-          });
+          }, showBusy: false);
         } catch (_) {
           // Background polling reports through the coordinator state.
         } finally {
@@ -1803,14 +1803,14 @@ class SyncCoordinator extends ChangeNotifier {
   void _enqueueBackground(Future<void> Function() action) {
     if (_disposed || _removingLocalAccount) return;
     unawaited(
-      _enqueue(action).catchError((Object _, StackTrace __) {
+      _enqueue(action, showBusy: false).catchError((Object _, StackTrace __) {
         // Background work reports through lastError; do not surface an
         // unhandled Future error into the Flutter zone.
       }),
     );
   }
 
-  Future<T> _enqueue<T>(Future<T> Function() action) {
+  Future<T> _enqueue<T>(Future<T> Function() action, {bool showBusy = true}) {
     final completer = Completer<T>();
     _tail = _tail
         .then<void>((_) async {
@@ -1820,8 +1820,10 @@ class SyncCoordinator extends ChangeNotifier {
             }
             return;
           }
-          _syncBusy = true;
-          if (!_disposed) notifyListeners();
+          if (showBusy) {
+            _syncBusy = true;
+            if (!_disposed) notifyListeners();
+          }
           try {
             final result = await action();
             if (!completer.isCompleted) completer.complete(result);
@@ -1831,8 +1833,10 @@ class SyncCoordinator extends ChangeNotifier {
               completer.completeError(error, stackTrace);
             }
           } finally {
-            _syncBusy = false;
-            if (!_disposed) notifyListeners();
+            if (showBusy) {
+              _syncBusy = false;
+              if (!_disposed) notifyListeners();
+            }
           }
         })
         .catchError((Object _, StackTrace __) {
