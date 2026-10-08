@@ -200,6 +200,22 @@ class ScreenshotLayoutParser {
         relativeText: line.text.trim(),
       ));
     }
+
+    // A screenshot can omit deadlines entirely. Conservatively detect
+    // artwork-title-shaped lines when no date/relative anchor follows the
+    // title in its own card. They still require a human-filled deadline.
+    for (final line in prepared) {
+      final title = line.text.trim();
+      final looksLikeCardTitle =
+          title.startsWith('【') || title.startsWith('定向企划 ');
+      if (!looksLikeCardTitle || !_plausibleTitle(title)) continue;
+      if (anchors.any((anchor) =>
+          anchor.line.centerY >= line.centerY &&
+          anchor.line.centerY - line.centerY < 290)) {
+        continue;
+      }
+      anchors.add(_ScreenshotDeadlineAnchor(line: line, isTitleAnchor: true));
+    }
     anchors.sort((a, b) => a.line.centerY.compareTo(b.line.centerY));
 
     final result = <ScreenshotOrderCandidate>[];
@@ -216,8 +232,10 @@ class ScreenshotLayoutParser {
       final nextDateY = i + 1 < anchors.length
           ? anchors[i + 1].line.centerY
           : imageHeight;
-      final endY = (anchor.centerY + 115).clamp(
-        anchor.centerY, (anchor.centerY + nextDateY) / 2).toDouble();
+      final endY =
+          (anchor.centerY + (deadlineAnchor.isTitleAnchor ? 270 : 115))
+              .clamp(anchor.centerY, (anchor.centerY + nextDateY) / 2)
+              .toDouble();
 
       final preceding = prepared.where((line) =>
           line.centerY >= startY &&
@@ -225,12 +243,13 @@ class ScreenshotLayoutParser {
       final titles = preceding.where((line) =>
           line.centerY > anchor.centerY - 260 &&
           _plausibleTitle(line.text)).toList();
-      if (titles.isEmpty) continue;
+      if (!deadlineAnchor.isTitleAnchor && titles.isEmpty) continue;
 
-      // Nearest reasonable title before the deadline; avoid treating a buyer
-      // name as a title when one is further down the card.
+      // With no date anchor the header itself is the title; otherwise select
+      // the nearest plausible title before the deadline field.
       titles.sort((a, b) => b.centerY.compareTo(a.centerY));
-      final titleLine = titles.first;
+      final titleLine =
+          deadlineAnchor.isTitleAnchor ? anchor : titles.first;
       final title = _stripKnownUiLabel(titleLine.text);
       if (title.isEmpty) continue;
 
@@ -331,10 +350,12 @@ class _ScreenshotDeadlineAnchor {
     this.date,
     this.hasTime = false,
     this.relativeText,
+    this.isTitleAnchor = false,
   });
 
   final ScreenshotTextLine line;
   final DateTime? date;
   final bool hasTime;
   final String? relativeText;
+  final bool isTitleAnchor;
 }
