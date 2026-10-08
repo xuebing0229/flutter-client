@@ -126,7 +126,6 @@ class ScreenshotHuajiaDetailParser {
           !text.contains('历史') &&
           !text.contains('参考信息') &&
           !text.contains('Lv1') &&
-          !text.contains('24H') &&
           !RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text);
     }).toList()
       ..sort((a, b) => b.centerY.compareTo(a.centerY));
