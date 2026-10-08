@@ -67,7 +67,7 @@ class AdventurerNewsStore {
 
   Future<File> _file() async {
     final dir = await getApplicationSupportDirectory();
-    return File(dir.path + '/' + _fileName);
+    return File('${dir.path}/$_fileName');
   }
 
   Future<int> installedBuild() async {
