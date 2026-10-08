@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../domain/screenshot_layout_parser.dart';
-import 'screenshot_ocr_service.dart';
+import 'screenshot_ocr_result.dart';
 
 /// Windows OCR via a redistributable local Tesseract installation shipped in
 /// the Windows app bundle by the release workflow (including chi_sim data).
