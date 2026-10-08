@@ -356,4 +356,22 @@ void main() {
     expect(rows.last.clientName, isEmpty);
     expect(rows.last.price, 94);
   });
+
+  test('real phone OCR concatenates date and time without whitespace', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 1272,
+      imageHeight: 2800,
+      lines: [
+        at('客户甲 >', 1352, x: 171),
+        at('【批发合集】20r虚构服设', 1494, x: 437),
+        // Actual device output lacks the space after day 31.
+        at('截稿时间:2025-05-3114:34', 1572, x: 405),
+        at('y 20', 1727, x: 1120),
+        at('查看评价', 1903, x: 973),
+      ],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.importReadyDeadline, DateTime(2025, 5, 31, 14, 34));
+    expect(rows.single.price, 20);
+  });
 }
