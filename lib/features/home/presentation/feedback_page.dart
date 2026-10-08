@@ -131,7 +131,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: AspectRatio(
-                    aspectRatio: 360 / 460,
+                    aspectRatio: 360 / 488,
                     child: FittedBox(
                       fit: BoxFit.contain,
                       child: RepaintBoundary(
@@ -181,7 +181,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
 }
 
 /// The same theme-aware QR card is displayed in the app and exported at
-/// 3x resolution (1080×1380 PNG). Using a fixed layout inside the scalable
+/// 3x resolution (1080×1464 PNG). Using a fixed layout inside the scalable
 /// preview keeps the saved image predictable across phone sizes/text scales.
 /// The QR remains black-on-white for reliable scanning in both theme modes.
 class FeedbackPoster extends StatelessWidget {
@@ -193,7 +193,7 @@ class FeedbackPoster extends StatelessWidget {
     final colors = theme.colorScheme;
     return SizedBox(
       width: 360,
-      height: 460,
+      height: 488,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.surfaceContainerLow,
