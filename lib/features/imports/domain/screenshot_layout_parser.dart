@@ -120,6 +120,265 @@ class ScreenshotLayoutParser {
     r'(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:日)?'
     r'(?:\s+(\d{1,2}):(\d{2}))?',
   );
+  static final RegExp _clock = RegExp(r'^([01]?\d|2[0-3]):([0-5]\d)RegExp(r'[¥￥]\s*(\d+(?:\.\d{1,2})?)');
+  static final RegExp _percent = RegExp(r'(\d{1,3})\s*%');
+
+  // Identifies ONLY an acceptance-relative quick deadline, not labels like
+  // "还有 23 天" which can appear on ordinary fixed-date commissions.
+  static final RegExp _relativeDeadline = RegExp(
+    r'(?:接单|接稿|成交|付款|支付|下单)\s*后\s*\d+\s*(?:天|日|小时|时)'
+    r'|\d+\s*(?:天|日|小时|时)\s*(?:内交稿|内截稿|速约)',
+  );
+
+  List<ScreenshotOrderCandidate> parse({
+    required List<ScreenshotTextLine> lines,
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    if (imageWidth <= 0 || imageHeight <= 0) return const [];
+
+    final prepared = lines.where((line) {
+      return line.text.trim().isNotEmpty &&
+          !isScreenshotChromeLine(
+            text: line.text,
+            centerY: line.centerY,
+            imageHeight: imageHeight,
+          );
+    }).toList()
+      ..sort((a, b) {
+        final byY = a.centerY.compareTo(b.centerY);
+        return byY == 0 ? a.left.compareTo(b.left) : byY;
+      });
+
+    final dates = <(ScreenshotTextLine, DateTime, bool)>[];
+    for (final line in prepared) {
+      final match = _date.firstMatch(line.text);
+      if (match == null) continue;
+      final year = int.parse(match.group(1)!);
+      final month = int.parse(match.group(2)!);
+      final day = int.parse(match.group(3)!);
+      var hour = int.tryParse(match.group(4) ?? '') ?? 0;
+      var minute = int.tryParse(match.group(5) ?? '') ?? 0;
+      var hasTime = match.group(4) != null;
+      if (!hasTime) {
+        // OCR can place the date and time in separate boxes. Require a
+        // nearby clock belonging to the order, not the phone status bar.
+        final clocks = prepared.where((candidate) =>
+            !identical(candidate, line) &&
+            (candidate.centerY - line.centerY).abs() < 42 &&
+            (candidate.left - line.left).abs() < imageWidth * 0.55 &&
+            _clock.hasMatch(candidate.text.trim())).toList()
+          ..sort((a, b) =>
+              (a.centerY - line.centerY).abs()
+                  .compareTo((b.centerY - line.centerY).abs()));
+        if (clocks.isNotEmpty) {
+          final matchedClock = _clock.firstMatch(clocks.first.text.trim())!;
+          hour = int.parse(matchedClock.group(1)!);
+          minute = int.parse(matchedClock.group(2)!);
+          hasTime = true;
+        }
+      }
+      if (month < 1 || month > 12 || day < 1 || day > 31 ||
+          hour > 23 || minute > 59) {
+        continue;
+      }
+      final value = DateTime(year, month, day, hour, minute);
+      if (value.month != month || value.day != day) continue;
+      dates.add((line, value, hasTime));
+    }
+
+    // A card with only "接单后X天" has no calendar date. Preserve it as an
+    // editable candidate, rather than silently dropping it from the import.
+    // Explicit date anchors take precedence if a quick label belongs to the
+    // very same card.
+    final anchors = <_ScreenshotDeadlineAnchor>[
+      for (final record in dates)
+        _ScreenshotDeadlineAnchor(
+          line: record.$1,
+          date: record.$2,
+          hasTime: record.$3,
+        ),
+    ];
+    for (final line in prepared) {
+      if (!_relativeDeadline.hasMatch(line.text)) continue;
+      final nearbyDateIndex = anchors.indexWhere((item) =>
+          item.date != null &&
+          (item.line.centerY - line.centerY).abs() < 90);
+      if (nearbyDateIndex != -1) {
+        final dateAnchor = anchors[nearbyDateIndex];
+        anchors[nearbyDateIndex] = _ScreenshotDeadlineAnchor(
+          line: dateAnchor.line,
+          date: dateAnchor.date,
+          hasTime: dateAnchor.hasTime,
+          relativeText: line.text.trim(),
+        );
+        continue;
+      }
+      anchors.add(_ScreenshotDeadlineAnchor(
+        line: line,
+        relativeText: line.text.trim(),
+      ));
+    }
+
+    // A screenshot can omit deadlines entirely. Conservatively detect
+    // artwork-title-shaped lines when no date/relative anchor follows the
+    // title in its own card. They still require a human-filled deadline.
+    for (final line in prepared) {
+      final title = line.text.trim();
+      final looksLikeCardTitle =
+          title.startsWith('【') || title.startsWith('定向企划 ');
+      if (!looksLikeCardTitle || !_plausibleTitle(title)) continue;
+      if (anchors.any((anchor) =>
+          anchor.line.centerY >= line.centerY &&
+          anchor.line.centerY - line.centerY < 290)) {
+        continue;
+      }
+      anchors.add(_ScreenshotDeadlineAnchor(line: line, isTitleAnchor: true));
+    }
+    anchors.sort((a, b) => a.line.centerY.compareTo(b.line.centerY));
+
+    final result = <ScreenshotOrderCandidate>[];
+    for (var i = 0; i < anchors.length; i++) {
+      final deadlineAnchor = anchors[i];
+      final anchor = deadlineAnchor.line;
+
+      // A previous order's deadline cannot become this card's title/client.
+      // Keep some headroom for cards with a large portrait area.
+      final previousDateY =
+          i == 0 ? 0.0 : anchors[i - 1].line.centerY;
+      final startY = (anchor.centerY - 370).clamp(
+        previousDateY + (i == 0 ? 0 : 24), anchor.centerY).toDouble();
+      final nextDateY = i + 1 < anchors.length
+          ? anchors[i + 1].line.centerY
+          : imageHeight;
+      final endY =
+          (anchor.centerY + (deadlineAnchor.isTitleAnchor ? 270 : 115))
+              .clamp(anchor.centerY, (anchor.centerY + nextDateY) / 2)
+              .toDouble();
+
+      final preceding = prepared.where((line) =>
+          line.centerY >= startY &&
+          line.centerY < anchor.centerY - 7).toList();
+      final titles = preceding.where((line) =>
+          line.centerY > anchor.centerY - 260 &&
+          _plausibleTitle(line.text)).toList();
+      if (!deadlineAnchor.isTitleAnchor && titles.isEmpty) continue;
+
+      // With no date anchor the header itself is the title; otherwise select
+      // the nearest plausible title before the deadline field.
+      titles.sort((a, b) => b.centerY.compareTo(a.centerY));
+      final titleLine =
+          deadlineAnchor.isTitleAnchor ? anchor : titles.first;
+      final title = _stripKnownUiLabel(titleLine.text);
+      if (title.isEmpty) continue;
+
+      final buyers = preceding.where((line) =>
+          line.centerY < titleLine.centerY - 10 &&
+          line.centerY >= titleLine.centerY - 210 &&
+          line.left < imageWidth * 0.65 &&
+          _plausibleBuyer(line.text)).toList()
+        ..sort((a, b) => b.centerY.compareTo(a.centerY));
+      final buyer = buyers.isEmpty ? '' : buyers.first.text.trim();
+
+      // Price can appear above the date (米画师) or below it (画加).
+      final cardArea = prepared.where((line) =>
+          line.centerY >= titleLine.centerY - 12 &&
+          line.centerY <= endY).toList();
+      double? price;
+      int? progress;
+      for (final line in cardArea) {
+        final money = _money.firstMatch(line.text);
+        if (money != null && price == null) {
+          price = double.tryParse(money.group(1)!);
+        }
+        final matched = _percent.firstMatch(line.text);
+        if (matched != null && progress == null) {
+          progress = int.tryParse(matched.group(1)!);
+          if (progress != null && progress > 100) progress = null;
+        }
+      }
+
+      result.add(ScreenshotOrderCandidate(
+        title: title,
+        clientName: buyer,
+        detectedDate: deadlineAnchor.date,
+        deadlineHasTime: deadlineAnchor.hasTime,
+        relativeDeadlineText: deadlineAnchor.relativeText,
+        price: price,
+        progressPercent: progress,
+        sourceLines: List.unmodifiable(cardArea),
+        sourceStartY: startY,
+        sourceEndY: endY,
+      ));
+    }
+    return List.unmodifiable(result);
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    if (text.length < 2 || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text)) {
+      return false;
+    }
+    if (<String>{
+      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+      '全部', '默认', '返回', '全额支付', '定向企划',
+    }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+);
   static final RegExp _money = RegExp(r'[¥￥]\s*(\d+(?:\.\d{1,2})?)');
   static final RegExp _percent = RegExp(r'(\d{1,3})\s*%');
 
