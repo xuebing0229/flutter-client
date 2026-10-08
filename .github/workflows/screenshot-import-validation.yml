@@ -67,4 +67,4 @@ jobs:
         run: flutter build windows --debug
       - name: Bundle and check offline OCR
         shell: pwsh
-        run: ./tool/bundle_windows_ocr.ps1 -OutputDir "build/windows/x64/runner/Debug"
+        run: ./tool/bundle_windows_rapidocr.ps1 -OutputDir "build/windows/x64/runner/Debug"
