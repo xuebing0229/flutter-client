@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../orders/data/node_presets.dart';
@@ -11,6 +12,7 @@ import '../../orders/state/order_store.dart';
 import '../../products/domain/finished_product.dart';
 import '../../products/state/product_store.dart';
 import '../data/screenshot_ocr_service.dart';
+import '../data/screenshot_ocr_diagnostic.dart';
 import '../data/screenshot_import_history.dart';
 import '../domain/screenshot_duplicate_review.dart';
 import '../domain/screenshot_import_draft.dart';
@@ -52,6 +54,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   final _ordersParser = const ScreenshotLayoutParser();
   final _productsParser = const ScreenshotProductLayoutParser();
   final List<ScreenshotImportDraft> _rows = [];
+  // Transient diagnostics only; nothing is uploaded or persisted.
+  final List<String> _ocrDiagnostics = [];
   int _imageSerial = 0;
   int _rowSerial = 0;
   bool _working = false;
@@ -72,6 +76,60 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(text), behavior: SnackBarBehavior.floating),
     );
+  }
+
+  Future<void> _copyOcrDiagnostic() async {
+    if (_ocrDiagnostics.isEmpty) {
+      _message('请先选择截图并等待识别结束');
+      return;
+    }
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('复制本机 OCR 诊断？'),
+        content: const Text(
+          '报告包含截图里识别到的文字及位置，包括图名、单主、价格、日期。'
+          '不包含原始图片、文件路径或账号凭据，也不会自动上传。'
+          '复制后文字会进入系统剪贴板，请确认愿意分享这些信息。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('复制诊断文字'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || accepted != true) return;
+    final output = StringBuffer()
+      ..writeln('冒险者公会 · 截图 OCR 本机诊断')
+      ..writeln('类型：' + (_products ? '成品' : '排单'))
+      ..writeln('以下为手机实际 OCR 输出，不是原始截图。')
+      ..writeln();
+    for (final item in _ocrDiagnostics) {
+      output.writeln(item);
+    }
+    output.writeln('--- 当前识别预览（可能经过人工编辑） ---');
+    for (var i = 0; i < _rows.length; i++) {
+      final row = _rows[i];
+      output.writeln(
+        '${i + 1}. ${row.sourceImageId} | 图名=${row.title} '
+        '| 单主=${row.clientName} | 平台=${row.platform?.label ?? "待选择"} '
+        '| 稿价=${row.price?.toString() ?? "未识别"} '
+        '| 截稿日期=${row.detectedDate?.toIso8601String() ?? "未识别"} '
+        '| 已确认截稿=${row.deadline?.toIso8601String() ?? "未设置"}',
+      );
+    }
+    try {
+      await Clipboard.setData(ClipboardData(text: output.toString()));
+      _message('OCR 诊断文字已复制，可粘贴到聊天中核对');
+    } catch (error) {
+      _message('复制 OCR 诊断失败：$error');
+    }
   }
 
   Future<void> _pickAndRecognize() async {
@@ -96,6 +154,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         try {
           final imageHash = await _history.hashImage(image.path);
           final recognized = await _ocr.recognize(image.path);
+          final parsedForReport = <String>[];
           final guess = preselectImportPlatform(
             recognized.lines.map((line) => line.text),
           );
@@ -126,6 +185,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             );
             for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
               final candidate = found[cardIndex];
+              parsedForReport.add(
+                '成品 ${cardIndex + 1}: 图名=${candidate.title}'
+                ' | 售价=${candidate.price?.toString() ?? "未识别"}',
+              );
               generated.add(_draft(
                 imageId: imageId,
                 fingerprint: screenshotCardFingerprint(
@@ -160,6 +223,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 : [for (final candidate in found) candidate.title];
             for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
               final candidate = found[cardIndex];
+              parsedForReport.add(
+                '排单 ${cardIndex + 1}: 原图名=${candidate.title}'
+                ' | 校正图名=${reconciledTitles[cardIndex]}'
+                ' | 单主=${candidate.clientName}'
+                ' | 稿价=${candidate.price?.toString() ?? "未识别"}'
+                ' | 截稿=${candidate.detectedDate?.toIso8601String() ?? "未识别"}'
+                ' | 时间明确=${candidate.deadlineHasTime}'
+                ' | 进度=${candidate.progressPercent?.toString() ?? "未识别"}',
+              );
               generated.add(_draft(
                 imageId: imageId,
                 fingerprint: screenshotCardFingerprint(
@@ -187,7 +259,21 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ));
             }
           }
+          _ocrDiagnostics.add(formatScreenshotOcrDiagnostic(
+            screenshotNumber: _imageSerial,
+            ocr: recognized,
+            route: _products
+                ? '成品橱窗'
+                : huajiaDetail
+                    ? '画加详情页'
+                    : mihuashiDetail
+                        ? '米画师详情页'
+                        : '排单列表或未识别详情页',
+            platform: platform?.label ?? '待选择',
+            parsedRows: parsedForReport,
+          ));
         } catch (error) {
+          _ocrDiagnostics.add('截图 $_imageSerial 识别失败：$error\n');
           unreadable++;
           firstError ??= error.toString();
         }
@@ -782,6 +868,13 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       appBar: AppBar(
         title: Text(_products ? '截图导入成品' : '截图导入排单'),
         actions: [
+          IconButton(
+            tooltip: '复制 OCR 诊断（不会上传原图）',
+            onPressed: _working || _ocrDiagnostics.isEmpty
+                ? null
+                : () => unawaited(_copyOcrDiagnostic()),
+            icon: const Icon(Icons.bug_report_outlined),
+          ),
           TextButton.icon(
             onPressed: _working ? null : _pickAndRecognize,
             icon: const Icon(Icons.add_photo_alternate_outlined),

@@ -276,10 +276,23 @@ class ScreenshotLayoutParser {
               field.left > imageWidth * 0.24 &&
               (_money.hasMatch(field.text) ||
                   _percent.hasMatch(field.text)));
+      // A storefront-like list card may contain its 【category badge】 in
+      // the middle of the artwork title, and may have a delivery policy
+      // ("拍下自动提交源文件") instead of a calendar date. OCR for such a
+      // card must still yield a reviewable row, not silently drop it.
+      // Requiring the nearby deadline LABEL prevents treating arbitrary
+      // comments with bracketed text as new orders.
+      final taggedTitleWithDeadlineLabel =
+          title.contains('【') && title.contains('】') &&
+          line.left >= imageWidth * 0.25 &&
+          prepared.any((field) =>
+              field.centerY > line.centerY &&
+              field.centerY - line.centerY < 170 &&
+              field.text.contains('截稿时间'));
       final looksLikeCardTitle =
           title.startsWith('【') ||
           title.startsWith('定向企划 ') ||
-          hasNearbyOrderField;
+          hasNearbyOrderField || taggedTitleWithDeadlineLabel;
       if (!looksLikeCardTitle || !_plausibleTitle(title)) continue;
       if (anchors.any((anchor) =>
           anchor.line.centerY >= line.centerY &&
@@ -488,8 +501,13 @@ class ScreenshotLayoutParser {
     List<ScreenshotTextLine> lines, {required double paymentY}) {
     // Prefer a currency token in the payment/status row, not a number from
     // the thumbnail or file-size line. Some OCR runs separate ¥ and 88.
+    // In the actual MiHuashi detail layout the status "已全额支付" and
+    // the fee itself are two *vertically stacked* rows. ML Kit measures
+    // their centers about 50px apart on a 1920px screenshot. Restrict to
+    // the same payment block, but don't require a same-line token.
     final nearby = lines.where((line) =>
-        (line.centerY - paymentY).abs() < 40).toList();
+        line.centerY >= paymentY - 30 &&
+        line.centerY <= paymentY + 105).toList();
     for (final line in nearby) {
       final matched = _money.firstMatch(line.text.trim().replaceFirst(
         RegExp(r'^[yY](?=\s*\d)'), '¥',
@@ -629,7 +647,7 @@ class ScreenshotLayoutParser {
   static String _cleanBuyerName(String source) {
     // Huajia renders a chevron after the customer name; its glyph is not
     // part of the person's username.
-    return source.trim().replaceFirst(RegExp(r'\s*[›＞>]\s*$'), '').trim();
+    return source.trim().replaceFirst(RegExp(r'\s*[›＞>》»]\s*$'), '').trim();
   }
 
   static bool _plausibleBuyer(String source) {

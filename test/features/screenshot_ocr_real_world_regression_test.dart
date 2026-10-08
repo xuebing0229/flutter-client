@@ -276,4 +276,84 @@ void main() {
     expect(rows.single.price, 30);
   });
 
+
+  test('actual device OCR geometry: stacked MiHuashi detail fee below paid label', () {
+    // Coordinates mirror device ML Kit output, but identities/titles are
+    // synthetic. Never commit raw user screenshots or customer names.
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 865, imageHeight: 1920,
+      lines: [
+        at('订单', 117, x: 393),
+        at('【常驻】虚构头像3.0', 235, x: 234),
+        at('距截稿间 2026-10-31 23:59 还有23天', 337, x: 215),
+        at('客户甲', 460, x: 132),
+        at('创作节点', 601, x: 37),
+        at('已全额支付', 604, x: 575),
+        at('94', 650, x: 574),
+        at('¥94', 651, x: 574),
+        at('60%', 662, x: 94),
+        at('进程动态', 800, x: 206),
+        at('联系企划方', 1818, x: 348),
+      ],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single.price, 94);
+    expect(rows.single.progressPercent, 60);
+    expect(rows.single.clientName, '客户甲');
+    expect(rows.single.importReadyDeadline, DateTime(2026, 10, 31, 23, 59));
+  });
+
+  test('device OCR layout: bracketed middle title and policy-only deadline', () {
+    // Same geometry as a Huajia-style completed bulk storefront list;
+    // here we intentionally entered via the ORDER route. All three rows
+    // stay reviewable, but the first must still require a manual deadline.
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 1272, imageHeight: 2800,
+      lines: [
+        at('已完成', 603, x: 1087),
+        at('客户甲>', 589, x: 80),
+        at('虚构小白裙【服设批发】', 740, x: 516),
+        at('截稿时间:拍下自动提交源文件', 821, x: 405),
+        at('y 10', 974, x: 1120),
+        at('查看评价', 1149, x: 973),
+        at('客户乙 》', 1352, x: 171),
+        at('【批发合集】20r虚构服设批发', 1494, x: 437),
+        at('截稿时间:2025-05-31 14:34', 1572, x: 405),
+        at('y 20', 1727, x: 1120),
+        at('客户丙>', 2109, x: 174),
+        at('虚构服设·限定2025', 2245, x: 406),
+        at('截稿时间:2025-03-24 21:12', 2321, x: 390),
+        at('y 10', 2480, x: 1120),
+      ],
+    );
+    expect(rows, hasLength(3));
+    expect(rows.map((e) => e.price).toList(), [10, 20, 10]);
+    expect(rows.map((e) => e.clientName).toList(),
+        ['客户甲', '客户乙', '客户丙']);
+    expect(rows.first.detectedDate, isNull);
+    expect(rows.first.importReadyDeadline, isNull);
+    expect(rows[1].importReadyDeadline, DateTime(2025, 5, 31, 14, 34));
+    expect(rows[2].importReadyDeadline, DateTime(2025, 3, 24, 21, 12));
+  });
+
+  test('native OCR lost buyer entirely: parser never invents a nickname', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 865, imageHeight: 1920,
+      lines: [
+        at('买家甲', 383, x: 167),
+        at('【常驻】虚构盒子', 496, x: 347),
+        at('94', 550, x: 346),
+        at('2026-10-31', 645, x: 344),
+        at('60%', 697, x: 387),
+        at('【常驻】虚构盒子', 1070, x: 362),
+        at('94', 1120, x: 346),
+        at('2026-10-31', 1219, x: 345),
+        at('60%', 1270, x: 426),
+      ],
+    );
+    expect(rows, hasLength(2));
+    expect(rows.first.clientName, '买家甲');
+    expect(rows.last.clientName, isEmpty);
+    expect(rows.last.price, 94);
+  });
 }

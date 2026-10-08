@@ -5,6 +5,8 @@ on:
     branches:
       - feat/adventurer-news-20261008
       - fix/adventurer-news-inline-20261008
+      - build/beta-108-ocr-diagnostics
+      - fix/ocr-feedback-20261009
   workflow_dispatch:
 
 permissions:
@@ -27,6 +29,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
       - name: Verify cumulative news and version ranges
-        run: flutter test test/core/adventurer_news_test.dart test/features/home/adventurer_news_dialog_test.dart test/features/screenshot_ocr_real_world_regression_test.dart test/features/screenshot_layout_parser_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/screenshot_title_reconciliation_test.dart test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_huajia_detail_layout_test.dart
+        run: flutter test test/core/adventurer_news_test.dart test/features/home/adventurer_news_dialog_test.dart test/features/screenshot_ocr_real_world_regression_test.dart test/features/screenshot_layout_parser_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/screenshot_title_reconciliation_test.dart test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_ocr_diagnostic_test.dart test/features/screenshot_product_layout_parser_test.dart test/features/screenshot_product_dedup_test.dart
       - name: Analyze application
         run: flutter analyze
