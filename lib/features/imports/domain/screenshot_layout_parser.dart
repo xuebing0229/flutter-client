@@ -504,7 +504,7 @@ class ScreenshotLayoutParser {
   static String _cleanBuyerName(String source) {
     // Huajia renders a chevron after the customer name; its glyph is not
     // part of the person's username.
-    return source.trim().replaceFirst(RegExp(r'\\s*[›＞>]\\s*$'), '').trim();
+    return source.trim().replaceFirst(RegExp(r'\s*[›＞>]\s*$'), '').trim();
   }
 
   static bool _plausibleBuyer(String source) {
