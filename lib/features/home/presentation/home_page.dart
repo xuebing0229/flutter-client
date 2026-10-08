@@ -30,6 +30,7 @@ import 'abstract_mode_guide.dart';
 import 'app_drawer.dart';
 import 'archive_page.dart';
 import 'feature_toggle_page.dart';
+import 'feedback_page.dart';
 import 'first_run_guide.dart';
 import 'reminder_background_guide.dart';
 import 'settings_page.dart';
@@ -854,6 +855,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         syncCoordinator: _syncCoordinator,
       ),
       AppToolMenu.syncTool => DeviceSyncPage(coordinator: _syncCoordinator),
+      AppToolMenu.feedbackTool => const FeedbackPage(),
       AppToolMenu.accountTool => AccountPage(
         store: widget.accountStore,
         buildTransferPackage: () =>
@@ -985,6 +987,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.featureToggleTool => '附加功能开关',
       AppToolMenu.archiveTool => '归档',
       AppToolMenu.syncTool => '设备同步',
+      AppToolMenu.feedbackTool => '问题反馈',
       AppToolMenu.accountTool => '账号与设备',
       AppToolMenu.settingsTool => '设置',
       AppToolMenu.themeColorTool => 'UI主题色',
