@@ -202,9 +202,10 @@ class ScreenshotLayoutParser {
     // such a page by its upload timestamps.
     final visible = prepared.map((line) => line.text).join(' ');
     final isDetail = visible.contains('订单') &&
+        visible.contains('截稿') &&
         <String>['稿件夹', '进程动态', '参考信息', '联系企划方',
-          '上传稿件', '约稿完成', '创作节点']
-          .where(visible.contains).length >= 2;
+          '上传稿件', '约稿完成', '创作节点', '已全额支付']
+          .where(visible.contains).isNotEmpty;
     if (isDetail) {
       final marked = dates.where((r) => r.$1.text.contains('截稿')).toList();
       if (marked.isEmpty) {
