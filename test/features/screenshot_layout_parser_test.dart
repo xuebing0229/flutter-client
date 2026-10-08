@@ -31,6 +31,15 @@ void main() {
     expect(entries.first.progressPercent, 60);
     expect(entries.last.clientName, '晓vv');
     expect(entries.last.price, 94);
+
+    // 米画师截图只有日期，绝不能默默写成 2026-10-31 00:00。
+    expect(entries.first.detectedDate, DateTime(2026, 10, 31));
+    expect(entries.first.needsDeadlineTimeConfirmation, isTrue);
+    expect(entries.first.importReadyDeadline, isNull);
+    expect(
+      entries.first.deadlineWithChosenTime(hour: 21, minute: 30),
+      DateTime(2026, 10, 31, 21, 30),
+    );
   });
 
   test('画加: progress and price are not mixed with the next card', () {
@@ -57,6 +66,8 @@ void main() {
     expect(entries.first.price, 30);
     expect(entries.last.title, '妹宝only的摸鱼草盲盒');
     expect(entries.last.price, 88);
+    expect(entries.first.needsDeadlineTimeConfirmation, isFalse);
+    expect(entries.first.importReadyDeadline, DateTime(2026, 10, 8, 16, 48));
     expect(entries.last.progressPercent, 100);
   });
 
@@ -74,4 +85,26 @@ void main() {
     expect(entries.single.price, isNull);
     expect(entries.single.title, '邀请您企目表中的Xhead气球');
   });
+  test('date-only deadline requires an explicit valid clock time', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1000,
+      lines: [
+        at('测试单主', 150),
+        at('【常驻】黑白摸鱼头3.0', 250),
+        at('2026-10-31', 400),
+      ],
+    );
+    expect(entries.length, 1);
+    final candidate = entries.single;
+    expect(candidate.importReadyDeadline, isNull);
+    expect(() => candidate.deadlineWithChosenTime(hour: 24, minute: 0),
+        throwsRangeError);
+    expect(() => candidate.deadlineWithChosenTime(hour: 18, minute: 60),
+        throwsRangeError);
+    // A user can explicitly opt into midnight, but OCR will not assume it.
+    expect(candidate.deadlineWithChosenTime(hour: 0, minute: 0),
+        DateTime(2026, 10, 31));
+  });
+
 }
