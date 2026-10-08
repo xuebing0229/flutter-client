@@ -3,7 +3,7 @@ import '../../orders/domain/queue_order.dart';
 /// The artwork title is user data. Only normalize whitespace for comparisons;
 /// never remove business prefixes such as 【常驻】.
 String normalizedImportTitle(String text) =>
-    text.trim().replaceAll(RegExp(r'\\s+'), ' ').toLowerCase();
+    text.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 
 /// Imported OCR can mention several apps, so require multiple distinguishing
 /// signals before picking a platform. Uncertain cases stay user-selectable.
@@ -117,8 +117,8 @@ bool isScreenshotChromeLine({
   final value = text.trim();
   final ratio = centerY / imageHeight;
   if (ratio < 0.045 &&
-      (RegExp(r'^\\d{1,2}:\\d{2}$').hasMatch(value) ||
-          RegExp(r'^(?:[345]G|Wi-?Fi|\\d{1,3}%|\\d+(?:\\.\\d+)? ?K/s)$',
+      (RegExp(r'^\d{1,2}:\d{2}$').hasMatch(value) ||
+          RegExp(r'^(?:[345]G|Wi-?Fi|\d{1,3}%|\d+(?:\.\d+)? ?K/s)$',
                   caseSensitive: false)
               .hasMatch(value))) {
     return true;
