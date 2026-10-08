@@ -16,6 +16,7 @@ import '../domain/screenshot_duplicate_review.dart';
 import '../domain/screenshot_import_draft.dart';
 import '../domain/screenshot_import_rules.dart';
 import '../domain/screenshot_layout_parser.dart';
+import '../domain/screenshot_huajia_detail_parser.dart';
 import '../domain/screenshot_title_reconciliation.dart';
 import '../domain/screenshot_product_layout_parser.dart';
 
@@ -98,17 +99,26 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           final guess = preselectImportPlatform(
             recognized.lines.map((line) => line.text),
           );
-          // Layout is more reliable than partially recognized tab captions
-          // on MiHuashi's single-order detail screens. The generic text-only
-          // guess often reports "unknown" for these pages.
-          final platform = !_products &&
-                  isMiHuashiOrderDetailScreenshot(
-                    lines: recognized.lines,
-                    imageWidth: recognized.width,
-                    imageHeight: recognized.height,
-                  )
-              ? CommissionPlatform.mihuashi
-              : guess.platform;
+          // Detect the actual platform's detail layout before assigning an
+          // order to any app. A detail page is not automatically MiHuashi:
+          // Huajia also has a single-order page with attachment timestamps.
+          final huajiaDetail = !_products &&
+              isHuajiaOrderDetailScreenshot(
+                lines: recognized.lines,
+                imageWidth: recognized.width,
+                imageHeight: recognized.height,
+              );
+          final mihuashiDetail = !_products && !huajiaDetail &&
+              isMiHuashiOrderDetailScreenshot(
+                lines: recognized.lines,
+                imageWidth: recognized.width,
+                imageHeight: recognized.height,
+              );
+          final platform = huajiaDetail
+              ? CommissionPlatform.huajia
+              : mihuashiDetail
+                  ? CommissionPlatform.mihuashi
+                  : guess.platform;
           if (_products) {
             final found = _productsParser.parse(
               lines: recognized.lines,
@@ -131,11 +141,17 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ));
             }
           } else {
-            final found = _ordersParser.parse(
-              lines: recognized.lines,
-              imageHeight: recognized.height,
-              imageWidth: recognized.width,
-            );
+            final found = huajiaDetail
+                ? const ScreenshotHuajiaDetailParser().parse(
+                    lines: recognized.lines,
+                    imageHeight: recognized.height,
+                    imageWidth: recognized.width,
+                  )
+                : _ordersParser.parse(
+                    lines: recognized.lines,
+                    imageHeight: recognized.height,
+                    imageWidth: recognized.width,
+                  );
             // MiHuashi list cards often contain the same work sold to
             // different buyers. Resolve tiny OCR spelling differences before
             // selecting the same-title workflow preset for each draft.
