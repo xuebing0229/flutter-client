@@ -32,12 +32,12 @@ class WindowsRapidOcrOnnx {
       final run = await Process.run(
         engine.path,
         [
-          '--models', models.path.replaceAll(r'\\', '/'),
+          '--models', models.path.replaceAll(String.fromCharCode(92), '/'),
           '--det', 'ch_PP-OCRv3_det_infer.onnx',
           '--cls', 'ch_ppocr_mobile_v2.0_cls_infer.onnx',
           '--rec', 'ch_PP-OCRv3_rec_infer.onnx',
           '--keys', 'ppocr_keys_v1.txt',
-          '--image', local.replaceAll(r'\\', '/'),
+          '--image', local.replaceAll(String.fromCharCode(92), '/'),
           '--padding', '0',
           '--maxSideLen', '0',
           '--numThread', '4',
