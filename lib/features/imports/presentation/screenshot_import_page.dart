@@ -52,6 +52,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
   bool get _products => widget.kind == ScreenshotImportKind.products;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_pickAndRecognize());
+    });
+  }
+
   void _message(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
