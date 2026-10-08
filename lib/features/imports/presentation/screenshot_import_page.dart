@@ -259,6 +259,66 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  Future<void> _bulkCompleteMissingTimes() async {
+    final targets = _rows.where((row) =>
+        row.selected && !row.deadlineConfirmed &&
+        row.detectedDate != null &&
+        row.relativeDeadline == null).toList();
+    if (targets.isEmpty) {
+      _message('当前没有可批量补充时间的排单');
+      return;
+    }
+    final choice = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 23, minute: 59),
+      helpText: '批量设定截稿时分（仅补未确认的排单）',
+    );
+    if (!mounted || choice == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('批量补全截稿时间'),
+        content: Text(
+          '将为 ${targets.length} 条仅识别到日期的排单设置 '
+          '${choice.format(context)}。快速橱窗可能不是按日截稿，'
+          '请确认这些订单适用你选定的时分。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('应用并确认'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirm != true) return;
+    setState(() {
+      for (final row in targets) {
+        final date = row.detectedDate!;
+        row.deadline = DateTime(
+          date.year, date.month, date.day, choice.hour, choice.minute,
+        );
+        row.deadlineConfirmed = true;
+      }
+    });
+  }
+
+  void _addManualPreviewRow() {
+    setState(() {
+      _rows.add(_draft(
+        imageId: 'manual',
+        title: '',
+        client: '',
+        price: null,
+        platform: null,
+      ));
+    });
+  }
+
   Future<void> _editDeadline(ScreenshotImportDraft row) async {
     final basis = row.deadline ?? row.detectedDate ?? DateTime.now();
     final date = await showDatePicker(
@@ -443,6 +503,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                           ' 条，选中 ' + count.toString() + ' 条',
                     ),
                   ),
+                  if (!_products)
+                    TextButton(
+                      onPressed: () => unawaited(_bulkCompleteMissingTimes()),
+                      child: const Text('批量补时间'),
+                    ),
                   PopupMenuButton<CommissionPlatform>(
                     tooltip: '批量设置平台',
                     onSelected: (value) => setState(() {
@@ -465,6 +530,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     ),
                   ),
                 ],
+              ),
+            ),
+          if (!_working && _rows.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _addManualPreviewRow,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('补充漏识别的条目'),
               ),
             ),
           Expanded(
