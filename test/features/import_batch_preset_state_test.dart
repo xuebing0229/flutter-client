@@ -85,6 +85,52 @@ void main() {
     state.dispose();
   });
 
+  test('editing the last item also updates matching items above it', () {
+    final state = ImportBatchPresetState(
+      presets: [defaultNodePreset, special],
+      rows: [
+        draft('above-60', percentage: 60),
+        draft('above-80', percentage: 80),
+        draft('last-edited', percentage: 55),
+      ],
+    );
+
+    state.selectPreset('last-edited', special.id);
+
+    expect(state.byId('above-60').presetId, special.id);
+    expect(state.byId('above-60').nodeId, 'draft60');
+    expect(state.byId('above-80').presetId, special.id);
+    expect(state.byId('above-80').nodeId, 'almost80');
+    expect(state.byId('last-edited').nodeId, 'first');
+    state.dispose();
+  });
+
+  test('editing the middle row updates both directions and preserves overrides', () {
+    final state = ImportBatchPresetState(
+      presets: [defaultNodePreset, special],
+      rows: [
+        draft('above', percentage: 80),
+        draft('manual-override', percentage: 60),
+        draft('middle', percentage: 60),
+        draft('below', percentage: 55),
+        draft('different-platform', platform: CommissionPlatform.huajia),
+      ],
+    );
+
+    state.selectNode('manual-override', defaultNodePreset.nodes.last.id);
+    state.selectPreset('middle', special.id);
+
+    expect(state.byId('above').presetId, special.id);
+    expect(state.byId('above').nodeId, 'almost80');
+    expect(state.byId('manual-override').presetId, defaultNodePreset.id);
+    expect(state.byId('manual-override').nodeId, defaultNodePreset.nodes.last.id);
+    expect(state.byId('middle').nodeId, 'draft60');
+    expect(state.byId('below').presetId, special.id);
+    expect(state.byId('below').nodeId, 'first');
+    expect(state.byId('different-platform').presetId, defaultNodePreset.id);
+    state.dispose();
+  });
+
   test('distinct platforms, titles and explicitly changed later rows are safe', () {
     final state = ImportBatchPresetState(
       presets: [defaultNodePreset, special],
