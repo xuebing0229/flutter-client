@@ -25,8 +25,16 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
 
   final huajia = <String>['我卖出的', '当前交付节点', '等待对方收稿', '待交稿']
       .where(text.contains).length;
-  final mihuashi = <String>['企划方名称', '企划内容', '购买时间', '定向企划']
+  var mihuashi = <String>['企划方名称', '企划内容', '购买时间', '定向企划']
       .where(text.contains).length;
+  // 米画师列表头可能只有“截稿时间 / 接单时间 / 购买时间”，
+  // 不出现平台名字或企划文字。组合线索比只找单个词可靠。
+  if (text.contains('购买时间') &&
+      (text.contains('截稿时间') ||
+          text.contains('接单时间') ||
+          text.contains('默认'))) {
+    mihuashi += 2;
+  }
 
   if (huajia >= 2 && huajia > mihuashi) {
     return const PlatformGuess(CommissionPlatform.huajia, 0.85);
