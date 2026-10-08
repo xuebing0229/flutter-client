@@ -1,3 +1,4 @@
+import '../../orders/domain/queue_order.dart';
 import 'screenshot_import_rules.dart';
 
 /// Platform-neutral line geometry. Native OCR engines only need to convert
@@ -49,6 +50,24 @@ class ScreenshotOrderCandidate {
   /// a complete DateTime and cannot represent date-only deadlines.
   DateTime? get importReadyDeadline =>
       deadlineHasTime ? detectedDate : null;
+
+  /// Date-only 米画师 listings usually use 23:59 for ordinary day-based
+  /// deadlines. This is a visible, editable suggestion only; it is NOT an
+  /// OCR-confirmed deadline and cannot be written without user approval.
+  ///
+  /// 'isQuickCommission' takes precedence because quick commissions can use
+  /// other time rules. When the listing type is unknown the UI must call out
+  /// that the suggestion needs verification.
+  DateTime? suggestedDeadline({
+    required CommissionPlatform platform,
+    bool isQuickCommission = false,
+  }) {
+    if (deadlineHasTime) return detectedDate;
+    if (platform != CommissionPlatform.mihuashi || isQuickCommission) {
+      return null;
+    }
+    return deadlineWithChosenTime(hour: 23, minute: 59);
+  }
 
   /// Allows per-card or explicitly chosen batch time input while retaining
   /// the date read from the image. Invalid clock values cannot be imported.
