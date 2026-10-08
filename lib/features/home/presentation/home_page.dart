@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/account/account_models.dart';
 import '../../../core/account/account_store.dart';
+import '../../../core/changelog/adventurer_news.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/onboarding/interaction_hint_store.dart';
@@ -28,6 +29,7 @@ import '../../schedule/presentation/schedule_page.dart';
 import '../../statistics/presentation/statistics_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
+import 'adventurer_news_dialog.dart';
 import 'app_drawer.dart';
 import 'archive_page.dart';
 import 'feature_toggle_page.dart';
@@ -40,6 +42,7 @@ import 'theme_color_page.dart';
 class HomePage extends StatefulWidget {
   const HomePage({
     required this.accountId,
+    this.newsStore = const AdventurerNewsStore(),
     required this.themeStore,
     required this.featureStore,
     required this.accountStore,
@@ -47,6 +50,7 @@ class HomePage extends StatefulWidget {
   });
 
   final String accountId;
+  final AdventurerNewsStore newsStore;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
@@ -95,6 +99,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _abstractFeatureToggleHidden = false;
   bool _abstractGuidePromptVisible = false;
   bool _lastAbstractMode = false;
+  bool _newsPromptAttempted = false;
   bool _syncConflictPromptVisible = false;
   bool _syncConflictPromptedUntilClear = false;
   AccountSyncState? _accountSyncSnapshot;
@@ -232,6 +237,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_showFirstRunGuideOnce());
       });
+    }
+
+    if (errorMessage == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_showAdventurerNewsOnce());
+      });
+    }
+  }
+
+  Future<void> _showAdventurerNewsOnce() async {
+    if (_newsPromptAttempted || !mounted) return;
+    _newsPromptAttempted = true;
+    try {
+      final notice = await widget.newsStore.pending();
+      if (!mounted || notice == null) return;
+      final acknowledged = await showAdventurerNewsDialog(
+        context,
+        notice: notice,
+      );
+      if (acknowledged) {
+        await widget.newsStore.acknowledge(notice.currentBuild);
+      }
+    } catch (_) {
+      // A changelog popup must never break or overwrite work data.
     }
   }
 

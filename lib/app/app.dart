@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/account/account_store.dart';
+import '../core/changelog/adventurer_news.dart';
 import '../core/features/app_feature_store.dart';
 import '../core/notifications/order_deadline_reminder_service.dart';
 import '../core/portability/app_backup_data.dart';
@@ -29,6 +30,7 @@ class _AppState extends State<App> {
   final AppThemeStore _themeStore = AppThemeStore();
   final AppFeatureStore _featureStore = AppFeatureStore();
   final AccountStore _accountStore = AccountStore();
+  final AdventurerNewsStore _newsStore = const AdventurerNewsStore();
   final AppDataPersistence _persistence = const AppDataPersistence();
   final AccountSyncRecordStore _accountSyncRecordStore =
       AccountSyncRecordStore();
@@ -56,6 +58,16 @@ class _AppState extends State<App> {
     await _accountStore.load(
       recoveryLoader: _persistence.discoverRecoverableAccounts,
     );
+
+    // Determine whether this is a new installation before any account can
+    // be created. The read marker is device-local, never synced with accounts.
+    try {
+      await _newsStore.initialize(
+        hasExistingAccounts: _accountStore.localAccounts.isNotEmpty,
+      );
+    } catch (_) {
+      // A local changelog write failure must not prevent account sign-in.
+    }
 
     // Revoked accounts intentionally keep their transport folder until the
     // remote revocation acknowledgement has had a chance to sync. The user can
@@ -342,6 +354,7 @@ class _AppState extends State<App> {
             unlockedBuilder: (accountId) => HomePage(
               key: ValueKey(accountId),
               accountId: accountId,
+              newsStore: _newsStore,
               themeStore: _themeStore,
               featureStore: _featureStore,
               accountStore: _accountStore,

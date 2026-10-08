@@ -1,0 +1,31 @@
+name: Adventurer News Validation
+
+on:
+  push:
+    branches:
+      - feat/adventurer-news-20261008
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adventurer-news-validation
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Verify cumulative news and version ranges
+        run: flutter test test/core/adventurer_news_test.dart
+      - name: Analyze application
+        run: flutter analyze
