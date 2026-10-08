@@ -37,7 +37,6 @@ class WindowsRapidOcrOnnx {
           '--cls', 'ch_ppocr_mobile_v2.0_cls_infer.onnx',
           '--rec', 'ch_PP-OCRv3_rec_infer.onnx',
           '--keys', 'ppocr_keys_v1.txt',
-          // Upstream CLI splits image directory using '/', even on Windows.
           '--image', local.replaceAll(r'\\', '/'),
           '--padding', '0',
           '--maxSideLen', '0',
@@ -100,36 +99,7 @@ ScreenshotOcrResult parseRapidOnnxConsole(String output) {
     ];
   }
 
-  final linePattern = RegExp(r'^textLine\[(\d+)\]\((.*)\)\r?
-  for (final match in linePattern.allMatches(output)) {
-    words[int.parse(match.group(1)!)] = match.group(2)!.trim();
-  }
-  final lines = <ScreenshotTextLine>[];
-  for (final index in words.keys.toList()..sort()) {
-    final text = words[index]!;
-    final rect = boxes[index];
-    if (text.isEmpty || rect == null || rect[2] <= rect[0] ||
-        rect[3] <= rect[1]) {
-      continue;
-    }
-    lines.add(ScreenshotTextLine(
-      text: text,
-      left: rect[0],
-      top: rect[1],
-      right: rect[2],
-      bottom: rect[3],
-    ));
-  }
-  if (lines.isEmpty) {
-    throw const FormatException('RapidOCR 没有输出有效文字');
-  }
-  return ScreenshotOcrResult(
-    width: width,
-    height: height,
-    lines: List.unmodifiable(lines),
-  );
-}
-, multiLine: true);
+  final linePattern = RegExp(r'^textLine\[(\d+)\]\((.*)\)\r?$', multiLine: true);
   for (final match in linePattern.allMatches(output)) {
     words[int.parse(match.group(1)!)] = match.group(2)!.trim();
   }
