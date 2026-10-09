@@ -75,6 +75,7 @@ class DesktopPetSettings extends ChangeNotifier {
   String? _selectedPresetId;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
   String _customText = '';
+  String? _currentOrderId;
   String? _currentOrderTitle;
   String? _currentOrderNode;
   DateTime? _currentOrderDeadline;
@@ -86,6 +87,7 @@ class DesktopPetSettings extends ChangeNotifier {
   String? get selectedPresetId => _selectedPresetId;
   DesktopPetTextMode get textMode => _textMode;
   String get customText => _customText;
+  String? get currentOrderId => _currentOrderId;
 
   DesktopPetPreset? get selectedPreset {
     final selectedId = _selectedPresetId;
@@ -130,6 +132,8 @@ class DesktopPetSettings extends ChangeNotifier {
       _selectedPresetId =
           raw['selectedPresetId'] is String ? raw['selectedPresetId'] as String : null;
       _customText = raw['customText'] is String ? raw['customText'] as String : '';
+      _currentOrderId =
+          raw['currentOrderId'] is String ? raw['currentOrderId'] as String : null;
 
       final modeName = raw['textMode'];
       _textMode = modeName == DesktopPetTextMode.custom.name
@@ -280,6 +284,35 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> selectCurrentOrder({
+    required String orderId,
+    required String title,
+    required String node,
+    required DateTime? deadline,
+  }) async {
+    _currentOrderId = orderId;
+    _currentOrderTitle = title;
+    _currentOrderNode = node;
+    _currentOrderDeadline = deadline;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> clearCurrentOrderSelection() async {
+    if (_currentOrderId == null &&
+        _currentOrderTitle == null &&
+        _currentOrderNode == null &&
+        _currentOrderDeadline == null) {
+      return;
+    }
+    _currentOrderId = null;
+    _currentOrderTitle = null;
+    _currentOrderNode = null;
+    _currentOrderDeadline = null;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setRuntimeState({
     required bool enabled,
     required String? currentOrderTitle,
@@ -300,13 +333,14 @@ class DesktopPetSettings extends ChangeNotifier {
     await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 3,
+      'schema': 4,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
       'imageB': active?.imageB,
       'textMode': _textMode.name,
       'customText': _customText,
+      'currentOrderId': _currentOrderId,
       'currentOrderTitle': _currentOrderTitle,
       'currentOrderNode': _currentOrderNode,
       'currentOrderDeadline': _currentOrderDeadline?.toIso8601String(),
