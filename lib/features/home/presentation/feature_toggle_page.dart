@@ -168,21 +168,21 @@ class FeatureTogglePage extends StatelessWidget {
                   ),
                 ],
               ),
-              if (Platform.isWindows) ...[
-                const SizedBox(height: 14),
-                _FeatureSection(
-                  title: '桌面小助手',
-                  children: [
-                    _FeatureSwitch(
-                      store: store,
-                      feature: AppFeature.desktopPet,
-                      icon: Icons.pets_outlined,
-                      title: '桌宠',
-                      subtitle: '开启后在电脑端左侧栏显示「桌宠」板块，并启用 A/B 工作小人。',
-                    ),
-                  ],
-                ),
-              ],
+              const SizedBox(height: 14),
+              _FeatureSection(
+                title: '专注与桌宠',
+                children: [
+                  _FeatureSwitch(
+                    store: store,
+                    feature: AppFeature.desktopPet,
+                    icon: Icons.pets_outlined,
+                    title: '桌宠与专注',
+                    subtitle: Platform.isWindows
+                        ? '开启后显示「桌宠」板块：电脑端提供 A/B 桌宠、文字泡和专注计时记录。'
+                        : '开启后显示「桌宠」板块：手机端提供排单关联专注计时和专注记录。',
+                  ),
+                ],
+              ),
               if (store.abstractMode) ...[
                 const SizedBox(height: 14),
                 _FeatureSection(
