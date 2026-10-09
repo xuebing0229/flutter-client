@@ -1,0 +1,12 @@
+Third-party notices for Adventurer's Guild Desktop Pet
+
+VPet-Simulator.Core
+Copyright © VPet Group / VPet contributors
+Project: https://github.com/LorisYounger/VPet
+License: Apache License 2.0
+
+This companion uses VPet-Simulator.Core as its WPF desktop-pet rendering foundation.
+Adventurer's Guild supplies its own A/B images at runtime and does not redistribute
+VPet's built-in character animation assets.
+
+The complete Apache License 2.0 text for VPet is included as LICENSE-VPET.txt.
