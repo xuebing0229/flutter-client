@@ -45,13 +45,17 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
     super.dispose();
   }
 
-  QueueOrder? get _currentOrder {
-    for (final order in widget.orderStore.orders) {
-      if (order.isPinned && !order.isArchived && !order.isCompleted) {
-        return order;
-      }
-    }
-    return null;
+  List<QueueOrder> get _activeOrders => widget.orderStore.orders
+      .where((order) => !order.isArchived && !order.isCompleted)
+      .toList(growable: false);
+
+  Future<void> _selectCurrentOrder(QueueOrder order) async {
+    await _settings.selectCurrentOrder(
+      orderId: order.id,
+      title: order.title,
+      node: order.currentNode.name,
+      deadline: order.deadline,
+    );
   }
 
   Future<String?> _askName({
@@ -204,7 +208,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
           }
 
           final selected = _settings.selectedPreset;
-          final currentOrder = _currentOrder;
+          final activeOrders = _activeOrders;
 
           return ListView(
             padding: AppLayoutSpacing.pageScrollPadding(
@@ -341,11 +345,11 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                   const SizedBox(height: 14),
                   if (_settings.textMode ==
                       DesktopPetTextMode.currentOrder)
-                    _CurrentOrderPreview(
-                      order: currentOrder,
-                      deadlineText: currentOrder == null
-                          ? null
-                          : _formatDeadline(currentOrder.deadline),
+                    _CurrentOrderPicker(
+                      orders: activeOrders,
+                      selectedOrderId: _settings.currentOrderId,
+                      formatDeadline: _formatDeadline,
+                      onSelected: _selectCurrentOrder,
                     )
                   else
                     TextField(
@@ -364,7 +368,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               ),
               const SizedBox(height: 14),
               Text(
-                '“当前在画订单”读取置顶且尚未交稿的排单；桌宠图片和预设只保存在本机电脑。',
+                '“当前在画订单”由你在这里手动选择具体排单；桌宠图片、预设和这项选择都只保存在本机电脑。',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -377,47 +381,136 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
   }
 }
 
-class _CurrentOrderPreview extends StatelessWidget {
-  const _CurrentOrderPreview({
-    required this.order,
-    required this.deadlineText,
+class _CurrentOrderPicker extends StatelessWidget {
+  const _CurrentOrderPicker({
+    required this.orders,
+    required this.selectedOrderId,
+    required this.formatDeadline,
+    required this.onSelected,
   });
 
-  final QueueOrder? order;
-  final String? deadlineText;
+  final List<QueueOrder> orders;
+  final String? selectedOrderId;
+  final String Function(DateTime?) formatDeadline;
+  final Future<void> Function(QueueOrder order) onSelected;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    if (order == null) {
+    if (orders.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: colors.surfaceContainerLow,
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Text('当前没有置顶且尚未交稿的排单。'),
+        child: const Text('当前没有可选择的进行中排单。'),
       );
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth >= 720
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final order in orders)
+              SizedBox(
+                width: cardWidth,
+                child: _CurrentOrderChoiceCard(
+                  order: order,
+                  selected: order.id == selectedOrderId,
+                  deadlineText: formatDeadline(order.deadline),
+                  onTap: () => onSelected(order),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CurrentOrderChoiceCard extends StatelessWidget {
+  const _CurrentOrderChoiceCard({
+    required this.order,
+    required this.selected,
+    required this.deadlineText,
+    required this.onTap,
+  });
+
+  final QueueOrder order;
+  final bool selected;
+  final String deadlineText;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: selected
+          ? colors.primaryContainer.withValues(alpha: 0.55)
+          : colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            order!.title,
-            style: const TextStyle(fontWeight: FontWeight.w800),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? colors.primary : colors.outlineVariant,
+              width: selected ? 2 : 1,
+            ),
           ),
-          const SizedBox(height: 6),
-          Text('${order!.currentNode.name} · $deadlineText'),
-        ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${order.platform.label} · ${order.clientName.trim().isEmpty ? '未填写单主' : order.clientName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${order.currentNode.name} · $deadlineText',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? colors.primary : colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
