@@ -56,8 +56,13 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['Windows 桌宠']);
   });
 
-  test('127 向 126 用户补充桌宠与同步提示优化见闻', () {
+  test('127 向 126 用户补充专注计时见闻', () {
     final picked = newsBetweenBuilds(126, 127);
-    expect(picked.map((e) => e.title).toList(), ['桌宠与同步提示优化']);
+    expect(picked.map((e) => e.title).toList(), ['专注计时']);
+  });
+
+  test('129 向 128 用户补充桌宠与专注整合见闻', () {
+    final picked = newsBetweenBuilds(128, 129);
+    expect(picked.map((e) => e.title).toList(), ['桌宠与专注整合完善']);
   });
 }
