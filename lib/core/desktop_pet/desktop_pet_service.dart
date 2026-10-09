@@ -227,6 +227,17 @@ class DesktopPetSettings extends ChangeNotifier {
           .clamp(0.65, 1.8)
           .toDouble();
 
+      _bubbleBackgroundArgb =
+          (raw['bubbleBackgroundArgb'] as num?)?.toInt() ??
+              _bubbleBackgroundArgb;
+      _bubbleForegroundArgb =
+          (raw['bubbleForegroundArgb'] as num?)?.toInt() ??
+              _bubbleForegroundArgb;
+      _bubbleBorderArgb =
+          (raw['bubbleBorderArgb'] as num?)?.toInt() ?? _bubbleBorderArgb;
+      _bubbleAccentArgb =
+          (raw['bubbleAccentArgb'] as num?)?.toInt() ?? _bubbleAccentArgb;
+
       _currentOrderTitle = raw['currentOrderTitle'] is String
           ? raw['currentOrderTitle'] as String
           : null;
@@ -503,6 +514,7 @@ class DesktopPetService {
   final DesktopPetSettings settings;
   Process? _process;
   Future<void>? _startInFlight;
+  bool _enabledRequested = false;
 
   Future<void> sync({
     required bool enabled,
@@ -515,6 +527,7 @@ class DesktopPetService {
     required int bubbleAccentArgb,
   }) async {
     if (!Platform.isWindows) return;
+    _enabledRequested = enabled;
 
     await settings.setRuntimeState(
       enabled: enabled,
@@ -571,6 +584,10 @@ class DesktopPetService {
         ],
         mode: ProcessStartMode.detachedWithStdio,
       );
+      if (!_enabledRequested) {
+        process.kill();
+        return;
+      }
       _process = process;
       unawaited(process.exitCode.then((_) {
         if (identical(_process, process)) {
@@ -583,6 +600,7 @@ class DesktopPetService {
   }
 
   Future<void> stop() async {
+    _enabledRequested = false;
     final process = _process;
     _process = null;
     if (process == null) return;
