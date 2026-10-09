@@ -49,8 +49,12 @@ class ScreenshotOcrBridge(private val activity: Activity) {
         val bottom: Double,
     ) {
         val centerY: Double get() = (top + bottom) / 2
+        // Keep the Java-visible five-parameter constructor unchanged for
+        // existing instrumentation tests. Recovered OCR is more uncertain.
+        var recoveredFromCrop: Boolean = false
         fun toMap(): Map<String, Any> = mapOf(
             "text" to text,
+            "recoveredFromCrop" to recoveredFromCrop,
             "left" to left,
             "top" to top,
             "right" to right,
@@ -315,7 +319,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                     if (recovered.none { line ->
                         abs(line.centerY - best.centerY) < 26 &&
                             line.left < width * 0.42
-                    }) recovered.add(best)
+                    }) recovered.add(best.also { it.recoveredFromCrop = true })
                     return true
                 }
                 // First retry is unchanged ML Kit, on enlarged pixels. Only
