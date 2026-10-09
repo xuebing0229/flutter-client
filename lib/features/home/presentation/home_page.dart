@@ -718,7 +718,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       unawaited(_flushSyncThenPersist());
       return;
     }
-    if (state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       unawaited(_leaveForegroundSync());
     }
@@ -1374,7 +1375,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               child: IgnorePointer(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
-                  child: _ForegroundSyncProgressPopup(progress: progress),
+                  child: _ForegroundSyncProgressPopup(progress: progress!),
                 ),
               ),
             ),
