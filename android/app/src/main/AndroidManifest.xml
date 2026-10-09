@@ -39,6 +39,10 @@
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <service
+            android:name=".IsolatedPaddleOcrService"
+            android:process=":paddle_ocr"
+            android:exported="false"/>
+        <service
             android:name=".SyncthingService"
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
