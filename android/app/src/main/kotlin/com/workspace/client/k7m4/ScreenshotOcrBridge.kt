@@ -3,6 +3,10 @@ package com.workspace.client.k7m4
 import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.Text
@@ -275,9 +279,11 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 return
             }
             val title = missing[index]
-            val cropX = (width * 0.10).roundToInt()
+            // Skip the avatar on the left; its pictogram can drown out a
+            // short, low-contrast nickname such as a Chinese char + vv.
+            val cropX = (width * 0.15).roundToInt()
             val cropY = (title.centerY - 190).roundToInt().coerceIn(0, height - 1)
-            val cropRight = (width * 0.48).roundToInt().coerceAtMost(width)
+            val cropRight = (width * 0.46).roundToInt().coerceAtMost(width)
             val cropBottom = (title.centerY - 55).roundToInt().coerceIn(cropY + 1, height)
             val cropWidth = cropRight - cropX
             val cropHeight = cropBottom - cropY
@@ -293,27 +299,59 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 )
                 if (crop !== scaled) crop.recycle()
                 val zoom = scaled ?: throw IllegalStateException("Empty buyer crop")
-                recognizer.process(InputImage.fromBitmap(zoom, 0))
-                    .addOnSuccessListener { detected ->
-                        val candidates = extractLines(
-                            detected, horizontalOffset = cropX.toDouble(),
-                            verticalOffset = cropY.toDouble(), scale = 3.0,
-                        ).filter { line ->
-                            line.left < width * 0.42 &&
-                                line.centerY > title.centerY - 200 &&
-                                line.centerY < title.centerY - 55 &&
-                                possibleMiHuashiBuyer(line.text)
+                fun accept(detected: Text): Boolean {
+                    val candidates = extractLines(
+                        detected, horizontalOffset = cropX.toDouble(),
+                        verticalOffset = cropY.toDouble(), scale = 3.0,
+                    ).filter { line ->
+                        line.left < width * 0.42 &&
+                            line.centerY > title.centerY - 200 &&
+                            line.centerY < title.centerY - 55 &&
+                            possibleMiHuashiBuyer(line.text)
+                    }
+                    val best = candidates.minByOrNull {
+                        abs(it.centerY - (title.centerY - 112))
+                    } ?: return false
+                    if (recovered.none { line ->
+                        abs(line.centerY - best.centerY) < 26 &&
+                            line.left < width * 0.42
+                    }) recovered.add(best)
+                    return true
+                }
+                // First retry is unchanged ML Kit, on enlarged pixels. Only
+                // a STILL-MISSING buyer gets a contrast-enhanced second pass.
+                // No guesses or nearby customer names are copied across cards.
+                fun retryEnhanced() {
+                    var enhanced: Bitmap? = null
+                    try {
+                        enhanced = Bitmap.createBitmap(
+                            zoom.width, zoom.height, Bitmap.Config.ARGB_8888,
+                        )
+                        val matrix = ColorMatrix(floatArrayOf(
+                            1.8f, 0f, 0f, 0f, -110f,
+                            0f, 1.8f, 0f, 0f, -110f,
+                            0f, 0f, 1.8f, 0f, -110f,
+                            0f, 0f, 0f, 1f, 0f,
+                        ))
+                        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            colorFilter = ColorMatrixColorFilter(matrix)
                         }
-                        val best = candidates.minByOrNull {
-                            abs(it.centerY - (title.centerY - 112))
-                        }
-                        if (best != null && recovered.none { line ->
-                            abs(line.centerY - best.centerY) < 26 &&
-                                line.left < width * 0.42
-                        }) recovered.add(best)
+                        Canvas(enhanced).drawBitmap(zoom, 0f, 0f, paint)
+                        recognizer.process(InputImage.fromBitmap(enhanced, 0))
+                            .addOnSuccessListener { accept(it); retryAt(index + 1) }
+                            .addOnFailureListener { retryAt(index + 1) }
+                            .addOnCompleteListener { enhanced.recycle() }
+                    } catch (_: Exception) {
+                        enhanced?.recycle()
                         retryAt(index + 1)
                     }
-                    .addOnFailureListener { retryAt(index + 1) }
+                }
+                recognizer.process(InputImage.fromBitmap(zoom, 0))
+                    .addOnSuccessListener { detected ->
+                        if (accept(detected)) retryAt(index + 1)
+                        else retryEnhanced()
+                    }
+                    .addOnFailureListener { retryEnhanced() }
                     .addOnCompleteListener { zoom.recycle() }
             } catch (_: Exception) {
                 scaled?.recycle()
