@@ -62,6 +62,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   int _imageSerial = 0;
   int _rowSerial = 0;
   bool _working = false;
+  String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
 
   bool get _products => widget.kind == ScreenshotImportKind.products;
@@ -145,7 +146,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     try {
       final selected = await _pick.pickImages();
       if (selected.isEmpty) return;
-      setState(() => _working = true);
+      setState(() {
+        _working = true;
+        _recognitionStep = '准备读取截图';
+      });
       _importedFingerprints =
           await _history.read(accountId: widget.accountId);
 
@@ -155,6 +159,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       for (final image in selected) {
         final imageId = 'shot-' + (++_imageSerial).toString();
         try {
+          if (mounted) {
+            setState(() => _recognitionStep =
+                'ML Kit：识别截图 ${_imageSerial}/${selected.length}');
+          }
           final imageHash = await _history.hashImage(image.path);
           final mlKitTimer = Stopwatch()..start();
           final recognized = await _ocr.recognize(image.path);
@@ -170,6 +178,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               imageWidth: recognized.width,
               imageHeight: recognized.height,
               diagnostics: comparisonNotes,
+              onProgress: (stage) {
+                if (mounted) {
+                  setState(() => _recognitionStep =
+                      'PaddleOCR：$stage（截图 ${_imageSerial}/${selected.length}）');
+                }
+              },
             );
             if (paddleFull != null) {
               final paddleGuess = preselectImportPlatform(
@@ -293,7 +307,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   );
             // Second engine only runs for ambiguous MiHuashi fields.
             // It must not affect the original card, price or deadline parsing.
-            final paddleReviews = platform == CommissionPlatform.mihuashi
+            if (mounted) {
+              setState(() => _recognitionStep =
+                  '整理识别结果 ${_imageSerial}/${selected.length}');
+            }
+            final paddleReviews = !compareEngines &&
+                    platform == CommissionPlatform.mihuashi
                 ? await _paddleReview.review(
                     imagePath: image.path,
                     imageWidth: recognized.width,
@@ -1019,7 +1038,13 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       ),
       body: Column(
         children: [
-          if (_working) const LinearProgressIndicator(),
+          if (_working) ...[
+            const LinearProgressIndicator(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text(_recognitionStep, textAlign: TextAlign.center),
+            ),
+          ],
           if (_products)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
