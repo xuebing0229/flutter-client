@@ -75,4 +75,9 @@ void main() {
     final picked = newsBetweenBuilds(130, 131);
     expect(picked.map((e) => e.title).toList(), ['桌宠定位与主题跟随修复']);
   });
+
+  test('132 向 131 用户补充竖排气泡排版修复见闻', () {
+    final picked = newsBetweenBuilds(131, 132);
+    expect(picked.map((e) => e.title).toList(), ['竖排气泡排版修复']);
+  });
 }
