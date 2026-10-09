@@ -29,6 +29,12 @@ String formatScreenshotOcrDiagnostic({
     ].map((value) => value.toStringAsFixed(0)).join(',');
     result.writeln('[$rect] ${line.text}');
   }
+  if (ocr.nativeTrace.isNotEmpty) {
+    result.writeln('本机二次识别过程（含 OCR 猜测文字，未必准确）：');
+    for (final entry in ocr.nativeTrace) {
+      result.writeln('  $entry');
+    }
+  }
   final rows = parsedRows.toList();
   result.writeln('解析出的记录 (${rows.length} 条):');
   for (var index = 0; index < rows.length; index++) {
