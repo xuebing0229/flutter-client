@@ -66,6 +66,22 @@ class FocusStore extends ChangeNotifier {
     for (final session in sessions) {
       byId[session.id] = session;
     }
+
+    // Two devices can both start while offline. Resolve that deterministically
+    // when their records meet: the later start remains active, and every older
+    // active session ends at that later start so synced history never overlaps.
+    final active = byId.values.where((session) => session.isActive).toList()
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    if (active.length > 1) {
+      final keep = active.last;
+      for (final session in active.take(active.length - 1)) {
+        final end = keep.startedAt.isAfter(session.startedAt)
+            ? keep.startedAt
+            : session.startedAt.add(const Duration(seconds: 1));
+        byId[session.id] = session.copyWith(endedAt: end);
+      }
+    }
+
     _sessions
       ..clear()
       ..addAll(byId.values);
