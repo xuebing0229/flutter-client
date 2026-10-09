@@ -32,6 +32,7 @@ class ScreenshotImportDraft {
     this.relativeDeadline,
     this.deadlineConfirmed = false,
     this.feeEnabled = false,
+    this.tags = const <String>[],
     this.saleType = ProductSaleType.single,
   });
 
@@ -59,6 +60,7 @@ class ScreenshotImportDraft {
   DateTime? deadline;
   bool deadlineConfirmed;
   bool feeEnabled;
+  List<String> tags;
   ProductSaleType saleType;
   bool selected = true;
   /// Explicitly reselected a suspected duplicate; never auto-uncheck again.
