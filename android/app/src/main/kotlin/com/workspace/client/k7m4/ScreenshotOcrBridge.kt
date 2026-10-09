@@ -3,11 +3,10 @@ package com.workspace.client.k7m4
 import android.app.Activity
 import android.graphics.BitmapFactory
 import android.os.SystemClock
-import com.equationl.ncnnandroidppocr.OCR
-import com.equationl.ncnnandroidppocr.bean.Device
-import com.equationl.ncnnandroidppocr.bean.DrawModel
-import com.equationl.ncnnandroidppocr.bean.ImageSize
-import com.equationl.ncnnandroidppocr.bean.ModelType
+import com.paddle.ocr.EngineConfig
+import com.paddle.ocr.PaddleOCR
+import com.paddle.ocr.PaddleOCRConfig
+import com.paddle.ocr.util.OpenCVUtils
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.CoroutineScope
@@ -18,98 +17,121 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 
-/** One offline Android OCR path: PP-OCRv5 Mobile using the existing ncnn SDK. */
+/**
+ * Android's only screenshot recognizer, directly using the official PP-OCRv6
+ * Android SDK. Follows the upstream demo: initialize OpenCV, create model once,
+ * recognize image bytes and release on activity shutdown.
+ *
+ * Flutter owns the screenshot card parsing; this native layer returns ONLY
+ * raw text and original image coordinates, with no secondary engine or retries.
+ */
 class ScreenshotOcrBridge(private val activity: Activity) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val mutex = Mutex()
-    private var engine: OCR? = null
+    private val guard = Mutex()
+    private var ocr: PaddleOCR? = null
 
     fun configure(messenger: BinaryMessenger) {
-        MethodChannel(messenger, "app.screenshot_ocr").setMethodCallHandler { call, result ->
+        MethodChannel(messenger, "app.screenshot_ocr").setMethodCallHandler { call, reply ->
             when (call.method) {
                 "recognize" -> {
                     val path = call.argument<String>("path")
                     if (path.isNullOrBlank()) {
-                        result.error("BAD_IMAGE", "请选择截图文件", null)
+                        reply.error("BAD_IMAGE", "请选择截图文件", null)
                     } else {
                         scope.launch {
                             try {
-                                result.success(mutex.withLock { recognize(path) })
+                                reply.success(guard.withLock { recognize(path) })
                             } catch (error: Throwable) {
-                                result.error("OCR_FAILED", error.message ?: error.javaClass.simpleName, null)
+                                reply.error(
+                                    "OFFICIAL_PPOCRV6_FAILED",
+                                    error.message ?: error.javaClass.simpleName,
+                                    null,
+                                )
                             }
                         }
                     }
                 }
-                else -> result.notImplemented()
+                else -> reply.notImplemented()
             }
         }
     }
 
-    private fun getEngine(): OCR {
-        engine?.let { return it }
-        val created = OCR()
-        check(created.initModelFromAssert(
-            activity.assets, ModelType.Mobile, ImageSize.Size1080, Device.CPU
-        )) { "PP-OCRv5 ncnn 离线模型初始化失败" }
-        engine = created
-        return created
+    private suspend fun getOcr(): PaddleOCR {
+        ocr?.let { return it }
+        check(OpenCVUtils.init(activity.applicationContext)) {
+            "官方 PP-OCRv6 SDK 无法初始化 Android OpenCV"
+        }
+        val loaded = PaddleOCR.create(
+            context = activity.applicationContext,
+            config = PaddleOCRConfig(
+                detLimitSideLen = 1536,
+                detLimitType = "max",
+                recBatchSize = 1,
+                recScoreThresh = 0.0f,
+            ),
+            engineConfig = EngineConfig(numThreads = 2),
+            detModelAssetPath = "models/det/inference.onnx",
+            recModelAssetPath = "models/rec/inference.onnx",
+            recConfigAssetPath = "models/rec/inference.yml",
+        )
+        ocr = loaded
+        return loaded
     }
 
-    private fun recognize(path: String): Map<String, Any> {
+    private suspend fun recognize(path: String): Map<String, Any> {
         val file = File(path)
-        require(file.isFile && file.canRead()) { "截图不存在或无法读取" }
+        require(file.isFile && file.canRead()) { "截图不存在或不可读取" }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
-        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "截图格式无法识别" }
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "无法读取截图尺寸" }
 
-        var sample = 1
-        while (bounds.outWidth / sample > 2400 || bounds.outHeight / sample > 4000) sample *= 2
-        val bitmap = BitmapFactory.decodeFile(
-            path, BitmapFactory.Options().apply { inSampleSize = sample }
-        ) ?: throw IllegalArgumentException("图片解码失败")
-        val started = SystemClock.elapsedRealtime()
-        try {
-            val found = getEngine().detectBitmap(bitmap, DrawModel.None)
-                ?: error("PP-OCRv5 ncnn 推理未返回结果")
-            val lines = found.textLines.mapNotNull { row ->
-                if (row.text.isBlank() || row.points.isEmpty()) return@mapNotNull null
-                val left = row.points.minOf { it.x }.toDouble().coerceIn(0.0, bitmap.width.toDouble())
-                val right = row.points.maxOf { it.x }.toDouble().coerceIn(0.0, bitmap.width.toDouble())
-                val top = row.points.minOf { it.y }.toDouble().coerceIn(0.0, bitmap.height.toDouble())
-                val bottom = row.points.maxOf { it.y }.toDouble().coerceIn(0.0, bitmap.height.toDouble())
-                if (right <= left || bottom <= top) return@mapNotNull null
-                mapOf(
-                    "text" to row.text,
-                    "left" to left,
-                    "right" to right,
-                    "top" to top,
-                    "bottom" to bottom,
-                    "recoveredFromCrop" to false,
-                )
-            }.sortedWith(compareBy<Map<String, Any>> { it["top"] as Double }
-                .thenBy { it["left"] as Double })
-            return mapOf(
-                "imageWidth" to bitmap.width,
-                "imageHeight" to bitmap.height,
-                "lines" to lines,
-                "nativeTrace" to listOf(
-                    "唯一引擎：PaddleOCR PP-OCRv5 Mobile / ncnn",
-                    "识别行数：${lines.size}",
-                    "SDK 推理耗时：${found.inferenceTime} ms",
-                    "总耗时：${SystemClock.elapsedRealtime() - started} ms",
-                ),
+        // Same original encoded image-byte route as upstream OCRViewModel:
+        // OpenCV performs decoding, no intermediate Android Bitmap conversion.
+        val bytes = file.readBytes()
+        val start = SystemClock.elapsedRealtime()
+        val engine = getOcr()
+        val result = engine.recognize(bytes)
+
+        val lines = result.results.mapNotNull { row ->
+            if (row.text.isBlank()) return@mapNotNull null
+            val left = row.box.points.minOf { it.x }.toDouble().coerceIn(0.0, bounds.outWidth.toDouble())
+            val right = row.box.points.maxOf { it.x }.toDouble().coerceIn(0.0, bounds.outWidth.toDouble())
+            val top = row.box.points.minOf { it.y }.toDouble().coerceIn(0.0, bounds.outHeight.toDouble())
+            val bottom = row.box.points.maxOf { it.y }.toDouble().coerceIn(0.0, bounds.outHeight.toDouble())
+            if (right <= left || bottom <= top) return@mapNotNull null
+            mapOf(
+                "text" to row.text,
+                "left" to left,
+                "right" to right,
+                "top" to top,
+                "bottom" to bottom,
+                "recoveredFromCrop" to false,
             )
-        } finally {
-            bitmap.recycle()
-        }
+        }.sortedWith(compareBy<Map<String, Any>> { it["top"] as Double }
+            .thenBy { it["left"] as Double })
+
+        return mapOf(
+            "imageWidth" to bounds.outWidth,
+            "imageHeight" to bounds.outHeight,
+            "lines" to lines,
+            "nativeTrace" to listOf(
+                "唯一引擎：官方 PaddleOCR PP-OCRv6 Tiny Android SDK (ONNX Runtime)",
+                "识别行数：${result.lineCount}",
+                "模型初始化：${result.coldLoadTimeMs} ms",
+                "检测：${result.detectionTimeMs} ms",
+                "识别：${result.recognitionTimeMs} ms",
+                "推理总耗时：${result.totalTimeMs} ms",
+                "本轮总耗时：${SystemClock.elapsedRealtime() - start} ms",
+                "检测张量：${result.detInputShape}",
+            ),
+        )
     }
 
     fun close() {
         scope.launch {
-            mutex.withLock {
-                engine?.release()
-                engine = null
+            guard.withLock {
+                ocr?.release()
+                ocr = null
             }
         }
     }

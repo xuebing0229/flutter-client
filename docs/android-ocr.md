@@ -1,29 +1,25 @@
-# Android screenshot OCR — Beta 117
+# Official PaddleOCR PP-OCRv6 Android single-engine implementation
 
-Android now uses **one** engine only, PP-OCRv5 Mobile via the existing ncnn
-Android SDK. No ML Kit fallback, custom ONNX/OpenCV isolate, duplicate local
-crop recognition, or dual-engine comparison UI remains.
+Only one Android OCR engine: official PP-OCRv6 Tiny via the standalone
+Android SDK imported from PaddlePaddle/PaddleOCR at commit
+`dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf`:
+https://github.com/PaddlePaddle/PaddleOCR/tree/dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf/deploy/ppocr-android
 
-Reference Android implementation:
-https://github.com/equationl/paddleocr4android/tree/master/ncnnAndroidPPOCR
+Android SDK Kotlin sources under `android/ppocr-sdk/src/main/` are **verbatim**
+upstream sources. The small `ppocr-sdk/build.gradle.kts` changes only the
+Gradle host integration (AGP9) and replaces an older, Android-linker-incompatible
+OpenCV AAR with `org.opencv:opencv:4.13.0` (same Java/OpenCV APIs).
+The Flutter native bridge calls the official demo's `OpenCVUtils.init`,
+`PaddleOCR.create` and `recognize(bytes)` directly.
 
-Integration and SDK API documentation:
-https://github.com/equationl/paddleocr4android/blob/master/doc/ncnn.md
+Models: official **PP-OCRv6 Tiny** ONNX models fetched *at build time* from
+official PaddlePaddle model archives and packaged inside the APK. No online
+OCR or runtime download. No ncnn, ML Kit, old third-party paddle_ocr_native,
+dual-engine comparisons, local crop retries or crash-marker fallbacks.
 
-Native OCR reference app:
-https://github.com/nihui/ncnn-android-ppocrv5
+The app's order parsing, editing, sync and Windows OCR are not changed.
+The native CI test loads both actual ONNX models and recognizes rendered
+Chinese and English on a full Android screenshot-size bitmap.
 
-The SDK is built by JitPack at version v1.3.0, the four PP-OCRv5 Mobile
-model files come from the pinned upstream commit
-9414502728d4bd23395fa4aa6e026f1e04f6c1f5 and are SHA-verified
-by tool/fetch_ncnn_ocr_models.sh. All inference stays on the phone; no model
-files are downloaded at runtime. Windows remains on its Windows-only
-RapidOCR engine; unrelated backup/sync, order and product logic are unchanged.
-
-To build Android locally:
-bash tool/fetch_ncnn_ocr_models.sh
-flutter build apk --release --flavor beta
-
-Unit tests validate parsers; the Android instrumentation test invokes the
-real ncnn library with image pixels. Device-specific performance and buyer
-name accuracy still require live testing on representative phone screenshots.
+Tests on the emulator prove SDK execution on the emulator only. Real
+arm64 phone crash and MiHuashi small-label accuracy require a device check.
