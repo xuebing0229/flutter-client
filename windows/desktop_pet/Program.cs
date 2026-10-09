@@ -59,14 +59,14 @@ internal sealed class DesktopPetWindow : Window
     private readonly DispatcherTimer _reloadDebounce;
     private readonly DispatcherTimer _parentTimer;
     private readonly DispatcherTimer _deadlineTimer;
-    private readonly GlobalKeyboardActivityHook _keyboardHook;
+    private readonly GlobalInputActivityHook _inputHook;
     private readonly GraphCore _graphCore;
 
     private FileSystemWatcher? _watcher;
     private PetConfig _config = new();
     private Picture? _activePicture;
     private string? _activeImagePath;
-    private bool _keyActive;
+    private bool _inputActive;
     private bool _closed;
 
     public DesktopPetWindow(string configPath, int parentPid)
@@ -173,13 +173,13 @@ internal sealed class DesktopPetWindow : Window
         };
         _deadlineTimer.Tick += (_, _) => RefreshBubble();
 
-        _keyboardHook = new GlobalKeyboardActivityHook();
-        _keyboardHook.ActivityChanged += active =>
+        _inputHook = new GlobalInputActivityHook();
+        _inputHook.ActivityChanged += active =>
         {
             Dispatcher.BeginInvoke(() =>
             {
-                if (_keyActive == active) return;
-                _keyActive = active;
+                if (_inputActive == active) return;
+                _inputActive = active;
                 RefreshImage();
             });
         };
@@ -188,7 +188,7 @@ internal sealed class DesktopPetWindow : Window
         {
             RestorePetWindowState();
             StartConfigWatcher();
-            _keyboardHook.Start();
+            _inputHook.Start();
             _parentTimer.Start();
             _deadlineTimer.Start();
             await ReloadConfigAsync();
@@ -268,7 +268,7 @@ internal sealed class DesktopPetWindow : Window
 
     private void RefreshImage(bool force = false)
     {
-        var path = _keyActive && IsUsableImage(_config.ImageB)
+        var path = _inputActive && IsUsableImage(_config.ImageB)
             ? _config.ImageB
             : _config.ImageA;
 
@@ -305,7 +305,7 @@ internal sealed class DesktopPetWindow : Window
                 _graphCore,
                 path,
                 new GraphInfo(
-                    _keyActive ? "guild-key-active" : "guild-idle",
+                    _inputActive ? "guild-input-active" : "guild-idle",
                     GraphInfo.GraphType.Common,
                     GraphInfo.AnimatType.Single,
                     IGameSave.ModeType.Nomal
@@ -511,7 +511,7 @@ internal sealed class DesktopPetWindow : Window
             _watcher = null;
         }
 
-        _keyboardHook.Dispose();
+        _inputHook.Dispose();
         _activePicture?.Dispose();
         _activePicture = null;
         _graphCore.Dispose();
@@ -532,46 +532,87 @@ internal sealed class DesktopPetWindow : Window
     }
 }
 
-internal sealed class GlobalKeyboardActivityHook : IDisposable
+internal sealed class GlobalInputActivityHook : IDisposable
 {
     private const int WhKeyboardLl = 13;
+    private const int WhMouseLl = 14;
+
     private const int WmKeyDown = 0x0100;
     private const int WmKeyUp = 0x0101;
     private const int WmSysKeyDown = 0x0104;
     private const int WmSysKeyUp = 0x0105;
 
+    private const int WmLButtonDown = 0x0201;
+    private const int WmLButtonUp = 0x0202;
+    private const int WmRButtonDown = 0x0204;
+    private const int WmRButtonUp = 0x0205;
+    private const int WmMButtonDown = 0x0207;
+    private const int WmMButtonUp = 0x0208;
+
     private readonly HashSet<int> _pressedKeys = new();
-    private readonly LowLevelKeyboardProc _callback;
-    private IntPtr _hook;
+    private readonly HashSet<int> _pressedMouseButtons = new();
+    private readonly LowLevelKeyboardProc _keyboardCallback;
+    private readonly LowLevelMouseProc _mouseCallback;
+
+    private IntPtr _keyboardHook;
+    private IntPtr _mouseHook;
     private bool _active;
 
-    public GlobalKeyboardActivityHook()
+    public GlobalInputActivityHook()
     {
-        _callback = HookCallback;
+        _keyboardCallback = KeyboardHookCallback;
+        _mouseCallback = MouseHookCallback;
     }
 
     public event Action<bool>? ActivityChanged;
 
     public void Start()
     {
-        if (_hook != IntPtr.Zero) return;
         using var process = Process.GetCurrentProcess();
         using var module = process.MainModule;
         var moduleHandle = GetModuleHandle(module?.ModuleName);
-        _hook = SetWindowsHookEx(WhKeyboardLl, _callback, moduleHandle, 0);
+
+        if (_keyboardHook == IntPtr.Zero)
+        {
+            _keyboardHook = SetWindowsHookEx(
+                WhKeyboardLl,
+                _keyboardCallback,
+                moduleHandle,
+                0
+            );
+        }
+
+        if (_mouseHook == IntPtr.Zero)
+        {
+            _mouseHook = SetWindowsHookEx(
+                WhMouseLl,
+                _mouseCallback,
+                moduleHandle,
+                0
+            );
+        }
     }
 
     public void Dispose()
     {
-        if (_hook != IntPtr.Zero)
+        if (_keyboardHook != IntPtr.Zero)
         {
-            UnhookWindowsHookEx(_hook);
-            _hook = IntPtr.Zero;
+            UnhookWindowsHookEx(_keyboardHook);
+            _keyboardHook = IntPtr.Zero;
         }
+
+        if (_mouseHook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_mouseHook);
+            _mouseHook = IntPtr.Zero;
+        }
+
         _pressedKeys.Clear();
+        _pressedMouseButtons.Clear();
+        SetActive(false);
     }
 
-    private IntPtr HookCallback(int code, IntPtr wParam, IntPtr lParam)
+    private IntPtr KeyboardHookCallback(int code, IntPtr wParam, IntPtr lParam)
     {
         if (code >= 0)
         {
@@ -581,16 +622,57 @@ internal sealed class GlobalKeyboardActivityHook : IDisposable
             if (message is WmKeyDown or WmSysKeyDown)
             {
                 _pressedKeys.Add(data.VirtualKeyCode);
-                SetActive(_pressedKeys.Count > 0);
+                RefreshActiveState();
             }
             else if (message is WmKeyUp or WmSysKeyUp)
             {
                 _pressedKeys.Remove(data.VirtualKeyCode);
-                SetActive(_pressedKeys.Count > 0);
+                RefreshActiveState();
             }
         }
 
-        return CallNextHookEx(_hook, code, wParam, lParam);
+        return CallNextHookEx(_keyboardHook, code, wParam, lParam);
+    }
+
+    private IntPtr MouseHookCallback(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0)
+        {
+            switch (wParam.ToInt32())
+            {
+                case WmLButtonDown:
+                    _pressedMouseButtons.Add(1);
+                    RefreshActiveState();
+                    break;
+                case WmLButtonUp:
+                    _pressedMouseButtons.Remove(1);
+                    RefreshActiveState();
+                    break;
+                case WmRButtonDown:
+                    _pressedMouseButtons.Add(2);
+                    RefreshActiveState();
+                    break;
+                case WmRButtonUp:
+                    _pressedMouseButtons.Remove(2);
+                    RefreshActiveState();
+                    break;
+                case WmMButtonDown:
+                    _pressedMouseButtons.Add(3);
+                    RefreshActiveState();
+                    break;
+                case WmMButtonUp:
+                    _pressedMouseButtons.Remove(3);
+                    RefreshActiveState();
+                    break;
+            }
+        }
+
+        return CallNextHookEx(_mouseHook, code, wParam, lParam);
+    }
+
+    private void RefreshActiveState()
+    {
+        SetActive(_pressedKeys.Count > 0 || _pressedMouseButtons.Count > 0);
     }
 
     private void SetActive(bool active)
@@ -611,11 +693,12 @@ internal sealed class GlobalKeyboardActivityHook : IDisposable
     }
 
     private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
+    private delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(
         int idHook,
-        LowLevelKeyboardProc callback,
+        Delegate callback,
         IntPtr module,
         uint threadId
     );
