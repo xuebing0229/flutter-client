@@ -144,6 +144,7 @@ class DesktopPetSettings extends ChangeNotifier {
   DesktopPetBubblePosition _bubblePosition = DesktopPetBubblePosition.above;
   double _petScale = 1;
   double _bubbleScale = 1;
+  double _focusClockScale = 1;
   String _customText = '';
   String? _currentOrderId;
   String? _currentOrderTitle;
@@ -164,6 +165,7 @@ class DesktopPetSettings extends ChangeNotifier {
   DesktopPetBubblePosition get bubblePosition => _bubblePosition;
   double get petScale => _petScale;
   double get bubbleScale => _bubbleScale;
+  double get focusClockScale => _focusClockScale;
   String get customText => _customText;
   String? get currentOrderId => _currentOrderId;
 
@@ -225,6 +227,9 @@ class DesktopPetSettings extends ChangeNotifier {
           .clamp(0.5, 1.8)
           .toDouble();
       _bubbleScale = ((raw['bubbleScale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.65, 1.8)
+          .toDouble();
+      _focusClockScale = ((raw['focusClockScale'] as num?)?.toDouble() ?? 1)
           .clamp(0.65, 1.8)
           .toDouble();
 
@@ -445,6 +450,15 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setFocusClockScale(double value) async {
+    await _readFromDisk();
+    final normalized = value.clamp(0.65, 1.8).toDouble();
+    if ((_focusClockScale - normalized).abs() < 0.001) return;
+    _focusClockScale = normalized;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setCustomText(String value) async {
     await _readFromDisk();
     if (_customText == value) return;
@@ -525,6 +539,7 @@ class DesktopPetSettings extends ChangeNotifier {
       'bubblePosition': _bubblePosition.name,
       'petScale': _petScale,
       'bubbleScale': _bubbleScale,
+      'focusClockScale': _focusClockScale,
       'customText': _customText,
       'currentOrderId': _currentOrderId,
       'currentOrderTitle': _currentOrderTitle,
