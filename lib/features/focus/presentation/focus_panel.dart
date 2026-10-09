@@ -833,7 +833,10 @@ class _FocusTargetCard extends StatelessWidget {
   }
 }
 
-$insertBefore
+class _FocusTarget {
+  const _FocusTarget([this.order]);
+  final QueueOrder? order;
+}
 
 class _FocusGroup {
   const _FocusGroup({
