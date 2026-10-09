@@ -726,7 +726,10 @@ class _DesktopPetPlacementDialogState
                           widget.slot == DesktopPetAssetSlot.keyB &&
                                   hasGuide
                               ? widget.guidePlacement
-                              : const DesktopPetPlacement(),
+                              : _placement.copyWith(
+                                  offsetX: 0,
+                                  offsetY: 0,
+                                ),
                     ),
                     icon: const Icon(Icons.restart_alt_rounded),
                     label: Text(
@@ -869,15 +872,6 @@ class _DesktopPetCanvasGuidePainter extends CustomPainter {
       Offset(0, size.height / 2),
       Offset(size.width, size.height / 2),
       paint,
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(
-        size.width * 0.08,
-        size.height * 0.08,
-        size.width * 0.84,
-        size.height * 0.84,
-      ),
-      paint..style = PaintingStyle.stroke,
     );
   }
 
@@ -1042,7 +1036,10 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
   void _resetDraft() {
     if (!_editing) return;
     setState(() {
-      _placement = const DesktopPetPlacement();
+      _placement = _placement.copyWith(
+        offsetX: 0,
+        offsetY: 0,
+      );
     });
   }
 
