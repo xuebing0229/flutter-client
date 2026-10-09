@@ -362,6 +362,7 @@ internal sealed class DesktopPetWindow : Window
     {
         var petScale = Math.Clamp(_config.PetScale, 0.5, 1.8);
         var bubbleScale = Math.Clamp(_config.BubbleScale, 0.65, 1.8);
+        var clockScale = Math.Clamp(_config.FocusClockScale, 0.65, 1.8);
         var side = string.Equals(
             _config.BubblePosition,
             "side",
@@ -371,6 +372,7 @@ internal sealed class DesktopPetWindow : Window
         var petSize = 280 * petScale;
         _imageViewport.Width = petSize;
         _imageViewport.Height = petSize;
+        _imageViewport.Margin = new Thickness(0);
 
         var background = BrushFromArgb(_config.BubbleBackgroundArgb, 0xFFF7F7F7);
         var foreground = BrushFromArgb(_config.BubbleForegroundArgb, 0xFF202020);
@@ -380,122 +382,198 @@ internal sealed class DesktopPetWindow : Window
         _bubble.Background = background;
         _bubble.BorderBrush = border;
         _bubble.BorderThickness = new Thickness(Math.Max(1, bubbleScale));
-        _bubble.CornerRadius = new CornerRadius(17 * bubbleScale);
+        _bubble.CornerRadius = new CornerRadius(15 * bubbleScale);
         _bubble.Padding = new Thickness(
-            14 * bubbleScale,
-            10 * bubbleScale,
-            14 * bubbleScale,
-            10 * bubbleScale
+            13 * bubbleScale,
+            9 * bubbleScale,
+            13 * bubbleScale,
+            9 * bubbleScale
         );
+        _bubble.Margin = new Thickness(0);
+
         _bubbleText.Foreground = foreground;
         _bubbleText.FontSize = 14 * bubbleScale;
+
         _bubbleTail.Fill = background;
         _bubbleTail.Stroke = border;
         _bubbleTail.StrokeThickness = Math.Max(1, bubbleScale);
+
         _focusClock.Background = background;
         _focusClock.BorderBrush = border;
+        _focusClock.BorderThickness = new Thickness(Math.Max(1, clockScale));
+        _focusClock.CornerRadius = new CornerRadius(10 * clockScale);
         _focusClockText.Foreground = foreground;
-        _focusClockText.FontSize = 13 * bubbleScale;
+        _focusClockText.FontSize = 13 * clockScale;
         _focusClock.Padding = new Thickness(
-            10 * bubbleScale,
-            7 * bubbleScale,
-            10 * bubbleScale,
-            7 * bubbleScale
+            10 * clockScale,
+            7 * clockScale,
+            10 * clockScale,
+            7 * clockScale
         );
-        _focusClock.HorizontalAlignment = HorizontalAlignment.Right;
+        _focusClock.HorizontalAlignment = HorizontalAlignment.Left;
         _focusClock.VerticalAlignment = VerticalAlignment.Top;
-        _focusClock.Margin = new Thickness(8, 6, 8, 0);
+        _focusClock.Margin = new Thickness(
+            5 * clockScale,
+            Math.Max(12, petSize * 0.16),
+            0,
+            0
+        );
         _focusClock.Effect = new DropShadowEffect
         {
-            BlurRadius = 12 * bubbleScale,
-            ShadowDepth = 2 * bubbleScale,
-            Opacity = 0.16,
+            BlurRadius = 10 * clockScale,
+            ShadowDepth = 2 * clockScale,
+            Opacity = 0.14,
             Color = accentColor,
         };
         _bubble.Effect = new DropShadowEffect
         {
-            BlurRadius = 16 * bubbleScale,
-            ShadowDepth = 3 * bubbleScale,
-            Opacity = 0.20,
+            BlurRadius = 14 * bubbleScale,
+            ShadowDepth = 2 * bubbleScale,
+            Opacity = 0.18,
             Color = accentColor,
         };
 
         _layoutPanel.Children.Clear();
+        _layoutPanel.Orientation = Orientation.Vertical;
+        _layoutPanel.HorizontalAlignment = HorizontalAlignment.Left;
+        _layoutPanel.VerticalAlignment = VerticalAlignment.Top;
+
         _headerRow.Children.Clear();
         _headerRow.ColumnDefinitions.Clear();
+        _headerRow.RowDefinitions.Clear();
         _bubbleHost.Children.Clear();
 
         if (side)
         {
-            _layoutPanel.Orientation = Orientation.Horizontal;
-            _layoutPanel.VerticalAlignment = VerticalAlignment.Bottom;
-            _bubbleHost.Orientation = Orientation.Horizontal;
-            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Left;
-            _bubbleHost.VerticalAlignment = VerticalAlignment.Center;
-
-            _bubbleText.MaxWidth = 78 * bubbleScale;
-            _bubbleText.MinWidth = 42 * bubbleScale;
-            _bubbleText.TextAlignment = TextAlignment.Center;
-            _bubble.Margin = new Thickness(6, 8, 0, 8);
-
-            _bubbleTail.Width = 12 * bubbleScale;
-            _bubbleTail.Height = 20 * bubbleScale;
-            _bubbleTail.Points = new PointCollection
-            {
-                new Point(0, 0),
-                new Point(12, 10),
-                new Point(0, 20),
-            };
-            _bubbleTail.Margin = new Thickness(-1, 0, 4, 0);
-            _bubbleTail.VerticalAlignment = VerticalAlignment.Center;
-
-            _bubbleHost.Children.Add(_bubble);
-            _bubbleHost.Children.Add(_bubbleTail);
-            _layoutPanel.Children.Add(_bubbleHost);
-            _layoutPanel.Children.Add(_imageViewport);
-            _layoutPanel.Children.Add(_focusClock);
-        }
-        else
-        {
-            _layoutPanel.Orientation = Orientation.Vertical;
-            _layoutPanel.HorizontalAlignment = HorizontalAlignment.Center;
-            _bubbleHost.Orientation = Orientation.Vertical;
-            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Center;
-            _bubbleHost.VerticalAlignment = VerticalAlignment.Top;
-
-            _bubbleText.MaxWidth = 280 * bubbleScale;
-            _bubbleText.MinWidth = 130 * bubbleScale;
-            _bubbleText.TextAlignment = TextAlignment.Left;
-            _bubble.Margin = new Thickness(8, 6, 8, 0);
-
-            _bubbleTail.Width = 20 * bubbleScale;
-            _bubbleTail.Height = 12 * bubbleScale;
-            _bubbleTail.Points = new PointCollection
-            {
-                new Point(0, 0),
-                new Point(20, 0),
-                new Point(10, 12),
-            };
-            _bubbleTail.Margin = new Thickness(0, -1, 0, 3);
-            _bubbleTail.HorizontalAlignment = HorizontalAlignment.Center;
-
-            _bubbleHost.Children.Add(_bubble);
-            _bubbleHost.Children.Add(_bubbleTail);
-
             _headerRow.ColumnDefinitions.Add(
-                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
+                new ColumnDefinition { Width = GridLength.Auto }
             );
             _headerRow.ColumnDefinitions.Add(
                 new ColumnDefinition { Width = GridLength.Auto }
             );
-            Grid.SetColumn(_bubbleHost, 0);
-            Grid.SetColumn(_focusClock, 1);
-            _headerRow.Children.Add(_bubbleHost);
-            _headerRow.Children.Add(_focusClock);
+            _headerRow.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = GridLength.Auto }
+            );
+            _headerRow.RowDefinitions.Add(
+                new RowDefinition { Height = GridLength.Auto }
+            );
 
-            _layoutPanel.Children.Add(_headerRow);
-            _layoutPanel.Children.Add(_imageViewport);
+            _bubbleHost.Orientation = Orientation.Horizontal;
+            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Right;
+            _bubbleHost.VerticalAlignment = VerticalAlignment.Top;
+            _bubbleHost.Margin = new Thickness(
+                0,
+                Math.Max(10, petSize * 0.12),
+                0,
+                0
+            );
+
+            _bubbleText.TextWrapping = TextWrapping.NoWrap;
+            _bubbleText.TextAlignment = TextAlignment.Center;
+            _bubbleText.MinWidth = 20 * bubbleScale;
+            _bubbleText.MaxWidth = 32 * bubbleScale;
+            _bubbleText.MinHeight = 150 * bubbleScale;
+            _bubbleText.MaxHeight = Math.Max(180, petSize * 0.78);
+            _bubble.MinWidth = 44 * bubbleScale;
+            _bubble.MaxWidth = 62 * bubbleScale;
+            _bubble.MinHeight = 185 * bubbleScale;
+            _bubble.MaxHeight = Math.Max(210, petSize * 0.9);
+
+            _bubbleTail.Width = 15 * bubbleScale;
+            _bubbleTail.Height = 22 * bubbleScale;
+            _bubbleTail.Points = new PointCollection
+            {
+                new Point(0, 0),
+                new Point(15, 11),
+                new Point(0, 22),
+            };
+            _bubbleTail.VerticalAlignment = VerticalAlignment.Top;
+            _bubbleTail.HorizontalAlignment = HorizontalAlignment.Left;
+            _bubbleTail.Margin = new Thickness(
+                -1.5 * bubbleScale,
+                48 * bubbleScale,
+                0,
+                0
+            );
+
+            _bubbleHost.Children.Add(_bubble);
+            _bubbleHost.Children.Add(_bubbleTail);
+
+            Grid.SetColumn(_bubbleHost, 0);
+            Grid.SetRow(_bubbleHost, 0);
+            Grid.SetColumn(_imageViewport, 1);
+            Grid.SetRow(_imageViewport, 0);
+            Grid.SetColumn(_focusClock, 2);
+            Grid.SetRow(_focusClock, 0);
+
+            _headerRow.Children.Add(_bubbleHost);
+            _headerRow.Children.Add(_imageViewport);
+            _headerRow.Children.Add(_focusClock);
         }
+        else
+        {
+            _headerRow.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = GridLength.Auto }
+            );
+            _headerRow.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = GridLength.Auto }
+            );
+            _headerRow.RowDefinitions.Add(
+                new RowDefinition { Height = GridLength.Auto }
+            );
+            _headerRow.RowDefinitions.Add(
+                new RowDefinition { Height = GridLength.Auto }
+            );
+
+            _bubbleHost.Orientation = Orientation.Vertical;
+            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Center;
+            _bubbleHost.VerticalAlignment = VerticalAlignment.Bottom;
+            _bubbleHost.Margin = new Thickness(0, 0, 0, -1 * bubbleScale);
+
+            _bubbleText.TextWrapping = TextWrapping.Wrap;
+            _bubbleText.TextAlignment = TextAlignment.Left;
+            _bubbleText.MinWidth = 170 * bubbleScale;
+            _bubbleText.MaxWidth = Math.Max(220, petSize * 0.95);
+            _bubbleText.MinHeight = 0;
+            _bubbleText.MaxHeight = double.PositiveInfinity;
+            _bubble.MinWidth = 190 * bubbleScale;
+            _bubble.MaxWidth = Math.Max(250, petSize * 1.06);
+            _bubble.MinHeight = 0;
+            _bubble.MaxHeight = double.PositiveInfinity;
+
+            _bubbleTail.Width = 22 * bubbleScale;
+            _bubbleTail.Height = 14 * bubbleScale;
+            _bubbleTail.Points = new PointCollection
+            {
+                new Point(0, 0),
+                new Point(22, 0),
+                new Point(11, 14),
+            };
+            _bubbleTail.HorizontalAlignment = HorizontalAlignment.Left;
+            _bubbleTail.VerticalAlignment = VerticalAlignment.Top;
+            _bubbleTail.Margin = new Thickness(
+                38 * bubbleScale,
+                -1.5 * bubbleScale,
+                0,
+                0
+            );
+
+            _bubbleHost.Children.Add(_bubble);
+            _bubbleHost.Children.Add(_bubbleTail);
+
+            Grid.SetColumn(_bubbleHost, 0);
+            Grid.SetRow(_bubbleHost, 0);
+            Grid.SetColumn(_imageViewport, 0);
+            Grid.SetRow(_imageViewport, 1);
+            Grid.SetColumn(_focusClock, 1);
+            Grid.SetRow(_focusClock, 1);
+
+            _headerRow.Children.Add(_bubbleHost);
+            _headerRow.Children.Add(_imageViewport);
+            _headerRow.Children.Add(_focusClock);
+        }
+
+        _layoutPanel.Children.Add(_headerRow);
     }
 
     private void RefreshFocusClock()
@@ -850,6 +928,7 @@ internal sealed class DesktopPetWindow : Window
         public string BubblePosition { get; set; } = "above";
         public double PetScale { get; set; } = 1;
         public double BubbleScale { get; set; } = 1;
+        public double FocusClockScale { get; set; } = 1;
         public long BubbleBackgroundArgb { get; set; } = 0xFFF7F7F7;
         public long BubbleForegroundArgb { get; set; } = 0xFF202020;
         public long BubbleBorderArgb { get; set; } = 0x33202020;
