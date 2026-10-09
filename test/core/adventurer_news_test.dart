@@ -65,4 +65,9 @@ void main() {
     final picked = newsBetweenBuilds(128, 129);
     expect(picked.map((e) => e.title).toList(), ['桌宠与专注整合完善']);
   });
+
+  test('130 向 129 用户补充桌宠布局与专注体验完善见闻', () {
+    final picked = newsBetweenBuilds(129, 130);
+    expect(picked.map((e) => e.title).toList(), ['桌宠布局与专注体验完善']);
+  });
 }
