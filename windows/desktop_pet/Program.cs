@@ -468,10 +468,10 @@ internal sealed class DesktopPetWindow : Window
 
             _bubbleText.TextWrapping = TextWrapping.NoWrap;
             _bubbleText.TextAlignment = TextAlignment.Center;
-            _bubbleText.MinWidth = 20 * bubbleScale;
-            _bubbleText.MaxWidth = 58 * bubbleScale;
-            _bubbleText.MinHeight = 150 * bubbleScale;
-            _bubbleText.MaxHeight = Math.Max(180, petSize * 0.78);
+            _bubbleText.MinWidth = 0;
+            _bubbleText.MaxWidth = double.PositiveInfinity;
+            _bubbleText.MinHeight = 0;
+            _bubbleText.MaxHeight = double.PositiveInfinity;
             _bubble.MinWidth = 44 * bubbleScale;
             _bubble.MaxWidth = 82 * bubbleScale;
             _bubble.MinHeight = 185 * bubbleScale;
@@ -780,11 +780,19 @@ internal sealed class DesktopPetWindow : Window
             "side",
             StringComparison.OrdinalIgnoreCase
         );
-        _bubbleText.Text = side ? ToVerticalBubbleText(text) : text;
+        if (side)
+        {
+            _bubble.Child = BuildVerticalBubbleContent(text);
+        }
+        else
+        {
+            _bubble.Child = _bubbleText;
+            _bubbleText.Text = text;
+        }
         _bubbleHost.Visibility = Visibility.Visible;
     }
 
-    private static string ToVerticalBubbleText(string value)
+    private UIElement BuildVerticalBubbleContent(string value)
     {
         var normalized = value
             .Replace("\r\n", "\n", StringComparison.Ordinal)
@@ -793,15 +801,7 @@ internal sealed class DesktopPetWindow : Window
         foreach (var rune in normalized.EnumerateRunes())
         {
             var token = rune.ToString();
-            if (token == "\n")
-            {
-                if (runes.Count == 0 || runes[^1] != string.Empty)
-                {
-                    runes.Add(string.Empty);
-                }
-                continue;
-            }
-            if (char.IsWhiteSpace(token, 0))
+            if (token == "\n" || char.IsWhiteSpace(token, 0))
             {
                 continue;
             }
@@ -816,20 +816,53 @@ internal sealed class DesktopPetWindow : Window
             runes.Add("…");
         }
 
-        if (runes.Count <= rowsPerColumn)
+        var bubbleScale = Math.Clamp(_config.BubbleScale, 0.65, 1.8);
+        var columns = runes.Count > rowsPerColumn ? 2 : 1;
+        var cellWidth = 23 * bubbleScale;
+        var cellHeight = 20 * bubbleScale;
+
+        var grid = new Grid
         {
-            return string.Join(Environment.NewLine, runes);
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        for (var column = 0; column < columns; column++)
+        {
+            grid.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = new GridLength(cellWidth) }
+            );
+        }
+        for (var row = 0; row < rowsPerColumn; row++)
+        {
+            grid.RowDefinitions.Add(
+                new RowDefinition { Height = new GridLength(cellHeight) }
+            );
         }
 
-        var rows = new List<string>();
-        for (var index = 0; index < rowsPerColumn; index++)
+        for (var index = 0; index < runes.Count; index++)
         {
-            var right = index < runes.Count ? runes[index] : string.Empty;
-            var leftIndex = rowsPerColumn + index;
-            var left = leftIndex < runes.Count ? runes[leftIndex] : string.Empty;
-            rows.Add(left.Length == 0 ? right : left + "　" + right);
+            var logicalColumn = index / rowsPerColumn;
+            var row = index % rowsPerColumn;
+            var visualColumn = columns - 1 - logicalColumn;
+            var cell = new TextBlock
+            {
+                Text = runes[index],
+                Foreground = _bubbleText.Foreground,
+                FontFamily = _bubbleText.FontFamily,
+                FontSize = 14 * bubbleScale,
+                FontWeight = _bubbleText.FontWeight,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center,
+                LineHeight = cellHeight,
+            };
+            Grid.SetColumn(cell, visualColumn);
+            Grid.SetRow(cell, row);
+            grid.Children.Add(cell);
         }
-        return string.Join(Environment.NewLine, rows);
+
+        return grid;
     }
 
     private static string FormatDeadline(DateTime deadline)
