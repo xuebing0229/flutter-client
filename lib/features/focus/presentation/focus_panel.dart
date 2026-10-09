@@ -79,12 +79,8 @@ class _FocusPanelState extends State<FocusPanel> {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
     final secs = seconds % 60;
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:'
-          '${minutes.toString().padLeft(2, '0')}:'
-          '${secs.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:'
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}:'
         '${secs.toString().padLeft(2, '0')}';
   }
 
@@ -92,7 +88,7 @@ class _FocusPanelState extends State<FocusPanel> {
     final local = value.toLocal();
     String two(int number) => number.toString().padLeft(2, '0');
     return '${local.year}/${two(local.month)}/${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
+        '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
   }
 
   Future<DateTime?> _pickDateTime(DateTime? current) async {
@@ -737,10 +733,9 @@ class _FocusPanelState extends State<FocusPanel> {
                 _SessionTile(
                   session: session,
                   targetLabel: _targetLabel(session),
-                  timeText:
-                      '开始 ${_formatDateTime(session.startedAt)}\n'
-                      '结束 ${_formatDateTime(session.endedAt!)} · '
-                      '${_formatDuration(session.durationAt())}',
+                  startText: _formatDateTime(session.startedAt),
+                  endText: _formatDateTime(session.endedAt!),
+                  durationText: _formatDuration(session.durationAt()),
                   onTap: session.orderId == null
                       ? null
                       : () => _confirmOpenOrder(
@@ -894,31 +889,81 @@ class _SessionTile extends StatelessWidget {
   const _SessionTile({
     required this.session,
     required this.targetLabel,
-    required this.timeText,
+    required this.startText,
+    required this.endText,
+    required this.durationText,
     required this.onTap,
   });
 
   final FocusSession session;
   final String targetLabel;
-  final String timeText;
+  final String startText;
+  final String endText;
+  final String durationText;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(
-          session.isFreeFocus
-              ? Icons.self_improvement_rounded
-              : Icons.draw_outlined,
-        ),
-        title: Text(targetLabel),
-        subtitle: Text(timeText, maxLines: 2),
-        trailing: onTap == null
-            ? null
-            : const Icon(Icons.open_in_new_rounded, size: 18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  session.isFreeFocus
+                      ? Icons.self_improvement_rounded
+                      : Icons.draw_outlined,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      targetLabel,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '开始  $startText',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '结束  $endText',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      '时长  $durationText',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 8),
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.open_in_new_rounded, size: 18),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
