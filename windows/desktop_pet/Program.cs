@@ -463,13 +463,8 @@ internal sealed class DesktopPetWindow : Window
 
             _bubbleHost.Orientation = Orientation.Horizontal;
             _bubbleHost.HorizontalAlignment = HorizontalAlignment.Right;
-            _bubbleHost.VerticalAlignment = VerticalAlignment.Top;
-            _bubbleHost.Margin = new Thickness(
-                0,
-                Math.Max(10, petSize * 0.12),
-                0,
-                0
-            );
+            _bubbleHost.VerticalAlignment = VerticalAlignment.Center;
+            _bubbleHost.Margin = new Thickness(0);
 
             _bubbleText.TextWrapping = TextWrapping.NoWrap;
             _bubbleText.TextAlignment = TextAlignment.Center;
@@ -532,6 +527,7 @@ internal sealed class DesktopPetWindow : Window
             _bubbleHost.HorizontalAlignment = HorizontalAlignment.Center;
             _bubbleHost.VerticalAlignment = VerticalAlignment.Bottom;
             _bubbleHost.Margin = new Thickness(0, 0, 0, -1 * bubbleScale);
+            _bubbleHost.Width = double.NaN;
 
             _bubbleText.TextWrapping = TextWrapping.Wrap;
             _bubbleText.TextAlignment = TextAlignment.Left;
