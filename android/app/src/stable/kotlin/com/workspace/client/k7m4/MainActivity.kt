@@ -10,6 +10,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var orderReminderBridge: OrderReminderBridge
     private lateinit var syncthingBridge: SyncthingBridge
     private lateinit var screenshotOcrBridge: ScreenshotOcrBridge
+    private lateinit var isolatedPaddleOcrBridge: IsolatedPaddleOcrBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -29,6 +30,9 @@ class MainActivity : FlutterActivity() {
         screenshotOcrBridge = ScreenshotOcrBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
+        isolatedPaddleOcrBridge = IsolatedPaddleOcrBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -46,6 +50,11 @@ class MainActivity : FlutterActivity() {
             return
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onDestroy() {
+        if (::isolatedPaddleOcrBridge.isInitialized) isolatedPaddleOcrBridge.close()
+        super.onDestroy()
     }
 
     override fun onActivityResult(
