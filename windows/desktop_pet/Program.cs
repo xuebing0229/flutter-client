@@ -82,8 +82,11 @@ internal sealed class DesktopPetWindow : Window
     private readonly int _parentPid;
     private readonly Grid _root;
     private readonly StackPanel _layoutPanel;
+    private readonly Grid _headerRow;
     private readonly StackPanel _bubbleHost;
     private readonly Polygon _bubbleTail;
+    private readonly Border _focusClock;
+    private readonly TextBlock _focusClockText;
     private readonly Grid _imageViewport;
     private readonly Image _petImage;
     private readonly Border _bubble;
@@ -91,6 +94,7 @@ internal sealed class DesktopPetWindow : Window
     private readonly DispatcherTimer _reloadDebounce;
     private readonly DispatcherTimer _parentTimer;
     private readonly DispatcherTimer _deadlineTimer;
+    private readonly DispatcherTimer _focusTimer;
     private readonly GlobalInputActivityHook _inputHook;
     private readonly GraphCore _graphCore;
 
@@ -136,6 +140,11 @@ internal sealed class DesktopPetWindow : Window
         };
         _root.Children.Add(_layoutPanel);
 
+        _headerRow = new Grid
+        {
+            Background = Brushes.Transparent,
+        };
+
         _bubbleText = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
@@ -165,6 +174,24 @@ internal sealed class DesktopPetWindow : Window
         };
         _bubbleHost.Children.Add(_bubble);
         _bubbleHost.Children.Add(_bubbleTail);
+
+        _focusClockText = new TextBlock
+        {
+            Text = "⏱ 00:00",
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            TextAlignment = TextAlignment.Center,
+        };
+        _focusClock = new Border
+        {
+            CornerRadius = new CornerRadius(999),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 7, 10, 7),
+            Margin = new Thickness(8),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Child = _focusClockText,
+        };
 
         _imageViewport = new Grid
         {
@@ -228,6 +255,12 @@ internal sealed class DesktopPetWindow : Window
         };
         _deadlineTimer.Tick += (_, _) => RefreshBubble();
 
+        _focusTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1),
+        };
+        _focusTimer.Tick += (_, _) => RefreshFocusClock();
+
         _inputHook = new GlobalInputActivityHook();
         _inputHook.ActivityChanged += active =>
         {
@@ -246,6 +279,7 @@ internal sealed class DesktopPetWindow : Window
             _inputHook.Start();
             _parentTimer.Start();
             _deadlineTimer.Start();
+            _focusTimer.Start();
             await ReloadConfigAsync();
         };
 
@@ -320,6 +354,7 @@ internal sealed class DesktopPetWindow : Window
         ApplyLayoutAndTheme();
         RefreshImage(force: true);
         RefreshBubble();
+        RefreshFocusClock();
     }
 
     private void ApplyLayoutAndTheme()
@@ -356,6 +391,23 @@ internal sealed class DesktopPetWindow : Window
         _bubbleTail.Fill = background;
         _bubbleTail.Stroke = border;
         _bubbleTail.StrokeThickness = Math.Max(1, bubbleScale);
+        _focusClock.Background = background;
+        _focusClock.BorderBrush = border;
+        _focusClockText.Foreground = foreground;
+        _focusClockText.FontSize = 13 * bubbleScale;
+        _focusClock.Padding = new Thickness(
+            10 * bubbleScale,
+            7 * bubbleScale,
+            10 * bubbleScale,
+            7 * bubbleScale
+        );
+        _focusClock.Effect = new DropShadowEffect
+        {
+            BlurRadius = 12 * bubbleScale,
+            ShadowDepth = 2 * bubbleScale,
+            Opacity = 0.16,
+            Color = accentColor,
+        };
         _bubble.Effect = new DropShadowEffect
         {
             BlurRadius = 16 * bubbleScale,
@@ -365,6 +417,8 @@ internal sealed class DesktopPetWindow : Window
         };
 
         _layoutPanel.Children.Clear();
+        _headerRow.Children.Clear();
+        _headerRow.ColumnDefinitions.Clear();
         _bubbleHost.Children.Clear();
 
         if (side)
@@ -395,6 +449,7 @@ internal sealed class DesktopPetWindow : Window
             _bubbleHost.Children.Add(_bubbleTail);
             _layoutPanel.Children.Add(_bubbleHost);
             _layoutPanel.Children.Add(_imageViewport);
+            _layoutPanel.Children.Add(_focusClock);
         }
         else
         {
@@ -422,9 +477,38 @@ internal sealed class DesktopPetWindow : Window
 
             _bubbleHost.Children.Add(_bubble);
             _bubbleHost.Children.Add(_bubbleTail);
-            _layoutPanel.Children.Add(_bubbleHost);
+
+            _headerRow.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
+            );
+            _headerRow.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = GridLength.Auto }
+            );
+            Grid.SetColumn(_bubbleHost, 0);
+            Grid.SetColumn(_focusClock, 1);
+            _headerRow.Children.Add(_bubbleHost);
+            _headerRow.Children.Add(_focusClock);
+
+            _layoutPanel.Children.Add(_headerRow);
             _layoutPanel.Children.Add(_imageViewport);
         }
+    }
+
+    private void RefreshFocusClock()
+    {
+        if (!DateTime.TryParse(_config.FocusStartedAt, out var startedAt))
+        {
+            _focusClockText.Text = "⏱ 00:00";
+            return;
+        }
+
+        var start = startedAt.ToUniversalTime();
+        var elapsed = DateTime.UtcNow - start;
+        if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+        var totalHours = (int)Math.Floor(elapsed.TotalHours);
+        _focusClockText.Text = totalHours > 0
+            ? $"⏱ {totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}"
+            : $"⏱ {elapsed.Minutes:00}:{elapsed.Seconds:00}";
     }
 
     private static SolidColorBrush BrushFromArgb(long value, long fallback)
@@ -735,6 +819,7 @@ internal sealed class DesktopPetWindow : Window
         _reloadDebounce.Stop();
         _parentTimer.Stop();
         _deadlineTimer.Stop();
+        _focusTimer.Stop();
 
         if (_watcher is not null)
         {
@@ -765,6 +850,7 @@ internal sealed class DesktopPetWindow : Window
         public long BubbleForegroundArgb { get; set; } = 0xFF202020;
         public long BubbleBorderArgb { get; set; } = 0x33202020;
         public long BubbleAccentArgb { get; set; } = 0xFF6C7A6B;
+        public string? FocusStartedAt { get; set; }
         public string? TextMode { get; set; }
         public string? CustomText { get; set; }
         public string? CurrentOrderTitle { get; set; }
