@@ -18,6 +18,7 @@ import '../domain/screenshot_duplicate_review.dart';
 import '../domain/screenshot_import_draft.dart';
 import '../domain/screenshot_import_rules.dart';
 import '../domain/screenshot_layout_parser.dart';
+import '../domain/screenshot_mihuashi_badge.dart';
 import '../domain/screenshot_huajia_detail_parser.dart';
 import '../domain/screenshot_title_reconciliation.dart';
 import '../domain/screenshot_product_layout_parser.dart';
@@ -223,9 +224,17 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 : [for (final candidate in found) candidate.title];
             for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
               final candidate = found[cardIndex];
+              final directed = hasDirectedCommissionBadge(
+                platform: platform,
+                candidate: candidate,
+              );
+              final cleanTitle = directed
+                  ? removeDirectedCommissionPrefix(reconciledTitles[cardIndex])
+                  : reconciledTitles[cardIndex];
               parsedForReport.add(
                 '排单 ${cardIndex + 1}: 原图名=${candidate.title}'
-                ' | 校正图名=${reconciledTitles[cardIndex]}'
+                ' | 校正图名=$cleanTitle'
+                ' | 标签=${directed ? directedCommissionTag : "无"}'
                 ' | 单主=${candidate.clientName}'
                 ' | 稿价=${candidate.price?.toString() ?? "未识别"}'
                 ' | 截稿=${candidate.detectedDate?.toIso8601String() ?? "未识别"}'
@@ -240,7 +249,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   products: false,
                 ),
                 imagePath: image.path,
-                title: reconciledTitles[cardIndex],
+                title: cleanTitle,
+                tags: directed ? const <String>[directedCommissionTag] : const <String>[],
                 client: candidate.clientName,
                 price: candidate.price,
                 platform: platform,
@@ -369,6 +379,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     required String client,
     required double? price,
     required CommissionPlatform? platform,
+    List<String> tags = const <String>[],
     DateTime? date,
     bool hasTime = false,
     int? percentage,
@@ -418,6 +429,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       clientName: client,
       price: price,
       platform: platform,
+      tags: normalizeOrderTags(tags),
       detectedDate: date,
       sourceHasClock: hasTime,
       recognizedPercent: percentage,
@@ -827,6 +839,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           title: row.title.trim(),
           clientName: row.clientName.trim(),
           platform: row.platform!,
+          tags: normalizeOrderTags(row.tags),
           deadline: row.deadline,
           nodePresetId: preset.id,
           nodePresetSnapshot: preset.snapshot(),
@@ -1105,6 +1118,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelSmall,
               ),
+            if (!_products && row.tags.isNotEmpty)
+              Text(
+                '标签：' + row.tags.join('、'),
+                style: theme.textTheme.labelSmall,
+              ),
             if (row.duplicateWarning != null)
               Text(
                 row.duplicateWarning!,
@@ -1142,6 +1160,26 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 child: Text(
                   row.duplicateWarning! + '（勾选可仍然导入）',
                   style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
+                ),
+              ),
+            if (!_products && row.tags.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final tag in row.tags)
+                      InputChip(
+                        label: Text(tag),
+                        onDeleted: () => setState(() {
+                          row.tags = [
+                            for (final existing in row.tags)
+                              if (existing != tag) existing,
+                          ];
+                        }),
+                      ),
+                  ],
                 ),
               ),
             TextFormField(
