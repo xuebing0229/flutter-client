@@ -623,7 +623,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
     if (_ready) {
+      _scheduleDesktopPetThemeSync();
+    }
+  }
+
+  void _scheduleDesktopPetThemeSync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_ready) return;
       unawaited(_syncDesktopPet());
+    });
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    super.didChangePlatformBrightness();
+    if (!_ready || !mounted) return;
+    if (widget.themeStore.mode == ThemeMode.system) {
+      _scheduleDesktopPetThemeSync();
     }
   }
 
