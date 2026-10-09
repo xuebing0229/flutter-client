@@ -57,14 +57,24 @@ public final class ScreenshotBuyerRecoveryTest {
 
     @Test
     public void missingSecondBuyerRecoveredByThreeTimesCrop() throws Exception {
+        assertBuyerRecovered("测试买家乙", Color.BLACK);
+    }
+
+    @Test
+    public void shortLowContrastBuyerGetsAnotherChance() throws Exception {
+        // Synthetic nickname, not copied from a real customer's screenshot.
+        assertBuyerRecovered("茶vv", Color.rgb(145, 145, 145));
+    }
+
+    private void assertBuyerRecovered(String expected, int ink) throws Exception {
         Bitmap bitmap = Bitmap.createBitmap(865, 1920, Bitmap.Config.ARGB_8888);
         final Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
         final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(Color.BLACK);
+        paint.setColor(ink);
         paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         paint.setTextSize(30f);
-        canvas.drawText("测试买家乙", 167f, 970f, paint);
+        canvas.drawText(expected, 167f, 970f, paint);
 
         List<Object> firstPass = new ArrayList<>();
         firstPass.add(box("默认", 73, 235, 127, 259));
@@ -116,9 +126,9 @@ public final class ScreenshotBuyerRecoveryTest {
             boolean recovered = false;
             for (Object line : result.get()) {
                 String value = String.valueOf(TEXT.invoke(line));
-                if (value.contains("买家乙")) recovered = true;
+                if (value.contains(expected)) recovered = true;
             }
-            assertTrue("The synthetic second buyer should be recovered", recovered);
+            assertTrue("Synthetic nickname should be recovered: " + expected, recovered);
         } finally {
             engine.close();
             bitmap.recycle();
