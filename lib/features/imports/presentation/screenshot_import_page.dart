@@ -12,6 +12,7 @@ import '../../orders/state/order_store.dart';
 import '../../products/domain/finished_product.dart';
 import '../../products/state/product_store.dart';
 import '../data/screenshot_ocr_service.dart';
+import '../data/screenshot_paddle_review.dart';
 import '../data/screenshot_ocr_diagnostic.dart';
 import '../data/screenshot_import_history.dart';
 import '../domain/screenshot_duplicate_review.dart';
@@ -49,6 +50,7 @@ class ScreenshotImportPage extends StatefulWidget {
 
 class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   final _ocr = const ScreenshotOcrService();
+  final _paddleReview = ScreenshotPaddleReviewService();
   final _history = const ScreenshotImportHistory();
   Set<String> _importedFingerprints = <String>{};
   final _pick = const DataPortabilityFileBridge();
@@ -216,6 +218,19 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     imageHeight: recognized.height,
                     imageWidth: recognized.width,
                   );
+            // Second engine only runs for ambiguous MiHuashi fields.
+            // It must not affect the original card, price or deadline parsing.
+            final paddleNotes = <String>[];
+            final paddleReviews = platform == CommissionPlatform.mihuashi
+                ? await _paddleReview.review(
+                    imagePath: image.path,
+                    imageWidth: recognized.width,
+                    imageHeight: recognized.height,
+                    rows: found,
+                    diagnostics: paddleNotes,
+                  )
+                : List<PaddleFieldReview>.filled(
+                    found.length, const PaddleFieldReview());
             // MiHuashi list cards often contain the same work sold to
             // different buyers. Resolve tiny OCR spelling differences before
             // selecting the same-title workflow preset for each draft.
@@ -224,6 +239,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 : [for (final candidate in found) candidate.title];
             for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
               final candidate = found[cardIndex];
+              final secondOpinion = paddleReviews[cardIndex];
               final directed = hasDirectedCommissionBadge(
                 platform: platform,
                 candidate: candidate,
@@ -236,6 +252,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 ' | 校正图名=$cleanTitle'
                 ' | 标签=${directed ? directedCommissionTag : "无"}'
                 ' | 单主=${candidate.clientName}'
+                ' | 第二OCR单主=${secondOpinion.buyer ?? "无"}'
+                ' | 第二OCR图名=${secondOpinion.title ?? "无"}'
                 ' | 稿价=${candidate.price?.toString() ?? "未识别"}'
                 ' | 截稿=${candidate.detectedDate?.toIso8601String() ?? "未识别"}'
                 ' | 时间明确=${candidate.deadlineHasTime}'
@@ -251,7 +269,13 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 imagePath: image.path,
                 title: cleanTitle,
                 tags: directed ? const <String>[directedCommissionTag] : const <String>[],
-                client: candidate.clientName,
+                client: candidate.clientName.isEmpty && secondOpinion.buyer != null
+                    ? secondOpinion.buyer!
+                    : candidate.clientName,
+                alternateClientName: candidate.clientName.isEmpty
+                    ? null
+                    : secondOpinion.buyer,
+                alternateTitle: secondOpinion.title,
                 price: candidate.price,
                 platform: platform,
                 date: candidate.detectedDate,
@@ -281,7 +305,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                         : '排单列表或未识别详情页',
             platform: platform?.label ?? '待选择',
             parsedRows: parsedForReport,
-          ));
+          ) + (paddleNotes.isEmpty
+              ? ''
+              : '第二 OCR 局部核对：\n${paddleNotes.join("\n")}\n'));
+
         } catch (error) {
           _ocrDiagnostics.add('截图 $_imageSerial 识别失败：$error\n');
           unreadable++;
@@ -360,6 +387,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       if (!mounted) return;
       setState(() => _working = false);
       _message('读取截图失败：' + error.toString());
+    } finally {
+      await _paddleReview.dispose();
     }
   }
 
@@ -380,6 +409,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     required double? price,
     required CommissionPlatform? platform,
     List<String> tags = const <String>[],
+    String? alternateClientName,
+    String? alternateTitle,
     DateTime? date,
     bool hasTime = false,
     int? percentage,
@@ -430,6 +461,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       price: price,
       platform: platform,
       tags: normalizeOrderTags(tags),
+      alternateClientName: alternateClientName,
+      alternateTitle: alternateTitle,
       detectedDate: date,
       sourceHasClock: hasTime,
       recognizedPercent: percentage,
@@ -1182,8 +1215,33 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   ],
                 ),
               ),
+            if (!_products && row.alternateTitle != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ActionChip(
+                  label: Text('另一 OCR 图名：${row.alternateTitle}'),
+                  onPressed: () => setState(() {
+                    row.title = row.alternateTitle!;
+                    row.alternateTitle = null;
+                    if (!row.presetManuallyChanged) {
+                      final preset = resolveImportPreset(
+                        platform: row.platform ?? CommissionPlatform.mihuashi,
+                        title: row.title,
+                        presets: widget.presetStore.presets,
+                        existingOrders: widget.orderStore.orders,
+                      );
+                      row.presetId = preset.id;
+                      row.nodeId = resolveImportNode(
+                        preset: preset,
+                        recognizedPercent: row.recognizedPercent,
+                      ).id;
+                    }
+                    _refreshDuplicateWarnings();
+                  }),
+                ),
+              ),
             TextFormField(
-              key: ValueKey(row.id + '-title'),
+              key: ValueKey(row.id + '-title-' + row.title),
               initialValue: row.title,
               maxLines: 1,
               decoration: InputDecoration(
@@ -1200,13 +1258,25 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               onChanged: (value) => row.title = value,
             ),
             const SizedBox(height: 6),
+            if (!_products && row.alternateClientName != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ActionChip(
+                  label: Text('另一 OCR 单主：${row.alternateClientName}'),
+                  onPressed: () => setState(() {
+                    row.clientName = row.alternateClientName!;
+                    row.alternateClientName = null;
+                    _refreshDuplicateWarnings();
+                  }),
+                ),
+              ),
             Row(
               children: [
                 if (!_products) ...[
                   Expanded(
                     flex: 2,
                     child: TextFormField(
-                      key: ValueKey(row.id + '-client'),
+                      key: ValueKey(row.id + '-client-' + row.clientName),
                       initialValue: row.clientName,
                       decoration: InputDecoration(
                         labelText: '单主',
