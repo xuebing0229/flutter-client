@@ -349,8 +349,7 @@ class _FocusPageState extends State<FocusPage> {
                         _formatDuration(active.elapsedAt(DateTime.now())),
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              fontFeatures: const <FontFeature>[],
+                              fontWeight: FontWeight.w800
                             ),
                       ),
                       const SizedBox(height: 6),
