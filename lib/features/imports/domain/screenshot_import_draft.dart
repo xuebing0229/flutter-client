@@ -91,6 +91,35 @@ class ScreenshotImportDraft {
   }
 }
 
+
+int screenshotImportInformationScore(ScreenshotImportDraft row) {
+  var score = 0;
+  if (row.title.trim().isNotEmpty) score += 2;
+  if (row.clientName.trim().isNotEmpty) score += 3;
+  if (row.price != null) score += 2;
+  if (row.detectedDate != null) score += 2;
+  // Exact HH:mm visible in the source is substantially more informative
+  // than a day-only deadline and should win a duplicate tie by default.
+  if (row.sourceHasClock) score += 4;
+  if (row.recognizedPercent != null) score += 2;
+  if (row.relativeDeadline?.trim().isNotEmpty ?? false) score += 1;
+  if (row.tags.isNotEmpty) score += 1;
+  return score;
+}
+
+/// When two screenshots probably show the same order, keep the richer OCR
+/// result selected by default. Ties are stable: the earlier row still wins.
+/// This never merges fields because "possible duplicate" is intentionally
+/// conservative and may still represent two distinct transactions.
+ScreenshotImportDraft preferredScreenshotDuplicate(
+  ScreenshotImportDraft earlier,
+  ScreenshotImportDraft later,
+) {
+  final earlierScore = screenshotImportInformationScore(earlier);
+  final laterScore = screenshotImportInformationScore(later);
+  return laterScore > earlierScore ? later : earlier;
+}
+
 /// Apply a manual preset choice to ALL matching preview rows, not only
 /// those visually below the edited row. Other manual overrides win.
 void cascadeScreenshotPreset({

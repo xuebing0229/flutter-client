@@ -558,9 +558,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               (row.sourceHasClock
                   ? _sameMinute(order.deadline!, comparisonDate)
                   : _sameDay(order.deadline!, comparisonDate))));
-      var acrossScreenshots = false;
+      ScreenshotImportDraft? duplicatePeer;
       for (final other in _rows.take(index)) {
         if (other.platform == null || other.platform != platform) continue;
+        final otherComparisonDate = other.deadline ?? other.detectedDate;
         final comparison = reviewScreenshotDuplicate(
           ScreenshotImportIdentity(
             platform: platform,
@@ -579,7 +580,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             clientName: other.clientName,
             imageInstanceId: other.sourceImageId,
             cardInstanceId: other.id,
-            sourceDate: other.detectedDate,
+            sourceDate: otherComparisonDate,
             datePrecision: other.sourceHasClock
                 ? ScreenshotDatePrecision.minute
                 : ScreenshotDatePrecision.day,
@@ -587,16 +588,51 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         );
         if (comparison == ScreenshotDuplicateReview.possibleDuplicate ||
             comparison == ScreenshotDuplicateReview.insufficientEvidence) {
-          acrossScreenshots = true;
+          duplicatePeer = other;
           break;
         }
       }
-      if (existing || acrossScreenshots) {
-        row.duplicateWarning = existing
-            ? '与已有排单疑似重复' : '与其他截图的排单疑似重复';
+
+      if (existing) {
+        row.duplicateWarning = '与已有排单疑似重复';
         if (!row.duplicateReviewed) {
           row.selected = false;
           row.duplicateAutoSkipped = true;
+        }
+        continue;
+      }
+
+      if (duplicatePeer != null) {
+        final other = duplicatePeer;
+        final preferred = preferredScreenshotDuplicate(other, row);
+        final keepCurrent = identical(preferred, row);
+
+        if (!row.duplicateReviewed && !other.duplicateReviewed) {
+          if (keepCurrent) {
+            // A later screenshot can contain a more precise deadline or more
+            // recognized fields. In that case swap the default selection
+            // instead of blindly keeping the first imported screenshot.
+            other.selected = false;
+            other.duplicateAutoSkipped = true;
+            row.selected = true;
+            row.duplicateAutoSkipped = false;
+          } else {
+            row.selected = false;
+            row.duplicateAutoSkipped = true;
+          }
+        }
+
+        if (keepCurrent) {
+          row.duplicateWarning = '与其他截图的排单疑似重复；默认保留信息更完整的这一条';
+          if (other.duplicateWarning == null ||
+              other.duplicateAutoSkipped) {
+            other.duplicateWarning = '与其他截图的排单疑似重复；默认跳过较少信息版本';
+          }
+        } else {
+          row.duplicateWarning = '与其他截图的排单疑似重复；默认跳过较少信息版本';
+          if (other.duplicateWarning == null) {
+            other.duplicateWarning = '与其他截图的排单疑似重复；默认保留信息更完整的这一条';
+          }
         }
       }
     }
