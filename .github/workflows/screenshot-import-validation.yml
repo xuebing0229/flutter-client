@@ -6,6 +6,7 @@ on:
       - 'feat/ppocrv6-small-session-scope-20261009'
       - 'fix/ocr-native-crash-diagnostics-20261009'
       - 'fix/ppocrv6-official-baseline-20261009'
+      - 'fix/ocr-clean-symbol-fragments-20261009'
   workflow_dispatch:
 
 concurrency:
