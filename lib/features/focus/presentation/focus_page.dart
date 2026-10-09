@@ -36,6 +36,7 @@ class _FocusPageState extends State<FocusPage> {
 
   Timer? _ticker;
   late String _selectedTarget;
+  int _selectorRevision = 0;
 
   @override
   void initState() {
@@ -114,6 +115,9 @@ class _FocusPageState extends State<FocusPage> {
           ],
         ),
       );
+      if (mounted) {
+        setState(() => _selectorRevision++);
+      }
       return;
     }
 
@@ -331,7 +335,7 @@ class _FocusPageState extends State<FocusPage> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      key: ValueKey<String>(target),
+                      key: ValueKey<String>('$target/$_selectorRevision'),
                       initialValue: target,
                       isExpanded: true,
                       decoration: const InputDecoration(
