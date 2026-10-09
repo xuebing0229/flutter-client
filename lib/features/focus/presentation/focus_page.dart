@@ -154,7 +154,7 @@ class _FocusPageState extends State<FocusPage> {
       orderId: order.id,
       orderTitleSnapshot: order.title,
     );
-    setState(() => _selectedTarget = order!.id);
+    setState(() => _selectedTarget = order.id);
   }
 
   Future<void> _stopFocus(FocusSession active) async {
@@ -331,7 +331,8 @@ class _FocusPageState extends State<FocusPage> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: target,
+                      key: ValueKey<String>(target),
+                      initialValue: target,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: '本次专注',
@@ -348,9 +349,10 @@ class _FocusPageState extends State<FocusPage> {
                       Text(
                         _formatDuration(active.elapsedAt(DateTime.now())),
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                              fontWeight: FontWeight.w800
-                            ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .displaySmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 6),
                       Text(
