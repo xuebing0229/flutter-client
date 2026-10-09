@@ -148,7 +148,48 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
     DesktopPetAssetSlot slot,
   ) async {
     try {
-      await _settings.importAsset(preset.id, slot);
+      final sourcePath = await _settings.pickAssetSource();
+      if (sourcePath == null || !mounted) return;
+
+      final hasCurrentImage = slot == DesktopPetAssetSlot.idleA
+          ? preset.imageA != null
+          : preset.imageB != null;
+      final currentPlacement = slot == DesktopPetAssetSlot.idleA
+          ? preset.placementA
+          : preset.placementB;
+      final otherPlacement = slot == DesktopPetAssetSlot.idleA
+          ? preset.placementB
+          : preset.placementA;
+      final initialPlacement = hasCurrentImage
+          ? currentPlacement
+          : (slot == DesktopPetAssetSlot.keyB && preset.imageA != null
+              ? preset.placementA
+              : (slot == DesktopPetAssetSlot.idleA && preset.imageB != null
+                  ? preset.placementB
+                  : currentPlacement));
+      final guidePath = slot == DesktopPetAssetSlot.idleA
+          ? preset.imageB
+          : preset.imageA;
+
+      final placement = await showDialog<DesktopPetPlacement>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _DesktopPetPlacementDialog(
+          slot: slot,
+          sourcePath: sourcePath,
+          initialPlacement: initialPlacement,
+          guidePath: guidePath,
+          guidePlacement: otherPlacement,
+        ),
+      );
+      if (placement == null) return;
+
+      await _settings.importAssetFromPath(
+        preset.id,
+        slot,
+        sourcePath,
+        placement,
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -221,7 +262,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               _InfoCard(
                 child: Text(
                   '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在键盘按键或鼠标点击时显示。'
-                  '切换预设会整组切换美术资源。',
+                  '导入时会先进入固定桌宠画布定位，A/B 使用同一坐标系，避免切换时人物跳位。',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -314,6 +355,8 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                           DesktopPetAssetSlot.keyB,
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      _PairPlacementPreview(preset: selected),
                     ],
                   ],
                 ],
@@ -377,6 +420,421 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
           );
         },
       ),
+    );
+  }
+}
+
+class _DesktopPetPlacementDialog extends StatefulWidget {
+  const _DesktopPetPlacementDialog({
+    required this.slot,
+    required this.sourcePath,
+    required this.initialPlacement,
+    required this.guidePath,
+    required this.guidePlacement,
+  });
+
+  final DesktopPetAssetSlot slot;
+  final String sourcePath;
+  final DesktopPetPlacement initialPlacement;
+  final String? guidePath;
+  final DesktopPetPlacement guidePlacement;
+
+  @override
+  State<_DesktopPetPlacementDialog> createState() =>
+      _DesktopPetPlacementDialogState();
+}
+
+class _DesktopPetPlacementDialogState
+    extends State<_DesktopPetPlacementDialog> {
+  late DesktopPetPlacement _placement;
+  bool _showGuide = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _placement = widget.initialPlacement;
+  }
+
+  void _update({
+    double? scale,
+    double? offsetX,
+    double? offsetY,
+  }) {
+    setState(() {
+      _placement = _placement.copyWith(
+        scale: scale,
+        offsetX: offsetX,
+        offsetY: offsetY,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final slotName =
+        widget.slot == DesktopPetAssetSlot.idleA ? 'A · 平时状态' : 'B · 操作状态';
+    final guideFile = widget.guidePath == null ? null : File(widget.guidePath!);
+    final hasGuide = guideFile?.existsSync() == true;
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 760),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '定位 $slotName',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '下面的方框就是桌宠人物的固定显示画布。拖动图片调整位置，用滑杆调整大小；A/B 共用同一套坐标。',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 14),
+              Flexible(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final side = constraints.biggest.shortestSide
+                        .clamp(280.0, 430.0)
+                        .toDouble();
+                    return Center(
+                      child: SizedBox.square(
+                        dimension: side,
+                        child: _PlacementCanvas(
+                          sourcePath: widget.sourcePath,
+                          placement: _placement,
+                          guidePath: hasGuide ? widget.guidePath : null,
+                          guidePlacement: widget.guidePlacement,
+                          showGuide: _showGuide,
+                          onPan: (delta) {
+                            _update(
+                              offsetX: _placement.offsetX +
+                                  delta.dx / (side / 2),
+                              offsetY: _placement.offsetY +
+                                  delta.dy / (side / 2),
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const SizedBox(width: 54, child: Text('大小')),
+                  Expanded(
+                    child: Slider(
+                      min: 0.35,
+                      max: 3,
+                      value: _placement.scale,
+                      onChanged: (value) => _update(scale: value),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      '${_placement.scale.toStringAsFixed(2)}×',
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ],
+              ),
+              if (hasGuide)
+                CheckboxListTile(
+                  value: _showGuide,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('半透明叠加另一张状态图作为对齐参考'),
+                  onChanged: (value) =>
+                      setState(() => _showGuide = value ?? true),
+                ),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () => setState(
+                      () => _placement =
+                          widget.slot == DesktopPetAssetSlot.keyB &&
+                                  hasGuide
+                              ? widget.guidePlacement
+                              : const DesktopPetPlacement(),
+                    ),
+                    icon: const Icon(Icons.restart_alt_rounded),
+                    label: Text(
+                      widget.slot == DesktopPetAssetSlot.keyB && hasGuide
+                          ? '跟随 A 的位置'
+                          : '重置位置',
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(_placement),
+                    child: const Text('保存定位'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlacementCanvas extends StatelessWidget {
+  const _PlacementCanvas({
+    required this.sourcePath,
+    required this.placement,
+    required this.guidePath,
+    required this.guidePlacement,
+    required this.showGuide,
+    required this.onPan,
+  });
+
+  final String sourcePath;
+  final DesktopPetPlacement placement;
+  final String? guidePath;
+  final DesktopPetPlacement guidePlacement;
+  final bool showGuide;
+  final ValueChanged<Offset> onPan;
+
+  Widget _placedImage(
+    String path,
+    DesktopPetPlacement value, {
+    double opacity = 1,
+  }) {
+    return Positioned.fill(
+      child: Transform.translate(
+        offset: Offset(value.offsetX * 0.5, value.offsetY * 0.5),
+        child: FractionalTranslation(
+          translation: Offset(value.offsetX / 2, value.offsetY / 2),
+          child: Transform.scale(
+            scale: value.scale,
+            child: Opacity(
+              opacity: opacity,
+              child: Image.file(
+                File(path),
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) =>
+                    const Center(child: Icon(Icons.broken_image_outlined)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final guide = guidePath;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanUpdate: (details) => onPan(details.delta),
+      child: ClipRect(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerLowest,
+            border: Border.all(color: colors.primary, width: 2),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CustomPaint(
+                painter: _DesktopPetCanvasGuidePainter(
+                  lineColor: colors.outlineVariant,
+                ),
+              ),
+              if (showGuide && guide != null)
+                _placedImage(
+                  guide,
+                  guidePlacement,
+                  opacity: 0.28,
+                ),
+              _placedImage(sourcePath, placement),
+              Positioned(
+                left: 10,
+                bottom: 8,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface.withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      '桌宠显示范围',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopPetCanvasGuidePainter extends CustomPainter {
+  const _DesktopPetCanvasGuidePainter({required this.lineColor});
+
+  final Color lineColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(size.width / 2, 0),
+      Offset(size.width / 2, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      paint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(
+        size.width * 0.08,
+        size.height * 0.08,
+        size.width * 0.84,
+        size.height * 0.84,
+      ),
+      paint..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DesktopPetCanvasGuidePainter oldDelegate) =>
+      oldDelegate.lineColor != lineColor;
+}
+
+class _PairPlacementPreview extends StatelessWidget {
+  const _PairPlacementPreview({required this.preset});
+
+  final DesktopPetPreset preset;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth >= 520
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: width,
+              child: _SinglePlacementPreview(
+                label: 'A · 平时状态',
+                path: preset.imageA,
+                placement: preset.placementA,
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _SinglePlacementPreview(
+                label: 'B · 操作状态',
+                path: preset.imageB,
+                placement: preset.placementB,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SinglePlacementPreview extends StatelessWidget {
+  const _SinglePlacementPreview({
+    required this.label,
+    required this.path,
+    required this.placement,
+  });
+
+  final String label;
+  final String? path;
+  final DesktopPetPlacement placement;
+
+  @override
+  Widget build(BuildContext context) {
+    final file = path == null ? null : File(path!);
+    final exists = file?.existsSync() == true;
+    final colors = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        AspectRatio(
+          aspectRatio: 1,
+          child: ClipRect(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerLow,
+                border: Border.all(color: colors.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: exists
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Transform.translate(
+                          offset: Offset(
+                            placement.offsetX * 0.5,
+                            placement.offsetY * 0.5,
+                          ),
+                          child: FractionalTranslation(
+                            translation: Offset(
+                              placement.offsetX / 2,
+                              placement.offsetY / 2,
+                            ),
+                            child: Transform.scale(
+                              scale: placement.scale,
+                              child: Image.file(file!, fit: BoxFit.contain),
+                            ),
+                          ),
+                        ),
+                        CustomPaint(
+                          painter: _DesktopPetCanvasGuidePainter(
+                            lineColor: colors.outlineVariant,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Center(
+                      child: Text(
+                        '未导入',
+                        style: TextStyle(color: colors.onSurfaceVariant),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
