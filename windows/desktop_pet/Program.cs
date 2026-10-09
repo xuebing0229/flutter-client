@@ -1,12 +1,16 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using VPet_Simulator.Core;
 
@@ -25,13 +29,36 @@ internal static class Program
 
         _ = int.TryParse(GetArgument(args, "--parent-pid"), out var parentPid);
 
-        var app = new Application
+        var fullConfigPath = Path.GetFullPath(configPath);
+        var mutexKey = Convert.ToHexString(
+            SHA256.HashData(
+                Encoding.UTF8.GetBytes(fullConfigPath.ToUpperInvariant())
+            )
+        );
+        using var singleInstance = new Mutex(
+            initiallyOwned: true,
+            name: @"Local\AdventurersGuild.DesktopPet." + mutexKey,
+            createdNew: out var createdNew
+        );
+        if (!createdNew)
         {
-            ShutdownMode = ShutdownMode.OnMainWindowClose,
-        };
-        var window = new DesktopPetWindow(Path.GetFullPath(configPath), parentPid);
-        app.Run(window);
-        return 0;
+            return 0;
+        }
+
+        try
+        {
+            var app = new Application
+            {
+                ShutdownMode = ShutdownMode.OnMainWindowClose,
+            };
+            var window = new DesktopPetWindow(fullConfigPath, parentPid);
+            app.Run(window);
+            return 0;
+        }
+        finally
+        {
+            singleInstance.ReleaseMutex();
+        }
     }
 
     private static string? GetArgument(string[] args, string name)
