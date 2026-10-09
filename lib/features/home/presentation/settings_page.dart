@@ -17,6 +17,7 @@ import '../../../core/update/android_beta_update_installer.dart';
 import '../../../core/update/beta_update_coordinator.dart';
 import '../../../core/update/update_manifest.dart';
 import '../../../core/update/windows_beta_update_installer.dart';
+import '../../focus/state/focus_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/state/order_store.dart';
@@ -30,6 +31,7 @@ class SettingsPage extends StatefulWidget {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    required this.focusStore,
     required this.themeStore,
     required this.featureStore,
     required this.accountStore,
@@ -42,6 +44,7 @@ class SettingsPage extends StatefulWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final FocusStore focusStore;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
@@ -413,6 +416,7 @@ class _SettingsPageState extends State<SettingsPage>
         orders: snapshot.orders,
         products: snapshot.products,
         nodePresets: snapshot.nodePresets,
+        focusSessions: snapshot.focusSessions,
         accountSyncState: snapshot.accountSyncState,
         syncRecords: snapshot.syncRecords,
         settings: snapshot.settings,
@@ -490,6 +494,7 @@ class _SettingsPageState extends State<SettingsPage>
               '排单：${backup.orders.length} 条\n'
               '成品：${backup.products.length} 条\n'
               '节点预设：${backup.nodePresets.length} 套\n'
+              '专注记录：${backup.focusSessions.length} 条\n'
               '参考图：$referenceImageCount 张\n\n'
               '导入会用备份内容覆盖当前本地数据。'
               '$legacyAssetWarning',
@@ -518,6 +523,7 @@ class _SettingsPageState extends State<SettingsPage>
             orderStore: widget.orderStore,
             productStore: widget.productStore,
             nodePresetStore: widget.nodePresetStore,
+            focusStore: widget.focusStore,
           );
           // Apply settings inside the coordinator's restore transaction. This
           // makes the post-restore baseline describe the imported workspace,
