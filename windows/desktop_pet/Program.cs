@@ -496,8 +496,6 @@ internal sealed class DesktopPetWindow : Window
         }
 
         _keyboardHook.Dispose();
-
-        _activePicture?.Stop(true);
         _activePicture?.Dispose();
         _activePicture = null;
         _graphCore.Dispose();
