@@ -1118,27 +1118,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelSmall,
               ),
-            if (!_products && row.title.contains('【') &&
-                !row.title.contains('】'))
-              Text(
-                '图名括号疑似被 OCR 误读，Emoji 也可能变成汉字，请核对原图',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.error,
-                ),
-              ),
             if (!_products && row.tags.isNotEmpty)
               Text(
                 '标签：' + row.tags.join('、'),
                 style: theme.textTheme.labelSmall,
-              ),
-            if (!_products && row.clientBox?.recoveredFromCrop == true)
-              Text(
-                '单主由局部放大识别补回，请核对拼写（如 vv / w 可能混淆）',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.error,
-                ),
               ),
             if (row.duplicateWarning != null)
               Text(
