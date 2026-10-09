@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:image/image.dart' as img;
 import 'package:paddle_ocr_native/paddle_ocr_native.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../domain/screenshot_layout_parser.dart';
 import 'screenshot_ocr_result.dart';
@@ -67,58 +68,137 @@ class ScreenshotPaddleReviewService {
   final PaddleOcr _engine = PaddleOcr();
   bool _initialized = false;
 
-  Future<void> _ensureInitialized() async {
-    if (_initialized) return;
-    await _engine.init(engine: const EngineConfig(numThreads: 2));
-    _initialized = true;
+  // A native SIGABRT/SIGSEGV or Android low-memory process kill cannot be
+  // caught by Dart. Keep an on-disk stage marker before each native call:
+  // after an interrupted stage, disable Paddle for the rest of this build.
+  // ML Kit remains available for all normal imports.
+  Future<File> _crashMarker() async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}/paddle-ocr-native-v115.running');
   }
 
-  /// One-shot diagnostic: run the same whole screenshot through PP-OCRv6.
-  /// Does not change the ML Kit result or any import draft. All pixels stay
-  /// on device; diagnostics contain text only and are copied by user opt-in.
+  Future<void> _nativeStageStart(String stage) async {
+    final marker = await _crashMarker();
+    if (await marker.exists()) {
+      final oldStage = await marker.readAsString();
+      throw StateError('PaddleOCR 上次运行未正常结束（$oldStage），'
+          '本版本已自动停用第二引擎以避免连续闪退。原 ML Kit 仍可正常识别。');
+    }
+    await marker.writeAsString(stage, flush: true);
+  }
+
+  Future<void> _nativeStageEnd() async {
+    final marker = await _crashMarker();
+    if (await marker.exists()) await marker.delete();
+  }
+
+  Future<void> _ensureInitialized() async {
+    if (_initialized) return;
+    await _nativeStageStart('初始化模型');
+    try {
+      await _engine.init(engine: const EngineConfig(numThreads: 1));
+      _initialized = true;
+    } finally {
+      await _nativeStageEnd();
+    }
+  }
+
+  /// Run PP-OCRv6 on bounded vertical tiles instead of passing the entire
+  /// image to OpenCV and ONNX at once. Preserve original coordinates/scale,
+  /// text sizes and the main ML Kit import result. All images remain local.
+  /// A crash marker prevents repeatedly killing the app on native failure.
   Future<ScreenshotOcrResult?> recognizeFullImage({
     required String imagePath,
     required double imageWidth,
     required double imageHeight,
     required List<String> diagnostics,
+    void Function(String stage)? onProgress,
   }) async {
     if (!Platform.isAndroid) {
-      diagnostics.add('PaddleOCR 全图对照目前仅支持 Android');
+      diagnostics.add('PaddleOCR 对照目前仅支持 Android');
       return null;
     }
     final clock = Stopwatch()..start();
+    Directory? workDir;
     try {
+      onProgress?.call('初始化（首次可能较慢）');
       await _ensureInitialized();
-      final run = await _engine.recognize(imagePath)
-          .timeout(const Duration(seconds: 60));
-      final lines = <ScreenshotTextLine>[];
-      for (final result in run.results) {
-        final box = result.boundingBox;
-        lines.add(ScreenshotTextLine(
-          text: result.text,
-          left: box.left, top: box.top,
-          right: box.right, bottom: box.bottom,
-        ));
+      final source = img.decodeImage(await File(imagePath).readAsBytes());
+      if (source == null) throw const FormatException('截图解码失败');
+      // The detector already resizes its input, but the old full-image path
+      // first allocated a native full-size ARGB bitmap. Limit that footprint.
+      const tileHeight = 720;
+      const overlap = 120;
+      const stride = tileHeight - overlap;
+      final n = source.height <= tileHeight
+          ? 1
+          : ((source.height - tileHeight + stride - 1) ~/ stride) + 1;
+      final sx = imageWidth / source.width;
+      final sy = imageHeight / source.height;
+      final found = <ScreenshotTextLine>[];
+      workDir = await Directory.systemTemp.createTemp('ag-ocr-tiles-');
+      diagnostics.add('PaddleOCR 分片安全模式：$n 片，'
+          '每片最多 $tileHeight 像素高，重叠 $overlap 像素');
+      var nativeMs = 0;
+      for (var index = 0; index < n; index++) {
+        final top = index * stride;
+        final height = math.min(tileHeight, source.height - top);
+        final crop = img.copyCrop(source, x: 0, y: top,
+            width: source.width, height: height);
+        final path = '${workDir.path}/tile.png';
+        await File(path).writeAsBytes(img.encodePng(crop), flush: true);
+        onProgress?.call('分片 ${index + 1}/$n');
+        await _nativeStageStart('识别分片 ${index + 1}/$n');
+        try {
+          final run = await _engine.recognize(path)
+              .timeout(const Duration(seconds: 35));
+          nativeMs += run.totalTimeMs;
+          for (final result in run.results) {
+            final box = result.boundingBox;
+            final center = top + box.center.dy;
+            // Keep only the middle half of an overlap, assigning a
+            // line to exactly one tile instead of duplicating a card.
+            if (index > 0 && center < top + overlap / 2) continue;
+            if (index < n - 1 && center >= top + height - overlap / 2) {
+              continue;
+            }
+            found.add(ScreenshotTextLine(
+              text: result.text,
+              left: box.left * sx, right: box.right * sx,
+              top: (box.top + top) * sy,
+              bottom: (box.bottom + top) * sy,
+            ));
+            diagnostics.add('PaddleOCR 置信度 '
+                '${result.confidence.toStringAsFixed(3)}'
+                ' | ${result.text}');
+          }
+          diagnostics.add('PaddleOCR 分片 ${index + 1}/$n：'
+              '${run.results.length} 行，推理 ${run.totalTimeMs} ms');
+        } finally {
+          await _nativeStageEnd();
+          try { await File(path).delete(); } catch (_) {}
+        }
       }
-      diagnostics.add('PaddleOCR 全图：共 ${lines.length} 行'
-          '，模型推理 ${run.totalTimeMs} ms'
-          '，含初始化总耗时 ${clock.elapsedMilliseconds} ms');
-      for (var i = 0; i < run.results.length; i++) {
-        final entry = run.results[i];
-        diagnostics.add('PaddleOCR 置信度 ${i + 1}: '
-            '${entry.confidence.toStringAsFixed(3)} | ${entry.text}');
-      }
+      found.sort((a, b) {
+        final byY = a.top.compareTo(b.top);
+        return byY == 0 ? a.left.compareTo(b.left) : byY;
+      });
+      diagnostics.add('PaddleOCR 分片合并：${found.length} 行，'
+          '推理合计 $nativeMs ms，总耗时 ${clock.elapsedMilliseconds} ms');
       return ScreenshotOcrResult(
         width: imageWidth,
         height: imageHeight,
-        lines: List.unmodifiable(lines),
+        lines: List.unmodifiable(found),
       );
     } catch (error) {
-      diagnostics.add('PaddleOCR 全图对照失败：$error'
-          '（${clock.elapsedMilliseconds} ms，原 ML Kit 结果保留）');
+      diagnostics.add('PaddleOCR 安全对照失败：$error'
+          '（${clock.elapsedMilliseconds} ms；原 ML Kit 结果保留）');
       return null;
     } finally {
       clock.stop();
+      if (workDir != null) {
+        try { await workDir.delete(recursive: true); } catch (_) {}
+      }
     }
   }
 
@@ -218,8 +298,14 @@ class ScreenshotPaddleReviewService {
       );
       final path = '${tempDir.path}/region.png';
       await File(path).writeAsBytes(img.encodePng(enlarged));
-      final run = await _engine.recognize(path)
-          .timeout(const Duration(seconds: 25));
+      await _nativeStageStart('局部文字重识别');
+      late final dynamic run;
+      try {
+        run = await _engine.recognize(path)
+            .timeout(const Duration(seconds: 25));
+      } finally {
+        await _nativeStageEnd();
+      }
       final reading = bestPaddleText(
         run.results.map((r) => PaddleFieldText(
           r.text, r.confidence, r.boundingBox.center.dy,
@@ -243,7 +329,16 @@ class ScreenshotPaddleReviewService {
   Future<void> dispose() async {
     if (_initialized) {
       _initialized = false;
-      await _engine.dispose();
+      try {
+        await _nativeStageStart('卸载模型');
+        try {
+          await _engine.dispose();
+        } finally {
+          await _nativeStageEnd();
+        }
+      } catch (_) {
+        // The primary ML Kit import must remain usable.
+      }
     }
   }
 }
