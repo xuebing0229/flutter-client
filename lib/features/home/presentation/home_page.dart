@@ -499,11 +499,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _syncDesktopPet() async {
     final order = await _currentDesktopPetOrder();
+    if (!mounted) return;
+    final colors = Theme.of(context).colorScheme;
     await _desktopPetService.sync(
       enabled: widget.featureStore.enabled(AppFeature.desktopPet),
       currentOrderTitle: order?.title,
       currentOrderNode: order?.currentNode.name,
       currentOrderDeadline: order?.deadline,
+      bubbleBackgroundArgb: colors.surfaceContainerHigh.toARGB32(),
+      bubbleForegroundArgb: colors.onSurface.toARGB32(),
+      bubbleBorderArgb: colors.outlineVariant.toARGB32(),
+      bubbleAccentArgb: colors.primary.toARGB32(),
     );
   }
 
@@ -511,6 +517,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
+    if (_ready) {
+      unawaited(_syncDesktopPet());
+    }
   }
 
   Map<String, dynamic> _captureSyncSettings() {
