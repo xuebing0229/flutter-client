@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/account/account_store.dart';
@@ -193,6 +195,9 @@ class AppToolMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showDesktopPet =
+        Platform.isWindows && featureStore.enabled(AppFeature.desktopPet);
+
     return ListView(
       padding: padding,
       children: [
@@ -220,21 +225,21 @@ class AppToolMenu extends StatelessWidget {
               ),
             ),
           ),
-        if (featureStore.enabled(AppFeature.desktopPet))
-          _item(
-            icon: Icons.pets_outlined,
-            title: '桌宠',
-            tool: desktopPetTool,
-            onTap: () => _open(
-              context,
-              desktopPetTool,
-              DesktopPetPage(
-                orderStore: orderStore,
-                focusStore: focusStore,
-                onOpenOrder: onOpenOrder,
-              ),
+        _item(
+          icon: showDesktopPet ? Icons.pets_outlined : Icons.timer_outlined,
+          title: showDesktopPet ? '桌宠' : '专注',
+          tool: desktopPetTool,
+          onTap: () => _open(
+            context,
+            desktopPetTool,
+            DesktopPetPage(
+              orderStore: orderStore,
+              focusStore: focusStore,
+              onOpenOrder: onOpenOrder,
+              showDesktopPet: showDesktopPet,
             ),
           ),
+        ),
         _item(
           icon: Icons.archive_outlined,
           title: '归档',
