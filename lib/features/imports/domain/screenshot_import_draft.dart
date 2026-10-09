@@ -53,6 +53,10 @@ class ScreenshotImportDraft {
   String title;
   String clientName;
   double? price;
+  /// Increment only when another UI action replaces a field programmatically.
+  /// Ordinary keyboard edits must keep a stable widget key and input focus.
+  int titleInputRevision = 0;
+  int clientInputRevision = 0;
   CommissionPlatform? platform;
   final DateTime? detectedDate;
   /// Whether the actual screenshot contained HH:mm, not a user guess.
