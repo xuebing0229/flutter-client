@@ -47,4 +47,23 @@ void main() {
     expect(report, contains('原始 OCR (0 行'));
     expect(report, contains('解析出的记录 (0 条)'));
   });
+
+  test('native missing-buyer retry trace remains visible in user-authorized report', () {
+    final text = formatScreenshotOcrDiagnostic(
+      screenshotNumber: 1,
+      ocr: const ScreenshotOcrResult(
+        width: 865, height: 1920, lines: [],
+        nativeTrace: [
+          '小字单主候选标题=3；需要局部重识别=1',
+          '单主区域y=1085；放大：[测试买家]；有效=[测试买家]',
+        ],
+      ),
+      route: '排单列表',
+      platform: '米画师',
+      parsedRows: const [],
+    );
+    expect(text, contains('本机二次识别过程'));
+    expect(text, contains('需要局部重识别=1'));
+    expect(text, contains('放大：[测试买家]'));
+  });
 }
