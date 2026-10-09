@@ -109,11 +109,242 @@ internal class OcrCrashDiagnostics(context: Context) {
                 appendLine("进程：${chosen.processName}")
                 // Android 12+ native tombstones are a binary protobuf, not
                 // UTF-8 text. Never misinterpret them as a human stack trace.
-                val tombstoneAvailable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    runCatching { chosen.traceInputStream?.use { true } == true }.getOrDefault(false)
-                } else false
-                appendLine("原生 tombstone 可提取：$tombstoneAvailable")
+                val tombstoneSummary = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    runCatching {
+                        chosen.traceInputStream?.use { input ->
+                            parseNativeTombstone(input.readNBytes(4 * 1024 * 1024))
+                        }
+                    }.getOrNull()
+                } else null
+                appendLine("原生 tombstone 可提取：${tombstoneSummary != null}")
+                if (tombstoneSummary != null) {
+                    appendLine("--- 原生 tombstone 摘要 ---")
+                    append(tombstoneSummary)
+                    if (!tombstoneSummary.endsWith("\n")) appendLine()
+                }
             }
         }
     }
+    private data class NativeFrame(
+        val relPc: Long?,
+        val function: String?,
+        val functionOffset: Long?,
+        val file: String?,
+        val buildId: String?,
+    )
+
+    private data class NativeThread(
+        val id: Int?,
+        val name: String?,
+        val frames: List<NativeFrame>,
+    )
+
+    /**
+     * ApplicationExitInfo returns Android native tombstones as protobuf on
+     * API 31+. Parse only signal/abort/cause/crashing-thread/backtrace fields.
+     * Logs, memory dumps, fds and command arguments are intentionally ignored.
+     */
+    private fun parseNativeTombstone(bytes: ByteArray): String? {
+        if (bytes.isEmpty()) return null
+        val reader = ProtoReader(bytes)
+        var crashingTid: Int? = null
+        var signalNumber: Int? = null
+        var signalName: String? = null
+        var signalCode: Int? = null
+        var signalCodeName: String? = null
+        var abortMessage: String? = null
+        val causes = mutableListOf<String>()
+        val threads = linkedMapOf<Int, NativeThread>()
+
+        while (!reader.done()) {
+            val tag = reader.readVarintOrNull() ?: break
+            val field = (tag ushr 3).toInt()
+            val wire = (tag and 7L).toInt()
+            when (field) {
+                6 -> if (wire == 0) crashingTid = reader.readVarintOrNull()?.toInt()
+                10 -> if (wire == 2) {
+                    val signal = ProtoReader(reader.readBytesOrNull() ?: ByteArray(0))
+                    while (!signal.done()) {
+                        val st = signal.readVarintOrNull() ?: break
+                        val sf = (st ushr 3).toInt()
+                        val sw = (st and 7L).toInt()
+                        when (sf) {
+                            1 -> if (sw == 0) signalNumber = signal.readVarintOrNull()?.toInt()
+                            2 -> if (sw == 2) signalName = signal.readStringOrNull()
+                            3 -> if (sw == 0) signalCode = signal.readVarintOrNull()?.toInt()
+                            4 -> if (sw == 2) signalCodeName = signal.readStringOrNull()
+                            else -> signal.skip(sw)
+                        }
+                    }
+                }
+                14 -> if (wire == 2) abortMessage = reader.readStringOrNull()
+                15 -> if (wire == 2) {
+                    val cause = ProtoReader(reader.readBytesOrNull() ?: ByteArray(0))
+                    while (!cause.done()) {
+                        val ct = cause.readVarintOrNull() ?: break
+                        val cf = (ct ushr 3).toInt()
+                        val cw = (ct and 7L).toInt()
+                        if (cf == 1 && cw == 2) {
+                            cause.readStringOrNull()?.takeIf { it.isNotBlank() }?.let(causes::add)
+                        } else {
+                            cause.skip(cw)
+                        }
+                    }
+                }
+                16 -> if (wire == 2) {
+                    parseThreadMapEntry(reader.readBytesOrNull() ?: ByteArray(0))?.let { (key, thread) ->
+                        threads[key] = thread
+                    }
+                }
+                else -> reader.skip(wire)
+            }
+        }
+
+        val crashing = crashingTid?.let(threads::get)
+            ?: threads.values.firstOrNull { it.frames.isNotEmpty() }
+        if (signalNumber == null && signalName == null && abortMessage == null && crashing == null) return null
+
+        return buildString {
+            appendLine("signal：${signalName ?: "未知"} (${signalNumber ?: -1})" +
+                if (signalCode != null || !signalCodeName.isNullOrBlank())
+                    "；code=${signalCodeName ?: "未知"} (${signalCode ?: -1})"
+                else "")
+            if (!abortMessage.isNullOrBlank()) appendLine("abort message：$abortMessage")
+            causes.take(4).forEach { appendLine("cause：$it") }
+            if (crashing != null) {
+                appendLine("crashing tid：${crashing.id ?: crashingTid ?: -1}" +
+                    if (!crashing.name.isNullOrBlank()) "；thread=${crashing.name}" else "")
+                crashing.frames.take(16).forEachIndexed { index, frame ->
+                    append("#")
+                    append(index.toString().padStart(2, '0'))
+                    append(" ")
+                    if (frame.relPc != null) append("pc 0x${frame.relPc.toString(16)} ")
+                    append(frame.file ?: "<unknown>")
+                    if (!frame.function.isNullOrBlank()) {
+                        append(" (")
+                        append(frame.function)
+                        if (frame.functionOffset != null && frame.functionOffset != 0L) {
+                            append("+")
+                            append(frame.functionOffset)
+                        }
+                        append(")")
+                    }
+                    if (!frame.buildId.isNullOrBlank()) append(" [BuildId ${frame.buildId}]")
+                    appendLine()
+                }
+            }
+        }
+    }
+
+    private fun parseThreadMapEntry(bytes: ByteArray): Pair<Int, NativeThread>? {
+        val reader = ProtoReader(bytes)
+        var key: Int? = null
+        var thread: NativeThread? = null
+        while (!reader.done()) {
+            val tag = reader.readVarintOrNull() ?: break
+            val field = (tag ushr 3).toInt()
+            val wire = (tag and 7L).toInt()
+            when (field) {
+                1 -> if (wire == 0) key = reader.readVarintOrNull()?.toInt()
+                2 -> if (wire == 2) thread = parseNativeThread(reader.readBytesOrNull() ?: ByteArray(0))
+                else -> reader.skip(wire)
+            }
+        }
+        val resolved = key ?: thread?.id ?: return null
+        return resolved to (thread ?: NativeThread(resolved, null, emptyList()))
+    }
+
+    private fun parseNativeThread(bytes: ByteArray): NativeThread {
+        val reader = ProtoReader(bytes)
+        var id: Int? = null
+        var name: String? = null
+        val frames = mutableListOf<NativeFrame>()
+        while (!reader.done()) {
+            val tag = reader.readVarintOrNull() ?: break
+            val field = (tag ushr 3).toInt()
+            val wire = (tag and 7L).toInt()
+            when (field) {
+                1 -> if (wire == 0) id = reader.readVarintOrNull()?.toInt()
+                2 -> if (wire == 2) name = reader.readStringOrNull()
+                4 -> if (wire == 2) parseNativeFrame(reader.readBytesOrNull() ?: ByteArray(0))?.let(frames::add)
+                else -> reader.skip(wire)
+            }
+        }
+        return NativeThread(id, name, frames)
+    }
+
+    private fun parseNativeFrame(bytes: ByteArray): NativeFrame? {
+        val reader = ProtoReader(bytes)
+        var relPc: Long? = null
+        var function: String? = null
+        var functionOffset: Long? = null
+        var file: String? = null
+        var buildId: String? = null
+        while (!reader.done()) {
+            val tag = reader.readVarintOrNull() ?: break
+            val field = (tag ushr 3).toInt()
+            val wire = (tag and 7L).toInt()
+            when (field) {
+                1 -> if (wire == 0) relPc = reader.readVarintOrNull()
+                4 -> if (wire == 2) function = reader.readStringOrNull()
+                5 -> if (wire == 0) functionOffset = reader.readVarintOrNull()
+                6 -> if (wire == 2) file = reader.readStringOrNull()
+                8 -> if (wire == 2) buildId = reader.readStringOrNull()
+                else -> reader.skip(wire)
+            }
+        }
+        if (relPc == null && function == null && file == null) return null
+        return NativeFrame(relPc, function, functionOffset, file, buildId)
+    }
+
+    private class ProtoReader(private val bytes: ByteArray) {
+        private var index = 0
+
+        fun done(): Boolean = index >= bytes.size
+
+        fun readVarintOrNull(): Long? {
+            var out = 0L
+            var shift = 0
+            while (index < bytes.size && shift <= 63) {
+                val b = bytes[index++].toInt() and 0xff
+                out = out or ((b and 0x7f).toLong() shl shift)
+                if (b and 0x80 == 0) return out
+                shift += 7
+            }
+            index = bytes.size
+            return null
+        }
+
+        fun readBytesOrNull(): ByteArray? {
+            val length = readVarintOrNull()?.toInt() ?: return null
+            if (length < 0 || length > bytes.size - index) {
+                index = bytes.size
+                return null
+            }
+            val result = bytes.copyOfRange(index, index + length)
+            index += length
+            return result
+        }
+
+        fun readStringOrNull(): String? =
+            readBytesOrNull()?.toString(Charsets.UTF_8)
+
+        fun skip(wire: Int) {
+            when (wire) {
+                0 -> readVarintOrNull()
+                1 -> index = (index + 8).coerceAtMost(bytes.size)
+                2 -> {
+                    val length = readVarintOrNull()?.toInt() ?: return
+                    if (length < 0) {
+                        index = bytes.size
+                    } else {
+                        index = (index + length).coerceAtMost(bytes.size)
+                    }
+                }
+                5 -> index = (index + 4).coerceAtMost(bytes.size)
+                else -> index = bytes.size
+            }
+        }
+    }
+
 }
