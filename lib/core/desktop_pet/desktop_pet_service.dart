@@ -8,6 +8,51 @@ import 'package:path_provider/path_provider.dart';
 
 enum DesktopPetAssetSlot { idleA, keyB }
 
+class DesktopPetPlacement {
+  const DesktopPetPlacement({
+    this.scale = 1,
+    this.offsetX = 0,
+    this.offsetY = 0,
+  });
+
+  final double scale;
+  final double offsetX;
+  final double offsetY;
+
+  DesktopPetPlacement copyWith({
+    double? scale,
+    double? offsetX,
+    double? offsetY,
+  }) {
+    return DesktopPetPlacement(
+      scale: (scale ?? this.scale).clamp(0.35, 3.0).toDouble(),
+      offsetX: (offsetX ?? this.offsetX).clamp(-1.0, 1.0).toDouble(),
+      offsetY: (offsetY ?? this.offsetY).clamp(-1.0, 1.0).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'scale': scale,
+        'offsetX': offsetX,
+        'offsetY': offsetY,
+      };
+
+  static DesktopPetPlacement fromJson(Object? raw) {
+    if (raw is! Map) return const DesktopPetPlacement();
+    return DesktopPetPlacement(
+      scale: ((raw['scale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.35, 3.0)
+          .toDouble(),
+      offsetX: ((raw['offsetX'] as num?)?.toDouble() ?? 0)
+          .clamp(-1.0, 1.0)
+          .toDouble(),
+      offsetY: ((raw['offsetY'] as num?)?.toDouble() ?? 0)
+          .clamp(-1.0, 1.0)
+          .toDouble(),
+    );
+  }
+}
+
 enum DesktopPetTextMode {
   currentOrder,
   custom;
@@ -24,17 +69,23 @@ class DesktopPetPreset {
     required this.name,
     this.imageA,
     this.imageB,
+    this.placementA = const DesktopPetPlacement(),
+    this.placementB = const DesktopPetPlacement(),
   });
 
   final String id;
   final String name;
   final String? imageA;
   final String? imageB;
+  final DesktopPetPlacement placementA;
+  final DesktopPetPlacement placementB;
 
   DesktopPetPreset copyWith({
     String? name,
     String? imageA,
     String? imageB,
+    DesktopPetPlacement? placementA,
+    DesktopPetPlacement? placementB,
     bool clearImageA = false,
     bool clearImageB = false,
   }) {
@@ -43,6 +94,8 @@ class DesktopPetPreset {
       name: name ?? this.name,
       imageA: clearImageA ? null : (imageA ?? this.imageA),
       imageB: clearImageB ? null : (imageB ?? this.imageB),
+      placementA: placementA ?? this.placementA,
+      placementB: placementB ?? this.placementB,
     );
   }
 
@@ -51,6 +104,8 @@ class DesktopPetPreset {
         'name': name,
         'imageA': imageA,
         'imageB': imageB,
+        'placementA': placementA.toJson(),
+        'placementB': placementB.toJson(),
       };
 
   static DesktopPetPreset? fromJson(Object? raw) {
@@ -63,6 +118,8 @@ class DesktopPetPreset {
       name: name.trim().isEmpty ? '未命名桌宠' : name.trim(),
       imageA: raw['imageA'] is String ? raw['imageA'] as String : null,
       imageB: raw['imageB'] is String ? raw['imageB'] as String : null,
+      placementA: DesktopPetPlacement.fromJson(raw['placementA']),
+      placementB: DesktopPetPlacement.fromJson(raw['placementB']),
     );
   }
 }
@@ -217,14 +274,8 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> importAsset(
-    String presetId,
-    DesktopPetAssetSlot slot,
-  ) async {
+  Future<String?> pickAssetSource() async {
     if (!Platform.isWindows) return null;
-    final index = _presets.indexWhere((preset) => preset.id == presetId);
-    if (index < 0) return null;
-
     const typeGroup = XTypeGroup(
       label: '桌宠图片',
       extensions: <String>['png', 'jpg', 'jpeg'],
@@ -232,22 +283,42 @@ class DesktopPetSettings extends ChangeNotifier {
     final selected = await openFile(
       acceptedTypeGroups: const <XTypeGroup>[typeGroup],
     );
-    if (selected == null) return null;
+    return selected?.path;
+  }
+
+  Future<String?> importAssetFromPath(
+    String presetId,
+    DesktopPetAssetSlot slot,
+    String sourcePath,
+    DesktopPetPlacement placement,
+  ) async {
+    if (!Platform.isWindows) return null;
+    final index = _presets.indexWhere((preset) => preset.id == presetId);
+    if (index < 0) return null;
+
+    final source = File(sourcePath);
+    if (!await source.exists()) return null;
 
     final root = await _rootDirectory();
     final folder = Directory('${root.path}/presets/$presetId');
     await folder.create(recursive: true);
 
-    final ext = selected.path.split('.').last.toLowerCase();
+    final ext = source.path.split('.').last.toLowerCase();
     final baseName = slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB';
     final destination = File('${folder.path}/$baseName.$ext');
-    await File(selected.path).copy(destination.path);
+    if (source.absolute.path != destination.absolute.path) {
+      await source.copy(destination.path);
+    }
 
     _presets[index] = switch (slot) {
-      DesktopPetAssetSlot.idleA =>
-        _presets[index].copyWith(imageA: destination.path),
-      DesktopPetAssetSlot.keyB =>
-        _presets[index].copyWith(imageB: destination.path),
+      DesktopPetAssetSlot.idleA => _presets[index].copyWith(
+          imageA: destination.path,
+          placementA: placement,
+        ),
+      DesktopPetAssetSlot.keyB => _presets[index].copyWith(
+          imageB: destination.path,
+          placementB: placement,
+        ),
     };
     await _persist();
     notifyListeners();
@@ -333,11 +404,13 @@ class DesktopPetSettings extends ChangeNotifier {
     await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 4,
+      'schema': 5,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
       'imageB': active?.imageB,
+      'placementA': active?.placementA.toJson(),
+      'placementB': active?.placementB.toJson(),
       'textMode': _textMode.name,
       'customText': _customText,
       'currentOrderId': _currentOrderId,
