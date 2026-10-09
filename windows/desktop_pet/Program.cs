@@ -678,8 +678,14 @@ internal sealed class DesktopPetWindow : Window
         }
 
         WindowStartupLocation = WindowStartupLocation.Manual;
-        Left = SystemParameters.WorkArea.Right - Width - 36;
-        Top = SystemParameters.WorkArea.Bottom - Height - 36;
+        var fallbackWidth = ActualWidth > 0 && !double.IsNaN(ActualWidth)
+            ? ActualWidth
+            : 320;
+        var fallbackHeight = ActualHeight > 0 && !double.IsNaN(ActualHeight)
+            ? ActualHeight
+            : 390;
+        Left = SystemParameters.WorkArea.Right - fallbackWidth - 36;
+        Top = SystemParameters.WorkArea.Bottom - fallbackHeight - 36;
     }
 
     private bool IsVisiblePosition(double left, double top)
