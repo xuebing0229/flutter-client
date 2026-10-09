@@ -74,7 +74,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
             maxLength: 40,
             decoration: const InputDecoration(
               labelText: '桌宠预设名称',
-              hintText: '例如：祁连云工作中',
+              hintText: '给这个预设起个名字',
             ),
             onSubmitted: (value) {
               final normalized = value.trim();
