@@ -588,9 +588,8 @@ internal sealed class DesktopPetWindow : Window
         var elapsed = DateTime.UtcNow - start;
         if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
         var totalHours = (int)Math.Floor(elapsed.TotalHours);
-        _focusClockText.Text = totalHours > 0
-            ? $"⏱ {totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}"
-            : $"⏱ {elapsed.Minutes:00}:{elapsed.Seconds:00}";
+        _focusClockText.Text =
+            $"⏱ {totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
     }
 
     private static SolidColorBrush BrushFromArgb(long value, long fallback)
