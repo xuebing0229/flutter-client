@@ -16,6 +16,7 @@ class DesktopPetPage extends StatefulWidget {
     required this.focusStore,
     required this.onOpenOrder,
     required this.showDesktopPet,
+    required this.showFocus,
     super.key,
   });
 
@@ -23,6 +24,7 @@ class DesktopPetPage extends StatefulWidget {
   final FocusStore focusStore;
   final Future<void> Function(String orderId) onOpenOrder;
   final bool showDesktopPet;
+  final bool showFocus;
 
   @override
   State<DesktopPetPage> createState() => _DesktopPetPageState();
@@ -544,7 +546,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               ),
               const SizedBox(height: 14),
             ],
-              if (!widget.showDesktopPet) ...[
+              if (!widget.showDesktopPet && widget.showFocus) ...[
                 _InfoCard(
                   child: Text(
                     Platform.isWindows
@@ -557,12 +559,24 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                 ),
                 const SizedBox(height: 14),
               ],
-              FocusPanel(
-                orderStore: widget.orderStore,
-                focusStore: widget.focusStore,
-                onOpenOrder: widget.onOpenOrder,
-                desktopSettings: widget.showDesktopPet ? _settings : null,
-              ),
+              if (widget.showDesktopPet && !widget.showFocus) ...[
+                _InfoCard(
+                  child: Text(
+                    '专注计时当前已关闭，这里只显示桌宠设置。已有专注记录不会删除，重新开启后会恢复。',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              if (widget.showFocus)
+                FocusPanel(
+                  orderStore: widget.orderStore,
+                  focusStore: widget.focusStore,
+                  onOpenOrder: widget.onOpenOrder,
+                  desktopSettings: widget.showDesktopPet ? _settings : null,
+                ),
             ],
           );
         },
