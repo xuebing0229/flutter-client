@@ -617,20 +617,17 @@ class _PlacementCanvas extends StatelessWidget {
     double opacity = 1,
   }) {
     return Positioned.fill(
-      child: Transform.translate(
-        offset: Offset(value.offsetX * 0.5, value.offsetY * 0.5),
-        child: FractionalTranslation(
-          translation: Offset(value.offsetX / 2, value.offsetY / 2),
-          child: Transform.scale(
-            scale: value.scale,
-            child: Opacity(
-              opacity: opacity,
-              child: Image.file(
-                File(path),
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) =>
-                    const Center(child: Icon(Icons.broken_image_outlined)),
-              ),
+      child: FractionalTranslation(
+        translation: Offset(value.offsetX / 2, value.offsetY / 2),
+        child: Transform.scale(
+          scale: value.scale,
+          child: Opacity(
+            opacity: opacity,
+            child: Image.file(
+              File(path),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Center(child: Icon(Icons.broken_image_outlined)),
             ),
           ),
         ),
@@ -802,20 +799,14 @@ class _SinglePlacementPreview extends StatelessWidget {
                   ? Stack(
                       fit: StackFit.expand,
                       children: [
-                        Transform.translate(
-                          offset: Offset(
-                            placement.offsetX * 0.5,
-                            placement.offsetY * 0.5,
+                        FractionalTranslation(
+                          translation: Offset(
+                            placement.offsetX / 2,
+                            placement.offsetY / 2,
                           ),
-                          child: FractionalTranslation(
-                            translation: Offset(
-                              placement.offsetX / 2,
-                              placement.offsetY / 2,
-                            ),
-                            child: Transform.scale(
-                              scale: placement.scale,
-                              child: Image.file(file!, fit: BoxFit.contain),
-                            ),
+                          child: Transform.scale(
+                            scale: placement.scale,
+                            child: Image.file(file!, fit: BoxFit.contain),
                           ),
                         ),
                         CustomPaint(
