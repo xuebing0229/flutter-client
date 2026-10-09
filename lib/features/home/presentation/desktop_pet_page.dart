@@ -15,12 +15,14 @@ class DesktopPetPage extends StatefulWidget {
     required this.orderStore,
     required this.focusStore,
     required this.onOpenOrder,
+    required this.showDesktopPet,
     super.key,
   });
 
   final OrderStore orderStore;
   final FocusStore focusStore;
   final Future<void> Function(String orderId) onOpenOrder;
+  final bool showDesktopPet;
 
   @override
   State<DesktopPetPage> createState() => _DesktopPetPageState();
@@ -278,9 +280,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '桌宠',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Text(
+          widget.showDesktopPet ? '桌宠' : '专注',
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       body: AnimatedBuilder(
@@ -305,7 +307,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               right: 16,
             ),
             children: [
-              if (Platform.isWindows) ...[
+              if (widget.showDesktopPet) ...[
                 _InfoCard(
                 child: Text(
                   '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在键盘按键或鼠标点击时显示。'
@@ -525,10 +527,12 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               ),
               const SizedBox(height: 14),
             ],
-              if (!Platform.isWindows) ...[
+              if (!widget.showDesktopPet) ...[
                 _InfoCard(
                   child: Text(
-                    '手机端不显示桌宠形象，但可以使用与电脑双端同步的排单专注计时和专注列表。',
+                    Platform.isWindows
+                        ? '桌宠当前已关闭，这里只保留专注计时与专注记录；重新开启桌宠后，桌宠设置会回到同一个板块。'
+                        : '手机端不显示桌宠形象，这里保留与电脑双端同步的排单专注计时和专注列表。',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -540,7 +544,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                 orderStore: widget.orderStore,
                 focusStore: widget.focusStore,
                 onOpenOrder: widget.onOpenOrder,
-                desktopSettings: Platform.isWindows ? _settings : null,
+                desktopSettings: widget.showDesktopPet ? _settings : null,
               ),
             ],
           );
