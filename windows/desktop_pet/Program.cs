@@ -402,6 +402,9 @@ internal sealed class DesktopPetWindow : Window
             10 * bubbleScale,
             7 * bubbleScale
         );
+        _focusClock.HorizontalAlignment = HorizontalAlignment.Right;
+        _focusClock.VerticalAlignment = VerticalAlignment.Top;
+        _focusClock.Margin = new Thickness(8, 6, 8, 0);
         _focusClock.Effect = new DropShadowEffect
         {
             BlurRadius = 12 * bubbleScale,
