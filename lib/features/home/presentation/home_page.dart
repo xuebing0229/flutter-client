@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/account/account_models.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
+import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/onboarding/interaction_hint_store.dart';
@@ -32,6 +33,7 @@ import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
 import 'app_drawer.dart';
 import 'archive_page.dart';
+import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
 import 'feedback_page.dart';
 import 'first_run_guide.dart';
@@ -67,6 +69,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
   final InteractionHintStore _hintStore = const InteractionHintStore();
+  final DesktopPetService _desktopPetService = DesktopPetService();
   late final SyncCoordinator _syncCoordinator;
 
   static const _orderCardViewSettingKey = 'orderCardView';
@@ -224,6 +227,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _ready = true);
     _onSyncCoordinatorChanged();
     unawaited(_syncReminders());
+    unawaited(_syncDesktopPet());
 
     if (errorMessage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -316,6 +320,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _onOrderStoreChanged() {
     _scheduleSave();
     _scheduleReminderSync();
+    if (_ready) {
+      unawaited(_syncDesktopPet());
+    }
   }
 
   void _onAccountStoreChanged() {
@@ -451,16 +458,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (leftAbstractMode) {
         _abstractFeatureToggleHidden = false;
       }
+      if (!widget.featureStore.enabled(AppFeature.desktopPet) &&
+          _desktopToolSelection == AppToolMenu.desktopPetTool) {
+        _desktopToolSelection = null;
+      }
       _refreshDesktopCollectionRootIfNeeded();
     });
 
     _scheduleSave();
     _scheduleReminderSync();
     _syncCoordinator.notifySettingsChanged();
+    if (_ready) {
+      unawaited(_syncDesktopPet());
+    }
 
     if (_ready && enteredAbstractMode) {
       unawaited(_showAbstractModeGuideOnce());
     }
+  }
+
+  QueueOrder? _currentDesktopPetOrder() {
+    for (final order in _orderStore.orders) {
+      if (order.isPinned && !order.isArchived && !order.isCompleted) {
+        return order;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _syncDesktopPet() {
+    final order = _currentDesktopPetOrder();
+    return _desktopPetService.sync(
+      enabled: widget.featureStore.enabled(AppFeature.desktopPet),
+      currentOrderTitle: order?.title,
+      currentOrderNode: order?.currentNode.name,
+      currentOrderDeadline: order?.deadline,
+    );
   }
 
   void _onThemeSettingsChanged() {
@@ -766,6 +799,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     _desktopContentNavigatorObserver.deactivate();
+    _desktopPetService.dispose();
     _syncCoordinator.dispose();
     _orderStore.dispose();
     _productStore.dispose();
@@ -1004,6 +1038,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         store: widget.featureStore,
         onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
       ),
+      AppToolMenu.desktopPetTool => DesktopPetPage(
+        orderStore: _orderStore,
+      ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
         orderStore: _orderStore,
@@ -1143,6 +1180,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final title = switch (_desktopToolSelection) {
       AppToolMenu.nodePresetTool => '节点预设',
       AppToolMenu.featureToggleTool => '附加功能开关',
+      AppToolMenu.desktopPetTool => '桌宠',
       AppToolMenu.archiveTool => '归档',
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',

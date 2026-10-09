@@ -118,6 +118,10 @@ jobs:
           channel: stable
           cache: true
 
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
       - name: Enable Windows desktop
         shell: pwsh
         run: flutter config --enable-windows-desktop
@@ -128,6 +132,22 @@ jobs:
       - name: Build Windows Beta
         shell: pwsh
         run: flutter build windows --release --dart-define=APP_CHANNEL=beta
+
+      - name: Build VPet desktop companion
+        shell: pwsh
+        run: |
+          $output = "build/windows/x64/runner/Release/desktop_pet"
+          dotnet publish "windows/desktop_pet/AdventurersGuild.DesktopPet.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o $output
+          if (-not (Test-Path (Join-Path $output "AdventurersGuild.DesktopPet.exe"))) {
+            throw "Desktop pet host was not created."
+          }
 
       - name: Bundle embedded Syncthing core
         shell: pwsh

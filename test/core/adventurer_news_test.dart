@@ -50,4 +50,9 @@ void main() {
     final picked = newsBetweenBuilds(124, 125);
     expect(picked.map((e) => e.title), contains('设备同步恢复与前台自动连接'));
   });
+
+  test('126 向 125 用户补充 Windows 桌宠见闻', () {
+    final picked = newsBetweenBuilds(125, 126);
+    expect(picked.map((e) => e.title).toList(), ['Windows 桌宠']);
+  });
 }

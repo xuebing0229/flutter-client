@@ -48,6 +48,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备同步恢复与前台自动连接',
     description: '修复 124 测试版误带旧同步后台的问题；手机和电脑打开公会后会自动连接并同步，传输时显示真实百分比，Android 不再常驻“正在同步设备数据”通知。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 126,
+    title: 'Windows 桌宠',
+    description: '电脑端附加功能新增桌宠：可以保存并一键切换多组自定义 A/B 图片预设，A 为平时状态、B 为按键操作状态；文字框可显示当前在画订单或自定义内容。桌宠美术资源和预设只保存在本机。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

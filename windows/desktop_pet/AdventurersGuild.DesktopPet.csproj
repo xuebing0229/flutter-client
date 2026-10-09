@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>AdventurersGuild.DesktopPet</AssemblyName>
+    <RootNamespace>AdventurersGuild.DesktopPet</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="VPet-Simulator.Core" Version="1.1.0.66" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="LICENSE-VPET.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="THIRD_PARTY_NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

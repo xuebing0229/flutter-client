@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/account/account_store.dart';
@@ -12,6 +14,7 @@ import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'archive_page.dart';
+import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
 import 'feedback_page.dart';
 import 'settings_page.dart';
@@ -104,6 +107,7 @@ class AppToolMenu extends StatelessWidget {
   static const accountTool = 'account';
   static const settingsTool = 'settings';
   static const themeColorTool = 'themeColor';
+  static const desktopPetTool = 'desktopPet';
 
   const AppToolMenu({
     required this.orderStore,
@@ -205,6 +209,18 @@ class AppToolMenu extends StatelessWidget {
                 store: featureStore,
                 onHideFeatureToggle: onHideFeatureToggle,
               ),
+            ),
+          ),
+        if (Platform.isWindows &&
+            featureStore.enabled(AppFeature.desktopPet))
+          _item(
+            icon: Icons.pets_outlined,
+            title: '桌宠',
+            tool: desktopPetTool,
+            onTap: () => _open(
+              context,
+              desktopPetTool,
+              DesktopPetPage(orderStore: orderStore),
             ),
           ),
         _item(

@@ -17,15 +17,23 @@ enum AppFeature {
   deadlineReminders,
   abstractMode,
   abstractEffects,
+  desktopPet,
 }
 
 class AppFeatureStore extends ChangeNotifier {
   Future<void> _persistTail = Future<void>.value();
 
   final Map<AppFeature, bool> _values = {
-    for (final feature in AppFeature.values)
-      feature: feature == AppFeature.abstractMode ? false : true,
+    for (final feature in AppFeature.values) feature: _defaultValue(feature),
   };
+
+  static bool _defaultValue(AppFeature feature) {
+    return switch (feature) {
+      AppFeature.abstractMode ||
+      AppFeature.desktopPet => false,
+      _ => true,
+    };
+  }
 
   bool enabled(AppFeature feature) => _values[feature]!;
 
@@ -68,7 +76,7 @@ class AppFeatureStore extends ChangeNotifier {
   Future<void> resetToDefaults() {
     return applyJson(<String, dynamic>{
       for (final feature in AppFeature.values)
-        feature.name: feature != AppFeature.abstractMode,
+        feature.name: _defaultValue(feature),
     });
   }
 
@@ -99,6 +107,7 @@ class AppFeatureStore extends ChangeNotifier {
     // does not silently disable abstract-version effects.
     normalized.putIfAbsent(AppFeature.abstractEffects.name, () => true);
     normalized.putIfAbsent(AppFeature.customTags.name, () => true);
+    normalized.putIfAbsent(AppFeature.desktopPet.name, () => false);
 
     for (final feature in AppFeature.values) {
       if (normalized[feature.name] is! bool) {
