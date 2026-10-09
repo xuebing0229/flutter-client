@@ -363,7 +363,67 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               ),
               const SizedBox(height: 14),
               _Section(
-                title: '文字框内容',
+                title: '桌面显示',
+                children: [
+                  const SizedBox(height: 4),
+                  Text(
+                    '文字泡位置',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<DesktopPetBubblePosition>(
+                    segments: const [
+                      ButtonSegment(
+                        value: DesktopPetBubblePosition.above,
+                        icon: Icon(Icons.vertical_align_top_rounded),
+                        label: Text('头顶 · 横向'),
+                      ),
+                      ButtonSegment(
+                        value: DesktopPetBubblePosition.side,
+                        icon: Icon(Icons.view_sidebar_outlined),
+                        label: Text('旁边 · 竖向'),
+                      ),
+                    ],
+                    selected: <DesktopPetBubblePosition>{
+                      _settings.bubblePosition,
+                    },
+                    onSelectionChanged: (selection) {
+                      if (selection.isEmpty) return;
+                      unawaited(
+                        _settings.setBubblePosition(selection.first),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _ScaleSetting(
+                    label: '桌宠大小',
+                    value: _settings.petScale,
+                    min: 0.5,
+                    max: 1.8,
+                    onChanged: (value) =>
+                        unawaited(_settings.setPetScale(value)),
+                  ),
+                  const SizedBox(height: 10),
+                  _ScaleSetting(
+                    label: '文字泡大小',
+                    value: _settings.bubbleScale,
+                    min: 0.65,
+                    max: 1.8,
+                    onChanged: (value) =>
+                        unawaited(_settings.setBubbleScale(value)),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '头顶模式使用横向文字泡；旁边模式使用更窄、更高的竖向文字泡。文字泡会和桌宠一起移动，并自动跟随当前主题。',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _Section(
+                title: '文字泡内容',
                 children: [
                   const SizedBox(height: 4),
                   SegmentedButton<DesktopPetTextMode>(
@@ -411,7 +471,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               ),
               const SizedBox(height: 14),
               Text(
-                '“当前在画订单”由你在这里手动选择具体排单；桌宠图片、预设和这项选择都只保存在本机电脑。',
+                '“当前在画订单”由你在这里手动选择具体排单；桌宠图片、预设、显示大小和文字泡设置都只保存在本机电脑。',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -1022,6 +1082,54 @@ class _AssetTile extends StatelessWidget {
         ],
       ),
       onTap: onImport,
+    );
+  }
+}
+
+class _ScaleSetting extends StatelessWidget {
+  const _ScaleSetting({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = (value * 100).round();
+    return Row(
+      children: [
+        SizedBox(
+          width: 88,
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max).toDouble(),
+            min: min,
+            max: max,
+            divisions: ((max - min) * 20).round(),
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+          width: 52,
+          child: Text(
+            '$percent%',
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ],
     );
   }
 }
