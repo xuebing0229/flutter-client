@@ -574,7 +574,7 @@ internal sealed class GlobalInputActivityHook : IDisposable
 
         if (_keyboardHook == IntPtr.Zero)
         {
-            _keyboardHook = SetWindowsHookEx(
+            _keyboardHook = SetWindowsHookExKeyboard(
                 WhKeyboardLl,
                 _keyboardCallback,
                 moduleHandle,
@@ -584,7 +584,7 @@ internal sealed class GlobalInputActivityHook : IDisposable
 
         if (_mouseHook == IntPtr.Zero)
         {
-            _mouseHook = SetWindowsHookEx(
+            _mouseHook = SetWindowsHookExMouse(
                 WhMouseLl,
                 _mouseCallback,
                 moduleHandle,
@@ -695,10 +695,18 @@ internal sealed class GlobalInputActivityHook : IDisposable
     private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
     private delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookExW")]
+    private static extern IntPtr SetWindowsHookExKeyboard(
         int idHook,
-        Delegate callback,
+        LowLevelKeyboardProc callback,
+        IntPtr module,
+        uint threadId
+    );
+
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookExW")]
+    private static extern IntPtr SetWindowsHookExMouse(
+        int idHook,
+        LowLevelMouseProc callback,
         IntPtr module,
         uint threadId
     );
