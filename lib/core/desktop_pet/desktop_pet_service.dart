@@ -81,6 +81,8 @@ class DesktopPetPreset {
     this.imageB,
     this.placementA = const DesktopPetPlacement(),
     this.placementB = const DesktopPetPlacement(),
+    this.importPlacementA,
+    this.importPlacementB,
   });
 
   final String id;
@@ -89,6 +91,8 @@ class DesktopPetPreset {
   final String? imageB;
   final DesktopPetPlacement placementA;
   final DesktopPetPlacement placementB;
+  final DesktopPetPlacement? importPlacementA;
+  final DesktopPetPlacement? importPlacementB;
 
   DesktopPetPreset copyWith({
     String? name,
@@ -96,6 +100,8 @@ class DesktopPetPreset {
     String? imageB,
     DesktopPetPlacement? placementA,
     DesktopPetPlacement? placementB,
+    DesktopPetPlacement? importPlacementA,
+    DesktopPetPlacement? importPlacementB,
     bool clearImageA = false,
     bool clearImageB = false,
   }) {
@@ -106,6 +112,8 @@ class DesktopPetPreset {
       imageB: clearImageB ? null : (imageB ?? this.imageB),
       placementA: placementA ?? this.placementA,
       placementB: placementB ?? this.placementB,
+      importPlacementA: importPlacementA ?? this.importPlacementA,
+      importPlacementB: importPlacementB ?? this.importPlacementB,
     );
   }
 
@@ -116,6 +124,10 @@ class DesktopPetPreset {
         'imageB': imageB,
         'placementA': placementA.toJson(),
         'placementB': placementB.toJson(),
+        if (importPlacementA != null)
+          'importPlacementA': importPlacementA!.toJson(),
+        if (importPlacementB != null)
+          'importPlacementB': importPlacementB!.toJson(),
       };
 
   static DesktopPetPreset? fromJson(Object? raw) {
@@ -123,13 +135,23 @@ class DesktopPetPreset {
     final id = raw['id'];
     final name = raw['name'];
     if (id is! String || id.trim().isEmpty || name is! String) return null;
+    final placementA = DesktopPetPlacement.fromJson(raw['placementA']);
+    final placementB = DesktopPetPlacement.fromJson(raw['placementB']);
     return DesktopPetPreset(
       id: id,
       name: name.trim().isEmpty ? '未命名桌宠' : name.trim(),
       imageA: raw['imageA'] is String ? raw['imageA'] as String : null,
       imageB: raw['imageB'] is String ? raw['imageB'] as String : null,
-      placementA: DesktopPetPlacement.fromJson(raw['placementA']),
-      placementB: DesktopPetPlacement.fromJson(raw['placementB']),
+      placementA: placementA,
+      placementB: placementB,
+      // Older configs did not preserve an import baseline. Use the last
+      // saved placement as a non-destructive compatibility baseline.
+      importPlacementA: raw['importPlacementA'] is Map
+          ? DesktopPetPlacement.fromJson(raw['importPlacementA'])
+          : placementA,
+      importPlacementB: raw['importPlacementB'] is Map
+          ? DesktopPetPlacement.fromJson(raw['importPlacementB'])
+          : placementB,
     );
   }
 }
