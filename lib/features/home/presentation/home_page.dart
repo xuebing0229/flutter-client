@@ -477,18 +477,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  QueueOrder? _currentDesktopPetOrder() {
+  Future<QueueOrder?> _currentDesktopPetOrder() async {
+    await _desktopPetService.settings.refresh();
+    final selectedOrderId = _desktopPetService.settings.currentOrderId;
+    if (selectedOrderId == null || selectedOrderId.isEmpty) return null;
+
     for (final order in _orderStore.orders) {
-      if (order.isPinned && !order.isArchived && !order.isCompleted) {
+      if (order.id == selectedOrderId &&
+          !order.isArchived &&
+          !order.isCompleted) {
         return order;
       }
     }
+
+    // The selected order may have been completed, archived, or deleted.
+    // Clear the local-only selection instead of silently switching to
+    // another order.
+    await _desktopPetService.settings.clearCurrentOrderSelection();
     return null;
   }
 
-  Future<void> _syncDesktopPet() {
-    final order = _currentDesktopPetOrder();
-    return _desktopPetService.sync(
+  Future<void> _syncDesktopPet() async {
+    final order = await _currentDesktopPetOrder();
+    await _desktopPetService.sync(
       enabled: widget.featureStore.enabled(AppFeature.desktopPet),
       currentOrderTitle: order?.title,
       currentOrderNode: order?.currentNode.name,
@@ -1405,10 +1416,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       children: [
         scaffold,
         Positioned(
-          top: 8,
+          top: useDesktopLayout ? 8 : null,
+          bottom: useDesktopLayout
+              ? null
+              : (tabs.length > 1 ? 88 : 12),
           left: 16,
           right: 16,
           child: SafeArea(
+            top: useDesktopLayout,
+            bottom: !useDesktopLayout,
             child: Center(
               child: IgnorePointer(
                 child: ConstrainedBox(
