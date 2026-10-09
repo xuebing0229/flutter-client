@@ -984,33 +984,66 @@ class _GroupTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(
-          group.orderId == null
-              ? Icons.self_improvement_rounded
-              : Icons.draw_outlined,
-        ),
-        title: Text(group.label),
-        subtitle: Text(
-          '${group.sessions.length} 次专注 · 最近 $recentText',
-          maxLines: 1,
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              durationText,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-            if (onTap != null) ...[
-              const SizedBox(width: 8),
-              const Icon(Icons.open_in_new_rounded, size: 18),
-            ],
-          ],
-        ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  group.orderId == null
+                      ? Icons.self_improvement_rounded
+                      : Icons.draw_outlined,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group.label,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '累计时长  $durationText',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '专注次数  ${group.sessions.length} 次',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '最近专注  $recentText',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 8),
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.open_in_new_rounded, size: 18),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
