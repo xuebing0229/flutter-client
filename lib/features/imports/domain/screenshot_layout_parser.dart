@@ -13,6 +13,7 @@ class ScreenshotTextLine {
     required this.right,
     required this.bottom,
     this.confidence = 1,
+    this.recoveredFromCrop = false,
   });
 
   final String text;
@@ -21,6 +22,8 @@ class ScreenshotTextLine {
   final double right;
   final double bottom;
   final double confidence;
+  /// True when missing buyer text came from a second OCR crop pass.
+  final bool recoveredFromCrop;
 
   double get centerY => (top + bottom) / 2;
 }
