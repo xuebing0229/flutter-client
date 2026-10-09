@@ -33,6 +33,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '冒险者新见闻',
     description: '更新后首次进入公会，会自动汇总你上次使用版本以来的新功能；跨版本升级也不会漏掉中间的见闻。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 124,
+    title: '截图识别导入优化',
+    description: '截图识别改用稳定的官方 PP-OCRv6 链路，并优化米画师进度归属、重复截图默认保留信息更完整版本、画加成品平台与卡片解析；旧的 OCR 异常退出记录也不会再反复打扰导入。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

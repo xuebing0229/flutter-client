@@ -631,9 +631,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           }
         } else {
           row.duplicateWarning = '与其他截图的排单疑似重复；默认跳过较少信息版本';
-          if (other.duplicateWarning == null) {
-            other.duplicateWarning = '与其他截图的排单疑似重复；默认保留信息更完整的这一条';
-          }
+          other.duplicateWarning ??=
+              '与其他截图的排单疑似重复；默认保留信息更完整的这一条';
         }
       }
     }
