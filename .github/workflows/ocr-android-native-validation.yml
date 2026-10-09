@@ -1,4 +1,4 @@
-name: Native Android PP-OCRv5 Verification (not a release)
+name: Native Official PP-OCRv6 Verification (not a release)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
       - fix/ocr-directed-tag-20261009
       - fix/ocr-real-recovery-20261009
       - feat/dual-ocr-paddle-20261009
-      - 'build/beta-117-native-ncnn-single-ocr'
+      - 'feat/official-ppocrv6-android-only-20261009'
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
@@ -24,8 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  real-ncnn-ocr:
-    name: ncnn PP-OCRv5 mobile emulator integration
+  real-ppocrv6-ocr:
+    name: Official PP-OCRv6 Android emulator integration
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -51,8 +51,8 @@ jobs:
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
           echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
           cat android/local.properties
-      - name: Fetch and hash-verify offline OCR models
-        run: bash tool/fetch_ncnn_ocr_models.sh
+      - name: Bundle PP-OCRv6 Tiny models
+        run: python3 tool/fetch_official_ppocrv6_models.py
       - name: Enable hardware acceleration for GitHub hosted runner
         run: |
           if test -e /dev/kvm; then
@@ -61,7 +61,7 @@ jobs:
           else
             echo "WARNING: /dev/kvm is missing; software emulator will be slow."
           fi
-      - name: Test bundled offline ncnn OCR on emulated Android
+      - name: Test official PP-OCRv6 SDK on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -74,14 +74,14 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           # The fixtures are synthetic, but all their pixels go through the
-          # real bundled ncnn recognizer. Preserve the actual recognized
+          # real official PaddleOCR v6 SDK. Preserve the actual recognized
           # lines in CI logs for reviewing price/title omissions.
           script: bash -lc 'cd android; gradle :app:connectedBetaDebugAndroidTest --no-daemon --console=plain --stacktrace; status=$?; adb logcat -d -s AG_REAL_OCR:I "*:S" | tail -n 250; exit "$status"'
       - name: Upload instrumentation reports only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chinese-ncnn-real-pixel-tests
+          name: chinese-official-ppocrv6-real-pixel-tests
           path: |
             build/app/outputs/androidTest-results/connected/**
             build/app/reports/androidTests/connected/**

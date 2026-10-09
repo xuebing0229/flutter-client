@@ -83,8 +83,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Fetch and verify offline OCR models
-        run: bash tool/fetch_ncnn_ocr_models.sh
+      - name: Bundle verified PP-OCRv6 Tiny models
+        run: python3 tool/fetch_official_ppocrv6_models.py
 
       - name: Build signed Beta APK
         run: |
