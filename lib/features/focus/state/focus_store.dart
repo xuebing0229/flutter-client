@@ -46,20 +46,28 @@ class FocusStore extends ChangeNotifier {
     return session;
   }
 
-  FocusSession? stopActive() {
+  FocusSession? stopActive() => stopActiveAt(DateTime.now());
+
+  FocusSession? stopActiveAt(DateTime requestedEnd) {
     final active = activeSession;
     if (active == null) return null;
     final index = _sessions.indexWhere((item) => item.id == active.id);
     if (index < 0) return null;
-    final now = DateTime.now();
-    _sessions[index] = active.copyWith(
-      endedAt: now.isAfter(active.startedAt)
-          ? now
-          : active.startedAt.add(const Duration(seconds: 1)),
-    );
+    final end = requestedEnd.isAfter(active.startedAt)
+        ? requestedEnd
+        : active.startedAt.add(const Duration(seconds: 1));
+    _sessions[index] = active.copyWith(endedAt: end);
     _sort();
     notifyListeners();
     return _sessions[index];
+  }
+
+  FocusSession? discardActive() {
+    final active = activeSession;
+    if (active == null) return null;
+    _sessions.removeWhere((session) => session.id == active.id);
+    notifyListeners();
+    return active;
   }
 
   void replaceAll(Iterable<FocusSession> sessions) {
