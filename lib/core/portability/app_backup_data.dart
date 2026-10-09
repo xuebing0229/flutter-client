@@ -47,7 +47,7 @@ class AppBackupData {
     required OrderStore orderStore,
     required ProductStore productStore,
     required NodePresetStore nodePresetStore,
-    required FocusStore focusStore,
+    FocusStore? focusStore,
     AccountSyncState? accountSyncState,
     List<Map<String, dynamic>>? syncRecords,
     Map<String, dynamic> settings = const <String, dynamic>{},
@@ -59,7 +59,7 @@ class AppBackupData {
       nodePresets: [
         for (final preset in nodePresetStore.presets) preset.snapshot(),
       ],
-      focusSessions: [for (final session in focusStore.sessions) session],
+      focusSessions: [for (final session in focusStore?.sessions ?? const <FocusSession>[]) session],
       accountSyncState: accountSyncState,
       syncRecords: syncRecords,
       settings: settings,
@@ -199,12 +199,12 @@ class AppBackupData {
     required OrderStore orderStore,
     required ProductStore productStore,
     required NodePresetStore nodePresetStore,
-    required FocusStore focusStore,
+    FocusStore? focusStore,
   }) {
     nodePresetStore.replaceAll(nodePresets);
     orderStore.replaceAll(orders);
     productStore.replaceAll(products);
-    focusStore.replaceAll(focusSessions);
+    focusStore?.replaceAll(focusSessions);
   }
 }
 
