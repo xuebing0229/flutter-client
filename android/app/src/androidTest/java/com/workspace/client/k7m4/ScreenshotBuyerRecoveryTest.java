@@ -124,11 +124,14 @@ public final class ScreenshotBuyerRecoveryTest {
             assertEquals("The retry must add precisely one missing buyer",
                 firstPass.size() + 1, result.get().size());
             boolean recovered = false;
+            List<String> allReadings = new ArrayList<>();
             for (Object line : result.get()) {
                 String value = String.valueOf(TEXT.invoke(line));
+                allReadings.add(value);
                 if (value.contains(expected)) recovered = true;
             }
-            assertTrue("Synthetic nickname should be recovered: " + expected, recovered);
+            assertTrue("Synthetic nickname should be recovered: " + expected
+                + "; actual OCR results=" + allReadings, recovered);
         } finally {
             engine.close();
             bitmap.recycle();
