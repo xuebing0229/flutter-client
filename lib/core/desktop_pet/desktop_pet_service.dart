@@ -495,7 +495,7 @@ class DesktopPetSettings extends ChangeNotifier {
     await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 6,
+      'schema': 7,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
