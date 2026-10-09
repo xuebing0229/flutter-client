@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/desktop_pet/desktop_pet_service.dart';
+import '../../focus/presentation/focus_panel.dart';
+import '../../focus/state/focus_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
@@ -11,10 +13,14 @@ import '../../shared/presentation/layout_spacing.dart';
 class DesktopPetPage extends StatefulWidget {
   const DesktopPetPage({
     required this.orderStore,
+    required this.focusStore,
+    required this.onOpenOrder,
     super.key,
   });
 
   final OrderStore orderStore;
+  final FocusStore focusStore;
+  final Future<void> Function(String orderId) onOpenOrder;
 
   @override
   State<DesktopPetPage> createState() => _DesktopPetPageState();
@@ -50,6 +56,52 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
       .toList(growable: false);
 
   Future<void> _selectCurrentOrder(QueueOrder order) async {
+    final active = widget.focusStore.activeSession;
+    if (active != null && active.orderId != order.id) {
+      final lockedTitle = active.isFreeFocus
+          ? '自由专注'
+          : (active.orderTitleSnapshot ?? '原排单');
+      final action = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('当前专注已锁定'),
+          content: Text(
+            '这次专注开始时锁定的是“$lockedTitle”。\n'
+            '切换“当前在画订单”不会改写正在进行的专注。'
+            '如果现在要开始画“${order.title}”，建议结束本次并新开一次计时。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop('switch'),
+              child: const Text('仅切换'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop('restart'),
+              child: const Text('结束并新开'),
+            ),
+          ],
+        ),
+      );
+      if (action == null) return;
+      if (action == 'restart') {
+        widget.focusStore.stopActive();
+        await _settings.selectCurrentOrder(
+          orderId: order.id,
+          title: order.title,
+          node: order.currentNode.name,
+          deadline: order.deadline,
+        );
+        widget.focusStore.start(order: order);
+        return;
+      }
+    }
+
     await _settings.selectCurrentOrder(
       orderId: order.id,
       title: order.title,
@@ -224,13 +276,6 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isWindows) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('桌宠')),
-        body: const Center(child: Text('桌宠仅在 Windows 电脑版提供。')),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -242,6 +287,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
         animation: Listenable.merge(<Listenable>[
           _settings,
           widget.orderStore,
+          widget.focusStore,
         ]),
         builder: (context, _) {
           if (!_settings.loaded) {
@@ -259,7 +305,8 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               right: 16,
             ),
             children: [
-              _InfoCard(
+              if (Platform.isWindows) ...[
+                _InfoCard(
                 child: Text(
                   '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在键盘按键或鼠标点击时显示。'
                   '导入时会先进入固定桌宠画布定位，A/B 使用同一坐标系，避免切换时人物跳位。',
@@ -475,6 +522,25 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+              ),
+              const SizedBox(height: 14),
+            ],
+              if (!Platform.isWindows) ...[
+                _InfoCard(
+                  child: Text(
+                    '手机端不显示桌宠形象，但可以使用与电脑双端同步的排单专注计时和专注列表。',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              FocusPanel(
+                orderStore: widget.orderStore,
+                focusStore: widget.focusStore,
+                onOpenOrder: widget.onOpenOrder,
+                desktopSettings: Platform.isWindows ? _settings : null,
               ),
             ],
           );
