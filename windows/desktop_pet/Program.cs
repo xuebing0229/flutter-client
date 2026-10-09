@@ -395,8 +395,8 @@ internal sealed class DesktopPetWindow : Window
         _bubbleText.FontSize = 14 * bubbleScale;
 
         _bubbleTail.Fill = background;
-        _bubbleTail.Stroke = border;
-        _bubbleTail.StrokeThickness = Math.Max(1, bubbleScale);
+        _bubbleTail.Stroke = Brushes.Transparent;
+        _bubbleTail.StrokeThickness = 0;
 
         _focusClock.Background = background;
         _focusClock.BorderBrush = border;
@@ -471,11 +471,11 @@ internal sealed class DesktopPetWindow : Window
             _bubbleText.TextWrapping = TextWrapping.NoWrap;
             _bubbleText.TextAlignment = TextAlignment.Center;
             _bubbleText.MinWidth = 20 * bubbleScale;
-            _bubbleText.MaxWidth = 32 * bubbleScale;
+            _bubbleText.MaxWidth = 58 * bubbleScale;
             _bubbleText.MinHeight = 150 * bubbleScale;
             _bubbleText.MaxHeight = Math.Max(180, petSize * 0.78);
             _bubble.MinWidth = 44 * bubbleScale;
-            _bubble.MaxWidth = 62 * bubbleScale;
+            _bubble.MaxWidth = 82 * bubbleScale;
             _bubble.MinHeight = 185 * bubbleScale;
             _bubble.MaxHeight = Math.Max(210, petSize * 0.9);
 
@@ -804,13 +804,28 @@ internal sealed class DesktopPetWindow : Window
             runes.Add(token);
         }
 
-        const int maxCharacters = 24;
+        const int rowsPerColumn = 14;
+        const int maxCharacters = rowsPerColumn * 2;
         if (runes.Count > maxCharacters)
         {
             runes = runes.Take(maxCharacters - 1).ToList();
             runes.Add("…");
         }
-        return string.Join(Environment.NewLine, runes);
+
+        if (runes.Count <= rowsPerColumn)
+        {
+            return string.Join(Environment.NewLine, runes);
+        }
+
+        var rows = new List<string>();
+        for (var index = 0; index < rowsPerColumn; index++)
+        {
+            var right = index < runes.Count ? runes[index] : string.Empty;
+            var leftIndex = rowsPerColumn + index;
+            var left = leftIndex < runes.Count ? runes[leftIndex] : string.Empty;
+            rows.Add(left.Length == 0 ? right : left + "　" + right);
+        }
+        return string.Join(Environment.NewLine, rows);
     }
 
     private static string FormatDeadline(DateTime deadline)
