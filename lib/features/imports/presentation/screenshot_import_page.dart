@@ -135,7 +135,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     }
   }
 
-  Future<void> _pickAndRecognize() async {
+  Future<void> _pickAndRecognize({bool compareEngines = false}) async {
     if (_working) return;
     if (!_ocr.supported) {
       _message('当前平台的离线 OCR 引擎仍在适配中；暂时请使用手动导入。');
@@ -156,8 +156,76 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         final imageId = 'shot-' + (++_imageSerial).toString();
         try {
           final imageHash = await _history.hashImage(image.path);
+          final mlKitTimer = Stopwatch()..start();
           final recognized = await _ocr.recognize(image.path);
+          mlKitTimer.stop();
           final parsedForReport = <String>[];
+          final comparisonNotes = <String>[];
+          if (compareEngines) {
+            comparisonNotes.add('ML Kit 全图：${recognized.lines.length} 行，'
+                '含初始化耗时 ${mlKitTimer.elapsedMilliseconds} ms');
+            final paddleFull = await _paddleReview.recognizeFullImage(
+              imagePath: image.path,
+              imageWidth: recognized.width,
+              imageHeight: recognized.height,
+              diagnostics: comparisonNotes,
+            );
+            if (paddleFull != null) {
+              final paddleGuess = preselectImportPlatform(
+                paddleFull.lines.map((line) => line.text),
+              );
+              final paddleHj = !_products && isHuajiaOrderDetailScreenshot(
+                lines: paddleFull.lines,
+                imageWidth: paddleFull.width,
+                imageHeight: paddleFull.height,
+              );
+              final paddleMi = !_products && !paddleHj &&
+                  isMiHuashiOrderDetailScreenshot(
+                    lines: paddleFull.lines,
+                    imageWidth: paddleFull.width,
+                    imageHeight: paddleFull.height,
+                  );
+              final paddlePlatform = paddleHj
+                  ? CommissionPlatform.huajia
+                  : paddleMi
+                      ? CommissionPlatform.mihuashi
+                      : paddleGuess.platform;
+              final paddleRows = _products
+                  ? const ScreenshotProductLayoutParser().parse(
+                      lines: paddleFull.lines,
+                      imageHeight: paddleFull.height,
+                    ).map((r) =>
+                      '成品 图名=${r.title} | 售价=${r.price ?? "未识别"}').toList()
+                  : (paddleHj
+                      ? const ScreenshotHuajiaDetailParser().parse(
+                          lines: paddleFull.lines,
+                          imageHeight: paddleFull.height,
+                          imageWidth: paddleFull.width,
+                        )
+                      : _ordersParser.parse(
+                          lines: paddleFull.lines,
+                          imageHeight: paddleFull.height,
+                          imageWidth: paddleFull.width,
+                        )).map((r) => '排单 图名=${r.title} | 单主=${r.clientName}'
+                          ' | 稿价=${r.price ?? "未识别"}'
+                          ' | 截稿=${r.detectedDate?.toIso8601String() ?? "未识别"}')
+                      .toList();
+              comparisonNotes.add('PaddleOCR 独立解析结果：${paddleRows.length} 笔');
+              comparisonNotes.add(formatScreenshotOcrDiagnostic(
+                screenshotNumber: _imageSerial,
+                ocr: paddleFull,
+                route: _products
+                    ? '成品橱窗'
+                    : paddleHj
+                        ? '画加详情页'
+                        : paddleMi
+                            ? '米画师详情页'
+                            : '排单列表或未识别详情页',
+                platform: paddlePlatform?.label ?? '待选择',
+                parsedRows: paddleRows,
+              ));
+            }
+          }
           final guess = preselectImportPlatform(
             recognized.lines.map((line) => line.text),
           );
@@ -307,7 +375,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             parsedRows: parsedForReport,
           ) + (paddleNotes.isEmpty
               ? ''
-              : '第二 OCR 局部核对：\n${paddleNotes.join("\n")}\n'));
+              : '第二 OCR 局部核对：\n${paddleNotes.join("\n")}\n')
+              + (comparisonNotes.isEmpty
+                  ? ''
+                  : '\n--- 双 OCR 独立整图对照（不影响导入） ---\n'
+                      '${comparisonNotes.join("\n")}\n'));
 
         } catch (error) {
           _ocrDiagnostics.add('截图 $_imageSerial 识别失败：$error\n');
@@ -382,6 +454,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             : '离线识别失败：$firstError');
       } else if (unreadable > 0) {
         _message('有 ' + unreadable.toString() + ' 张截图识别失败，其余已保留。');
+      } else if (compareEngines) {
+        _message('双 OCR 对照已记录，点虫子图标复制两套识别结果');
       }
     } catch (error) {
       if (!mounted) return;
@@ -921,8 +995,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 : () => unawaited(_copyOcrDiagnostic()),
             icon: const Icon(Icons.bug_report_outlined),
           ),
+          IconButton(
+            tooltip: '双 OCR 同图对照：重新选图，不改变导入结果',
+            onPressed: _working || !Platform.isAndroid
+                ? null
+                : () => unawaited(_pickAndRecognize(compareEngines: true)),
+            icon: const Icon(Icons.compare_arrows),
+          ),
           TextButton.icon(
-            onPressed: _working ? null : _pickAndRecognize,
+            onPressed: _working ? null : () => unawaited(_pickAndRecognize()),
             icon: const Icon(Icons.add_photo_alternate_outlined),
             label: const Text('选择截图'),
           ),
