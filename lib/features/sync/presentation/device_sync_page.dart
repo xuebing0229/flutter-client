@@ -577,6 +577,13 @@ String _conflictSubject(
         }
       }
       return '成品 · ${view.fieldLabel}';
+    case SyncEntityKind.focusSession:
+      for (final session in coordinator.focusStore.sessions) {
+        if (session.id == view.recordId) {
+          return '专注「${session.displayTitle}」 · ${view.fieldLabel}';
+        }
+      }
+      return '专注记录 · ${view.fieldLabel}';
   }
 }
 

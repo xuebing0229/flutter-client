@@ -53,6 +53,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 桌宠',
     description: '电脑端附加功能新增桌宠：可以保存并一键切换多组自定义 A/B 图片预设，A 为平时状态、B 为按键操作状态；文字框可显示当前在画订单或自定义内容。桌宠美术资源和预设只保存在本机。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 127,
+    title: '专注计时',
+    description: '手机和电脑新增专注计时，可锁定一个排单或使用“自由专注”；专注历史会作为独立记录在设备间同步，关联排单仍存在时可确认后跳转查看。Windows 桌宠右上角会同步显示本次专注计时，并与头顶气泡分开占位。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

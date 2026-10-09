@@ -55,4 +55,9 @@ void main() {
     final picked = newsBetweenBuilds(125, 126);
     expect(picked.map((e) => e.title).toList(), ['Windows 桌宠']);
   });
+
+  test('127 向 126 用户补充专注计时见闻', () {
+    final picked = newsBetweenBuilds(126, 127);
+    expect(picked.map((e) => e.title).toList(), ['专注计时']);
+  });
 }

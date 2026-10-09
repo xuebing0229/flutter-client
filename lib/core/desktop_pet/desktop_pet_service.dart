@@ -78,6 +78,7 @@ class DesktopPetSettings extends ChangeNotifier {
   String? _currentOrderTitle;
   String? _currentOrderNode;
   DateTime? _currentOrderDeadline;
+  DateTime? _activeFocusStartedAt;
   final List<DesktopPetPreset> _presets = <DesktopPetPreset>[];
 
   bool get loaded => _loaded;
@@ -144,6 +145,9 @@ class DesktopPetSettings extends ChangeNotifier {
           : null;
       _currentOrderDeadline = raw['currentOrderDeadline'] is String
           ? DateTime.tryParse(raw['currentOrderDeadline'] as String)
+          : null;
+      _activeFocusStartedAt = raw['activeFocusStartedAt'] is String
+          ? DateTime.tryParse(raw['activeFocusStartedAt'] as String)
           : null;
 
       _presets
@@ -285,6 +289,7 @@ class DesktopPetSettings extends ChangeNotifier {
     required String? currentOrderTitle,
     required String? currentOrderNode,
     required DateTime? currentOrderDeadline,
+    required DateTime? activeFocusStartedAt,
   }) async {
     await _readFromDisk();
     _loaded = true;
@@ -292,6 +297,7 @@ class DesktopPetSettings extends ChangeNotifier {
     _currentOrderTitle = currentOrderTitle;
     _currentOrderNode = currentOrderNode;
     _currentOrderDeadline = currentOrderDeadline;
+    _activeFocusStartedAt = activeFocusStartedAt;
     await _persist();
   }
 
@@ -300,7 +306,7 @@ class DesktopPetSettings extends ChangeNotifier {
     await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 3,
+      'schema': 4,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
@@ -310,6 +316,7 @@ class DesktopPetSettings extends ChangeNotifier {
       'currentOrderTitle': _currentOrderTitle,
       'currentOrderNode': _currentOrderNode,
       'currentOrderDeadline': _currentOrderDeadline?.toIso8601String(),
+      'activeFocusStartedAt': _activeFocusStartedAt?.toUtc().toIso8601String(),
       'presets': <Map<String, dynamic>>[
         for (final preset in _presets) preset.toJson(),
       ],
@@ -333,6 +340,7 @@ class DesktopPetService {
     String? currentOrderTitle,
     String? currentOrderNode,
     DateTime? currentOrderDeadline,
+    DateTime? activeFocusStartedAt,
   }) async {
     if (!Platform.isWindows) return;
 
@@ -341,6 +349,7 @@ class DesktopPetService {
       currentOrderTitle: currentOrderTitle,
       currentOrderNode: currentOrderNode,
       currentOrderDeadline: currentOrderDeadline,
+      activeFocusStartedAt: activeFocusStartedAt,
     );
 
     if (!enabled) {

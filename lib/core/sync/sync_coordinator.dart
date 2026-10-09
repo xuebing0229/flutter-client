@@ -9,6 +9,8 @@ import 'package:synchronized/synchronized.dart';
 import '../account/account_models.dart';
 import '../account/account_store.dart';
 import '../portability/app_backup_data.dart';
+import '../../features/focus/domain/focus_session.dart';
+import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/data/node_presets.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/orders/state/order_store.dart';
@@ -32,6 +34,7 @@ class PortableWorkspaceSnapshot {
     required this.orders,
     required this.products,
     required this.nodePresets,
+    required this.focusSessions,
     required this.settings,
     required this.accountSyncState,
     required this.syncRecords,
@@ -41,6 +44,7 @@ class PortableWorkspaceSnapshot {
   final List<QueueOrder> orders;
   final List<FinishedProduct> products;
   final List<NodePreset> nodePresets;
+  final List<FocusSession> focusSessions;
   final Map<String, dynamic> settings;
   final AccountSyncState? accountSyncState;
   final List<Map<String, dynamic>> syncRecords;
@@ -61,6 +65,7 @@ class SyncConflictView {
     SyncEntityKind.order => '排单',
     SyncEntityKind.product => '成品',
     SyncEntityKind.nodePreset => '节点预设',
+    SyncEntityKind.focusSession => '专注记录',
     SyncEntityKind.settings => '界面设置',
   };
 
@@ -122,6 +127,10 @@ String syncFieldLabel(String field) {
     'desktopNavigationOpen' => '电脑导航栏状态',
     'name' => '预设名称',
     'nodes' => '节点内容',
+    'orderId' => '排单',
+    'orderTitleSnapshot' => '排单标题',
+    'startedAt' => '开始时间',
+    'endedAt' => '结束时间',
     SyncRecord.deletedField => '删除状态',
     _ => field,
   };
@@ -138,6 +147,7 @@ class SyncCoordinator extends ChangeNotifier {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    FocusStore? focusStore,
     required this.captureSettings,
     required this.applySettings,
     SyncMergeEngine? mergeEngine,
@@ -145,7 +155,8 @@ class SyncCoordinator extends ChangeNotifier {
     AccountSyncRecordStore? accountSyncStore,
     SyncGcAckStore? gcAckStore,
     EmbeddedSyncthingBridge bridge = const EmbeddedSyncthingBridge(),
-  }) : _mergeEngine = mergeEngine ?? SyncMergeEngine(),
+  }) : focusStore = focusStore ?? FocusStore(),
+       _mergeEngine = mergeEngine ?? SyncMergeEngine(),
        _recordStore = recordStore ?? SyncRecordStore(),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
@@ -158,6 +169,7 @@ class SyncCoordinator extends ChangeNotifier {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final FocusStore focusStore;
   final SyncSettingsCapture captureSettings;
   final SyncSettingsApply applySettings;
   final SyncMergeEngine _mergeEngine;
@@ -329,12 +341,14 @@ class SyncCoordinator extends ChangeNotifier {
           final orderFields = _captureOrders();
           final productFields = _captureProducts();
           final presetFields = _capturePresets();
+          final focusFields = _captureFocusSessions();
           final settings = captureSettings();
           final orders = <QueueOrder>[...orderStore.orders];
           final products = <FinishedProduct>[...productStore.products];
           final presets = <NodePreset>[
             for (final preset in nodePresetStore.presets) preset.snapshot(),
           ];
+          final focusSessions = <FocusSession>[...focusStore.sessions];
 
           final records = await _recordStore.exportPortableRecords(
             accountId: accountId,
@@ -344,6 +358,7 @@ class SyncCoordinator extends ChangeNotifier {
               syncJsonEquals(orderFields, _captureOrders()) &&
               syncJsonEquals(productFields, _captureProducts()) &&
               syncJsonEquals(presetFields, _capturePresets()) &&
+              syncJsonEquals(focusFields, _captureFocusSessions()) &&
               syncJsonEquals(settings, captureSettings());
           if (!storesUnchanged) continue;
 
@@ -353,6 +368,7 @@ class SyncCoordinator extends ChangeNotifier {
             orders: orderFields,
             products: productFields,
             presets: presetFields,
+            focusSessions: focusFields,
             settings: settings,
             mergeEngine: _mergeEngine,
           )) {
@@ -374,6 +390,7 @@ class SyncCoordinator extends ChangeNotifier {
             orders: orders,
             products: products,
             nodePresets: presets,
+            focusSessions: focusSessions,
             settings: settings,
             accountSyncState: accountSnapshot,
             syncRecords: records,
@@ -462,6 +479,9 @@ class SyncCoordinator extends ChangeNotifier {
         SyncEntityKind.nodePreset: <String>{
           for (final preset in backup.nodePresets) preset.id,
         },
+        SyncEntityKind.focusSession: <String>{
+          for (final session in backup.focusSessions) session.id,
+        },
       },
     );
 
@@ -508,6 +528,7 @@ class SyncCoordinator extends ChangeNotifier {
     orderStore.addListener(_onLocalChanged);
     productStore.addListener(_onLocalChanged);
     nodePresetStore.addListener(_onLocalChanged);
+    focusStore.addListener(_onLocalChanged);
     _initialized = true;
     notifyListeners();
 
@@ -1620,6 +1641,8 @@ class SyncCoordinator extends ChangeNotifier {
         _applyProductRecords(records);
       case SyncEntityKind.nodePreset:
         _applyPresetRecords(records);
+      case SyncEntityKind.focusSession:
+        _applyFocusRecords(records);
       case SyncEntityKind.settings:
         await _applySettingsRecords(records);
     }
@@ -1719,6 +1742,43 @@ class SyncCoordinator extends ChangeNotifier {
 
     if (!_sameProductList(productStore.products, result)) {
       productStore.replaceAll(result);
+    }
+  }
+
+  void _applyFocusRecords(Map<String, SyncRecord> records) {
+    final result = <FocusSession>[];
+
+    for (final existing in focusStore.sessions) {
+      final record = records[existing.id];
+      if (record == null) {
+        result.add(existing);
+        continue;
+      }
+      final fields = _mergeEngine.materializeKeepingLocalConflicts(
+        record,
+        SyncEntityCodec.focusSessionToFields(existing),
+      );
+      if (fields == null) continue;
+      try {
+        result.add(SyncEntityCodec.focusSessionFromFields(fields));
+      } catch (_) {
+        result.add(existing);
+      }
+    }
+
+    for (final record in records.values) {
+      if (focusStore.contains(record.id)) continue;
+      final fields = _mergeEngine.materialize(record);
+      if (fields == null) continue;
+      try {
+        result.add(SyncEntityCodec.focusSessionFromFields(fields));
+      } catch (_) {
+        // Invalid remote focus records stay on disk for later repair.
+      }
+    }
+
+    if (!_sameFocusList(focusStore.sessions, result)) {
+      focusStore.replaceAll(result);
     }
   }
 
@@ -1838,11 +1898,19 @@ class SyncCoordinator extends ChangeNotifier {
     };
   }
 
+  Map<String, Map<String, dynamic>> _captureFocusSessions() {
+    return <String, Map<String, dynamic>>{
+      for (final session in focusStore.sessions)
+        session.id: SyncEntityCodec.focusSessionToFields(session),
+    };
+  }
+
   Map<SyncEntityKind, Map<String, Map<String, dynamic>>> _captureEntities() {
     return <SyncEntityKind, Map<String, Map<String, dynamic>>>{
       SyncEntityKind.order: _captureOrders(),
       SyncEntityKind.product: _captureProducts(),
       SyncEntityKind.nodePreset: _capturePresets(),
+      SyncEntityKind.focusSession: _captureFocusSessions(),
       SyncEntityKind.settings: <String, Map<String, dynamic>>{
         settingsRecordId: captureSettings(),
       },
@@ -1868,6 +1936,21 @@ class SyncCoordinator extends ChangeNotifier {
     ];
     final b = <Map<String, dynamic>>[
       for (final product in right) SyncEntityCodec.productToFields(product),
+    ];
+    return syncJsonEquals(a, b);
+  }
+
+  bool _sameFocusList(
+    Iterable<FocusSession> left,
+    Iterable<FocusSession> right,
+  ) {
+    final a = <Map<String, dynamic>>[
+      for (final session in left)
+        SyncEntityCodec.focusSessionToFields(session),
+    ];
+    final b = <Map<String, dynamic>>[
+      for (final session in right)
+        SyncEntityCodec.focusSessionToFields(session),
     ];
     return syncJsonEquals(a, b);
   }
@@ -1928,6 +2011,7 @@ class SyncCoordinator extends ChangeNotifier {
       orderStore.removeListener(_onLocalChanged);
       productStore.removeListener(_onLocalChanged);
       nodePresetStore.removeListener(_onLocalChanged);
+      focusStore.removeListener(_onLocalChanged);
     }
     super.dispose();
   }

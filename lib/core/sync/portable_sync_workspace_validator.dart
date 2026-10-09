@@ -35,6 +35,10 @@ class PortableSyncWorkspaceValidator {
       for (final preset in backup.nodePresets)
         preset.id: SyncEntityCodec.nodePresetToFields(preset),
     };
+    final focusSessions = <String, Map<String, dynamic>>{
+      for (final session in backup.focusSessions)
+        session.id: SyncEntityCodec.focusSessionToFields(session),
+    };
     final containsSettingsRecord = records.any(
       (record) => record['kind'] == SyncEntityKind.settings.name,
     );
@@ -55,6 +59,7 @@ class PortableSyncWorkspaceValidator {
         SyncEntityKind.order: orders.keys.toSet(),
         SyncEntityKind.product: products.keys.toSet(),
         SyncEntityKind.nodePreset: presets.keys.toSet(),
+        SyncEntityKind.focusSession: focusSessions.keys.toSet(),
       },
     );
 
@@ -64,6 +69,7 @@ class PortableSyncWorkspaceValidator {
       orders: orders,
       products: products,
       presets: presets,
+      focusSessions: focusSessions,
       settings: settings,
       mergeEngine: mergeEngine,
     )) {
@@ -80,6 +86,8 @@ class PortableSyncWorkspaceValidator {
     required Map<String, Map<String, dynamic>> orders,
     required Map<String, Map<String, dynamic>> products,
     required Map<String, Map<String, dynamic>> presets,
+    Map<String, Map<String, dynamic>> focusSessions =
+        const <String, Map<String, dynamic>>{},
     Map<String, dynamic>? settings,
     SyncMergeEngine? mergeEngine,
   }) {
@@ -88,6 +96,7 @@ class PortableSyncWorkspaceValidator {
       SyncEntityKind.order: orders,
       SyncEntityKind.product: products,
       SyncEntityKind.nodePreset: presets,
+      SyncEntityKind.focusSession: focusSessions,
     };
     if (settings != null) {
       expected[SyncEntityKind.settings] = <String, Map<String, dynamic>>{

@@ -56,9 +56,12 @@ internal sealed class DesktopPetWindow : Window
     private readonly Image _petImage;
     private readonly Border _bubble;
     private readonly TextBlock _bubbleText;
+    private readonly Border _focusClockContainer;
+    private readonly TextBlock _focusClock;
     private readonly DispatcherTimer _reloadDebounce;
     private readonly DispatcherTimer _parentTimer;
     private readonly DispatcherTimer _deadlineTimer;
+    private readonly DispatcherTimer _focusTimer;
     private readonly GlobalKeyboardActivityHook _keyboardHook;
     private readonly GraphCore _graphCore;
 
@@ -95,6 +98,17 @@ internal sealed class DesktopPetWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
+        var topBar = new Grid
+        {
+            Background = Brushes.Transparent,
+        };
+        topBar.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
+        );
+        topBar.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto }
+        );
+
         _bubbleText = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
@@ -109,7 +123,7 @@ internal sealed class DesktopPetWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(16),
             Padding = new Thickness(14, 11, 14, 11),
-            Margin = new Thickness(12, 8, 12, 6),
+            Margin = new Thickness(12, 8, 6, 6),
             Child = _bubbleText,
             Effect = new DropShadowEffect
             {
@@ -118,8 +132,40 @@ internal sealed class DesktopPetWindow : Window
                 Opacity = 0.18,
             },
         };
-        Grid.SetRow(_bubble, 0);
-        root.Children.Add(_bubble);
+        Grid.SetColumn(_bubble, 0);
+        topBar.Children.Add(_bubble);
+
+        _focusClock = new TextBlock
+        {
+            Text = "00:00:00",
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(38, 38, 38)),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _focusClockContainer = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(238, 255, 255, 255)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(40, 0, 0, 0)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(2, 8, 10, 6),
+            Child = _focusClock,
+            Visibility = Visibility.Collapsed,
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 14,
+                ShadowDepth = 3,
+                Opacity = 0.16,
+            },
+        };
+        Grid.SetColumn(_focusClockContainer, 1);
+        topBar.Children.Add(_focusClockContainer);
+
+        Grid.SetRow(topBar, 0);
+        root.Children.Add(topBar);
 
         _petImage = new Image
         {
@@ -171,6 +217,12 @@ internal sealed class DesktopPetWindow : Window
         };
         _deadlineTimer.Tick += (_, _) => RefreshBubble();
 
+        _focusTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1),
+        };
+        _focusTimer.Tick += (_, _) => RefreshFocusClock();
+
         _keyboardHook = new GlobalKeyboardActivityHook();
         _keyboardHook.ActivityChanged += active =>
         {
@@ -189,6 +241,7 @@ internal sealed class DesktopPetWindow : Window
             _keyboardHook.Start();
             _parentTimer.Start();
             _deadlineTimer.Start();
+            _focusTimer.Start();
             await ReloadConfigAsync();
         };
 
@@ -262,6 +315,7 @@ internal sealed class DesktopPetWindow : Window
 
         RefreshImage(force: true);
         RefreshBubble();
+        RefreshFocusClock();
     }
 
     private void RefreshImage(bool force = false)
@@ -368,6 +422,28 @@ internal sealed class DesktopPetWindow : Window
             ? title
             : title + Environment.NewLine + string.Join(" · ", details);
         _bubble.Visibility = Visibility.Visible;
+    }
+
+    private void RefreshFocusClock()
+    {
+        var raw = (_config.ActiveFocusStartedAt ?? string.Empty).Trim();
+        if (raw.Length == 0 ||
+            !DateTimeOffset.TryParse(raw, out var startedAt))
+        {
+            _focusClockContainer.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var elapsed = DateTimeOffset.UtcNow - startedAt.ToUniversalTime();
+        if (elapsed < TimeSpan.Zero)
+        {
+            elapsed = TimeSpan.Zero;
+        }
+
+        var totalHours = Math.Max(0, (long)elapsed.TotalHours);
+        _focusClock.Text =
+            $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+        _focusClockContainer.Visibility = Visibility.Visible;
     }
 
     private static string FormatDeadline(DateTime deadline)
@@ -487,6 +563,7 @@ internal sealed class DesktopPetWindow : Window
         _reloadDebounce.Stop();
         _parentTimer.Stop();
         _deadlineTimer.Stop();
+        _focusTimer.Stop();
 
         if (_watcher is not null)
         {
@@ -513,6 +590,7 @@ internal sealed class DesktopPetWindow : Window
         public string? CurrentOrderTitle { get; set; }
         public string? CurrentOrderNode { get; set; }
         public string? CurrentOrderDeadline { get; set; }
+        public string? ActiveFocusStartedAt { get; set; }
     }
 }
 
