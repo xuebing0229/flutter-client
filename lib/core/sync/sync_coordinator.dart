@@ -929,13 +929,17 @@ class SyncCoordinator extends ChangeNotifier {
     }
 
     final ownTransportId = _transportStatus.deviceId?.trim();
-    final expectedRemoteIds = <String>{
-      for (final device in state.activeDevices)
-        if (device.id != deviceId &&
-            device.syncTransportId?.trim().isNotEmpty == true &&
-            device.syncTransportId!.trim() != ownTransportId)
-          device.syncTransportId!.trim(),
-    };
+    final expectedRemoteIds = <String>{};
+    for (final device in state.activeDevices) {
+      if (device.id == deviceId) continue;
+      final remoteTransportId = device.syncTransportId?.trim();
+      if (remoteTransportId == null ||
+          remoteTransportId.isEmpty ||
+          remoteTransportId == ownTransportId) {
+        continue;
+      }
+      expectedRemoteIds.add(remoteTransportId);
+    }
     if (expectedRemoteIds.isEmpty) return;
 
     // If the core died, or this paired account never restored its permanent
@@ -948,11 +952,11 @@ class SyncCoordinator extends ChangeNotifier {
       return;
     }
 
-    final configuredRemoteIds = <String>{
-      for (final item in _transportStatus.configuredDevices)
-        if ((item['deviceId'] as String?)?.trim().isNotEmpty == true)
-          (item['deviceId'] as String).trim(),
-    };
+    final configuredRemoteIds = _transportStatus.configuredDevices
+        .map((item) => item['deviceId']?.toString().trim())
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet();
     if (expectedRemoteIds.every(configuredRemoteIds.contains)) return;
 
     // Syncthing can still be running while the account folder has lost one of
