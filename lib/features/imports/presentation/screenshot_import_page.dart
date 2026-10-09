@@ -181,6 +181,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               : mihuashiDetail
                   ? CommissionPlatform.mihuashi
                   : guess.platform;
+          final paddleNotes = <String>[];
           if (_products) {
             final found = _productsParser.parse(
               lines: recognized.lines,
@@ -220,7 +221,6 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   );
             // Second engine only runs for ambiguous MiHuashi fields.
             // It must not affect the original card, price or deadline parsing.
-            final paddleNotes = <String>[];
             final paddleReviews = platform == CommissionPlatform.mihuashi
                 ? await _paddleReview.review(
                     imagePath: image.path,
