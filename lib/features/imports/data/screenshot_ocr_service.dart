@@ -56,6 +56,11 @@ class ScreenshotOcrService {
       width: width,
       height: height,
       lines: List.unmodifiable(lines),
+      nativeTrace: List<String>.unmodifiable(
+        (result['nativeTrace'] is List)
+            ? (result['nativeTrace'] as List).whereType<String>()
+            : const <String>[],
+      ),
     );
   }
 }
