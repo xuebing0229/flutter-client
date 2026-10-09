@@ -518,7 +518,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               ),
               const SizedBox(height: 14),
               Text(
-                '“当前在画订单”由你在这里手动选择具体排单；桌宠图片、预设、显示大小和文字泡设置都只保存在本机电脑。',
+                '“当前在画订单”由你在这里手动选择具体排单；桌宠图片、预设、显示大小和文字泡设置只保存在本机电脑，专注计时与历史记录会随账号在手机和电脑间同步。',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
