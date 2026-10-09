@@ -598,10 +598,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return null;
   }
 
+  Color _desktopPetOnColor(Color color) {
+    return color.computeLuminance() > 0.48 ? Colors.black : Colors.white;
+  }
+
+  ColorScheme _desktopPetColorScheme() {
+    final brightness = switch (widget.themeStore.mode) {
+      ThemeMode.light => Brightness.light,
+      ThemeMode.dark => Brightness.dark,
+      ThemeMode.system =>
+        WidgetsBinding.instance.platformDispatcher.platformBrightness,
+    };
+    final palette = widget.themeStore.palette;
+    final colors = palette.previewColors;
+    final primary = colors.first;
+    final secondary = colors.length > 1 ? colors[1] : primary;
+    final tertiary = colors.length > 2 ? colors[2] : secondary;
+    final primaryContainer = colors.length > 3 ? colors[3] : primary;
+    final secondaryContainer = colors.length > 4 ? colors[4] : secondary;
+    final tertiaryContainer = colors.length > 2 ? colors.last : primary;
+    final base = ColorScheme.fromSeed(
+      seedColor: brightness == Brightness.dark
+          ? palette.effectiveDarkSeed
+          : palette.lightSeed,
+      brightness: brightness,
+    );
+
+    return base.copyWith(
+      primary: primary,
+      onPrimary: _desktopPetOnColor(primary),
+      primaryContainer: primaryContainer,
+      onPrimaryContainer: _desktopPetOnColor(primaryContainer),
+      secondary: secondary,
+      onSecondary: _desktopPetOnColor(secondary),
+      secondaryContainer: secondaryContainer,
+      onSecondaryContainer: _desktopPetOnColor(secondaryContainer),
+      tertiary: tertiary,
+      onTertiary: _desktopPetOnColor(tertiary),
+      tertiaryContainer: tertiaryContainer,
+      onTertiaryContainer: _desktopPetOnColor(tertiaryContainer),
+      surface: base.surface,
+      onSurface: base.onSurface,
+      surfaceContainerHighest: base.surfaceContainerHighest,
+      onSurfaceVariant: base.onSurfaceVariant,
+      outline: base.outline,
+      outlineVariant: base.outlineVariant,
+      inversePrimary: primary,
+      surfaceTint: Colors.transparent,
+    );
+  }
+
   Future<void> _syncDesktopPet() async {
     final order = await _currentDesktopPetOrder();
     if (!mounted) return;
-    final colors = Theme.of(context).colorScheme;
+    final colors = _desktopPetColorScheme();
     await _desktopPetService.sync(
       enabled: widget.featureStore.enabled(AppFeature.desktopPet),
       currentOrderTitle: order?.title,
@@ -623,15 +673,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
     if (_ready) {
-      _scheduleDesktopPetThemeSync();
-    }
-  }
-
-  void _scheduleDesktopPetThemeSync() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_ready) return;
       unawaited(_syncDesktopPet());
-    });
+    }
   }
 
   @override
@@ -639,7 +682,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.didChangePlatformBrightness();
     if (!_ready || !mounted) return;
     if (widget.themeStore.mode == ThemeMode.system) {
-      _scheduleDesktopPetThemeSync();
+      unawaited(_syncDesktopPet());
     }
   }
 
