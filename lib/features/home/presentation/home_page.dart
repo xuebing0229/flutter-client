@@ -478,7 +478,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (leftAbstractMode) {
         _abstractFeatureToggleHidden = false;
       }
-      _refreshDesktopCollectionRootIfNeeded();
+      final petFocusAvailable =
+          (Platform.isWindows &&
+              widget.featureStore.enabled(AppFeature.desktopPet)) ||
+          widget.featureStore.enabled(AppFeature.focus);
+      if (!petFocusAvailable &&
+          _desktopToolSelection == AppToolMenu.desktopPetTool) {
+        _desktopToolSelection = null;
+        _replaceDesktopContentNavigator();
+      } else {
+        _refreshDesktopCollectionRootIfNeeded();
+      }
     });
 
     _scheduleSave();
@@ -601,7 +611,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       bubbleForegroundArgb: colors.onSurface.toARGB32(),
       bubbleBorderArgb: colors.outlineVariant.toARGB32(),
       bubbleAccentArgb: colors.primary.toARGB32(),
-      focusStartedAt: _focusStore.activeSession?.startedAt,
+      focusStartedAt: widget.featureStore.enabled(AppFeature.focus)
+          ? _focusStore.activeSession?.startedAt
+          : null,
     );
   }
 
@@ -1177,6 +1189,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         showDesktopPet:
             Platform.isWindows &&
             widget.featureStore.enabled(AppFeature.desktopPet),
+        showFocus: widget.featureStore.enabled(AppFeature.focus),
       ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
