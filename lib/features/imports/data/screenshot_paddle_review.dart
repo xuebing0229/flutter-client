@@ -299,7 +299,7 @@ class ScreenshotPaddleReviewService {
       final path = '${tempDir.path}/region.png';
       await File(path).writeAsBytes(img.encodePng(enlarged));
       await _nativeStageStart('局部文字重识别');
-      late final dynamic run;
+      late final OcrRunResult run;
       try {
         run = await _engine.recognize(path)
             .timeout(const Duration(seconds: 25));
