@@ -469,9 +469,18 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     onChanged: (value) =>
                         unawaited(_settings.setBubbleScale(value)),
                   ),
+                  const SizedBox(height: 10),
+                  _ScaleSetting(
+                    label: '计时板大小',
+                    value: _settings.focusClockScale,
+                    min: 0.65,
+                    max: 1.8,
+                    onChanged: (value) =>
+                        unawaited(_settings.setFocusClockScale(value)),
+                  ),
                   const SizedBox(height: 6),
                   Text(
-                    '头顶模式使用横向文字泡；旁边模式使用更窄、更高的竖向文字泡。文字泡会和桌宠一起移动，并自动跟随当前主题。',
+                    '头顶模式使用横向文字泡；旁边模式使用瘦长竖向文字泡。文字泡贴人物边界，计时板固定在人物右侧上半部；两者大小可分别调整并自动跟随当前主题。',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
