@@ -1,29 +1,46 @@
-# Official PaddleOCR PP-OCRv6 Android single-engine implementation
+# Android OCR: official PaddleOCR baseline
 
-Only one Android OCR engine: official PP-OCRv6 Small via the standalone
-Android SDK imported from PaddlePaddle/PaddleOCR at commit
-`dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf`:
+This branch deliberately removes our OCR-engine tuning and uses the official
+PaddlePaddle Android demo path as the baseline.
+
+Upstream reference revision:
 https://github.com/PaddlePaddle/PaddleOCR/tree/dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf/deploy/ppocr-android
 
-Android SDK Kotlin sources under `android/ppocr-sdk/src/main/` are **verbatim**
-upstream sources. The small `ppocr-sdk/build.gradle.kts` changes only the
-Gradle host integration (AGP9) and replaces an older, Android-linker-incompatible
-OpenCV AAR with `org.opencv:opencv:4.13.0` (same Java/OpenCV APIs).
-The Flutter native bridge calls the official demo's `OpenCVUtils.init`,
-`PaddleOCR.create` and `recognize(bytes)` directly.
+The vendored `ppocr-sdk/src/main` source remains upstream PaddleOCR source.
+The engine is initialized exactly like the official `OCRApplication.loadModels()`:
 
-Models: official **PP-OCRv6 Small** ONNX models with pinned SHA256 hashes, fetched *at build time* from
-official PaddlePaddle model archives and packaged inside the APK. No online
-OCR or runtime download. No ncnn, ML Kit, old third-party paddle_ocr_native,
-dual-engine comparisons, local crop retries or crash-marker fallbacks.
+```kotlin
+OpenCVUtils.init(context)
+PaddleOCR.create(
+    context = context,
+    config = PaddleOCRConfig(
+        recScoreThresh = 0.0f,
+        recBatchSize = 1,
+    ),
+)
+```
 
-The app's order parsing, editing, sync and Windows OCR are not changed.
-For each selected-image batch, the Android SDK is loaded on the first image,
-reused for every screenshot and released in an import-level finally block.
-The next batch starts a new native ONNX session. During draft editing there is
-no live session. Peak recognition memory is still dictated by the model.
-The native CI test loads both actual ONNX models and recognizes rendered
-Chinese and English on a full Android screenshot-size bitmap.
+Recognition follows the official ViewModel path: read the encoded image bytes
+and call `ocr.recognize(bytes)`.
 
-Tests on the emulator prove SDK execution on the emulator only. Real
-arm64 phone crash and MiHuashi small-label accuracy require a device check.
+Official runtime dependency versions are restored:
+- ONNX Runtime Android 1.21.1
+- QuickBird OpenCV Android 4.5.3
+- kotlinx-coroutines-android 1.9.0
+- AndroidX core-ktx 1.15.0
+
+The only app-specific layers left around the engine are:
+1. the Flutter MethodChannel transport;
+2. mapping OCR result boxes back to Dart;
+3. explicit release after an import batch, because this app does not need OCR
+   to remain resident outside screenshot import;
+4. local crash diagnostics, which do not alter model inference.
+
+We still bundle PP-OCRv6 Small in the SDK's default asset paths
+`models/det/inference.onnx`, `models/rec/inference.onnx`, and
+`models/rec/inference.yml`. No custom detector limits, thread count, model
+paths, preprocessing, postprocessing, or fallback OCR are configured.
+
+This baseline is intentionally boring: if it crashes on the real ARM64 phone,
+the next step is to compare the native tombstone against the standalone
+official demo, not to invent more OCR changes.

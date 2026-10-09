@@ -9,6 +9,7 @@ on:
       - feat/dual-ocr-paddle-20261009
       - 'feat/ppocrv6-small-session-scope-20261009'
       - 'fix/ocr-native-crash-diagnostics-20261009'
+      - 'fix/ppocrv6-official-baseline-20261009'
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
