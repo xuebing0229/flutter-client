@@ -31,7 +31,7 @@ class SettingsPage extends StatefulWidget {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
-    required this.focusStore,
+    this.focusStore,
     required this.themeStore,
     required this.featureStore,
     required this.accountStore,
@@ -44,7 +44,7 @@ class SettingsPage extends StatefulWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
-  final FocusStore focusStore;
+  final FocusStore? focusStore;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
@@ -523,7 +523,7 @@ class _SettingsPageState extends State<SettingsPage>
             orderStore: widget.orderStore,
             productStore: widget.productStore,
             nodePresetStore: widget.nodePresetStore,
-            focusStore: widget.focusStore,
+            focusStore: widget.focusStore ?? widget.syncCoordinator.focusStore,
           );
           // Apply settings inside the coordinator's restore transaction. This
           // makes the post-restore baseline describe the imported workspace,
