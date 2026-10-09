@@ -698,7 +698,9 @@ class _FocusPanelState extends State<FocusPanel> {
                   session: session,
                   targetLabel: _targetLabel(session),
                   timeText:
-                      '${_formatDateTime(session.startedAt)} · ${_formatDuration(session.durationAt())}',
+                      '开始 ${_formatDateTime(session.startedAt)}\n'
+                      '结束 ${_formatDateTime(session.endedAt!)} · '
+                      '${_formatDuration(session.durationAt())}',
                   onTap: session.orderId == null
                       ? null
                       : () => _confirmOpenOrder(
@@ -799,7 +801,7 @@ class _SessionTile extends StatelessWidget {
               : Icons.draw_outlined,
         ),
         title: Text(targetLabel),
-        subtitle: Text(timeText),
+        subtitle: Text(timeText, maxLines: 2),
         trailing: onTap == null
             ? null
             : const Icon(Icons.open_in_new_rounded, size: 18),
