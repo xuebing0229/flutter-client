@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 import 'package:paddle_ocr_native/paddle_ocr_native.dart';
 
 import '../domain/screenshot_layout_parser.dart';
+import 'screenshot_ocr_result.dart';
 
 /// The second engine never changes dates, money, order count or card anchors.
 /// It is used only for uncertain buyer/title text in MiHuashi screenshots.
@@ -66,6 +67,61 @@ class ScreenshotPaddleReviewService {
   final PaddleOcr _engine = PaddleOcr();
   bool _initialized = false;
 
+  Future<void> _ensureInitialized() async {
+    if (_initialized) return;
+    await _engine.init(engine: const EngineConfig(numThreads: 2));
+    _initialized = true;
+  }
+
+  /// One-shot diagnostic: run the same whole screenshot through PP-OCRv6.
+  /// Does not change the ML Kit result or any import draft. All pixels stay
+  /// on device; diagnostics contain text only and are copied by user opt-in.
+  Future<ScreenshotOcrResult?> recognizeFullImage({
+    required String imagePath,
+    required double imageWidth,
+    required double imageHeight,
+    required List<String> diagnostics,
+  }) async {
+    if (!Platform.isAndroid) {
+      diagnostics.add('PaddleOCR 全图对照目前仅支持 Android');
+      return null;
+    }
+    final clock = Stopwatch()..start();
+    try {
+      await _ensureInitialized();
+      final run = await _engine.recognize(imagePath)
+          .timeout(const Duration(seconds: 60));
+      final lines = <ScreenshotTextLine>[];
+      for (final result in run.results) {
+        final box = result.boundingBox;
+        lines.add(ScreenshotTextLine(
+          text: result.text,
+          left: box.left, top: box.top,
+          right: box.right, bottom: box.bottom,
+        ));
+      }
+      diagnostics.add('PaddleOCR 全图：共 ${lines.length} 行'
+          '，模型推理 ${run.totalTimeMs} ms'
+          '，含初始化总耗时 ${clock.elapsedMilliseconds} ms');
+      for (var i = 0; i < run.results.length; i++) {
+        final entry = run.results[i];
+        diagnostics.add('PaddleOCR 置信度 ${i + 1}: '
+            '${entry.confidence.toStringAsFixed(3)} | ${entry.text}');
+      }
+      return ScreenshotOcrResult(
+        width: imageWidth,
+        height: imageHeight,
+        lines: List.unmodifiable(lines),
+      );
+    } catch (error) {
+      diagnostics.add('PaddleOCR 全图对照失败：$error'
+          '（${clock.elapsedMilliseconds} ms，原 ML Kit 结果保留）');
+      return null;
+    } finally {
+      clock.stop();
+    }
+  }
+
   Future<List<PaddleFieldReview>> review({
     required String imagePath,
     required double imageWidth,
@@ -84,8 +140,7 @@ class ScreenshotPaddleReviewService {
     try {
       source = img.decodeImage(await File(imagePath).readAsBytes());
       if (source == null) throw const FormatException('图片解码失败');
-      await _engine.init(engine: const EngineConfig(numThreads: 2));
-      _initialized = true;
+      await _ensureInitialized();
     } catch (error) {
       diagnostics.add('PaddleOCR 初始化不可用：$error；保留原 OCR');
       return List.filled(rows.length, const PaddleFieldReview());
