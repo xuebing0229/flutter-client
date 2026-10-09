@@ -341,7 +341,7 @@ class ScreenshotPaddleReviewService {
       await _nativeStageStart('局部文字重识别');
       late final OcrRunResult run;
       try {
-        run = await _engine.recognize(path)
+        run = await _recognizeIsolated(path)
             .timeout(const Duration(seconds: 25));
       } finally {
         await _nativeStageEnd();
