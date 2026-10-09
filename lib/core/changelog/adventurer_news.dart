@@ -38,6 +38,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备同步体验升级',
     description: '手机和电脑在前台打开时会自动连接并同步，不再需要两边手动点同步；实际传输时会显示实时百分比和进度条，完成后自动消失。Android 同步不再长期占用通知栏，并增强了同步通道掉线后的自动恢复。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 125,
+    title: 'Windows 桌宠',
+    description: '电脑端附加功能新增桌宠：可以保存并一键切换多组自定义 A/B 图片预设，A 为平时状态、B 为按键操作状态；文字框可显示当前在画订单或自定义内容。桌宠美术资源和预设只保存在本机。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
