@@ -170,7 +170,7 @@ class FeatureTogglePage extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _FeatureSection(
-                title: '桌宠',
+                title: '桌宠与专注',
                 children: [
                   _FeatureSwitch(
                     store: store,
@@ -178,8 +178,15 @@ class FeatureTogglePage extends StatelessWidget {
                     icon: Icons.pets_outlined,
                     title: '桌宠（电脑端）',
                     subtitle: Platform.isWindows
-                        ? '开启后左侧「专注」会变为「桌宠」，同一板块同时显示 A/B 桌宠、文字泡和专注；关闭后只保留专注。'
-                        : '桌宠形象仅在电脑端显示；手机端始终保留专注。这个开关会随账号同步到电脑。',
+                        ? '控制 A/B 桌宠和文字泡。开启专注时两者共用同一个左侧板块；单独关闭桌宠不会影响专注。'
+                        : '桌宠形象仅在电脑端显示；这个开关会随账号同步到电脑。',
+                  ),
+                  _FeatureSwitch(
+                    store: store,
+                    feature: AppFeature.focus,
+                    icon: Icons.timer_outlined,
+                    title: '专注计时',
+                    subtitle: '控制专注计时和专注记录入口。关闭只隐藏功能，不删除已有记录。',
                   ),
                 ],
               ),
