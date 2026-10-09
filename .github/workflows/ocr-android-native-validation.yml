@@ -5,6 +5,7 @@ on:
     branches:
       - fix/adventurer-news-inline-20261008
       - fix/ocr-directed-tag-20261009
+      - fix/ocr-real-recovery-20261009
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
