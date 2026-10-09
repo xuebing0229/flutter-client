@@ -82,6 +82,13 @@ String _repairKnownBadgeOcr(String raw) {
       '【常驻】',
     );
   }
+  // Real phone OCR renders the closing bracket of 【这是】 as "1".
+  // Only repair this specific known badge when there is no actual 】 before
+  // the artwork title; do NOT globally replace numbers in people's titles.
+  if (RegExp(r'^【这是[1lI丨|](?!】)').hasMatch(text) &&
+      !text.substring(0, text.length < 8 ? text.length : 8).contains('】')) {
+    text = text.replaceFirst(RegExp(r'^【这是[1lI丨|]'), '【这是】');
+  }
   return text;
 }
 
