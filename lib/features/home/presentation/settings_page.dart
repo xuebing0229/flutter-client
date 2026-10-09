@@ -413,6 +413,7 @@ class _SettingsPageState extends State<SettingsPage>
         orders: snapshot.orders,
         products: snapshot.products,
         nodePresets: snapshot.nodePresets,
+        focusSessions: snapshot.focusSessions,
         accountSyncState: snapshot.accountSyncState,
         syncRecords: snapshot.syncRecords,
         settings: snapshot.settings,
@@ -490,6 +491,7 @@ class _SettingsPageState extends State<SettingsPage>
               '排单：${backup.orders.length} 条\n'
               '成品：${backup.products.length} 条\n'
               '节点预设：${backup.nodePresets.length} 套\n'
+              '专注记录：${backup.focusSessions.length} 条\n'
               '参考图：$referenceImageCount 张\n\n'
               '导入会用备份内容覆盖当前本地数据。'
               '$legacyAssetWarning',
@@ -518,6 +520,7 @@ class _SettingsPageState extends State<SettingsPage>
             orderStore: widget.orderStore,
             productStore: widget.productStore,
             nodePresetStore: widget.nodePresetStore,
+            focusStore: widget.syncCoordinator.focusStore,
           );
           // Apply settings inside the coordinator's restore transaction. This
           // makes the post-restore baseline describe the imported workspace,
