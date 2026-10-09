@@ -1,7 +1,7 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+116
+version: 0.0.1+117
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -22,8 +22,6 @@ dependencies:
   mobile_scanner: ^7.4.2
   qr_flutter: ^4.1.0
   image: ^4.5.4
-  # Secondary offline Chinese OCR for ambiguous MiHuashi names/titles.
-  paddle_ocr_native: 0.1.1
   zxing2: ^0.2.4
   synchronized: ^3.3.0+3
 

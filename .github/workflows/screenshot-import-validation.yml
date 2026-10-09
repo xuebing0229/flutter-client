@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feat/screenshot-order-import-20261008
+      - 'build/beta-117-native-ncnn-single-ocr'
   workflow_dispatch:
 
 concurrency:
@@ -44,6 +45,8 @@ jobs:
           cache: true
       - name: Install Flutter dependencies
         run: flutter pub get
+      - name: Fetch ncnn PP-OCRv5 mobile models
+        run: bash tool/fetch_ncnn_ocr_models.sh
       - name: Compile Android Beta debug OCR (no release)
         run: flutter build apk --debug --flavor beta --no-pub
 

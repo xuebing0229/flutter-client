@@ -1,4 +1,4 @@
-name: Native Android Chinese OCR Verification (not a release)
+name: Native Android PP-OCRv5 Verification (not a release)
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - fix/ocr-directed-tag-20261009
       - fix/ocr-real-recovery-20261009
       - feat/dual-ocr-paddle-20261009
+      - 'build/beta-117-native-ncnn-single-ocr'
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
@@ -23,8 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  real-mlkit-ocr:
-    name: ML Kit Chinese OCR emulator integration
+  real-ncnn-ocr:
+    name: ncnn PP-OCRv5 mobile emulator integration
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -50,6 +51,8 @@ jobs:
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
           echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
           cat android/local.properties
+      - name: Fetch and hash-verify offline OCR models
+        run: bash tool/fetch_ncnn_ocr_models.sh
       - name: Enable hardware acceleration for GitHub hosted runner
         run: |
           if test -e /dev/kvm; then
@@ -58,7 +61,7 @@ jobs:
           else
             echo "WARNING: /dev/kvm is missing; software emulator will be slow."
           fi
-      - name: Run actual bundled Chinese ML Kit on emulated Android
+      - name: Test bundled offline ncnn OCR on emulated Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -71,14 +74,14 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           # The fixtures are synthetic, but all their pixels go through the
-          # real bundled ML Kit recognizer. Preserve the actual recognized
+          # real bundled ncnn recognizer. Preserve the actual recognized
           # lines in CI logs for reviewing price/title omissions.
           script: bash -lc 'cd android; gradle :app:connectedBetaDebugAndroidTest --no-daemon --console=plain --stacktrace; status=$?; adb logcat -d -s AG_REAL_OCR:I "*:S" | tail -n 250; exit "$status"'
       - name: Upload instrumentation reports only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chinese-mlkit-real-pixel-tests
+          name: chinese-ncnn-real-pixel-tests
           path: |
             build/app/outputs/androidTest-results/connected/**
             build/app/reports/androidTests/connected/**
@@ -99,6 +102,6 @@ jobs:
       - run: flutter pub get
       - name: Run screenshot import parser tests (not a release)
         run: |
-          flutter test test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_title_reconciliation_test.dart test/features/screenshot_layout_parser_test.dart test/features/screenshot_paddle_review_test.dart test/features/screenshot_ocr_real_world_regression_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/import_batch_preset_state_test.dart test/features/screenshot_product_layout_parser_test.dart test/features/screenshot_product_dedup_test.dart
+          flutter test test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_title_reconciliation_test.dart test/features/screenshot_layout_parser_test.dart test/features/screenshot_ocr_real_world_regression_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/import_batch_preset_state_test.dart test/features/screenshot_product_layout_parser_test.dart test/features/screenshot_product_dedup_test.dart
       - name: Analyze import sources
         run: flutter analyze lib/features/imports
