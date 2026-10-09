@@ -40,4 +40,9 @@ void main() {
     expect(newsBetweenBuilds(106, 107).single.title, '冒险者新见闻');
     expect(newsBetweenBuilds(105, 107).length, 2);
   });
+
+  test('124 升 125：只提示 Windows 桌宠', () {
+    final picked = newsBetweenBuilds(124, 125);
+    expect(picked.map((e) => e.title).toList(), ['Windows 桌宠']);
+  });
 }
