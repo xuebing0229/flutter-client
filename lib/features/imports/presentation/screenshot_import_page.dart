@@ -1222,6 +1222,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   label: Text('另一 OCR 图名：${row.alternateTitle}'),
                   onPressed: () => setState(() {
                     row.title = row.alternateTitle!;
+                    row.titleInputRevision++;
                     row.alternateTitle = null;
                     if (!row.presetManuallyChanged) {
                       final preset = resolveImportPreset(
@@ -1241,7 +1242,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 ),
               ),
             TextFormField(
-              key: ValueKey(row.id + '-title-' + row.title),
+              key: ValueKey('${row.id}-title-${row.titleInputRevision}'),
               initialValue: row.title,
               maxLines: 1,
               decoration: InputDecoration(
@@ -1255,7 +1256,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   )),
                 ),
               ),
-              onChanged: (value) => row.title = value,
+              onChanged: (value) => setState(() {
+                row.title = value;
+                _refreshDuplicateWarnings();
+              }),
             ),
             const SizedBox(height: 6),
             if (!_products && row.alternateClientName != null)
@@ -1265,6 +1269,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   label: Text('另一 OCR 单主：${row.alternateClientName}'),
                   onPressed: () => setState(() {
                     row.clientName = row.alternateClientName!;
+                    row.clientInputRevision++;
                     row.alternateClientName = null;
                     _refreshDuplicateWarnings();
                   }),
@@ -1276,7 +1281,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   Expanded(
                     flex: 2,
                     child: TextFormField(
-                      key: ValueKey(row.id + '-client-' + row.clientName),
+                      key: ValueKey('${row.id}-client-${row.clientInputRevision}'),
                       initialValue: row.clientName,
                       decoration: InputDecoration(
                         labelText: '单主',
@@ -1289,7 +1294,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                           )),
                         ),
                       ),
-                      onChanged: (value) => row.clientName = value,
+                      onChanged: (value) => setState(() {
+                        row.clientName = value;
+                        _refreshDuplicateWarnings();
+                      }),
                     ),
                   ),
                   const SizedBox(width: 7),
@@ -1312,8 +1320,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                         )),
                       ),
                     ),
-                    onChanged: (value) => row.price =
-                        double.tryParse(value.trim()),
+                    onChanged: (value) => setState(() {
+                      row.price = double.tryParse(value.trim());
+                      _refreshDuplicateWarnings();
+                    }),
                   ),
                 ),
                 const SizedBox(width: 7),
