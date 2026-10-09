@@ -176,6 +176,7 @@ class SyncCoordinator extends ChangeNotifier {
   bool _syncPaused = false;
   bool _removingLocalAccount = false;
   bool _pollQueued = false;
+  bool _foregroundTransportEnabled = true;
   bool _awaitingInitialRemoteWorkspace = false;
   Timer? _changeDebounce;
   Timer? _pollTimer;
@@ -574,10 +575,28 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   Future<void> activateTransport() {
+    _foregroundTransportEnabled = true;
     return _enqueue(() async {
       if (_syncPaused) return;
       await _prepareTransport(force: true);
     });
+  }
+
+  Future<void> deactivateTransportForBackground() {
+    _foregroundTransportEnabled = false;
+    return _enqueue(() async {
+      if (_syncPaused) return;
+      try {
+        await _bridge.stop(accountId: accountId);
+      } finally {
+        _transportPrepared = false;
+        _transportStatus = const EmbeddedSyncthingStatus(
+          available: true,
+          running: false,
+        );
+        if (!_disposed) notifyListeners();
+      }
+    }, showBusy: false);
   }
 
   Future<void> pauseTransport() {
@@ -919,7 +938,7 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   Future<void> _repairTransportIfNeeded() async {
-    if (_disposed || _syncPaused) return;
+    if (_disposed || _syncPaused || !_foregroundTransportEnabled) return;
 
     final state = accountStore.syncSnapshot;
     if (state == null ||
