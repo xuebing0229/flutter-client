@@ -112,4 +112,15 @@ void main() {
     expect(rows.every((r) => r.presetId == defaultNodePreset.id), isTrue);
     expect(rows.map((r) => r.clientName).toList(), ['甲', '乙', '丙']);
   });
+
+  test('real phone detail: recover malformed bracket, do not invent fish emoji', () {
+    final titles = reconcileMiHuashiScreenshotTitles([
+      card('【这是1摸念盒子', '买家丁'),
+    ]);
+    expect(titles, ['【这是】摸念盒子']);
+    // A genuinely numbered bracket label must not be rewritten.
+    expect(reconcileMiHuashiScreenshotTitles([
+      card('【这是1号】摸鱼盒子', '买家乙'),
+    ]), ['【这是1号】摸鱼盒子']);
+  });
 }
