@@ -2,7 +2,6 @@ package com.workspace.client.k7m4
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Base64
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.BinaryMessenger
@@ -555,11 +554,10 @@ class SyncthingBridge(
         val intent = Intent(activity, SyncthingService::class.java).apply {
             action = SyncthingService.ACTION_START
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            activity.startForegroundService(intent)
-        } else {
-            activity.startService(intent)
-        }
+        // This is intentionally a normal started service. The Flutter layer
+        // stops it as soon as the app leaves the foreground, so a permanent
+        // foreground-service notification is unnecessary.
+        activity.startService(intent)
     }
 
     private fun stopService() {
