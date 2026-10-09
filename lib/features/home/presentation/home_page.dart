@@ -102,6 +102,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _newsPromptAttempted = false;
   bool _syncConflictPromptVisible = false;
   bool _syncConflictPromptedUntilClear = false;
+  Map<String, dynamic>? _syncProgressOverlay;
+  String? _syncProgressOverlaySignature;
   AccountSyncState? _accountSyncSnapshot;
 
   @override
@@ -323,8 +325,50 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _scheduleSave();
   }
 
+  Map<String, dynamic>? _activeSyncProgress(
+    Map<String, dynamic>? progress,
+  ) {
+    if (progress == null) return null;
+    final completion = ((progress['completion'] as num?)?.toDouble() ?? 100)
+        .clamp(0, 100)
+        .toDouble();
+    final globalBytes = (progress['globalBytes'] as num?)?.toInt() ?? 0;
+    final needBytes = (progress['needBytes'] as num?)?.toInt() ?? 0;
+    final globalItems = (progress['globalItems'] as num?)?.toInt() ?? 0;
+    final needItems = (progress['needItems'] as num?)?.toInt() ?? 0;
+    final hasData = globalBytes > 0 || globalItems > 0;
+    final unfinished = completion < 99.95 || needBytes > 0 || needItems > 0;
+    if (!hasData || !unfinished) return null;
+    return Map<String, dynamic>.from(progress);
+  }
+
+  String? _syncProgressSignature(Map<String, dynamic>? progress) {
+    if (progress == null) return null;
+    final completion = ((progress['completion'] as num?)?.toDouble() ?? 0)
+        .clamp(0, 100)
+        .toDouble();
+    return <Object?>[
+      completion.toStringAsFixed(1),
+      progress['needBytes'],
+      progress['needItems'],
+      progress['direction'],
+      progress['deviceName'],
+    ].join('|');
+  }
+
   void _onSyncCoordinatorChanged() {
     if (!mounted || !_ready) return;
+
+    final nextProgress = _activeSyncProgress(
+      _syncCoordinator.transportStatus.syncProgress,
+    );
+    final nextSignature = _syncProgressSignature(nextProgress);
+    if (nextSignature != _syncProgressOverlaySignature) {
+      setState(() {
+        _syncProgressOverlay = nextProgress;
+        _syncProgressOverlaySignature = nextSignature;
+      });
+    }
 
     final conflicts = _syncCoordinator.conflicts;
     if (conflicts.isEmpty) {
@@ -653,14 +697,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _leaveForegroundSync() async {
+    _saveDebounce?.cancel();
+    try {
+      await _flushSyncThenPersist();
+    } finally {
+      await _syncCoordinator.deactivateTransportForBackground();
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_ready || !_localDataHealthy) return;
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncCoordinator.activateTransport());
+      return;
+    }
+    if (state == AppLifecycleState.inactive) {
       _saveDebounce?.cancel();
       unawaited(_flushSyncThenPersist());
+      return;
+    }
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_leaveForegroundSync());
     }
   }
 
@@ -1114,7 +1174,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
 
-    return Scaffold(
+    final scaffold = Scaffold(
       drawer: _ready && _localDataHealthy
           ? AppDrawer(
               orderStore: _orderStore,
@@ -1293,6 +1353,93 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ),
               ],
             ),
+    );
+
+    final progress = _syncProgressOverlay;
+    final showProgress =
+        progress != null &&
+        !(useDesktopLayout && _desktopToolSelection == AppToolMenu.syncTool);
+    if (!showProgress) return scaffold;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        scaffold,
+        Positioned(
+          top: 8,
+          left: 16,
+          right: 16,
+          child: SafeArea(
+            child: Center(
+              child: IgnorePointer(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: _ForegroundSyncProgressPopup(progress: progress),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ForegroundSyncProgressPopup extends StatelessWidget {
+  const _ForegroundSyncProgressPopup({required this.progress});
+
+  final Map<String, dynamic> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final completion = ((progress['completion'] as num?)?.toDouble() ?? 0)
+        .clamp(0, 100)
+        .toDouble();
+    final percent = completion >= 99.95
+        ? '100%'
+        : '${completion.toStringAsFixed(1)}%';
+    final direction = progress['direction']?.toString();
+    final deviceName = progress['deviceName']?.toString().trim() ?? '';
+    final subtitle = direction == 'sending'
+        ? '正在同步到${deviceName.isEmpty ? '另一台设备' : '「$deviceName」'}'
+        : '正在接收另一台设备的数据';
+
+    return Material(
+      elevation: 8,
+      color: colors.surface,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 13),
+        child: Row(
+          children: [
+            Icon(Icons.sync_rounded, color: colors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '正在同步 $percent',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  LinearProgressIndicator(value: completion / 100),
+                  const SizedBox(height: 5),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
