@@ -10,8 +10,8 @@ import '../state/focus_store.dart';
 
 enum _FocusListMode { sessions, orders }
 enum _FocusScope { all, orders, free }
-enum _FocusSessionSort { newest, oldest, longest, shortest }
-enum _FocusGroupSort { longest, shortest, mostSessions, leastSessions }
+enum _FocusSessionSortField { startedAt, duration }
+enum _FocusGroupSortField { totalDuration, sessionCount, recentFocus }
 
 class FocusPanel extends StatefulWidget {
   const FocusPanel({
@@ -35,8 +35,10 @@ class _FocusPanelState extends State<FocusPanel> {
   Timer? _ticker;
   _FocusListMode _mode = _FocusListMode.sessions;
   _FocusScope _scope = _FocusScope.all;
-  _FocusSessionSort _sessionSort = _FocusSessionSort.newest;
-  _FocusGroupSort _groupSort = _FocusGroupSort.longest;
+  _FocusSessionSortField _sessionSortField = _FocusSessionSortField.startedAt;
+  bool _sessionSortDescending = true;
+  _FocusGroupSortField _groupSortField = _FocusGroupSortField.totalDuration;
+  bool _groupSortDescending = true;
   DateTime? _filterStart;
   DateTime? _filterEnd;
 
@@ -227,14 +229,18 @@ class _FocusPanelState extends State<FocusPanel> {
       return true;
     }).toList();
 
-    result.sort((a, b) => switch (_sessionSort) {
-          _FocusSessionSort.newest => b.startedAt.compareTo(a.startedAt),
-          _FocusSessionSort.oldest => a.startedAt.compareTo(b.startedAt),
-          _FocusSessionSort.longest =>
-            b.durationAt().compareTo(a.durationAt()),
-          _FocusSessionSort.shortest =>
-            a.durationAt().compareTo(b.durationAt()),
-        });
+    result.sort((a, b) {
+      final comparison = switch (_sessionSortField) {
+        _FocusSessionSortField.startedAt =>
+          a.startedAt.compareTo(b.startedAt),
+        _FocusSessionSortField.duration =>
+          a.durationAt().compareTo(b.durationAt()),
+      };
+      if (comparison != 0) {
+        return _sessionSortDescending ? -comparison : comparison;
+      }
+      return b.startedAt.compareTo(a.startedAt);
+    });
     return result;
   }
 
@@ -257,16 +263,20 @@ class _FocusPanelState extends State<FocusPanel> {
           sessions: entry.value,
         ),
     ];
-    groups.sort((a, b) => switch (_groupSort) {
-          _FocusGroupSort.longest =>
-            b.totalDuration.compareTo(a.totalDuration),
-          _FocusGroupSort.shortest =>
-            a.totalDuration.compareTo(b.totalDuration),
-          _FocusGroupSort.mostSessions =>
-            b.sessions.length.compareTo(a.sessions.length),
-          _FocusGroupSort.leastSessions =>
-            a.sessions.length.compareTo(b.sessions.length),
-        });
+    groups.sort((a, b) {
+      final comparison = switch (_groupSortField) {
+        _FocusGroupSortField.totalDuration =>
+          a.totalDuration.compareTo(b.totalDuration),
+        _FocusGroupSortField.sessionCount =>
+          a.sessions.length.compareTo(b.sessions.length),
+        _FocusGroupSortField.recentFocus =>
+          a.mostRecentStartedAt.compareTo(b.mostRecentStartedAt),
+      };
+      if (comparison != 0) {
+        return _groupSortDescending ? -comparison : comparison;
+      }
+      return a.label.compareTo(b.label);
+    });
     return groups;
   }
 
@@ -587,7 +597,7 @@ class _FocusPanelState extends State<FocusPanel> {
                     ),
                     DropdownMenuItem(
                       value: _FocusScope.orders,
-                      child: Text('订单专注'),
+                      child: Text('排单专注'),
                     ),
                     DropdownMenuItem(
                       value: _FocusScope.free,
@@ -598,56 +608,71 @@ class _FocusPanelState extends State<FocusPanel> {
                     if (value != null) setState(() => _scope = value);
                   },
                 ),
-                if (_mode == _FocusListMode.sessions)
-                  DropdownButton<_FocusSessionSort>(
-                    value: _sessionSort,
+                if (_mode == _FocusListMode.sessions) ...[
+                  DropdownButton<_FocusSessionSortField>(
+                    value: _sessionSortField,
                     items: const [
                       DropdownMenuItem(
-                        value: _FocusSessionSort.newest,
-                        child: Text('开始时间：新→旧'),
+                        value: _FocusSessionSortField.startedAt,
+                        child: Text('按开始时间'),
                       ),
                       DropdownMenuItem(
-                        value: _FocusSessionSort.oldest,
-                        child: Text('开始时间：旧→新'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusSessionSort.longest,
-                        child: Text('时长：长→短'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusSessionSort.shortest,
-                        child: Text('时长：短→长'),
+                        value: _FocusSessionSortField.duration,
+                        child: Text('按时长'),
                       ),
                     ],
                     onChanged: (value) {
-                      if (value != null) setState(() => _sessionSort = value);
-                    },
-                  )
-                else
-                  DropdownButton<_FocusGroupSort>(
-                    value: _groupSort,
-                    items: const [
-                      DropdownMenuItem(
-                        value: _FocusGroupSort.longest,
-                        child: Text('总时长：长→短'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusGroupSort.shortest,
-                        child: Text('总时长：短→长'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusGroupSort.mostSessions,
-                        child: Text('次数：多→少'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusGroupSort.leastSessions,
-                        child: Text('次数：少→多'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _groupSort = value);
+                      if (value != null) {
+                        setState(() => _sessionSortField = value);
+                      }
                     },
                   ),
+                  IconButton(
+                    tooltip: _sessionSortDescending ? '当前：从大到小' : '当前：从小到大',
+                    onPressed: () => setState(
+                      () => _sessionSortDescending = !_sessionSortDescending,
+                    ),
+                    icon: Icon(
+                      _sessionSortDescending
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded,
+                    ),
+                  ),
+                ] else ...[
+                  DropdownButton<_FocusGroupSortField>(
+                    value: _groupSortField,
+                    items: const [
+                      DropdownMenuItem(
+                        value: _FocusGroupSortField.totalDuration,
+                        child: Text('按累计时长'),
+                      ),
+                      DropdownMenuItem(
+                        value: _FocusGroupSortField.sessionCount,
+                        child: Text('按专注次数'),
+                      ),
+                      DropdownMenuItem(
+                        value: _FocusGroupSortField.recentFocus,
+                        child: Text('按最近专注时间'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _groupSortField = value);
+                      }
+                    },
+                  ),
+                  IconButton(
+                    tooltip: _groupSortDescending ? '当前：从大到小' : '当前：从小到大',
+                    onPressed: () => setState(
+                      () => _groupSortDescending = !_groupSortDescending,
+                    ),
+                    icon: Icon(
+                      _groupSortDescending
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded,
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 10),
@@ -709,10 +734,14 @@ class _FocusPanelState extends State<FocusPanel> {
                 _SessionTile(
                   session: session,
                   targetLabel: _targetLabel(session),
-                  timeText:
-                      '开始 ${_formatDateTime(session.startedAt)}\n'
-                      '结束 ${_formatDateTime(session.endedAt!)} · '
-                      '${_formatDuration(session.durationAt())}',
+                  timeText: session.orderId == null
+                      ? '开始 ${_formatDateTime(session.startedAt)}\n'
+                          '结束 ${_formatDateTime(session.endedAt!)} · '
+                          '${_formatDuration(session.durationAt())}'
+                      : '排单 ID：${session.orderId}\n'
+                          '开始 ${_formatDateTime(session.startedAt)}\n'
+                          '结束 ${_formatDateTime(session.endedAt!)} · '
+                          '${_formatDuration(session.durationAt())}',
                   onTap: session.orderId == null
                       ? null
                       : () => _confirmOpenOrder(
@@ -725,6 +754,7 @@ class _FocusPanelState extends State<FocusPanel> {
                 _GroupTile(
                   group: group,
                   durationText: _formatDuration(group.totalDuration),
+                  recentText: _formatDateTime(group.mostRecentStartedAt),
                   onTap: group.orderId == null
                       ? null
                       : () => _confirmOpenOrder(group.orderId!, group.label),
@@ -756,6 +786,10 @@ class _FocusGroup {
         Duration.zero,
         (total, session) => total + session.durationAt(),
       );
+
+  DateTime get mostRecentStartedAt => sessions
+      .map((session) => session.startedAt)
+      .reduce((left, right) => left.isAfter(right) ? left : right);
 }
 
 class _RangeButton extends StatelessWidget {
@@ -813,7 +847,7 @@ class _SessionTile extends StatelessWidget {
               : Icons.draw_outlined,
         ),
         title: Text(targetLabel),
-        subtitle: Text(timeText, maxLines: 2),
+        subtitle: Text(timeText, maxLines: session.orderId == null ? 2 : 3),
         trailing: onTap == null
             ? null
             : const Icon(Icons.open_in_new_rounded, size: 18),
@@ -827,11 +861,13 @@ class _GroupTile extends StatelessWidget {
   const _GroupTile({
     required this.group,
     required this.durationText,
+    required this.recentText,
     required this.onTap,
   });
 
   final _FocusGroup group;
   final String durationText;
+  final String recentText;
   final VoidCallback? onTap;
 
   @override
@@ -845,7 +881,13 @@ class _GroupTile extends StatelessWidget {
               : Icons.draw_outlined,
         ),
         title: Text(group.label),
-        subtitle: Text('${group.sessions.length} 次专注'),
+        subtitle: Text(
+          group.orderId == null
+              ? '${group.sessions.length} 次专注 · 最近 $recentText'
+              : '排单 ID：${group.orderId}\n'
+                  '${group.sessions.length} 次专注 · 最近 $recentText',
+          maxLines: group.orderId == null ? 1 : 2,
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
