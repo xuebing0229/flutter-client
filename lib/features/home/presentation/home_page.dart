@@ -478,10 +478,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (leftAbstractMode) {
         _abstractFeatureToggleHidden = false;
       }
-      if (!widget.featureStore.enabled(AppFeature.desktopPet) &&
-          _desktopToolSelection == AppToolMenu.desktopPetTool) {
-        _desktopToolSelection = null;
-      }
       _refreshDesktopCollectionRootIfNeeded();
     });
 
@@ -1178,6 +1174,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         orderStore: _orderStore,
         focusStore: _focusStore,
         onOpenOrder: _openOrderFromFocus,
+        showDesktopPet:
+            Platform.isWindows &&
+            widget.featureStore.enabled(AppFeature.desktopPet),
       ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
@@ -1319,7 +1318,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final title = switch (_desktopToolSelection) {
       AppToolMenu.nodePresetTool => '节点预设',
       AppToolMenu.featureToggleTool => '附加功能开关',
-      AppToolMenu.desktopPetTool => '桌宠',
+      AppToolMenu.desktopPetTool =>
+        Platform.isWindows &&
+                widget.featureStore.enabled(AppFeature.desktopPet)
+            ? '桌宠'
+            : '专注',
       AppToolMenu.archiveTool => '归档',
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
