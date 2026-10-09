@@ -8,6 +8,7 @@ import '../../../core/portability/app_backup_data.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
+import '../../focus/presentation/focus_page.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/presentation/node_preset_page.dart';
 import '../../orders/state/order_store.dart';
@@ -108,6 +109,7 @@ class AppToolMenu extends StatelessWidget {
   static const settingsTool = 'settings';
   static const themeColorTool = 'themeColor';
   static const desktopPetTool = 'desktopPet';
+  static const focusTool = 'focus';
 
   const AppToolMenu({
     required this.orderStore,
@@ -223,6 +225,22 @@ class AppToolMenu extends StatelessWidget {
               DesktopPetPage(orderStore: orderStore),
             ),
           ),
+        _item(
+          icon: Icons.timer_outlined,
+          title: '专注',
+          tool: focusTool,
+          onTap: () => _open(
+            context,
+            focusTool,
+            FocusPage(
+              accountId: syncCoordinator.accountId,
+              store: syncCoordinator.focusStore,
+              orderStore: orderStore,
+              nodePresetStore: nodePresetStore,
+              featureStore: featureStore,
+            ),
+          ),
+        ),
         _item(
           icon: Icons.archive_outlined,
           title: '归档',
