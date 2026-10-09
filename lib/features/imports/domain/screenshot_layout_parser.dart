@@ -630,12 +630,8 @@ class ScreenshotLayoutParser {
 
   static bool _plausibleTitle(String source) {
     final text = source.trim();
-    // Native OCR can emit progress/icon debris such as "° 0" next to a
-    // legitimate 60% field. Geometry alone then makes that debris look like
-    // an undated title anchor and creates a duplicate empty order. A title
-    // must contain at least one actual language glyph; punctuation+digits
-    // are never enough. This keeps the existing cleaning rules while making
-    // them engine-agnostic for PaddleOCR output.
+    // PaddleOCR can emit progress/icon debris such as "。0" / "°0" beside
+    // a real "60%" line. Punctuation+digits can never be an order title.
     final hasLanguageGlyph = RegExp(
       r'[A-Za-z\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]',
     ).hasMatch(text);
