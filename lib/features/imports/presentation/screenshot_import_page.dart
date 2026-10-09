@@ -159,7 +159,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         try {
           if (mounted) {
             setState(() => _recognitionStep =
-                'PP-OCRv5：识别截图 $_imageSerial/${selected.length}');
+                'PP-OCRv6：识别截图 $_imageSerial/${selected.length}');
           }
           final imageHash = await _history.hashImage(image.path);
           final ocrTimer = Stopwatch()..start();
@@ -284,7 +284,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             }
           }
           _ocrDiagnostics.add(
-            '唯一 OCR 引擎：${Platform.isAndroid ? "PaddleOCR PP-OCRv5 ncnn" : "RapidOCR ONNX Windows"}；'
+            '唯一 OCR 引擎：${Platform.isAndroid ? "官方 PaddleOCR PP-OCRv6 Tiny" : "RapidOCR ONNX Windows"}；'
             '耗时 ${ocrTimer.elapsedMilliseconds} ms\n' +
             formatScreenshotOcrDiagnostic(
               screenshotNumber: _imageSerial,
@@ -398,8 +398,6 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     required double? price,
     required CommissionPlatform? platform,
     List<String> tags = const <String>[],
-    String? alternateClientName,
-    String? alternateTitle,
     DateTime? date,
     bool hasTime = false,
     int? percentage,
@@ -450,8 +448,6 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       price: price,
       platform: platform,
       tags: normalizeOrderTags(tags),
-      alternateClientName: alternateClientName,
-      alternateTitle: alternateTitle,
       detectedDate: date,
       sourceHasClock: hasTime,
       recognizedPercent: percentage,
@@ -1210,32 +1206,6 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   ],
                 ),
               ),
-            if (!_products && row.alternateTitle != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: ActionChip(
-                  label: Text('另一 OCR 图名：${row.alternateTitle}'),
-                  onPressed: () => setState(() {
-                    row.title = row.alternateTitle!;
-                    row.titleInputRevision++;
-                    row.alternateTitle = null;
-                    if (!row.presetManuallyChanged) {
-                      final preset = resolveImportPreset(
-                        platform: row.platform ?? CommissionPlatform.mihuashi,
-                        title: row.title,
-                        presets: widget.presetStore.presets,
-                        existingOrders: widget.orderStore.orders,
-                      );
-                      row.presetId = preset.id;
-                      row.nodeId = resolveImportNode(
-                        preset: preset,
-                        recognizedPercent: row.recognizedPercent,
-                      ).id;
-                    }
-                    _refreshDuplicateWarnings();
-                  }),
-                ),
-              ),
             TextFormField(
               key: ValueKey('${row.id}-title-${row.titleInputRevision}'),
               initialValue: row.title,
@@ -1257,19 +1227,6 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               }),
             ),
             const SizedBox(height: 6),
-            if (!_products && row.alternateClientName != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: ActionChip(
-                  label: Text('另一 OCR 单主：${row.alternateClientName}'),
-                  onPressed: () => setState(() {
-                    row.clientName = row.alternateClientName!;
-                    row.clientInputRevision++;
-                    row.alternateClientName = null;
-                    _refreshDuplicateWarnings();
-                  }),
-                ),
-              ),
             Row(
               children: [
                 if (!_products) ...[

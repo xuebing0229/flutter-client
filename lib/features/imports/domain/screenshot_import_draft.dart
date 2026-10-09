@@ -33,8 +33,6 @@ class ScreenshotImportDraft {
     this.deadlineConfirmed = false,
     this.feeEnabled = false,
     this.tags = const <String>[],
-    this.alternateTitle,
-    this.alternateClientName,
     this.saleType = ProductSaleType.single,
   });
 
@@ -67,9 +65,6 @@ class ScreenshotImportDraft {
   bool deadlineConfirmed;
   bool feeEnabled;
   List<String> tags;
-  /// Independent OCR suggestions, never merged into user data implicitly.
-  String? alternateTitle;
-  String? alternateClientName;
   ProductSaleType saleType;
   bool selected = true;
   /// Explicitly reselected a suspected duplicate; never auto-uncheck again.
