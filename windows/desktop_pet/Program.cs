@@ -11,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using Path = System.IO.Path;
 using System.Windows.Threading;
 using VPet_Simulator.Core;
 
