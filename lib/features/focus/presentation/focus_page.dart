@@ -154,7 +154,7 @@ class _FocusPageState extends State<FocusPage> {
       orderId: order.id,
       orderTitleSnapshot: order.title,
     );
-    setState(() => _selectedTarget = order.id);
+    setState(() => _selectedTarget = order!.id);
   }
 
   Future<void> _stopFocus(FocusSession active) async {
