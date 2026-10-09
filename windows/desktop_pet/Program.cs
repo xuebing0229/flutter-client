@@ -53,6 +53,7 @@ internal sealed class DesktopPetWindow : Window
     private readonly string _configPath;
     private readonly string _windowStatePath;
     private readonly int _parentPid;
+    private readonly Grid _imageViewport;
     private readonly Image _petImage;
     private readonly Border _bubble;
     private readonly TextBlock _bubbleText;
@@ -123,15 +124,24 @@ internal sealed class DesktopPetWindow : Window
         Grid.SetRow(_bubble, 0);
         root.Children.Add(_bubble);
 
+        _imageViewport = new Grid
+        {
+            ClipToBounds = true,
+            Background = Brushes.Transparent,
+            Margin = new Thickness(8, 0, 8, 4),
+        };
+        Grid.SetRow(_imageViewport, 1);
+        root.Children.Add(_imageViewport);
+
         _petImage = new Image
         {
             Stretch = Stretch.Uniform,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(8, 0, 8, 4),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            RenderTransformOrigin = new Point(0.5, 0.5),
         };
-        Grid.SetRow(_petImage, 1);
-        root.Children.Add(_petImage);
+        _imageViewport.Children.Add(_petImage);
+        _imageViewport.SizeChanged += (_, _) => ApplyCurrentImagePlacement();
 
         Content = root;
 
@@ -268,9 +278,10 @@ internal sealed class DesktopPetWindow : Window
 
     private void RefreshImage(bool force = false)
     {
-        var path = _inputActive && IsUsableImage(_config.ImageB)
-            ? _config.ImageB
-            : _config.ImageA;
+        var useB = _inputActive && IsUsableImage(_config.ImageB);
+        var path = useB ? _config.ImageB : _config.ImageA;
+        var placement = useB ? _config.PlacementB : _config.PlacementA;
+        ApplyImagePlacement(placement);
 
         if (!IsUsableImage(path))
         {
@@ -338,6 +349,32 @@ internal sealed class DesktopPetWindow : Window
         }
 
         RefreshBubble();
+    }
+
+    private void ApplyCurrentImagePlacement()
+    {
+        var useB = _inputActive && IsUsableImage(_config.ImageB);
+        ApplyImagePlacement(useB ? _config.PlacementB : _config.PlacementA);
+    }
+
+    private void ApplyImagePlacement(PetPlacement? placement)
+    {
+        placement ??= new PetPlacement();
+        var scale = Math.Clamp(placement.Scale, 0.35, 3.0);
+        var offsetX = Math.Clamp(placement.OffsetX, -1.0, 1.0);
+        var offsetY = Math.Clamp(placement.OffsetY, -1.0, 1.0);
+        var width = Math.Max(1, _imageViewport.ActualWidth);
+        var height = Math.Max(1, _imageViewport.ActualHeight);
+
+        var transforms = new TransformGroup();
+        transforms.Children.Add(new ScaleTransform(scale, scale));
+        transforms.Children.Add(
+            new TranslateTransform(
+                offsetX * width / 2.0,
+                offsetY * height / 2.0
+            )
+        );
+        _petImage.RenderTransform = transforms;
     }
 
     private void RefreshBubble()
@@ -524,11 +561,20 @@ internal sealed class DesktopPetWindow : Window
         public bool Enabled { get; set; }
         public string? ImageA { get; set; }
         public string? ImageB { get; set; }
+        public PetPlacement PlacementA { get; set; } = new();
+        public PetPlacement PlacementB { get; set; } = new();
         public string? TextMode { get; set; }
         public string? CustomText { get; set; }
         public string? CurrentOrderTitle { get; set; }
         public string? CurrentOrderNode { get; set; }
         public string? CurrentOrderDeadline { get; set; }
+    }
+
+    private sealed class PetPlacement
+    {
+        public double Scale { get; set; } = 1;
+        public double OffsetX { get; set; }
+        public double OffsetY { get; set; }
     }
 }
 
