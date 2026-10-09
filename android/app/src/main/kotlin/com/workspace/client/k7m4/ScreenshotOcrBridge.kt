@@ -250,6 +250,16 @@ class ScreenshotOcrBridge(private val activity: Activity) {
         initial: List<OcrLine>,
         done: (List<OcrLine>) -> Unit,
     ) {
+        retryMissingMiHuashiBuyers(bitmap, recognizer, initial, done, mutableListOf())
+    }
+
+    private fun retryMissingMiHuashiBuyers(
+        bitmap: Bitmap,
+        recognizer: com.google.mlkit.vision.text.TextRecognizer,
+        initial: List<OcrLine>,
+        done: (List<OcrLine>) -> Unit,
+        trace: MutableList<String>,
+    ) {
         if (!looksLikeMiHuashiList(initial)) {
             done(initial)
             return
@@ -272,6 +282,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                     possibleMiHuashiBuyer(line.text)
             }
         }.take(7)
+        trace.add("小字单主候选标题=${artworkTitles.size}；需要局部重识别=${missing.size}")
         if (missing.isEmpty()) {
             done(initial)
             return
@@ -285,10 +296,13 @@ class ScreenshotOcrBridge(private val activity: Activity) {
             val title = missing[index]
             // Skip the avatar on the left; its pictogram can drown out a
             // short, low-contrast nickname such as a Chinese char + vv.
-            val cropX = (width * 0.15).roundToInt()
-            val cropY = (title.centerY - 190).roundToInt().coerceIn(0, height - 1)
-            val cropRight = (width * 0.46).roundToInt().coerceAtMost(width)
-            val cropBottom = (title.centerY - 55).roundToInt().coerceIn(cropY + 1, height)
+            // Focus on the actual buyer baseline (about 110px above title).
+            // The former 135px-tall crop included too much whitespace/avatar;
+            // a narrow text band gives short mixed CJK/Latin names more pixels.
+            val cropX = (width * 0.155).roundToInt()
+            val cropY = (title.centerY - 165).roundToInt().coerceIn(0, height - 1)
+            val cropRight = (width * 0.52).roundToInt().coerceAtMost(width)
+            val cropBottom = (title.centerY - 65).roundToInt().coerceIn(cropY + 1, height)
             val cropWidth = cropRight - cropX
             val cropHeight = cropBottom - cropY
             if (cropWidth < 20 || cropHeight < 20) {
@@ -303,16 +317,23 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 )
                 if (crop !== scaled) crop.recycle()
                 val zoom = scaled ?: throw IllegalStateException("Empty buyer crop")
-                fun accept(detected: Text): Boolean {
-                    val candidates = extractLines(
+                fun accept(detected: Text, stage: String): Boolean {
+                    val raw = extractLines(
                         detected, horizontalOffset = cropX.toDouble(),
                         verticalOffset = cropY.toDouble(), scale = 3.0,
-                    ).filter { line ->
-                        line.left < width * 0.42 &&
-                            line.centerY > title.centerY - 200 &&
-                            line.centerY < title.centerY - 55 &&
-                            possibleMiHuashiBuyer(line.text)
+                    )
+                    // Leave the original OCR spelling intact. A one-character
+                    // Chinese fragment can be the ONLY surviving evidence of a
+                    // short nickname, but is marked as unverified in preview.
+                    val candidates = raw.filter { line ->
+                        line.left < width * 0.48 &&
+                            line.centerY > title.centerY - 165 &&
+                            line.centerY < title.centerY - 65 &&
+                            (possibleMiHuashiBuyer(line.text) ||
+                             (line.text.trim().length == 1 &&
+                              line.text.trim()[0].isLetter()))
                     }
+                    trace.add("单主区域y=${title.centerY.roundToInt()}；$stage：${raw.map { it.text }}；有效=${candidates.map { it.text }}")
                     val best = candidates.minByOrNull {
                         abs(it.centerY - (title.centerY - 112))
                     } ?: return false
@@ -343,7 +364,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                         }
                         Canvas(contrasted).drawBitmap(zoom, 0f, 0f, paint)
                         recognizer.process(InputImage.fromBitmap(contrasted, 0))
-                            .addOnSuccessListener { accept(it); retryAt(index + 1) }
+                            .addOnSuccessListener { accept(it, "对比度"); retryAt(index + 1) }
                             .addOnFailureListener { retryAt(index + 1) }
                             .addOnCompleteListener { contrasted.recycle() }
                     } catch (_: Exception) {
@@ -353,7 +374,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 }
                 recognizer.process(InputImage.fromBitmap(zoom, 0))
                     .addOnSuccessListener { detected ->
-                        if (accept(detected)) retryAt(index + 1)
+                        if (accept(detected, "放大")) retryAt(index + 1)
                         else retryEnhanced()
                     }
                     .addOnFailureListener { retryEnhanced() }
@@ -395,11 +416,13 @@ class ScreenshotOcrBridge(private val activity: Activity) {
         val recognizer = TextRecognition.getClient(
             ChineseTextRecognizerOptions.Builder().build()
         )
+        val nativeTrace = mutableListOf<String>()
         fun finish(lines: List<OcrLine>) {
             result.success(mapOf(
                 "imageWidth" to bitmap.width,
                 "imageHeight" to bitmap.height,
                 "lines" to lines.map { it.toMap() },
+                "nativeTrace" to nativeTrace,
             ))
             recognizer.close()
             bitmap.recycle()
@@ -418,7 +441,8 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                     looksLikeMiHuashiList(originalLines)) {
                     retryMissingMiHuashiBuyers(
                         bitmap, recognizer, originalLines,
-                    ) { recovered -> finish(recovered) }
+                        { recovered -> finish(recovered) }, nativeTrace,
+                    )
                     return@addOnSuccessListener
                 }
                 if (!looksLikeHuajia(originalLines) || bitmap.width < 300 ||
