@@ -327,7 +327,10 @@ class _FocusPanelState extends State<FocusPanel> {
             start: start,
             end: end,
           );
-          final canClean = start != null || end != null;
+          final rangeComplete = start != null && end != null;
+          final rangeValid =
+              rangeComplete && !start!.isAfter(end!);
+          final canClean = rangeValid;
           return AlertDialog(
             title: const Text('清理专注记录'),
             content: SizedBox(
@@ -336,7 +339,9 @@ class _FocusPanelState extends State<FocusPanel> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('必须先指定时间范围；正在进行的专注不会被清理。'),
+                  const Text(
+                    '请选择完整的“从 / 到”时间范围；按专注开始时间匹配，正在进行的专注不会被清理。',
+                  ),
                   const SizedBox(height: 12),
                   _RangeButton(
                     label: '从',
@@ -369,7 +374,9 @@ class _FocusPanelState extends State<FocusPanel> {
                   Text(
                     canClean
                         ? '当前范围匹配 $count 条历史记录。'
-                        : '未选择范围，不能清理。',
+                        : rangeComplete
+                            ? '起始时间不能晚于结束时间。'
+                            : '时间范围未选完整，不能清理。',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -644,6 +651,11 @@ class _FocusPanelState extends State<FocusPanel> {
               ],
             ),
             const SizedBox(height: 10),
+            Text(
+              '按专注开始时间筛选；不选择范围时显示全部记录。',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 6),
             Wrap(
               spacing: 8,
               runSpacing: 8,
