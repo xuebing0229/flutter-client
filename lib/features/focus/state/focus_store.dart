@@ -33,8 +33,34 @@ class FocusStore extends ChangeNotifier {
     _sessions
       ..clear()
       ..addAll(sessions);
+    _normalizeConcurrentActiveSessions();
     _sort();
     notifyListeners();
+  }
+
+  void _normalizeConcurrentActiveSessions() {
+    final active = <FocusSession>[
+      for (final session in _sessions)
+        if (session.isActive) session,
+    ];
+    if (active.length <= 1) return;
+
+    active.sort((left, right) {
+      final byStart = left.startedAt.compareTo(right.startedAt);
+      if (byStart != 0) return byStart;
+      return left.id.compareTo(right.id);
+    });
+    final keep = active.last;
+
+    for (final session in active) {
+      if (session.id == keep.id) continue;
+      final index = _sessions.indexWhere((item) => item.id == session.id);
+      if (index < 0) continue;
+      final endedAt = keep.startedAt.isBefore(session.startedAt)
+          ? session.startedAt
+          : keep.startedAt;
+      _sessions[index] = session.copyWith(endedAt: endedAt);
+    }
   }
 
   FocusSession start({
