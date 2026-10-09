@@ -53,6 +53,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 桌宠',
     description: '电脑端附加功能新增桌宠：可以保存并一键切换多组自定义 A/B 图片预设，A 为平时状态、B 为按键操作状态；文字框可显示当前在画订单或自定义内容。桌宠美术资源和预设只保存在本机。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 127,
+    title: '桌宠与同步提示优化',
+    description: '手机端同步进度提示移到底部，不再遮挡左侧栏入口；桌宠的“当前在画订单”改为在桌宠页用卡片手动选择具体排单；未导入 A 图时桌面不再显示多余提示气泡。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
