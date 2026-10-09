@@ -80,6 +80,10 @@ internal sealed class DesktopPetWindow : Window
     private readonly string _configPath;
     private readonly string _windowStatePath;
     private readonly int _parentPid;
+    private readonly Grid _root;
+    private readonly StackPanel _layoutPanel;
+    private readonly StackPanel _bubbleHost;
+    private readonly Polygon _bubbleTail;
     private readonly Grid _imageViewport;
     private readonly Image _petImage;
     private readonly Border _bubble;
@@ -105,10 +109,11 @@ internal sealed class DesktopPetWindow : Window
         _windowStatePath = Path.Combine(configDirectory, "window-state.json");
 
         Title = "冒险者公会 · 桌宠";
-        Width = 320;
-        Height = 390;
-        MinWidth = 220;
-        MinHeight = 260;
+        SizeToContent = SizeToContent.WidthAndHeight;
+        MinWidth = 0;
+        MinHeight = 0;
+        MaxWidth = 760;
+        MaxHeight = 760;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -118,47 +123,57 @@ internal sealed class DesktopPetWindow : Window
         ShowActivated = false;
         Opacity = 0;
 
-        var root = new Grid
+        _root = new Grid
         {
             Background = Brushes.Transparent,
+            Margin = new Thickness(4),
         };
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+        _layoutPanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Background = Brushes.Transparent,
+        };
+        _root.Children.Add(_layoutPanel);
 
         _bubbleText = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Left,
             FontSize = 14,
-            Foreground = new SolidColorBrush(Color.FromRgb(38, 38, 38)),
             MaxWidth = 270,
         };
         _bubble = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(238, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(40, 0, 0, 0)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(16),
             Padding = new Thickness(14, 11, 14, 11),
-            Margin = new Thickness(12, 8, 12, 6),
             Child = _bubbleText,
-            Effect = new DropShadowEffect
-            {
-                BlurRadius = 16,
-                ShadowDepth = 3,
-                Opacity = 0.18,
-            },
         };
-        Grid.SetRow(_bubble, 0);
-        root.Children.Add(_bubble);
+        _bubbleTail = new Polygon
+        {
+            Stretch = Stretch.Fill,
+            Width = 18,
+            Height = 12,
+            StrokeThickness = 1,
+        };
+        _bubbleHost = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _bubbleHost.Children.Add(_bubble);
+        _bubbleHost.Children.Add(_bubbleTail);
 
         _imageViewport = new Grid
         {
+            Width = 280,
+            Height = 280,
             ClipToBounds = true,
             Background = Brushes.Transparent,
             Margin = new Thickness(8, 0, 8, 4),
         };
-        Grid.SetRow(_imageViewport, 1);
-        root.Children.Add(_imageViewport);
 
         _petImage = new Image
         {
@@ -170,9 +185,12 @@ internal sealed class DesktopPetWindow : Window
         _imageViewport.Children.Add(_petImage);
         _imageViewport.SizeChanged += (_, _) => ApplyCurrentImagePlacement();
 
-        Content = root;
+        _layoutPanel.Children.Add(_bubbleHost);
+        _layoutPanel.Children.Add(_imageViewport);
 
-        root.MouseLeftButtonDown += (_, e) =>
+        Content = _root;
+
+        _root.MouseLeftButtonDown += (_, e) =>
         {
             if (e.LeftButton != MouseButtonState.Pressed) return;
             try
@@ -299,8 +317,130 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
+        ApplyLayoutAndTheme();
         RefreshImage(force: true);
         RefreshBubble();
+    }
+
+    private void ApplyLayoutAndTheme()
+    {
+        var petScale = Math.Clamp(_config.PetScale, 0.5, 1.8);
+        var bubbleScale = Math.Clamp(_config.BubbleScale, 0.65, 1.8);
+        var side = string.Equals(
+            _config.BubblePosition,
+            "side",
+            StringComparison.OrdinalIgnoreCase
+        );
+
+        var petSize = 280 * petScale;
+        _imageViewport.Width = petSize;
+        _imageViewport.Height = petSize;
+
+        var background = BrushFromArgb(_config.BubbleBackgroundArgb, 0xFFF7F7F7);
+        var foreground = BrushFromArgb(_config.BubbleForegroundArgb, 0xFF202020);
+        var border = BrushFromArgb(_config.BubbleBorderArgb, 0x33202020);
+        var accentColor = ColorFromArgb(_config.BubbleAccentArgb, 0xFF6C7A6B);
+
+        _bubble.Background = background;
+        _bubble.BorderBrush = border;
+        _bubble.BorderThickness = new Thickness(Math.Max(1, bubbleScale));
+        _bubble.CornerRadius = new CornerRadius(17 * bubbleScale);
+        _bubble.Padding = new Thickness(
+            14 * bubbleScale,
+            10 * bubbleScale,
+            14 * bubbleScale,
+            10 * bubbleScale
+        );
+        _bubbleText.Foreground = foreground;
+        _bubbleText.FontSize = 14 * bubbleScale;
+        _bubbleTail.Fill = background;
+        _bubbleTail.Stroke = border;
+        _bubbleTail.StrokeThickness = Math.Max(1, bubbleScale);
+        _bubble.Effect = new DropShadowEffect
+        {
+            BlurRadius = 16 * bubbleScale,
+            ShadowDepth = 3 * bubbleScale,
+            Opacity = 0.20,
+            Color = accentColor,
+        };
+
+        _layoutPanel.Children.Clear();
+        _bubbleHost.Children.Clear();
+
+        if (side)
+        {
+            _layoutPanel.Orientation = Orientation.Horizontal;
+            _layoutPanel.VerticalAlignment = VerticalAlignment.Bottom;
+            _bubbleHost.Orientation = Orientation.Horizontal;
+            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Left;
+            _bubbleHost.VerticalAlignment = VerticalAlignment.Center;
+
+            _bubbleText.MaxWidth = 78 * bubbleScale;
+            _bubbleText.MinWidth = 42 * bubbleScale;
+            _bubbleText.TextAlignment = TextAlignment.Center;
+            _bubble.Margin = new Thickness(6, 8, 0, 8);
+
+            _bubbleTail.Width = 12 * bubbleScale;
+            _bubbleTail.Height = 20 * bubbleScale;
+            _bubbleTail.Points = new PointCollection
+            {
+                new Point(0, 0),
+                new Point(12, 10),
+                new Point(0, 20),
+            };
+            _bubbleTail.Margin = new Thickness(-1, 0, 4, 0);
+            _bubbleTail.VerticalAlignment = VerticalAlignment.Center;
+
+            _bubbleHost.Children.Add(_bubble);
+            _bubbleHost.Children.Add(_bubbleTail);
+            _layoutPanel.Children.Add(_bubbleHost);
+            _layoutPanel.Children.Add(_imageViewport);
+        }
+        else
+        {
+            _layoutPanel.Orientation = Orientation.Vertical;
+            _layoutPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            _bubbleHost.Orientation = Orientation.Vertical;
+            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Center;
+            _bubbleHost.VerticalAlignment = VerticalAlignment.Top;
+
+            _bubbleText.MaxWidth = 280 * bubbleScale;
+            _bubbleText.MinWidth = 130 * bubbleScale;
+            _bubbleText.TextAlignment = TextAlignment.Left;
+            _bubble.Margin = new Thickness(8, 6, 8, 0);
+
+            _bubbleTail.Width = 20 * bubbleScale;
+            _bubbleTail.Height = 12 * bubbleScale;
+            _bubbleTail.Points = new PointCollection
+            {
+                new Point(0, 0),
+                new Point(20, 0),
+                new Point(10, 12),
+            };
+            _bubbleTail.Margin = new Thickness(0, -1, 0, 3);
+            _bubbleTail.HorizontalAlignment = HorizontalAlignment.Center;
+
+            _bubbleHost.Children.Add(_bubble);
+            _bubbleHost.Children.Add(_bubbleTail);
+            _layoutPanel.Children.Add(_bubbleHost);
+            _layoutPanel.Children.Add(_imageViewport);
+        }
+    }
+
+    private static SolidColorBrush BrushFromArgb(long value, long fallback)
+    {
+        return new SolidColorBrush(ColorFromArgb(value, fallback));
+    }
+
+    private static Color ColorFromArgb(long value, long fallback)
+    {
+        var raw = unchecked((uint)(value == 0 ? fallback : value));
+        return Color.FromArgb(
+            (byte)(raw >> 24),
+            (byte)(raw >> 16),
+            (byte)(raw >> 8),
+            (byte)raw
+        );
     }
 
     private void RefreshImage(bool force = false)
@@ -312,7 +452,7 @@ internal sealed class DesktopPetWindow : Window
             _activePicture = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
-            _bubble.Visibility = Visibility.Collapsed;
+            _bubbleHost.Visibility = Visibility.Collapsed;
             Opacity = 0;
             if (IsVisible)
             {
@@ -333,7 +473,7 @@ internal sealed class DesktopPetWindow : Window
             _activePicture = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
-            _bubble.Visibility = Visibility.Collapsed;
+            _bubbleHost.Visibility = Visibility.Collapsed;
             Opacity = 0;
             if (IsVisible)
             {
@@ -383,7 +523,7 @@ internal sealed class DesktopPetWindow : Window
             _activeImagePath = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
-            _bubble.Visibility = Visibility.Collapsed;
+            _bubbleHost.Visibility = Visibility.Collapsed;
             Opacity = 0;
             if (IsVisible)
             {
@@ -424,7 +564,7 @@ internal sealed class DesktopPetWindow : Window
     {
         if (!IsUsableImage(_config.ImageA))
         {
-            _bubble.Visibility = Visibility.Collapsed;
+            _bubbleHost.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -432,7 +572,7 @@ internal sealed class DesktopPetWindow : Window
         {
             var custom = (_config.CustomText ?? string.Empty).Trim();
             _bubbleText.Text = custom.Length == 0 ? " " : custom;
-            _bubble.Visibility = Visibility.Visible;
+            _bubbleHost.Visibility = Visibility.Visible;
             return;
         }
 
@@ -440,7 +580,7 @@ internal sealed class DesktopPetWindow : Window
         if (title.Length == 0)
         {
             _bubbleText.Text = "当前没有在画订单";
-            _bubble.Visibility = Visibility.Visible;
+            _bubbleHost.Visibility = Visibility.Visible;
             return;
         }
 
@@ -463,7 +603,7 @@ internal sealed class DesktopPetWindow : Window
         _bubbleText.Text = details.Count == 0
             ? title
             : title + Environment.NewLine + string.Join(" · ", details);
-        _bubble.Visibility = Visibility.Visible;
+        _bubbleHost.Visibility = Visibility.Visible;
     }
 
     private static string FormatDeadline(DateTime deadline)
@@ -544,8 +684,14 @@ internal sealed class DesktopPetWindow : Window
 
     private bool IsVisiblePosition(double left, double top)
     {
-        var right = left + Math.Max(120, Width);
-        var bottom = top + Math.Max(120, Height);
+        var windowWidth = ActualWidth > 0 && !double.IsNaN(ActualWidth)
+            ? ActualWidth
+            : 320;
+        var windowHeight = ActualHeight > 0 && !double.IsNaN(ActualHeight)
+            ? ActualHeight
+            : 390;
+        var right = left + Math.Max(120, windowWidth);
+        var bottom = top + Math.Max(120, windowHeight);
         var virtualRight = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth;
         var virtualBottom = SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight;
 
@@ -606,6 +752,13 @@ internal sealed class DesktopPetWindow : Window
         public string? ImageB { get; set; }
         public PetPlacement PlacementA { get; set; } = new();
         public PetPlacement PlacementB { get; set; } = new();
+        public string BubblePosition { get; set; } = "above";
+        public double PetScale { get; set; } = 1;
+        public double BubbleScale { get; set; } = 1;
+        public long BubbleBackgroundArgb { get; set; } = 0xFFF7F7F7;
+        public long BubbleForegroundArgb { get; set; } = 0xFF202020;
+        public long BubbleBorderArgb { get; set; } = 0x33202020;
+        public long BubbleAccentArgb { get; set; } = 0xFF6C7A6B;
         public string? TextMode { get; set; }
         public string? CustomText { get; set; }
         public string? CurrentOrderTitle { get; set; }
