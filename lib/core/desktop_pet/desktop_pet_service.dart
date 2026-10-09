@@ -271,6 +271,7 @@ class DesktopPetSettings extends ChangeNotifier {
 
   Future<DesktopPetPreset> createPreset(String rawName) async {
     await load();
+    await _readFromDisk();
     final name = rawName.trim().isEmpty ? '未命名桌宠' : rawName.trim();
     final preset = DesktopPetPreset(
       id: 'pet_${DateTime.now().microsecondsSinceEpoch}',
@@ -284,6 +285,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> renamePreset(String id, String rawName) async {
+    await _readFromDisk();
     final name = rawName.trim();
     if (name.isEmpty) return;
     final index = _presets.indexWhere((preset) => preset.id == id);
@@ -294,6 +296,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> selectPreset(String id) async {
+    await _readFromDisk();
     if (_selectedPresetId == id) return;
     if (!_presets.any((preset) => preset.id == id)) return;
     _selectedPresetId = id;
@@ -302,6 +305,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> deletePreset(String id) async {
+    await _readFromDisk();
     final index = _presets.indexWhere((preset) => preset.id == id);
     if (index < 0) return;
 
@@ -338,6 +342,7 @@ class DesktopPetSettings extends ChangeNotifier {
     DesktopPetPlacement placement,
   ) async {
     if (!Platform.isWindows) return null;
+    await _readFromDisk();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return null;
 
@@ -374,6 +379,7 @@ class DesktopPetSettings extends ChangeNotifier {
     String presetId,
     DesktopPetAssetSlot slot,
   ) async {
+    await _readFromDisk();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return;
     _presets[index] = switch (slot) {
@@ -387,6 +393,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setTextMode(DesktopPetTextMode mode) async {
+    await _readFromDisk();
     if (_textMode == mode) return;
     _textMode = mode;
     await _persist();
@@ -394,6 +401,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setBubblePosition(DesktopPetBubblePosition position) async {
+    await _readFromDisk();
     if (_bubblePosition == position) return;
     _bubblePosition = position;
     await _persist();
@@ -401,6 +409,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setPetScale(double value) async {
+    await _readFromDisk();
     final normalized = value.clamp(0.5, 1.8).toDouble();
     if ((_petScale - normalized).abs() < 0.001) return;
     _petScale = normalized;
@@ -409,6 +418,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setBubbleScale(double value) async {
+    await _readFromDisk();
     final normalized = value.clamp(0.65, 1.8).toDouble();
     if ((_bubbleScale - normalized).abs() < 0.001) return;
     _bubbleScale = normalized;
@@ -417,6 +427,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setCustomText(String value) async {
+    await _readFromDisk();
     if (_customText == value) return;
     _customText = value;
     await _persist();
@@ -429,6 +440,7 @@ class DesktopPetSettings extends ChangeNotifier {
     required String node,
     required DateTime? deadline,
   }) async {
+    await _readFromDisk();
     _currentOrderId = orderId;
     _currentOrderTitle = title;
     _currentOrderNode = node;
@@ -438,6 +450,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> clearCurrentOrderSelection() async {
+    await _readFromDisk();
     if (_currentOrderId == null &&
         _currentOrderTitle == null &&
         _currentOrderNode == null &&
