@@ -40,6 +40,7 @@ class ScreenshotOcrService {
       if (value is! Map || value['text'] is! String) continue;
       lines.add(ScreenshotTextLine(
         text: value['text'] as String,
+        recoveredFromCrop: value['recoveredFromCrop'] == true,
         left: number(value['left'], 'left'),
         top: number(value['top'], 'top'),
         right: number(value['right'], 'right'),
