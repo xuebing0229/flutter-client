@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/services.dart';
 import 'dart:math' as math;
 
 import 'package:image/image.dart' as img;
@@ -65,8 +68,48 @@ bool shouldPaddleReviewTitle(ScreenshotOrderCandidate row) {
 /// PaddleOCR / PP-OCRv6 small runs entirely offline, only after a suspicious
 /// ML Kit result. All cropped images are deleted, even on native OCR failure.
 class ScreenshotPaddleReviewService {
-  final PaddleOcr _engine = PaddleOcr();
-  bool _initialized = false;
+  static const _channel = MethodChannel('app.paddle_isolated_ocr');
+  bool _isolatedUnavailable = false;
+
+  Future<OcrRunResult> _recognizeIsolated(String path) async {
+    if (_isolatedUnavailable) {
+      throw StateError('PaddleOCR 子进程此前已异常退出，本轮已停止使用第二引擎。');
+    }
+    try {
+      final response = await _channel.invokeMapMethod<String, Object?>(
+        'recognize', {'path': path},
+      );
+      if (response == null || response['results'] is! String) {
+        throw const FormatException('隔离进程未返回识别结果');
+      }
+      final decoded = jsonDecode(response['results']! as String);
+      if (decoded is! List) throw const FormatException('识别结果结构错误');
+      final items = [
+        for (final item in decoded)
+          OcrResult.fromMap(Map<String, dynamic>.from(item as Map)),
+      ];
+      return OcrRunResult(
+        results: items,
+        detectionTimeMs: (response['detectionMs'] as num?)?.toInt() ?? 0,
+        recognitionTimeMs: (response['recognitionMs'] as num?)?.toInt() ?? 0,
+      );
+    } on PlatformException catch (error) {
+      if (error.code == 'PADDLE_PROCESS_DIED' ||
+          error.code == 'PADDLE_BIND_FAILED') {
+        _isolatedUnavailable = true;
+      }
+      rethrow;
+    }
+  }
+
+  Future<String> androidExitReport() async {
+    try {
+      return await _channel.invokeMethod<String>('recentExit') ??
+          '未获得系统进程退出记录';
+    } catch (error) {
+      return '无法读取退出历史：$error';
+    }
+  }
 
   // A native SIGABRT/SIGSEGV or Android low-memory process kill cannot be
   // caught by Dart. Keep an on-disk stage marker before each native call:
@@ -74,7 +117,7 @@ class ScreenshotPaddleReviewService {
   // ML Kit remains available for all normal imports.
   Future<File> _crashMarker() async {
     final dir = await getApplicationSupportDirectory();
-    return File('${dir.path}/paddle-ocr-native-v115.running');
+    return File('${dir.path}/paddle-ocr-isolated-v116.running');
   }
 
   Future<void> _nativeStageStart(String stage) async {
@@ -93,13 +136,8 @@ class ScreenshotPaddleReviewService {
   }
 
   Future<void> _ensureInitialized() async {
-    if (_initialized) return;
-    await _nativeStageStart('初始化模型');
-    try {
-      await _engine.init(engine: const EngineConfig(numThreads: 1));
-      _initialized = true;
-    } finally {
-      await _nativeStageEnd();
+    if (_isolatedUnavailable) {
+      throw StateError('PaddleOCR 子进程此前已异常退出，本轮已停用第二引擎。');
     }
   }
 
@@ -150,7 +188,7 @@ class ScreenshotPaddleReviewService {
         onProgress?.call('分片 ${index + 1}/$n');
         await _nativeStageStart('识别分片 ${index + 1}/$n');
         try {
-          final run = await _engine.recognize(path)
+          final run = await _recognizeIsolated(path)
               .timeout(const Duration(seconds: 35));
           nativeMs += run.totalTimeMs;
           for (final result in run.results) {
@@ -191,8 +229,9 @@ class ScreenshotPaddleReviewService {
         lines: List.unmodifiable(found),
       );
     } catch (error) {
-      diagnostics.add('PaddleOCR 安全对照失败：$error'
+      diagnostics.add('PaddleOCR 隔离进程对照失败：$error'
           '（${clock.elapsedMilliseconds} ms；原 ML Kit 结果保留）');
+      diagnostics.add('Android 进程退出记录：${await androidExitReport()}');
       return null;
     } finally {
       clock.stop();
@@ -222,7 +261,8 @@ class ScreenshotPaddleReviewService {
       if (source == null) throw const FormatException('图片解码失败');
       await _ensureInitialized();
     } catch (error) {
-      diagnostics.add('PaddleOCR 初始化不可用：$error；保留原 OCR');
+      diagnostics.add('PaddleOCR 隔离服务不可用：$error；保留原 OCR');
+      diagnostics.add('Android 进程退出记录：${await androidExitReport()}');
       return List.filled(rows.length, const PaddleFieldReview());
     }
 
@@ -319,26 +359,14 @@ class ScreenshotPaddleReviewService {
       return reading;
     } catch (error) {
       diagnostics.add('${isBuyer ? "单主" : "图名"}区域 PaddleOCR 不可用：$error');
+      diagnostics.add('Android 进程退出记录：${await androidExitReport()}');
       return null;
     } finally {
       try { await tempDir.delete(recursive: true); } catch (_) {}
     }
   }
 
-  /// Keep the native model between screenshots in one import batch.
-  Future<void> dispose() async {
-    if (_initialized) {
-      _initialized = false;
-      try {
-        await _nativeStageStart('卸载模型');
-        try {
-          await _engine.dispose();
-        } finally {
-          await _nativeStageEnd();
-        }
-      } catch (_) {
-        // The primary ML Kit import must remain usable.
-      }
-    }
-  }
+  /// The native model lives in a separately bound process managed by Android.
+  /// It is released when the Activity disconnects, not after each import.
+  Future<void> dispose() async {}
 }
