@@ -392,6 +392,25 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setPlacement(
+    String presetId,
+    DesktopPetAssetSlot slot,
+    DesktopPetPlacement placement,
+  ) async {
+    await _readFromDisk();
+    final index = _presets.indexWhere((preset) => preset.id == presetId);
+    if (index < 0) return;
+
+    _presets[index] = switch (slot) {
+      DesktopPetAssetSlot.idleA =>
+        _presets[index].copyWith(placementA: placement),
+      DesktopPetAssetSlot.keyB =>
+        _presets[index].copyWith(placementB: placement),
+    };
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setTextMode(DesktopPetTextMode mode) async {
     await _readFromDisk();
     if (_textMode == mode) return;
