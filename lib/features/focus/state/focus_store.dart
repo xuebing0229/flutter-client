@@ -80,7 +80,10 @@ class FocusStore extends ChangeNotifier {
     // when their records meet: the later start remains active, and every older
     // active session ends at that later start so synced history never overlaps.
     final active = byId.values.where((session) => session.isActive).toList()
-      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+      ..sort((a, b) {
+        final byTime = a.startedAt.compareTo(b.startedAt);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
     if (active.length > 1) {
       final keep = active.last;
       for (final session in active.take(active.length - 1)) {
