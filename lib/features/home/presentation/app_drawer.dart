@@ -197,6 +197,8 @@ class AppToolMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final showDesktopPet =
         Platform.isWindows && featureStore.enabled(AppFeature.desktopPet);
+    final showFocus = featureStore.enabled(AppFeature.focus);
+    final showPetFocusEntry = showDesktopPet || showFocus;
 
     return ListView(
       padding: padding,
@@ -225,21 +227,23 @@ class AppToolMenu extends StatelessWidget {
               ),
             ),
           ),
-        _item(
-          icon: showDesktopPet ? Icons.pets_outlined : Icons.timer_outlined,
-          title: showDesktopPet ? '桌宠' : '专注',
-          tool: desktopPetTool,
-          onTap: () => _open(
-            context,
-            desktopPetTool,
-            DesktopPetPage(
-              orderStore: orderStore,
-              focusStore: focusStore,
-              onOpenOrder: onOpenOrder,
-              showDesktopPet: showDesktopPet,
+        if (showPetFocusEntry)
+          _item(
+            icon: showDesktopPet ? Icons.pets_outlined : Icons.timer_outlined,
+            title: showDesktopPet ? '桌宠' : '专注',
+            tool: desktopPetTool,
+            onTap: () => _open(
+              context,
+              desktopPetTool,
+              DesktopPetPage(
+                orderStore: orderStore,
+                focusStore: focusStore,
+                onOpenOrder: onOpenOrder,
+                showDesktopPet: showDesktopPet,
+                showFocus: showFocus,
+              ),
             ),
           ),
-        ),
         _item(
           icon: Icons.archive_outlined,
           title: '归档',
