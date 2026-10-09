@@ -74,10 +74,11 @@ begin
   Command :=
     '$targets = @([IO.Path]::GetFullPath(''' + InstallDir +
     '\{#MyAppExeName}''), [IO.Path]::GetFullPath(''' + InstallDir +
-    '\syncthing\syncthing.exe'')); ' +
+    '\syncthing\syncthing.exe''), [IO.Path]::GetFullPath(''' + InstallDir +
+    '\desktop_pet\AdventurersGuild.DesktopPet.exe'')); ' +
     '$deadline = (Get-Date).AddSeconds(15); ' +
     'do { ' +
-    '$running = @(Get-Process -Name ''adventurers_guild'',''syncthing'' -ErrorAction SilentlyContinue | ' +
+    '$running = @(Get-Process -Name ''adventurers_guild'',''syncthing'',''AdventurersGuild.DesktopPet'' -ErrorAction SilentlyContinue | ' +
     'Where-Object { $_.Path -and $targets -contains [IO.Path]::GetFullPath($_.Path) }); ' +
     'if ($running.Count -eq 0) { exit 0 }; ' +
     '$running | Stop-Process -Force -ErrorAction SilentlyContinue; ' +
@@ -99,7 +100,7 @@ var
 begin
   Result := '';
   if not StopInstalledProcessesForInstall(ResultCode) then
-    Result := '无法在安装前关闭旧版冒险者公会或内置同步核心。请关闭后重试。';
+    Result := '无法在安装前关闭旧版冒险者公会、桌宠或内置同步核心。请关闭后重试。';
 end;
 
 function InitializeUninstall(): Boolean;
