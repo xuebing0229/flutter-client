@@ -18,6 +18,13 @@ NAMES = {
     "rec": "PP-OCRv6_tiny_rec_onnx_infer.tar",
 }
 REQUIRED = {"det": ("inference.onnx",), "rec": ("inference.onnx", "inference.yml")}
+# SHA256 of the official PaddlePaddle archives' extracted model files.
+# Checked on GitHub Actions against the actual downloaded bytes.
+EXPECTED_SHA256 = {
+    ("det", "inference.onnx"): "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
+    ("rec", "inference.onnx"): "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6",
+    ("rec", "inference.yml"): "66170210bad538e83fff3c4a3867e547d6bf20b50d64b20347c4b913f3034ea1",
+}
 
 def download(url: str, target: pathlib.Path):
     req = urllib.request.Request(url, headers={"User-Agent": "PaddleOCR-Android-model-bundle/1.0"})
@@ -64,7 +71,10 @@ def main():
                 assert len(content) > (50_000 if name.endswith(".onnx") else 100)
                 if name.endswith(".yml"):
                     assert b"PostProcess:" in content and b"character_dict:" in content
-                print(f"official PP-OCRv6 Tiny: {path} ({len(content)} bytes), sha256={hashlib.sha256(content).hexdigest()}")
+                digest = hashlib.sha256(content).hexdigest()
+                if digest != EXPECTED_SHA256[(group, name)]:
+                    raise RuntimeError(f"PP-OCRv6 model checksum mismatch: {path}: {digest}")
+                print(f"official PP-OCRv6 Tiny: {path} ({len(content)} bytes), sha256={digest}")
 
 if __name__ == "__main__":
     main()
