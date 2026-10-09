@@ -909,6 +909,8 @@ class _PairPlacementPreview extends StatelessWidget {
                 label: 'A · 平时状态',
                 path: preset.imageA,
                 placement: preset.placementA,
+                importPlacement:
+                    preset.importPlacementA ?? preset.placementA,
                 onPlacementChanged: (placement) => onPlacementChanged(
                   DesktopPetAssetSlot.idleA,
                   placement,
@@ -921,6 +923,8 @@ class _PairPlacementPreview extends StatelessWidget {
                 label: 'B · 操作状态',
                 path: preset.imageB,
                 placement: preset.placementB,
+                importPlacement:
+                    preset.importPlacementB ?? preset.placementB,
                 onPlacementChanged: (placement) => onPlacementChanged(
                   DesktopPetAssetSlot.keyB,
                   placement,
@@ -939,12 +943,14 @@ class _SinglePlacementPreview extends StatefulWidget {
     required this.label,
     required this.path,
     required this.placement,
+    required this.importPlacement,
     required this.onPlacementChanged,
   });
 
   final String label;
   final String? path;
   final DesktopPetPlacement placement;
+  final DesktopPetPlacement importPlacement;
   final Future<void> Function(DesktopPetPlacement placement)
       onPlacementChanged;
 
@@ -1033,13 +1039,20 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
     });
   }
 
-  void _resetDraft() {
+  void _centerDraft() {
     if (!_editing) return;
     setState(() {
       _placement = _placement.copyWith(
         offsetX: 0,
         offsetY: 0,
       );
+    });
+  }
+
+  void _resetDraft() {
+    if (!_editing) return;
+    setState(() {
+      _placement = widget.importPlacement;
     });
   }
 
@@ -1174,7 +1187,12 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
               ),
               const SizedBox(width: 4),
               IconButton(
-                tooltip: '重置到居中位置',
+                tooltip: '上下左右居中',
+                onPressed: _saving ? null : _centerDraft,
+                icon: const Icon(Icons.center_focus_strong_rounded),
+              ),
+              IconButton(
+                tooltip: '恢复导入时的位置和大小',
                 onPressed: _saving ? null : _resetDraft,
                 icon: const Icon(Icons.restart_alt_rounded),
               ),
