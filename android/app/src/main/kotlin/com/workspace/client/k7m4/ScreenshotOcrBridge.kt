@@ -28,19 +28,34 @@ import java.io.File
 class ScreenshotOcrBridge(private val activity: Activity) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val guard = Mutex()
+    private val failureLog = OcrCrashDiagnostics(activity)
     private var ocr: PaddleOCR? = null
 
     fun configure(messenger: BinaryMessenger) {
         MethodChannel(messenger, "app.screenshot_ocr").setMethodCallHandler { call, reply ->
             when (call.method) {
+                "lastCrashReport" -> {
+                    // Android system exit records may include a previous Beta,
+                    // which did not yet save pre-native checkpoints.
+                    try {
+                        reply.success(failureLog.lastFailureReport())
+                    } catch (error: Throwable) {
+                        reply.error("OCR_DIAGNOSTIC_FAILED", error.message, null)
+                    }
+                }
                 "release" -> {
                     // The mutex serializes release with inference and with
                     // the next batch. Null the handle even if release throws.
                     scope.launch {
                         try {
-                            guard.withLock { releaseModel() }
+                            guard.withLock {
+                                failureLog.checkpoint("release_onnx_sessions")
+                                releaseModel()
+                                failureLog.finish()
+                            }
                             reply.success(null)
                         } catch (error: Throwable) {
+                            failureLog.finish()
                             reply.error(
                                 "OFFICIAL_PPOCRV6_RELEASE_FAILED",
                                 error.message ?: error.javaClass.simpleName,
@@ -56,8 +71,14 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                     } else {
                         scope.launch {
                             try {
-                                reply.success(guard.withLock { recognize(path) })
+                                reply.success(guard.withLock {
+                                    failureLog.checkpoint("recognize_requested")
+                                    val output = recognize(path)
+                                    failureLog.finish()
+                                    output
+                                })
                             } catch (error: Throwable) {
+                                failureLog.finish()
                                 reply.error(
                                     "OFFICIAL_PPOCRV6_FAILED",
                                     error.message ?: error.javaClass.simpleName,
@@ -74,9 +95,11 @@ class ScreenshotOcrBridge(private val activity: Activity) {
 
     private suspend fun getOcr(): PaddleOCR {
         ocr?.let { return it }
+        failureLog.checkpoint("opencv_load")
         check(OpenCVUtils.init(activity.applicationContext)) {
             "官方 PP-OCRv6 SDK 无法初始化 Android OpenCV"
         }
+        failureLog.checkpoint("onnx_model_init")
         val loaded = PaddleOCR.create(
             context = activity.applicationContext,
             config = PaddleOCRConfig(
@@ -91,12 +114,14 @@ class ScreenshotOcrBridge(private val activity: Activity) {
             recConfigAssetPath = "models/rec/inference.yml",
         )
         ocr = loaded
+        failureLog.checkpoint("onnx_models_ready")
         return loaded
     }
 
     private suspend fun recognize(path: String): Map<String, Any> {
         val file = File(path)
         require(file.isFile && file.canRead()) { "截图不存在或不可读取" }
+        failureLog.checkpoint("image_decode_bounds")
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         require(bounds.outWidth > 0 && bounds.outHeight > 0) { "无法读取截图尺寸" }
@@ -106,7 +131,9 @@ class ScreenshotOcrBridge(private val activity: Activity) {
         val bytes = file.readBytes()
         val start = SystemClock.elapsedRealtime()
         val engine = getOcr()
+        failureLog.checkpoint("onnx_recognize_image")
         val result = engine.recognize(bytes)
+        failureLog.checkpoint("ocr_result_box_conversion")
 
         val lines = result.results.mapNotNull { row ->
             if (row.text.isBlank()) return@mapNotNull null

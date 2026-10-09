@@ -69,8 +69,29 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_pickAndRecognize());
+      if (mounted) unawaited(_resumeOrSelectScreenshot());
     });
+  }
+
+  Future<void> _resumeOrSelectScreenshot() async {
+    if (Platform.isAndroid) {
+      try {
+        final previous = await _ocr.lastNativeCrashReport();
+        if (!mounted) return;
+        if (previous != null && previous.isNotEmpty) {
+          setState(() {
+            _ocrDiagnostics.add(previous);
+          });
+          _message('发现上次应用异常退出的系统记录。请先点顶部诊断图标复制报告，'
+              '也可以点「选择截图」继续。');
+          return;
+        }
+      } catch (error) {
+        // Reporting should never block ordinary screenshot selection.
+        _ocrDiagnostics.add('读取 Android 退出信息失败：$error');
+      }
+    }
+    if (mounted) await _pickAndRecognize();
   }
 
   void _message(String text) {

@@ -15,6 +15,12 @@ class ScreenshotOcrService {
 
   bool get supported => Platform.isAndroid || Platform.isWindows;
 
+  /// Reads local Android process-exit diagnostics. No image or OCR text is sent.
+  Future<String?> lastNativeCrashReport() async {
+    if (!Platform.isAndroid) return null;
+    return _channel.invokeMethod<String>('lastCrashReport');
+  }
+
   /// Explicitly release native ONNX sessions after the selected-image batch.
   /// Windows OCR uses short-lived resources inside recognize().
   Future<void> release() async {
