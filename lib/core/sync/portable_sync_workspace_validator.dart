@@ -86,7 +86,8 @@ class PortableSyncWorkspaceValidator {
     required Map<String, Map<String, dynamic>> orders,
     required Map<String, Map<String, dynamic>> products,
     required Map<String, Map<String, dynamic>> presets,
-    required Map<String, Map<String, dynamic>> focusSessions,
+    Map<String, Map<String, dynamic>> focusSessions =
+        const <String, Map<String, dynamic>>{},
     Map<String, dynamic>? settings,
     SyncMergeEngine? mergeEngine,
   }) {
