@@ -8,6 +8,7 @@ import '../domain/focus_session.dart';
 
 class FocusStore extends ChangeNotifier {
   final List<FocusSession> _sessions = <FocusSession>[];
+  final Random _random = Random.secure();
 
   UnmodifiableListView<FocusSession> get sessions =>
       UnmodifiableListView(_sessions);
@@ -34,7 +35,7 @@ class FocusStore extends ChangeNotifier {
     }
     final now = DateTime.now();
     final session = FocusSession(
-      id: 'focus_\${now.microsecondsSinceEpoch}',
+      id: 'focus_${now.toUtc().microsecondsSinceEpoch.toRadixString(36)}_${_random.nextInt(1 << 32).toRadixString(36)}',
       startedAt: now,
       endedAt: null,
       orderId: order?.id,
