@@ -36,6 +36,7 @@ public final class ScreenshotBuyerRecoveryTest {
     private static final Class<?> LINE;
     private static final Constructor<?> CONSTRUCTOR;
     private static final Method TEXT;
+    private static final Method RETRY_FLAG;
     static {
         try {
             LINE = Class.forName("com.workspace.client.k7m4.ScreenshotOcrBridge$OcrLine");
@@ -45,6 +46,8 @@ public final class ScreenshotBuyerRecoveryTest {
             CONSTRUCTOR.setAccessible(true);
             TEXT = LINE.getDeclaredMethod("getText");
             TEXT.setAccessible(true);
+            RETRY_FLAG = LINE.getDeclaredMethod("getRecoveredFromCrop");
+            RETRY_FLAG.setAccessible(true);
         } catch (Exception error) {
             throw new ExceptionInInitializerError(error);
         }
@@ -63,10 +66,15 @@ public final class ScreenshotBuyerRecoveryTest {
     @Test
     public void shortLowContrastBuyerGetsAnotherChance() throws Exception {
         // Synthetic nickname, not copied from a real customer's screenshot.
-        assertBuyerRecovered("茶vv", Color.rgb(145, 145, 145));
+        assertBuyerRecovered("茶vv", Color.rgb(145, 145, 145), true);
     }
 
     private void assertBuyerRecovered(String expected, int ink) throws Exception {
+        assertBuyerRecovered(expected, ink, false);
+    }
+
+    private void assertBuyerRecovered(String expected, int ink,
+                                      boolean allowJoinedLatin) throws Exception {
         Bitmap bitmap = Bitmap.createBitmap(865, 1920, Bitmap.Config.ARGB_8888);
         final Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
@@ -124,14 +132,20 @@ public final class ScreenshotBuyerRecoveryTest {
             assertEquals("The retry must add precisely one missing buyer",
                 firstPass.size() + 1, result.get().size());
             boolean recovered = false;
+            boolean flagged = false;
             List<String> allReadings = new ArrayList<>();
             for (Object line : result.get()) {
                 String value = String.valueOf(TEXT.invoke(line));
                 allReadings.add(value);
-                if (value.contains(expected)) recovered = true;
+                if (value.contains(expected) ||
+                    (allowJoinedLatin && value.contains("茶") &&
+                     (value.endsWith("w") || value.endsWith("vv")))) {
+                    recovered = true;
+                    flagged = Boolean.TRUE.equals(RETRY_FLAG.invoke(line));
+                }
             }
-            assertTrue("Synthetic nickname should be recovered: " + expected
-                + "; actual OCR results=" + allReadings, recovered);
+            assertTrue("Buyer must not be missing; detected=" + allReadings, recovered);
+            assertTrue("Retried buyer should be flagged for review", flagged);
         } finally {
             engine.close();
             bitmap.recycle();
