@@ -73,6 +73,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '桌宠定位与主题跟随修复',
     description: '进一步修复桌宠主题同步：不再从旧页面主题状态取色，直接按当前主题模式、色板和 Windows 实际明暗模式生成气泡与计时板颜色。人物定位编辑移除误导性的内层参考框，并将“居中”和“重置”拆分：居中只调整上下左右位置，重置可恢复图片刚导入时保存的位置与大小。按订单合并的专注记录继续保留右侧展示，并将累计时长标注明确、放大加粗。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 132,
+    title: '竖排气泡排版修复',
+    description: '修复桌宠侧边竖排气泡文字高低不齐、数字和标点错位的问题：改为固定字格逐字排版，两列等宽等距；当文字较长或可用空间不足时会整体等比缩小，不再依赖手工换行或空格拼排。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
