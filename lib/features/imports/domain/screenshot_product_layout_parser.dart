@@ -1,3 +1,4 @@
+import '../../orders/domain/queue_order.dart';
 import 'screenshot_layout_parser.dart';
 import 'screenshot_import_rules.dart';
 
@@ -32,6 +33,7 @@ class ScreenshotProductLayoutParser {
   List<ScreenshotProductTextCandidate> parse({
     required Iterable<ScreenshotTextLine> lines,
     required double imageHeight,
+    CommissionPlatform? platform,
   }) {
     final filtered = lines.where((line) =>
         line.text.trim().isNotEmpty &&
@@ -41,6 +43,14 @@ class ScreenshotProductLayoutParser {
           imageHeight: imageHeight,
         )).toList()
       ..sort((a, b) => a.centerY.compareTo(b.centerY));
+
+    if (platform == CommissionPlatform.huajia) {
+      final anchored = _parseHuajiaCompletedStorefront(
+        filtered: filtered,
+        imageHeight: imageHeight,
+      );
+      if (anchored.isNotEmpty) return anchored;
+    }
 
     // Chinese OCR can return currency and digits as neighboring boxes.
     // Never promote a bare numeric label to a price without the ¥ symbol.
@@ -140,4 +150,82 @@ class ScreenshotProductLayoutParser {
     }
     return List.unmodifiable(results);
   }
+
+  List<ScreenshotProductTextCandidate> _parseHuajiaCompletedStorefront({
+    required List<ScreenshotTextLine> filtered,
+    required double imageHeight,
+  }) {
+    final anchors = filtered.where((line) =>
+        line.text.trim().startsWith('截稿时间')).toList()
+      ..sort((a, b) => a.centerY.compareTo(b.centerY));
+    if (anchors.isEmpty) return const [];
+
+    final amounts = <(ScreenshotTextLine, double)>[];
+    for (final line in filtered) {
+      final matched = _money.firstMatch(line.text.trim());
+      final value = double.tryParse(
+        matched?.group(1) ?? matched?.group(2) ?? '',
+      );
+      if (value != null) amounts.add((line, value));
+    }
+
+    bool rejectTitle(String source) {
+      final text = source.trim();
+      if (text.length < 3 || text.length > 85) return true;
+      if (_date.hasMatch(text) || _money.hasMatch(text) || _ui.contains(text)) {
+        return true;
+      }
+      if (<String>{'批发', '查看评价', '已完成', '全部', '搜索'}
+          .contains(text)) {
+        return true;
+      }
+      if (text.startsWith('截稿时间') ||
+          text.startsWith('剩余') ||
+          text.startsWith('距截稿') ||
+          text.startsWith('当前交付') ||
+          RegExp(r'^\d+(?:\.\d+)?%$').hasMatch(text)) {
+        return true;
+      }
+      return false;
+    }
+
+    final results = <ScreenshotProductTextCandidate>[];
+    for (var index = 0; index < anchors.length; index++) {
+      final anchor = anchors[index];
+      final previousBoundary = index == 0
+          ? 0.0
+          : (anchors[index - 1].centerY + anchor.centerY) / 2;
+      final nextBoundary = index + 1 < anchors.length
+          ? (anchor.centerY + anchors[index + 1].centerY) / 2
+          : imageHeight;
+
+      final titles = filtered.where((line) {
+        return line.centerY >= previousBoundary &&
+            line.centerY < anchor.centerY &&
+            anchor.centerY - line.centerY <= 170 &&
+            line.left >= 300 &&
+            !rejectTitle(line.text);
+      }).toList()
+        ..sort((a, b) {
+          final byLength =
+              b.text.trim().length.compareTo(a.text.trim().length);
+          if (byLength != 0) return byLength;
+          return b.centerY.compareTo(a.centerY);
+        });
+      if (titles.isEmpty) continue;
+
+      final prices = amounts.where((entry) =>
+          entry.$1.centerY > anchor.centerY &&
+          entry.$1.centerY < nextBoundary &&
+          entry.$1.centerY - anchor.centerY <= 300).toList()
+        ..sort((a, b) => a.$1.centerY.compareTo(b.$1.centerY));
+
+      results.add(ScreenshotProductTextCandidate(
+        title: titles.first.text.trim(),
+        price: prices.isEmpty ? null : prices.first.$2,
+      ));
+    }
+    return List.unmodifiable(results);
+  }
+
 }

@@ -40,4 +40,14 @@ void main() {
     expect(newsBetweenBuilds(106, 107).single.title, '冒险者新见闻');
     expect(newsBetweenBuilds(105, 107).length, 2);
   });
+
+  test('124 包含本轮截图识别导入优化', () {
+    final picked = newsBetweenBuilds(121, 124);
+    expect(picked.map((e) => e.title), contains('截图识别导入优化'));
+  });
+
+  test('125 向 124 用户补充同步恢复见闻', () {
+    final picked = newsBetweenBuilds(124, 125);
+    expect(picked.map((e) => e.title), contains('设备同步恢复与前台自动连接'));
+  });
 }

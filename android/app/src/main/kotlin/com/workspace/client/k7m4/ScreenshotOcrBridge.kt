@@ -3,7 +3,6 @@ package com.workspace.client.k7m4
 import android.app.Activity
 import android.graphics.BitmapFactory
 import android.os.SystemClock
-import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCR
 import com.paddle.ocr.PaddleOCRConfig
 import com.paddle.ocr.util.OpenCVUtils
@@ -18,9 +17,9 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 /**
- * Android's only screenshot recognizer, directly using the official PP-OCRv6
- * Android SDK. Follows the upstream demo: initialize OpenCV, create model once,
- * recognize image bytes, reuse during a batch, and release after import.
+ * Android's only screenshot recognizer, directly using the official PP-OCRv6 Android SDK. The OCR engine initialization
+ * and recognition calls intentionally mirror PaddlePaddle's OCRApplication +
+ * OCRViewModel demo. Flutter only supplies the image file and receives results.
  *
  * Flutter owns the screenshot card parsing; this native layer returns ONLY
  * raw text and original image coordinates, with no secondary engine or retries.
@@ -100,18 +99,15 @@ class ScreenshotOcrBridge(private val activity: Activity) {
             "官方 PP-OCRv6 SDK 无法初始化 Android OpenCV"
         }
         failureLog.checkpoint("onnx_model_init")
+        // Keep this invocation byte-for-byte equivalent in meaning to the
+        // official OCRApplication.loadModels() demo path. Do not override
+        // detection limits, engine thread count, or model paths here.
         val loaded = PaddleOCR.create(
             context = activity.applicationContext,
             config = PaddleOCRConfig(
-                detLimitSideLen = 1536,
-                detLimitType = "max",
-                recBatchSize = 1,
                 recScoreThresh = 0.0f,
+                recBatchSize = 1,
             ),
-            engineConfig = EngineConfig(numThreads = 2),
-            detModelAssetPath = "models/det/inference.onnx",
-            recModelAssetPath = "models/rec/inference.onnx",
-            recConfigAssetPath = "models/rec/inference.yml",
         )
         ocr = loaded
         failureLog.checkpoint("onnx_models_ready")

@@ -16,6 +16,14 @@ void main() {
     expect(preselectImportPlatform(['进行中', '2026-10-31']).platform, isNull);
   });
 
+  test('Huajia completed-product storefront auto-selects without app name', () {
+    final guess = preselectImportPlatform([
+      '批发', '已完成', '截稿时间：拍下自动提交源文件',
+      '¥10', '查看评价',
+    ]);
+    expect(guess.platform, CommissionPlatform.huajia);
+  });
+
   test('MiHuashi list screen headers auto-select even when logo is cropped', () {
     final guess = preselectImportPlatform([
       '进行中', '默认', '截稿时间', '接单时间', '购买时间',

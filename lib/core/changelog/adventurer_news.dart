@@ -38,6 +38,16 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备同步体验升级',
     description: '手机和电脑在前台打开时会自动连接并同步，不再需要两边手动点同步；实际传输时会显示实时百分比和进度条，完成后自动消失。Android 同步不再长期占用通知栏，并增强了同步通道掉线后的自动恢复。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 124,
+    title: '截图识别导入优化',
+    description: '截图识别改用稳定的官方 PP-OCRv6 链路，并优化米画师进度归属、重复截图默认保留信息更完整版本、画加成品平台与卡片解析；旧的 OCR 异常退出记录也不会再反复打扰导入。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 125,
+    title: '设备同步恢复与前台自动连接',
+    description: '修复 124 测试版误带旧同步后台的问题；手机和电脑打开公会后会自动连接并同步，传输时显示真实百分比，Android 不再常驻“正在同步设备数据”通知。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

@@ -56,6 +56,8 @@ internal class OcrCrashDiagnostics(context: Context) {
         val previous = pid != 0 && pid != Process.myPid() && !stage.isNullOrEmpty()
         val manager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val records = manager.getHistoricalProcessExitReasons(null, 0, 16)
+        val reportedPid = preferences.getInt("reportedExitPid", -1)
+        val reportedTimestamp = preferences.getLong("reportedExitTimestamp", -1L)
         val relevant = records.filter {
             it.processName == appContext.packageName &&
                 it.reason in listOf(
@@ -64,19 +66,21 @@ internal class OcrCrashDiagnostics(context: Context) {
                     ApplicationExitInfo.REASON_LOW_MEMORY,
                     ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
                 ) &&
-                System.currentTimeMillis() - it.timestamp < 24L * 3600L * 1000L
+                System.currentTimeMillis() - it.timestamp < 24L * 3600L * 1000L &&
+                !(it.pid == reportedPid && it.timestamp == reportedTimestamp)
         }
         val matched = relevant.firstOrNull {
             previous && it.pid == pid && it.timestamp >= stamp - 120_000L
         }
-        // If the previous version was too old to write breadcrumbs, still
-        // surface Android's own most recent process exit, if available.
+        // If an older app version did not write breadcrumbs, fall back to
+        // Android's newest unreported exit record. Each exit is surfaced only
+        // once, so reopening the import page never nags about the same crash.
         val chosen = matched ?: if (!previous) relevant.maxByOrNull { it.timestamp } else null
-        if (!previous && chosen == null) return null
+        if (chosen == null) return null
 
         val pageSize = runCatching { Os.sysconf(OsConstants._SC_PAGESIZE) }.getOrDefault(-1L)
         val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-        return buildString {
+        val report = buildString {
             appendLine("冒险者公会 · Android 原生 OCR 崩溃诊断")
             appendLine("版本：仅含系统退出信息和推理阶段，不包含订单/图片内容。")
             appendLine("Android：${Build.VERSION.SDK_INT}（${Build.VERSION.RELEASE}）")
@@ -115,5 +119,20 @@ internal class OcrCrashDiagnostics(context: Context) {
                 appendLine("原生 tombstone 可提取：$tombstoneAvailable")
             }
         }
+        preferences.edit()
+            .putInt("reportedExitPid", chosen.pid)
+            .putLong("reportedExitTimestamp", chosen.timestamp)
+            .commit()
+        // Old-process checkpoints are no longer useful once the matching
+        // system exit has been captured into this report.
+        if (previous && chosen.pid == pid) {
+            preferences.edit()
+                .remove("pid")
+                .remove("updatedAtMs")
+                .remove("stage")
+                .remove("pssKb")
+                .commit()
+        }
+        return report
     }
 }

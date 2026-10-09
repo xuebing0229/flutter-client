@@ -7,7 +7,6 @@ import android.graphics.Paint
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCR
 import com.paddle.ocr.PaddleOCRConfig
 import com.paddle.ocr.util.OpenCVUtils
@@ -18,7 +17,7 @@ import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 
 /**
- * Exercises the *real official PP-OCRv6 Small SDK*, OpenCV, ONNX, model load and
+ * Exercises the *real official PP-OCRv6 Small SDK using the official demo configuration*, OpenCV, ONNX, model load and
  * recognition. Does not simulate OCR by passing fake parsed text.
  */
 @RunWith(AndroidJUnit4::class)
@@ -50,15 +49,9 @@ class ScreenshotOfficialPaddleOcrTest {
           val ocr = PaddleOCR.create(
             context = ctx,
             config = PaddleOCRConfig(
-                detLimitSideLen = 1536,
-                detLimitType = "max",
-                recBatchSize = 1,
                 recScoreThresh = 0f,
+                recBatchSize = 1,
             ),
-            engineConfig = EngineConfig(numThreads = 2),
-            detModelAssetPath = "models/det/inference.onnx",
-            recModelAssetPath = "models/rec/inference.onnx",
-            recConfigAssetPath = "models/rec/inference.yml",
         )
         try {
             repeat(2) { run ->

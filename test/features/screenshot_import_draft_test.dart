@@ -23,6 +23,37 @@ void main() {
     nodeId: defaultNodePreset.nodes.first.id,
   );
 
+
+  test('probable duplicate defaults to the more complete screenshot', () {
+    final dayOnly = create('day-only');
+    dayOnly.deadline = null;
+    dayOnly.deadlineConfirmed = false;
+
+    final detailed = ScreenshotImportDraft(
+      id: 'detailed',
+      sourceImageId: 'shot2',
+      title: dayOnly.title,
+      clientName: dayOnly.clientName,
+      price: dayOnly.price,
+      platform: dayOnly.platform,
+      detectedDate: DateTime(2026, 10, 31, 23, 59),
+      sourceHasClock: true,
+      deadline: DateTime(2026, 10, 31, 23, 59),
+      deadlineConfirmed: true,
+      recognizedPercent: 60,
+      presetId: defaultNodePreset.id,
+      nodeId: defaultNodePreset.nodes.first.id,
+    );
+
+    expect(
+      screenshotImportInformationScore(detailed),
+      greaterThan(screenshotImportInformationScore(dayOnly)),
+    );
+    expect(preferredScreenshotDuplicate(dayOnly, detailed), same(detailed));
+    // Stable fallback: equal-information duplicates keep the earlier row.
+    expect(preferredScreenshotDuplicate(dayOnly, create('same')), same(dayOnly));
+  });
+
   test('choosing last row preset changes all unmodified same-title rows', () {
     final custom = NodePreset(
       id: 'custom',
