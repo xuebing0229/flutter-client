@@ -577,6 +577,14 @@ String _conflictSubject(
         }
       }
       return '成品 · ${view.fieldLabel}';
+    case SyncEntityKind.focusSession:
+      for (final session in coordinator.focusStore.sessions) {
+        if (session.id == view.recordId) {
+          final label = session.orderTitleSnapshot?.trim();
+          return '专注「${label == null || label.isEmpty ? '自由专注' : label}」 · ${view.fieldLabel}';
+        }
+      }
+      return '专注记录 · ${view.fieldLabel}';
   }
 }
 
