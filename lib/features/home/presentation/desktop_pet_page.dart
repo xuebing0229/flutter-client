@@ -1086,7 +1086,7 @@ class _AssetTile extends StatelessWidget {
   }
 }
 
-class _ScaleSetting extends StatelessWidget {
+class _ScaleSetting extends StatefulWidget {
   const _ScaleSetting({
     required this.label,
     required this.value,
@@ -1102,24 +1102,52 @@ class _ScaleSetting extends StatelessWidget {
   final ValueChanged<double> onChanged;
 
   @override
+  State<_ScaleSetting> createState() => _ScaleSettingState();
+}
+
+class _ScaleSettingState extends State<_ScaleSetting> {
+  late double _draft;
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _draft = widget.value;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ScaleSetting oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_dragging && (oldWidget.value - widget.value).abs() > 0.001) {
+      _draft = widget.value;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final value = _draft.clamp(widget.min, widget.max).toDouble();
     final percent = (value * 100).round();
     return Row(
       children: [
         SizedBox(
           width: 88,
           child: Text(
-            label,
+            widget.label,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
         Expanded(
           child: Slider(
-            value: value.clamp(min, max).toDouble(),
-            min: min,
-            max: max,
-            divisions: ((max - min) * 20).round(),
-            onChanged: onChanged,
+            value: value,
+            min: widget.min,
+            max: widget.max,
+            divisions: ((widget.max - widget.min) * 20).round(),
+            onChangeStart: (_) => _dragging = true,
+            onChanged: (next) => setState(() => _draft = next),
+            onChangeEnd: (next) {
+              _dragging = false;
+              widget.onChanged(next);
+            },
           ),
         ),
         SizedBox(
