@@ -1132,6 +1132,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 '标签：' + row.tags.join('、'),
                 style: theme.textTheme.labelSmall,
               ),
+            if (!_products && row.clientBox?.recoveredFromCrop == true)
+              Text(
+                '单主由局部放大识别补回，请核对拼写（如 vv / w 可能混淆）',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.error,
+                ),
+              ),
             if (row.duplicateWarning != null)
               Text(
                 row.duplicateWarning!,
