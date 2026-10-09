@@ -8,7 +8,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
-using LinePutScript;
 using VPet_Simulator.Core;
 
 namespace AdventurersGuild.DesktopPet;
@@ -50,14 +49,6 @@ internal static class Program
 
 internal sealed class DesktopPetWindow : Window
 {
-    private const string MinimalVPetGraphConfig = """
-touchhead:|px#0:|py#0:|sw#500:|sh#500:|
-touchbody:|px#0:|py#0:|sw#500:|sh#500:|
-touchraised:|happy_px#0:|happy_py#0:|happy_sw#500:|happy_sh#500:|nomal_px#0:|nomal_py#0:|nomal_sw#500:|nomal_sh#500:|poorcondition_px#0:|poorcondition_py#0:|poorcondition_sw#500:|poorcondition_sh#500:|ill_px#0:|ill_py#0:|ill_sw#500:|ill_sh#500:|
-raisepoint:|happy_x#250:|happy_y#250:|nomal_x#250:|nomal_y#250:|poorcondition_x#250:|poorcondition_y#250:|ill_x#250:|ill_y#250:|
-str:|
-duration:|
-""";
 
     private readonly string _configPath;
     private readonly string _windowStatePath;
@@ -148,7 +139,7 @@ duration:|
             try
             {
                 DragMove();
-                SaveWindowState();
+                SavePetWindowState();
             }
             catch (InvalidOperationException)
             {
@@ -156,12 +147,7 @@ duration:|
             }
         };
 
-        var graphDocument = new LpsDocument(MinimalVPetGraphConfig);
-        _graphCore = new GraphCore(
-            1000,
-            Dispatcher,
-            new GraphCore.Config(graphDocument)
-        );
+        _graphCore = new GraphCore(1000, Dispatcher);
 
         _reloadDebounce = new DispatcherTimer
         {
@@ -198,7 +184,7 @@ duration:|
 
         Loaded += async (_, _) =>
         {
-            RestoreWindowState();
+            RestorePetWindowState();
             StartConfigWatcher();
             _keyboardHook.Start();
             _parentTimer.Start();
@@ -288,7 +274,6 @@ duration:|
         {
             if (!force && _activeImagePath is null) return;
             _activeImagePath = null;
-            _activePicture?.Stop(true);
             _activePicture?.Dispose();
             _activePicture = null;
             _petImage.Source = null;
@@ -308,7 +293,6 @@ duration:|
 
         try
         {
-            _activePicture?.Stop(true);
             _activePicture?.Dispose();
 
             var picture = new Picture(
@@ -434,13 +418,13 @@ duration:|
         Close();
     }
 
-    private void RestoreWindowState()
+    private void RestorePetWindowState()
     {
         try
         {
             if (File.Exists(_windowStatePath))
             {
-                var state = JsonSerializer.Deserialize<WindowState>(
+                var state = JsonSerializer.Deserialize<PetWindowState>(
                     File.ReadAllText(_windowStatePath)
                 );
                 if (state is not null && IsVisiblePosition(state.Left, state.Top))
@@ -475,7 +459,7 @@ duration:|
                top <= virtualBottom - 40;
     }
 
-    private void SaveWindowState()
+    private void SavePetWindowState()
     {
         try
         {
@@ -486,7 +470,7 @@ duration:|
             }
             File.WriteAllText(
                 _windowStatePath,
-                JsonSerializer.Serialize(new WindowState(Left, Top))
+                JsonSerializer.Serialize(new PetWindowState(Left, Top))
             );
         }
         catch
@@ -519,7 +503,7 @@ duration:|
         _graphCore.Dispose();
     }
 
-    private sealed record WindowState(double Left, double Top);
+    private sealed record PetWindowState(double Left, double Top);
 
     private sealed class PetConfig
     {
