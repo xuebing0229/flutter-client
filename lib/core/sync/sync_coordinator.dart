@@ -1230,6 +1230,10 @@ class SyncCoordinator extends ChangeNotifier {
       _applyingRemote = false;
     }
 
+    await _persistFocusNormalization(
+      recordsByKind[SyncEntityKind.focusSession]!,
+    );
+
     var gcChanged = false;
     if (!_awaitingInitialRemoteWorkspace) {
       await _gcAckStore.writeSnapshot(
@@ -1828,6 +1832,28 @@ class SyncCoordinator extends ChangeNotifier {
 
     if (!_sameFocusList(focusStore.sessions, result)) {
       focusStore.replaceAll(result);
+    }
+  }
+
+  Future<void> _persistFocusNormalization(
+    Map<String, SyncRecord> records,
+  ) async {
+    for (final session in focusStore.sessions) {
+      final record = records[session.id];
+      if (record == null) continue;
+      final previous = _mergeEngine.materialize(record);
+      if (previous == null) continue;
+      final next = SyncEntityCodec.focusSessionToFields(session);
+      if (syncJsonEquals(previous, next)) continue;
+
+      final updated = _mergeEngine.applyLocalSnapshot(
+        record: record,
+        previousValues: previous,
+        nextValues: next,
+        deviceId: deviceId,
+      );
+      await _recordStore.write(accountId: accountId, record: updated);
+      records[session.id] = updated;
     }
   }
 
