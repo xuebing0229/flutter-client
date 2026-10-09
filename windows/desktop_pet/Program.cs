@@ -734,42 +734,83 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
+        string text;
         if (string.Equals(_config.TextMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
             var custom = (_config.CustomText ?? string.Empty).Trim();
-            _bubbleText.Text = custom.Length == 0 ? " " : custom;
-            _bubbleHost.Visibility = Visibility.Visible;
-            return;
-        }
-
-        var title = (_config.CurrentOrderTitle ?? string.Empty).Trim();
-        if (title.Length == 0)
-        {
-            _bubbleText.Text = "当前没有在画订单";
-            _bubbleHost.Visibility = Visibility.Visible;
-            return;
-        }
-
-        var details = new List<string>();
-        var node = (_config.CurrentOrderNode ?? string.Empty).Trim();
-        if (node.Length > 0)
-        {
-            details.Add(node);
-        }
-
-        if (DateTime.TryParse(_config.CurrentOrderDeadline, out var deadline))
-        {
-            details.Add(FormatDeadline(deadline.ToLocalTime()));
+            text = custom.Length == 0 ? " " : custom;
         }
         else
         {
-            details.Add("未设置截稿时间");
+            var title = (_config.CurrentOrderTitle ?? string.Empty).Trim();
+            if (title.Length == 0)
+            {
+                text = "当前没有在画订单";
+            }
+            else
+            {
+                var details = new List<string>();
+                var node = (_config.CurrentOrderNode ?? string.Empty).Trim();
+                if (node.Length > 0)
+                {
+                    details.Add(node);
+                }
+
+                if (DateTime.TryParse(_config.CurrentOrderDeadline, out var deadline))
+                {
+                    details.Add(FormatDeadline(deadline.ToLocalTime()));
+                }
+                else
+                {
+                    details.Add("未设置截稿时间");
+                }
+
+                text = details.Count == 0
+                    ? title
+                    : title + Environment.NewLine + string.Join(" · ", details);
+            }
         }
 
-        _bubbleText.Text = details.Count == 0
-            ? title
-            : title + Environment.NewLine + string.Join(" · ", details);
+        var side = string.Equals(
+            _config.BubblePosition,
+            "side",
+            StringComparison.OrdinalIgnoreCase
+        );
+        _bubbleText.Text = side ? ToVerticalBubbleText(text) : text;
         _bubbleHost.Visibility = Visibility.Visible;
+    }
+
+    private static string ToVerticalBubbleText(string value)
+    {
+        var normalized = value
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+        var runes = new List<string>();
+        foreach (var rune in normalized.EnumerateRunes())
+        {
+            var token = rune.ToString();
+            if (token == "\n")
+            {
+                if (runes.Count == 0 || runes[^1] != string.Empty)
+                {
+                    runes.Add(string.Empty);
+                }
+                continue;
+            }
+            if (char.IsWhiteSpace(token, 0))
+            {
+                continue;
+            }
+            runes.Add(token);
+        }
+
+        const int maxCharacters = 24;
+        if (runes.Count > maxCharacters)
+        {
+            runes = runes.Take(maxCharacters - 1).ToList();
+            runes.Add("…");
+        }
+        return string.Join(Environment.NewLine, runes);
     }
 
     private static string FormatDeadline(DateTime deadline)
