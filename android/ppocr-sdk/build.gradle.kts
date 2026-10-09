@@ -30,7 +30,10 @@ kotlin {
 dependencies {
     // Exact runtime versions from PaddleOCR's official Android demo.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.1")
-    implementation("com.quickbirdstudios:opencv:4.5.3")
+    // Only intentional deviation from the official demo: QuickBird 4.5.3
+    // fails to load opencv_java4 in our current Android test environment.
+    // Keep the same OpenCV Java API while using the maintained Android AAR.
+    implementation("org.opencv:opencv:4.13.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.core:core-ktx:1.15.0")
 }

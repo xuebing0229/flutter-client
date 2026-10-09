@@ -25,7 +25,7 @@ and call `ocr.recognize(bytes)`.
 
 Official runtime dependency versions are restored:
 - ONNX Runtime Android 1.21.1
-- QuickBird OpenCV Android 4.5.3
+- OpenCV Android 4.13.0 — the only intentional compatibility deviation; the official QuickBird 4.5.3 AAR failed at `System.loadLibrary("opencv_java4")` in Android validation
 - kotlinx-coroutines-android 1.9.0
 - AndroidX core-ktx 1.15.0
 
@@ -41,6 +41,6 @@ We still bundle PP-OCRv6 Small in the SDK's default asset paths
 `models/rec/inference.yml`. No custom detector limits, thread count, model
 paths, preprocessing, postprocessing, or fallback OCR are configured.
 
-This baseline is intentionally boring: if it crashes on the real ARM64 phone,
+This baseline keeps official OCR configuration and flow unchanged; only the OpenCV AAR is replaced because the official QuickBird package failed before OCR initialization. If it crashes on the real ARM64 phone,
 the next step is to compare the native tombstone against the standalone
 official demo, not to invent more OCR changes.
