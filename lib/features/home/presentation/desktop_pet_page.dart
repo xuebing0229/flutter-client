@@ -60,7 +60,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
       .toList(growable: false);
 
   Future<void> _selectCurrentOrder(QueueOrder order) async {
-    final active = widget.focusStore.activeSession;
+    final active = widget.showFocus ? widget.focusStore.activeSession : null;
     if (active != null && active.orderId != order.id) {
       final lockedTitle = active.isFreeFocus
           ? '自由专注'
