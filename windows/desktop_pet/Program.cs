@@ -418,6 +418,9 @@ internal sealed class DesktopPetWindow : Window
             0,
             0
         );
+        _focusClock.Visibility = _config.FocusEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         _focusClock.Effect = new DropShadowEffect
         {
             BlurRadius = 10 * clockScale,
@@ -578,9 +581,15 @@ internal sealed class DesktopPetWindow : Window
 
     private void RefreshFocusClock()
     {
+        if (!_config.FocusEnabled)
+        {
+            _focusClock.Visibility = Visibility.Collapsed;
+            return;
+        }
+        _focusClock.Visibility = Visibility.Visible;
         if (!DateTime.TryParse(_config.FocusStartedAt, out var startedAt))
         {
-            _focusClockText.Text = "⏱ 00:00";
+            _focusClockText.Text = "⏱ 00:00:00";
             return;
         }
 
@@ -984,6 +993,7 @@ internal sealed class DesktopPetWindow : Window
         public double PetScale { get; set; } = 1;
         public double BubbleScale { get; set; } = 1;
         public double FocusClockScale { get; set; } = 1;
+        public bool FocusEnabled { get; set; } = true;
         public long BubbleBackgroundArgb { get; set; } = 0xFFF7F7F7;
         public long BubbleForegroundArgb { get; set; } = 0xFF202020;
         public long BubbleBorderArgb { get; set; } = 0x33202020;
