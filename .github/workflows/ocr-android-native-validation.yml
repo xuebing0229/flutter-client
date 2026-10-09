@@ -13,6 +13,7 @@ on:
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
+      - 'android/ppocr-sdk/**'
       - '.github/workflows/ocr-android-native-validation.yml'
       - 'lib/features/imports/**'
       - 'test/features/screenshot_*'
