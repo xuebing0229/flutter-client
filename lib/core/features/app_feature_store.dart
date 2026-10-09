@@ -18,6 +18,7 @@ enum AppFeature {
   abstractMode,
   abstractEffects,
   desktopPet,
+  focus,
 }
 
 class AppFeatureStore extends ChangeNotifier {
@@ -48,6 +49,7 @@ class AppFeatureStore extends ChangeNotifier {
   bool get statistics => enabled(AppFeature.statistics);
   bool get deadlineReminders => enabled(AppFeature.deadlineReminders);
   bool get abstractMode => enabled(AppFeature.abstractMode);
+  bool get focus => enabled(AppFeature.focus);
 
   /// Effective abstract behavior. The preference may stay enabled while the
   /// user is in normal mode, but abstract effects must never leak into normal
@@ -108,6 +110,7 @@ class AppFeatureStore extends ChangeNotifier {
     normalized.putIfAbsent(AppFeature.abstractEffects.name, () => true);
     normalized.putIfAbsent(AppFeature.customTags.name, () => true);
     normalized.putIfAbsent(AppFeature.desktopPet.name, () => false);
+    normalized.putIfAbsent(AppFeature.focus.name, () => true);
 
     for (final feature in AppFeature.values) {
       if (normalized[feature.name] is! bool) {
