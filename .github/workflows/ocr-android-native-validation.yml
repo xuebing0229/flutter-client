@@ -7,7 +7,7 @@ on:
       - fix/ocr-directed-tag-20261009
       - fix/ocr-real-recovery-20261009
       - feat/dual-ocr-paddle-20261009
-      - 'feat/official-ppocrv6-android-only-20261009'
+      - 'feat/ppocrv6-small-session-scope-20261009'
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
@@ -51,7 +51,7 @@ jobs:
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
           echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
           cat android/local.properties
-      - name: Bundle PP-OCRv6 Tiny models
+      - name: Bundle PP-OCRv6 Small models
         run: python3 tool/fetch_official_ppocrv6_models.py
       - name: Enable hardware acceleration for GitHub hosted runner
         run: |

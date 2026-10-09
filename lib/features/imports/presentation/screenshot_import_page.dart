@@ -284,7 +284,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             }
           }
           _ocrDiagnostics.add(
-            '唯一 OCR 引擎：${Platform.isAndroid ? "官方 PaddleOCR PP-OCRv6 Tiny" : "RapidOCR ONNX Windows"}；'
+            '唯一 OCR 引擎：${Platform.isAndroid ? "官方 PaddleOCR PP-OCRv6 Small" : "RapidOCR ONNX Windows"}；'
             '耗时 ${ocrTimer.elapsedMilliseconds} ms\n' +
             formatScreenshotOcrDiagnostic(
               screenshotNumber: _imageSerial,
@@ -365,7 +365,6 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       setState(() {
         _rows.addAll(generated);
         _refreshDuplicateWarnings();
-        _working = false;
       });
       if (generated.isEmpty) {
         _message(firstError == null
@@ -376,8 +375,18 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       }
     } catch (error) {
       if (!mounted) return;
-      setState(() => _working = false);
       _message('读取截图失败：' + error.toString());
+    } finally {
+      // One ONNX session for all screenshots in THIS selection. Release it
+      // before the next selection; draft editing does not retain the model.
+      try {
+        await _ocr.release();
+      } catch (error) {
+        _ocrDiagnostics.add('OCR 模型资源释放失败：$error');
+      }
+      if (mounted) {
+        setState(() => _working = false);
+      }
     }
   }
 

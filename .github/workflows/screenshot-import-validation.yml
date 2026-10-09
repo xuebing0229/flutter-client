@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - feat/screenshot-order-import-20261008
-      - 'feat/official-ppocrv6-android-only-20261009'
+      - 'feat/ppocrv6-small-session-scope-20261009'
   workflow_dispatch:
 
 concurrency:
@@ -45,7 +45,7 @@ jobs:
           cache: true
       - name: Install Flutter dependencies
         run: flutter pub get
-      - name: Bundle PP-OCRv6 Tiny models
+      - name: Bundle PP-OCRv6 Small models
         run: python3 tool/fetch_official_ppocrv6_models.py
       - name: Compile Android Beta debug OCR (no release)
         run: flutter build apk --debug --flavor beta --no-pub

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bundle the official PaddleOCR Android PP-OCRv6 Tiny ONNX model files.
+"""Bundle the official PaddleOCR Android PP-OCRv6 Small ONNX model files.
 
 Use official PaddlePaddle model archives. All file I/O happens at BUILD TIME.
 APK inference is offline. No arbitrary tar extraction or executable content.
@@ -14,17 +14,12 @@ BASE = ("https://paddle-model-ecology.bj.bcebos.com/paddlex/"
         "official_inference_model/paddle3.0.0/")
 DEST = pathlib.Path("android/app/src/main/assets/models")
 NAMES = {
-    "det": "PP-OCRv6_tiny_det_onnx_infer.tar",
-    "rec": "PP-OCRv6_tiny_rec_onnx_infer.tar",
+    "det": "PP-OCRv6_small_det_onnx_infer.tar",
+    "rec": "PP-OCRv6_small_rec_onnx_infer.tar",
 }
 REQUIRED = {"det": ("inference.onnx",), "rec": ("inference.onnx", "inference.yml")}
-# SHA256 of the official PaddlePaddle archives' extracted model files.
-# Checked on GitHub Actions against the actual downloaded bytes.
-EXPECTED_SHA256 = {
-    ("det", "inference.onnx"): "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
-    ("rec", "inference.onnx"): "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6",
-    ("rec", "inference.yml"): "66170210bad538e83fff3c4a3867e547d6bf20b50d64b20347c4b913f3034ea1",
-}
+# Model digests are pinned after the independent Small-model CI download.
+EXPECTED_SHA256 = {}
 
 def download(url: str, target: pathlib.Path):
     req = urllib.request.Request(url, headers={"User-Agent": "PaddleOCR-Android-model-bundle/1.0"})
@@ -48,9 +43,7 @@ def main():
             folder = DEST / group
             folder.mkdir(exist_ok=True)
             required = REQUIRED[group]
-            if all((folder / f).is_file() and (folder / f).stat().st_size > 100 for f in required):
-                print(f"PP-OCRv6 {group} model already present")
-                continue
+            # Always overwrite assets; never reuse old Tiny assets during the switch.
             archive = pathlib.Path(td) / archive_name
             download(BASE + archive_name, archive)
             with tarfile.open(archive, "r:*") as contents:
@@ -72,9 +65,9 @@ def main():
                 if name.endswith(".yml"):
                     assert b"PostProcess:" in content and b"character_dict:" in content
                 digest = hashlib.sha256(content).hexdigest()
-                if digest != EXPECTED_SHA256[(group, name)]:
-                    raise RuntimeError(f"PP-OCRv6 model checksum mismatch: {path}: {digest}")
-                print(f"official PP-OCRv6 Tiny: {path} ({len(content)} bytes), sha256={digest}")
+                if (group, name) in EXPECTED_SHA256 and digest != EXPECTED_SHA256[(group, name)]:
+                    raise RuntimeError(f"PP-OCRv6 Small model checksum mismatch: {path}: {digest}")
+                print(f"official PP-OCRv6 Small: {path} ({len(content)} bytes), sha256={digest}")
 
 if __name__ == "__main__":
     main()

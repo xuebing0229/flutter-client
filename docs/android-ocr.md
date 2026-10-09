@@ -1,6 +1,6 @@
 # Official PaddleOCR PP-OCRv6 Android single-engine implementation
 
-Only one Android OCR engine: official PP-OCRv6 Tiny via the standalone
+Only one Android OCR engine: official PP-OCRv6 Small via the standalone
 Android SDK imported from PaddlePaddle/PaddleOCR at commit
 `dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf`:
 https://github.com/PaddlePaddle/PaddleOCR/tree/dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf/deploy/ppocr-android
@@ -12,12 +12,16 @@ OpenCV AAR with `org.opencv:opencv:4.13.0` (same Java/OpenCV APIs).
 The Flutter native bridge calls the official demo's `OpenCVUtils.init`,
 `PaddleOCR.create` and `recognize(bytes)` directly.
 
-Models: official **PP-OCRv6 Tiny** ONNX models fetched *at build time* from
+Models: official **PP-OCRv6 Small** ONNX models fetched *at build time* from
 official PaddlePaddle model archives and packaged inside the APK. No online
 OCR or runtime download. No ncnn, ML Kit, old third-party paddle_ocr_native,
 dual-engine comparisons, local crop retries or crash-marker fallbacks.
 
 The app's order parsing, editing, sync and Windows OCR are not changed.
+For each selected-image batch, the Android SDK is loaded on the first image,
+reused for every screenshot and released in an import-level finally block.
+The next batch starts a new native ONNX session. During draft editing there is
+no live session. Peak recognition memory is still dictated by the model.
 The native CI test loads both actual ONNX models and recognizes rendered
 Chinese and English on a full Android screenshot-size bitmap.
 

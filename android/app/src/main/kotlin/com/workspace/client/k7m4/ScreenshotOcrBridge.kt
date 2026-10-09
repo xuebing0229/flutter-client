@@ -20,7 +20,7 @@ import java.io.File
 /**
  * Android's only screenshot recognizer, directly using the official PP-OCRv6
  * Android SDK. Follows the upstream demo: initialize OpenCV, create model once,
- * recognize image bytes and release on activity shutdown.
+ * recognize image bytes, reuse during a batch, and release after import.
  *
  * Flutter owns the screenshot card parsing; this native layer returns ONLY
  * raw text and original image coordinates, with no secondary engine or retries.
@@ -33,6 +33,22 @@ class ScreenshotOcrBridge(private val activity: Activity) {
     fun configure(messenger: BinaryMessenger) {
         MethodChannel(messenger, "app.screenshot_ocr").setMethodCallHandler { call, reply ->
             when (call.method) {
+                "release" -> {
+                    // The mutex serializes release with inference and with
+                    // the next batch. Null the handle even if release throws.
+                    scope.launch {
+                        try {
+                            guard.withLock { releaseModel() }
+                            reply.success(null)
+                        } catch (error: Throwable) {
+                            reply.error(
+                                "OFFICIAL_PPOCRV6_RELEASE_FAILED",
+                                error.message ?: error.javaClass.simpleName,
+                                null,
+                            )
+                        }
+                    }
+                }
                 "recognize" -> {
                     val path = call.argument<String>("path")
                     if (path.isNullOrBlank()) {
@@ -115,7 +131,7 @@ class ScreenshotOcrBridge(private val activity: Activity) {
             "imageHeight" to bounds.outHeight,
             "lines" to lines,
             "nativeTrace" to listOf(
-                "唯一引擎：官方 PaddleOCR PP-OCRv6 Tiny Android SDK (ONNX Runtime)",
+                "唯一引擎：官方 PaddleOCR PP-OCRv6 Small Android SDK (ONNX Runtime)",
                 "识别行数：${result.lineCount}",
                 "模型初始化：${result.coldLoadTimeMs} ms",
                 "检测：${result.detectionTimeMs} ms",
@@ -127,12 +143,17 @@ class ScreenshotOcrBridge(private val activity: Activity) {
         )
     }
 
+    private suspend fun releaseModel() {
+        val previous = ocr
+        ocr = null
+        previous?.release()
+    }
+
+    // Defensive Activity teardown only. Normal release is Flutter's
+    // explicit 'release' call after all screenshots in the batch.
     fun close() {
         scope.launch {
-            guard.withLock {
-                ocr?.release()
-                ocr = null
-            }
+            guard.withLock { releaseModel() }
         }
     }
 }

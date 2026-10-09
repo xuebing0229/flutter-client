@@ -15,6 +15,14 @@ class ScreenshotOcrService {
 
   bool get supported => Platform.isAndroid || Platform.isWindows;
 
+  /// Explicitly release native ONNX sessions after the selected-image batch.
+  /// Windows OCR uses short-lived resources inside recognize().
+  Future<void> release() async {
+    if (Platform.isAndroid) {
+      await _channel.invokeMethod<void>('release');
+    }
+  }
+
   Future<ScreenshotOcrResult> recognize(String imagePath) async {
     if (Platform.isWindows) {
       return const WindowsRapidOcrOnnx().recognize(imagePath);
