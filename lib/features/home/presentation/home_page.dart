@@ -889,6 +889,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
+    _focusPersistenceHeartbeat?.cancel();
     widget.themeStore.removeListener(_onThemeSettingsChanged);
     widget.featureStore.removeListener(_onFeatureSettingsChanged);
     widget.accountStore.removeListener(_onAccountStoreChanged);
