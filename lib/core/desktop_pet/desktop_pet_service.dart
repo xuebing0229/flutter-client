@@ -53,6 +53,16 @@ class DesktopPetPlacement {
   }
 }
 
+enum DesktopPetBubblePosition {
+  above,
+  side;
+
+  String get label => switch (this) {
+        DesktopPetBubblePosition.above => '头顶',
+        DesktopPetBubblePosition.side => '旁边',
+      };
+}
+
 enum DesktopPetTextMode {
   currentOrder,
   custom;
@@ -131,11 +141,18 @@ class DesktopPetSettings extends ChangeNotifier {
   bool _enabled = false;
   String? _selectedPresetId;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
+  DesktopPetBubblePosition _bubblePosition = DesktopPetBubblePosition.above;
+  double _petScale = 1;
+  double _bubbleScale = 1;
   String _customText = '';
   String? _currentOrderId;
   String? _currentOrderTitle;
   String? _currentOrderNode;
   DateTime? _currentOrderDeadline;
+  int _bubbleBackgroundArgb = 0xFFF7F7F7;
+  int _bubbleForegroundArgb = 0xFF202020;
+  int _bubbleBorderArgb = 0x33202020;
+  int _bubbleAccentArgb = 0xFF6C7A6B;
   final List<DesktopPetPreset> _presets = <DesktopPetPreset>[];
 
   bool get loaded => _loaded;
@@ -143,6 +160,9 @@ class DesktopPetSettings extends ChangeNotifier {
   List<DesktopPetPreset> get presets => List<DesktopPetPreset>.unmodifiable(_presets);
   String? get selectedPresetId => _selectedPresetId;
   DesktopPetTextMode get textMode => _textMode;
+  DesktopPetBubblePosition get bubblePosition => _bubblePosition;
+  double get petScale => _petScale;
+  double get bubbleScale => _bubbleScale;
   String get customText => _customText;
   String? get currentOrderId => _currentOrderId;
 
@@ -196,6 +216,16 @@ class DesktopPetSettings extends ChangeNotifier {
       _textMode = modeName == DesktopPetTextMode.custom.name
           ? DesktopPetTextMode.custom
           : DesktopPetTextMode.currentOrder;
+
+      _bubblePosition = raw['bubblePosition'] == DesktopPetBubblePosition.side.name
+          ? DesktopPetBubblePosition.side
+          : DesktopPetBubblePosition.above;
+      _petScale = ((raw['petScale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.5, 1.8)
+          .toDouble();
+      _bubbleScale = ((raw['bubbleScale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.65, 1.8)
+          .toDouble();
 
       _currentOrderTitle = raw['currentOrderTitle'] is String
           ? raw['currentOrderTitle'] as String
@@ -348,6 +378,29 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setBubblePosition(DesktopPetBubblePosition position) async {
+    if (_bubblePosition == position) return;
+    _bubblePosition = position;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> setPetScale(double value) async {
+    final normalized = value.clamp(0.5, 1.8).toDouble();
+    if ((_petScale - normalized).abs() < 0.001) return;
+    _petScale = normalized;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> setBubbleScale(double value) async {
+    final normalized = value.clamp(0.65, 1.8).toDouble();
+    if ((_bubbleScale - normalized).abs() < 0.001) return;
+    _bubbleScale = normalized;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setCustomText(String value) async {
     if (_customText == value) return;
     _customText = value;
@@ -389,6 +442,10 @@ class DesktopPetSettings extends ChangeNotifier {
     required String? currentOrderTitle,
     required String? currentOrderNode,
     required DateTime? currentOrderDeadline,
+    required int bubbleBackgroundArgb,
+    required int bubbleForegroundArgb,
+    required int bubbleBorderArgb,
+    required int bubbleAccentArgb,
   }) async {
     await _readFromDisk();
     _loaded = true;
@@ -396,6 +453,10 @@ class DesktopPetSettings extends ChangeNotifier {
     _currentOrderTitle = currentOrderTitle;
     _currentOrderNode = currentOrderNode;
     _currentOrderDeadline = currentOrderDeadline;
+    _bubbleBackgroundArgb = bubbleBackgroundArgb;
+    _bubbleForegroundArgb = bubbleForegroundArgb;
+    _bubbleBorderArgb = bubbleBorderArgb;
+    _bubbleAccentArgb = bubbleAccentArgb;
     await _persist();
   }
 
@@ -404,7 +465,7 @@ class DesktopPetSettings extends ChangeNotifier {
     await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 5,
+      'schema': 6,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
@@ -412,11 +473,18 @@ class DesktopPetSettings extends ChangeNotifier {
       'placementA': active?.placementA.toJson(),
       'placementB': active?.placementB.toJson(),
       'textMode': _textMode.name,
+      'bubblePosition': _bubblePosition.name,
+      'petScale': _petScale,
+      'bubbleScale': _bubbleScale,
       'customText': _customText,
       'currentOrderId': _currentOrderId,
       'currentOrderTitle': _currentOrderTitle,
       'currentOrderNode': _currentOrderNode,
       'currentOrderDeadline': _currentOrderDeadline?.toIso8601String(),
+      'bubbleBackgroundArgb': _bubbleBackgroundArgb,
+      'bubbleForegroundArgb': _bubbleForegroundArgb,
+      'bubbleBorderArgb': _bubbleBorderArgb,
+      'bubbleAccentArgb': _bubbleAccentArgb,
       'presets': <Map<String, dynamic>>[
         for (final preset in _presets) preset.toJson(),
       ],
@@ -434,12 +502,17 @@ class DesktopPetService {
 
   final DesktopPetSettings settings;
   Process? _process;
+  Future<void>? _startInFlight;
 
   Future<void> sync({
     required bool enabled,
     String? currentOrderTitle,
     String? currentOrderNode,
     DateTime? currentOrderDeadline,
+    required int bubbleBackgroundArgb,
+    required int bubbleForegroundArgb,
+    required int bubbleBorderArgb,
+    required int bubbleAccentArgb,
   }) async {
     if (!Platform.isWindows) return;
 
@@ -448,12 +521,36 @@ class DesktopPetService {
       currentOrderTitle: currentOrderTitle,
       currentOrderNode: currentOrderNode,
       currentOrderDeadline: currentOrderDeadline,
+      bubbleBackgroundArgb: bubbleBackgroundArgb,
+      bubbleForegroundArgb: bubbleForegroundArgb,
+      bubbleBorderArgb: bubbleBorderArgb,
+      bubbleAccentArgb: bubbleAccentArgb,
     );
 
     if (!enabled) {
       await stop();
       return;
     }
+    if (_process != null) return;
+
+    final existingStart = _startInFlight;
+    if (existingStart != null) {
+      await existingStart;
+      return;
+    }
+
+    final startFuture = _startHost();
+    _startInFlight = startFuture;
+    try {
+      await startFuture;
+    } finally {
+      if (identical(_startInFlight, startFuture)) {
+        _startInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _startHost() async {
     if (_process != null) return;
 
     final executableDirectory = File(Platform.resolvedExecutable).parent;
@@ -464,7 +561,7 @@ class DesktopPetService {
 
     final config = await settings._configFile();
     try {
-      _process = await Process.start(
+      final process = await Process.start(
         host.path,
         <String>[
           '--config',
@@ -474,8 +571,11 @@ class DesktopPetService {
         ],
         mode: ProcessStartMode.detachedWithStdio,
       );
-      unawaited(_process!.exitCode.then((_) {
-        _process = null;
+      _process = process;
+      unawaited(process.exitCode.then((_) {
+        if (identical(_process, process)) {
+          _process = null;
+        }
       }));
     } catch (_) {
       _process = null;
