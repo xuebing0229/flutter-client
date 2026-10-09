@@ -36,7 +36,6 @@ class MainActivity : FlutterActivity() {
     private lateinit var orderReminderBridge: OrderReminderBridge
     private lateinit var syncthingBridge: SyncthingBridge
     private lateinit var screenshotOcrBridge: ScreenshotOcrBridge
-    private lateinit var isolatedPaddleOcrBridge: IsolatedPaddleOcrBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -54,9 +53,6 @@ class MainActivity : FlutterActivity() {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
         screenshotOcrBridge = ScreenshotOcrBridge(this).also {
-            it.configure(flutterEngine.dartExecutor.binaryMessenger)
-        }
-        isolatedPaddleOcrBridge = IsolatedPaddleOcrBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
 
@@ -440,7 +436,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        if (::isolatedPaddleOcrBridge.isInitialized) isolatedPaddleOcrBridge.close()
+        if (::screenshotOcrBridge.isInitialized) screenshotOcrBridge.close()
         unregisterDownloadReceiver()
         super.onDestroy()
     }

@@ -54,6 +54,9 @@ jobs:
         run: flutter analyze
 
 
+      - name: Fetch and verify offline OCR models
+        run: bash tool/fetch_ncnn_ocr_models.sh
+
       - name: Build signed Stable APK
         run: |
           flutter build apk \

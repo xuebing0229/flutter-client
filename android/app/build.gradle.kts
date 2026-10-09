@@ -134,8 +134,8 @@ kotlin {
 
 dependencies {
     implementation("androidx.work:work-runtime:2.11.0")
-    // Bundled recognizer: OCR works offline without Google Play Services.
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    // Reuse the existing offline PP-OCRv5 ncnn Android implementation.
+    implementation("com.github.equationl.paddleocr4android:ncnnandroidppocr:v1.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
