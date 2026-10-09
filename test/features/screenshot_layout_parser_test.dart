@@ -7,6 +7,53 @@ void main() {
       ScreenshotTextLine(text: text, left: x, top: y, right: x + 220,
           bottom: y + 22);
 
+  test('PaddleOCR symbol debris stays with the dated card progress', () {
+    // Mirrors the real PP-OCRv6 Small geometry seen on a 865x1920 phone
+    // screenshot, but keeps customer identities synthetic.
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 865,
+      imageHeight: 1920,
+      lines: [
+        at('买家甲', 378, x: 161),
+        at('【常驻】黑白摸鱼头3.0', 494, x: 357),
+        at('¥94', 540, x: 335),
+        at('2026-10-31', 641, x: 376),
+        at('60%', 691, x: 418),
+        at('。0', 696, x: 341),
+        at('添加备注', 794, x: 91),
+
+        at('买家乙', 948, x: 158),
+        at('【常驻】黑白摸鱼头3.0', 1066, x: 357),
+        at('¥94', 1114, x: 335),
+        at('2026-10-31', 1214, x: 380),
+        at('60%', 1265, x: 418),
+        at('。0', 1268, x: 341),
+        at('添加备注', 1367, x: 85),
+
+        at('Viu51', 1524, x: 160),
+        at('【常驻】黑白摸鱼头3.0', 1638, x: 357),
+        at('¥94', 1686, x: 334),
+        at('2026-10-31', 1786, x: 379),
+        at('60%', 1837, x: 418),
+        at('°0', 1839, x: 340),
+      ],
+    );
+
+    expect(rows, hasLength(3));
+    expect(rows.map((row) => row.title).toList(), [
+      '【常驻】黑白摸鱼头3.0',
+      '【常驻】黑白摸鱼头3.0',
+      '【常驻】黑白摸鱼头3.0',
+    ]);
+    expect(rows.map((row) => row.clientName).toList(),
+        ['买家甲', '买家乙', 'Viu51']);
+    expect(rows.every((row) => row.price == 94), isTrue);
+    // The key regression: 60% belongs to each real dated card. The nearby
+    // "。0"/"°0" icon fragment must neither become a fake order nor steal
+    // the progress field by splitting the card's geometry.
+    expect(rows.map((row) => row.progressPercent).toList(), [60, 60, 60]);
+  });
+
   test('米画师 screenshot can separate two cards without crossing fields', () {
     final entries = const ScreenshotLayoutParser().parse(
       imageWidth: 690,

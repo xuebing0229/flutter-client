@@ -41,8 +41,18 @@ void main() {
     expect(newsBetweenBuilds(105, 107).length, 2);
   });
 
-  test('124 升 125：只提示 Windows 桌宠', () {
+  test('124 包含本轮截图识别导入优化', () {
+    final picked = newsBetweenBuilds(121, 124);
+    expect(picked.map((e) => e.title), contains('截图识别导入优化'));
+  });
+
+  test('125 向 124 用户补充同步恢复见闻', () {
     final picked = newsBetweenBuilds(124, 125);
+    expect(picked.map((e) => e.title), contains('设备同步恢复与前台自动连接'));
+  });
+
+  test('126 向 125 用户补充 Windows 桌宠见闻', () {
+    final picked = newsBetweenBuilds(125, 126);
     expect(picked.map((e) => e.title).toList(), ['Windows 桌宠']);
   });
 }

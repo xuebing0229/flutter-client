@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/features/imports/domain/screenshot_layout_parser.dart';
 import 'package:flutter_app/features/imports/domain/screenshot_product_layout_parser.dart';
+import 'package:flutter_app/features/orders/domain/queue_order.dart';
 
 void main() {
   ScreenshotTextLine line(
@@ -12,6 +13,42 @@ void main() {
     right: x + width,
     bottom: y + 24.0,
   );
+
+  test('Huajia completed storefront ignores artwork text and keeps all prices', () {
+    final items = const ScreenshotProductLayoutParser().parse(
+      imageHeight: 2800,
+      platform: CommissionPlatform.huajia,
+      lines: [
+        line('已完成', 598, x: 1080, width: 150),
+        line('希腊风小白裙【服设批发】', 737, x: 503, width: 654),
+        line('批发', 741, x: 404, width: 101),
+        line('截稿时间：拍下自动提交源文件', 817, x: 402, width: 617),
+        line('￥10', 961, x: 1106, width: 130),
+        line('查看评价', 1145, x: 966, width: 214),
+
+        line('已完成', 1349, x: 1079, width: 150),
+        line('【批发合集】20r西幻服设批发', 1488, x: 430, width: 738),
+        line('截稿时间：2025-05-3114:34', 1569, x: 402, width: 587),
+        line('秋日来访', 1592, x: 258, width: 34),
+        line('￥20', 1711, x: 1106, width: 130),
+        line('查看评价', 1897, x: 968, width: 211),
+
+        line('已完成', 2101, x: 1080, width: 149),
+        line('批发服设·晓转2025', 2239, x: 402, width: 505),
+        line('XIAOZHUAN', 2260, x: 68, width: 150),
+        line('截稿时间：2025-03-2421:12', 2320, x: 402, width: 579),
+        line('¥10', 2463, x: 1106, width: 130),
+        line('NAME [ロール生成] 2', 2474, x: 84, width: 190),
+      ],
+    );
+
+    expect(items.map((e) => e.title).toList(), [
+      '希腊风小白裙【服设批发】',
+      '【批发合集】20r西幻服设批发',
+      '批发服设·晓转2025',
+    ]);
+    expect(items.map((e) => e.price).toList(), [10, 20, 10]);
+  });
 
   test('product screenshots extract storefronts without any deadline', () {
     final items = const ScreenshotProductLayoutParser().parse(
