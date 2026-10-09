@@ -165,10 +165,13 @@ class SyncthingService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle("冒险者公会")
-            .setContentText("正在同步设备数据")
+            .setContentTitle("冒险者公会 · 设备同步")
+            .setContentText("同步已开启，有改动时会自动传输")
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
+            // Android 13+ allows foreground-service notifications to be
+            // dismissed by the user. Do not force this low-priority standby
+            // notice to stay pinned in the notification shade.
+            .setOngoing(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
