@@ -120,30 +120,35 @@ class _FocusPanelState extends State<FocusPanel> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('选择本次专注'),
         content: SizedBox(
-          width: 520,
+          width: 640,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 480),
+            constraints: const BoxConstraints(maxHeight: 560),
             child: ListView(
               shrinkWrap: true,
               children: [
-                ListTile(
-                  leading: const Icon(Icons.self_improvement_rounded),
-                  title: const Text('自由专注'),
-                  subtitle: const Text('这次专注不绑定排单'),
+                _FocusTargetCard(
+                  icon: Icons.self_improvement_rounded,
+                  title: '自由专注',
+                  details: const <String>['这次专注不绑定排单'],
                   onTap: () =>
                       Navigator.of(dialogContext).pop(const _FocusTarget()),
                 ),
-                if (orders.isNotEmpty) const Divider(),
-                for (final order in orders)
-                  ListTile(
-                    leading: const Icon(Icons.draw_outlined),
-                    title: Text(order.title),
-                    subtitle: Text(
-                      '${order.platform.label} · ${order.currentNode.name}',
-                    ),
-                    onTap: () =>
-                        Navigator.of(dialogContext).pop(_FocusTarget(order)),
+                if (orders.isNotEmpty) const SizedBox(height: 10),
+                for (var index = 0; index < orders.length; index++) ...[
+                  _FocusTargetCard(
+                    icon: Icons.draw_outlined,
+                    title: orders[index].title,
+                    details: <String>[
+                      '${orders[index].platform.label} · '
+                          '${orders[index].clientName.trim().isEmpty ? '未填写单主' : orders[index].clientName}',
+                      '${orders[index].currentNode.name} · '
+                          '${orders[index].deadline == null ? '未设置截稿时间' : '截稿 ${_formatDateTime(orders[index].deadline!)}'}',
+                    ],
+                    onTap: () => Navigator.of(dialogContext)
+                        .pop(_FocusTarget(orders[index])),
                   ),
+                  if (index != orders.length - 1) const SizedBox(height: 10),
+                ],
               ],
             ),
           ),
@@ -732,14 +737,10 @@ class _FocusPanelState extends State<FocusPanel> {
                 _SessionTile(
                   session: session,
                   targetLabel: _targetLabel(session),
-                  timeText: session.orderId == null
-                      ? '开始 ${_formatDateTime(session.startedAt)}\n'
-                          '结束 ${_formatDateTime(session.endedAt!)} · '
-                          '${_formatDuration(session.durationAt())}'
-                      : '排单 ID：${session.orderId}\n'
-                          '开始 ${_formatDateTime(session.startedAt)}\n'
-                          '结束 ${_formatDateTime(session.endedAt!)} · '
-                          '${_formatDuration(session.durationAt())}',
+                  timeText:
+                      '开始 ${_formatDateTime(session.startedAt)}\n'
+                      '结束 ${_formatDateTime(session.endedAt!)} · '
+                      '${_formatDuration(session.durationAt())}',
                   onTap: session.orderId == null
                       ? null
                       : () => _confirmOpenOrder(
@@ -764,10 +765,75 @@ class _FocusPanelState extends State<FocusPanel> {
   }
 }
 
-class _FocusTarget {
-  const _FocusTarget([this.order]);
-  final QueueOrder? order;
+class _FocusTargetCard extends StatelessWidget {
+  const _FocusTargetCard({
+    required this.icon,
+    required this.title,
+    required this.details,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final List<String> details;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    for (final detail in details) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        detail,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+$insertBefore
 
 class _FocusGroup {
   const _FocusGroup({
@@ -845,7 +911,7 @@ class _SessionTile extends StatelessWidget {
               : Icons.draw_outlined,
         ),
         title: Text(targetLabel),
-        subtitle: Text(timeText, maxLines: session.orderId == null ? 2 : 3),
+        subtitle: Text(timeText, maxLines: 2),
         trailing: onTap == null
             ? null
             : const Icon(Icons.open_in_new_rounded, size: 18),
@@ -880,11 +946,8 @@ class _GroupTile extends StatelessWidget {
         ),
         title: Text(group.label),
         subtitle: Text(
-          group.orderId == null
-              ? '${group.sessions.length} 次专注 · 最近 $recentText'
-              : '排单 ID：${group.orderId}\n'
-                  '${group.sessions.length} 次专注 · 最近 $recentText',
-          maxLines: group.orderId == null ? 1 : 2,
+          '${group.sessions.length} 次专注 · 最近 $recentText',
+          maxLines: 1,
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
