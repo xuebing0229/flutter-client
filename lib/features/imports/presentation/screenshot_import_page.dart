@@ -161,7 +161,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         try {
           if (mounted) {
             setState(() => _recognitionStep =
-                'ML Kit：识别截图 ${_imageSerial}/${selected.length}');
+                'ML Kit：识别截图 $_imageSerial/${selected.length}');
           }
           final imageHash = await _history.hashImage(image.path);
           final mlKitTimer = Stopwatch()..start();
@@ -181,7 +181,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               onProgress: (stage) {
                 if (mounted) {
                   setState(() => _recognitionStep =
-                      'PaddleOCR：$stage（截图 ${_imageSerial}/${selected.length}）');
+                      'PaddleOCR：$stage（截图 $_imageSerial/${selected.length}）');
                 }
               },
             );
@@ -309,7 +309,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             // It must not affect the original card, price or deadline parsing.
             if (mounted) {
               setState(() => _recognitionStep =
-                  '整理识别结果 ${_imageSerial}/${selected.length}');
+                  '整理识别结果 $_imageSerial/${selected.length}');
             }
             final paddleReviews = !compareEngines &&
                     platform == CommissionPlatform.mihuashi
