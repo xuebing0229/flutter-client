@@ -147,10 +147,10 @@ class ScreenshotPaddleReviewService {
   }) async {
     final sx = source.width / imageWidth;
     final sy = source.height / imageHeight;
-    final x1 = (left * sx).floor().clamp(0, source.width - 1);
-    final y1 = (top * sy).floor().clamp(0, source.height - 1);
-    final x2 = (right * sx).ceil().clamp(x1 + 1, source.width);
-    final y2 = (bottom * sy).ceil().clamp(y1 + 1, source.height);
+    final x1 = (left * sx).floor().clamp(0, source.width - 1).toInt();
+    final y1 = (top * sy).floor().clamp(0, source.height - 1).toInt();
+    final x2 = (right * sx).ceil().clamp(x1 + 1, source.width).toInt();
+    final y2 = (bottom * sy).ceil().clamp(y1 + 1, source.height).toInt();
     if (x2 - x1 < 12 || y2 - y1 < 12) return null;
 
     final tempDir = await Directory.systemTemp.createTemp('ag-paddle-');
@@ -158,7 +158,7 @@ class ScreenshotPaddleReviewService {
       final crop = img.copyCrop(source, x: x1, y: y1,
           width: x2 - x1, height: y2 - y1);
       final enlarged = img.copyResize(
-        crop, width: (crop.width * 2).clamp(24, 1800),
+        crop, width: (crop.width * 2).clamp(24, 1800).toInt(),
         interpolation: img.Interpolation.cubic,
       );
       final path = '${tempDir.path}/region.png';
