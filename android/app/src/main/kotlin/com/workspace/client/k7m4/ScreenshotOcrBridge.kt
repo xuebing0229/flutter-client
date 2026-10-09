@@ -324,9 +324,10 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                 fun retryEnhanced() {
                     var enhanced: Bitmap? = null
                     try {
-                        enhanced = Bitmap.createBitmap(
+                        val contrasted = Bitmap.createBitmap(
                             zoom.width, zoom.height, Bitmap.Config.ARGB_8888,
                         )
+                        enhanced = contrasted
                         val matrix = ColorMatrix(floatArrayOf(
                             1.8f, 0f, 0f, 0f, -110f,
                             0f, 1.8f, 0f, 0f, -110f,
@@ -336,11 +337,11 @@ class ScreenshotOcrBridge(private val activity: Activity) {
                         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                             colorFilter = ColorMatrixColorFilter(matrix)
                         }
-                        Canvas(enhanced).drawBitmap(zoom, 0f, 0f, paint)
-                        recognizer.process(InputImage.fromBitmap(enhanced, 0))
+                        Canvas(contrasted).drawBitmap(zoom, 0f, 0f, paint)
+                        recognizer.process(InputImage.fromBitmap(contrasted, 0))
                             .addOnSuccessListener { accept(it); retryAt(index + 1) }
                             .addOnFailureListener { retryAt(index + 1) }
-                            .addOnCompleteListener { enhanced.recycle() }
+                            .addOnCompleteListener { contrasted.recycle() }
                     } catch (_: Exception) {
                         enhanced?.recycle()
                         retryAt(index + 1)
