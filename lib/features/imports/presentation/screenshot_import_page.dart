@@ -79,12 +79,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         final previous = await _ocr.lastNativeCrashReport();
         if (!mounted) return;
         if (previous != null && previous.isNotEmpty) {
+          // Keep the one-time system exit record available behind the
+          // diagnostics button, but never interrupt ordinary importing with
+          // a stale crash snackbar or an extra tap.
           setState(() {
             _ocrDiagnostics.add(previous);
           });
-          _message('发现上次应用异常退出的系统记录。请先点顶部诊断图标复制报告，'
-              '也可以点「选择截图」继续。');
-          return;
         }
       } catch (error) {
         // Reporting should never block ordinary screenshot selection.
