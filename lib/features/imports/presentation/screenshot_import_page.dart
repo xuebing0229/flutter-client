@@ -214,6 +214,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             final found = _productsParser.parse(
               lines: recognized.lines,
               imageHeight: recognized.height,
+              platform: platform,
             );
             for (var cardIndex = 0; cardIndex < found.length; cardIndex++) {
               final candidate = found[cardIndex];
