@@ -33,6 +33,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '冒险者新见闻',
     description: '更新后首次进入公会，会自动汇总你上次使用版本以来的新功能；跨版本升级也不会漏掉中间的见闻。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 123,
+    title: '设备同步体验升级',
+    description: '手机和电脑在前台打开时会自动连接并同步，不再需要两边手动点同步；实际传输时会显示实时百分比和进度条，完成后自动消失。Android 同步不再长期占用通知栏，并增强了同步通道掉线后的自动恢复。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
