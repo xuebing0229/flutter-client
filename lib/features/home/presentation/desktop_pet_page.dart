@@ -938,6 +938,8 @@ class _SinglePlacementPreview extends StatefulWidget {
 
 class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
   late DesktopPetPlacement _placement;
+  bool _editing = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -948,7 +950,13 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
   @override
   void didUpdateWidget(covariant _SinglePlacementPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.path != widget.path ||
+    if (oldWidget.path != widget.path) {
+      _editing = false;
+      _saving = false;
+      _placement = widget.placement;
+      return;
+    }
+    if (!_editing &&
         !_samePlacement(oldWidget.placement, widget.placement)) {
       _placement = widget.placement;
     }
@@ -963,8 +971,36 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
         (left.offsetY - right.offsetY).abs() < 0.0001;
   }
 
+  void _beginEditing() {
+    setState(() {
+      _placement = widget.placement;
+      _editing = true;
+    });
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _placement = widget.placement;
+      _editing = false;
+    });
+  }
+
+  Future<void> _finishEditing() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onPlacementChanged(_placement);
+      if (!mounted) return;
+      setState(() => _editing = false);
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
   void _move(Offset delta, double side) {
-    if (side <= 0) return;
+    if (!_editing || side <= 0) return;
     setState(() {
       _placement = _placement.copyWith(
         offsetX: _placement.offsetX + delta.dx / (side / 2),
@@ -974,20 +1010,17 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
   }
 
   void _setScale(double value) {
+    if (!_editing) return;
     setState(() {
       _placement = _placement.copyWith(scale: value);
     });
   }
 
-  void _save() {
-    unawaited(widget.onPlacementChanged(_placement));
-  }
-
-  void _reset() {
+  void _resetDraft() {
+    if (!_editing) return;
     setState(() {
       _placement = const DesktopPetPlacement();
     });
-    _save();
   }
 
   @override
@@ -995,6 +1028,34 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
     final file = widget.path == null ? null : File(widget.path!);
     final exists = file?.existsSync() == true;
     final colors = Theme.of(context).colorScheme;
+
+    Widget imageStack(File file) => Stack(
+          fit: StackFit.expand,
+          children: [
+            FractionalTranslation(
+              translation: Offset(
+                _placement.offsetX / 2,
+                _placement.offsetY / 2,
+              ),
+              child: Transform.scale(
+                scale: _placement.scale,
+                child: Image.file(
+                  file,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            IgnorePointer(
+              child: CustomPaint(
+                painter: _DesktopPetCanvasGuidePainter(
+                  lineColor: _editing
+                      ? colors.primary.withValues(alpha: 0.7)
+                      : colors.outlineVariant,
+                ),
+              ),
+            ),
+          ],
+        );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1007,11 +1068,18 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
-            if (exists)
+            if (exists && !_editing)
+              TextButton.icon(
+                onPressed: _beginEditing,
+                icon: const Icon(Icons.open_with_rounded, size: 18),
+                label: const Text('编辑位置'),
+              ),
+            if (exists && _editing)
               Text(
-                '直接拖动调整位置',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
+                '编辑中',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w700,
                     ),
               ),
           ],
@@ -1027,43 +1095,23 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: colors.surfaceContainerLow,
-                    border: Border.all(color: colors.outlineVariant),
+                    border: Border.all(
+                      color: _editing ? colors.primary : colors.outlineVariant,
+                      width: _editing ? 2 : 1,
+                    ),
                   ),
                   child: exists
-                      ? MouseRegion(
-                          cursor: SystemMouseCursors.move,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onPanUpdate: (details) =>
-                                _move(details.delta, side),
-                            onPanEnd: (_) => _save(),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                FractionalTranslation(
-                                  translation: Offset(
-                                    _placement.offsetX / 2,
-                                    _placement.offsetY / 2,
-                                  ),
-                                  child: Transform.scale(
-                                    scale: _placement.scale,
-                                    child: Image.file(
-                                      file!,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                ),
-                                IgnorePointer(
-                                  child: CustomPaint(
-                                    painter: _DesktopPetCanvasGuidePainter(
-                                      lineColor: colors.outlineVariant,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
+                      ? (_editing
+                          ? MouseRegion(
+                              cursor: SystemMouseCursors.move,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onPanUpdate: (details) =>
+                                    _move(details.delta, side),
+                                child: imageStack(file!),
+                              ),
+                            )
+                          : imageStack(file!))
                       : Center(
                           child: Text(
                             '未导入',
@@ -1077,8 +1125,15 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
             },
           ),
         ),
-        if (exists) ...[
+        if (exists && _editing) ...[
           const SizedBox(height: 8),
+          Text(
+            '拖动画面调整位置；这里的改动只有点“完成”后才会保存。',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
               const SizedBox(width: 36, child: Text('大小')),
@@ -1088,7 +1143,6 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
                   max: 3,
                   value: _placement.scale,
                   onChanged: _setScale,
-                  onChangeEnd: (_) => _save(),
                 ),
               ),
               SizedBox(
@@ -1101,8 +1155,22 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
               const SizedBox(width: 4),
               IconButton(
                 tooltip: '重置到居中位置',
-                onPressed: _reset,
+                onPressed: _saving ? null : _resetDraft,
                 icon: const Icon(Icons.restart_alt_rounded),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: _saving ? null : _cancelEditing,
+                child: const Text('取消'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _saving ? null : _finishEditing,
+                child: Text(_saving ? '保存中…' : '完成'),
               ),
             ],
           ),
