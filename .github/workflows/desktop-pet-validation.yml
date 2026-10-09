@@ -47,6 +47,10 @@ jobs:
       - name: Build Windows application
         shell: pwsh
         run: flutter build windows --debug
+      - name: Inspect packaged VPet API
+        shell: pwsh
+        run: dotnet run --project "windows/desktop_pet_api_probe/desktop_pet_api_probe.csproj" -c Release
+
       - name: Publish desktop pet host
         shell: pwsh
         run: |
