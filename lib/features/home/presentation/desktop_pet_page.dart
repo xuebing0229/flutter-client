@@ -220,7 +220,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
             children: [
               _InfoCard(
                 child: Text(
-                  '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在有按键操作时显示。'
+                  '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在键盘按键或鼠标点击时显示。'
                   '切换预设会整组切换美术资源。',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -304,8 +304,8 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       ),
                       const Divider(height: 1),
                       _AssetTile(
-                        title: 'B · 按键状态',
-                        subtitle: '有按键操作时显示；停止按键后回到 A',
+                        title: 'B · 操作状态',
+                        subtitle: '键盘按键或鼠标点击时显示；松开后回到 A',
                         path: selected.imageB,
                         onImport: () =>
                             _pick(selected, DesktopPetAssetSlot.keyB),
