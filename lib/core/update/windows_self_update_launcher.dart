@@ -158,6 +158,53 @@ function Get-EmbeddedSyncthingProcesses {
     })
 }
 
+function Get-DesktopPetProcesses {
+  $DesktopPetPath = Join-Path $InstallDir 'desktop_pet\AdventurersGuild.DesktopPet.exe'
+  if (-not (Test-Path -LiteralPath $DesktopPetPath -PathType Leaf)) {
+    return @()
+  }
+
+  $ExpectedPath = [IO.Path]::GetFullPath($DesktopPetPath)
+  @(Get-Process -Name 'AdventurersGuild.DesktopPet' -ErrorAction SilentlyContinue |
+    Where-Object {
+      try {
+        $ProcessPath = $_.Path
+        $ProcessPath -and
+          [IO.Path]::GetFullPath($ProcessPath).Equals(
+            $ExpectedPath,
+            [StringComparison]::OrdinalIgnoreCase
+          )
+      } catch {
+        $false
+      }
+    })
+}
+
+function Stop-DesktopPet {
+  $Deadline = (Get-Date).AddSeconds(15)
+  while ($true) {
+    $Processes = @(Get-DesktopPetProcesses)
+    foreach ($Process in $Processes) {
+      try {
+        Write-UpdateLog ("Stopping desktop pet process " + $Process.Id + '.')
+        Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+      } catch {
+        if ((Get-Date) -ge $Deadline) {
+          throw "无法停止桌宠进程：$($_.Exception.Message)"
+        }
+      }
+    }
+
+    if (@(Get-DesktopPetProcesses).Count -eq 0) {
+      return
+    }
+    if ((Get-Date) -ge $Deadline) {
+      throw '桌宠仍在运行，无法替换桌宠程序文件。'
+    }
+    Start-Sleep -Milliseconds 250
+  }
+}
+
 function Stop-EmbeddedSyncthing {
   $Deadline = (Get-Date).AddSeconds(15)
   while ($true) {
@@ -250,6 +297,7 @@ try {
   # the same executable alive. Kill every stale copy from this install path
   # before replacing files so an upgrade cannot inherit those old windows.
   Stop-OtherAppInstances
+  Stop-DesktopPet
   Stop-EmbeddedSyncthing
   Write-UpdateLog 'Application exited. Extracting update archive.'
   New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
