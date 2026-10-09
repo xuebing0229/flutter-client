@@ -12,7 +12,7 @@ OpenCV AAR with `org.opencv:opencv:4.13.0` (same Java/OpenCV APIs).
 The Flutter native bridge calls the official demo's `OpenCVUtils.init`,
 `PaddleOCR.create` and `recognize(bytes)` directly.
 
-Models: official **PP-OCRv6 Small** ONNX models fetched *at build time* from
+Models: official **PP-OCRv6 Small** ONNX models with pinned SHA256 hashes, fetched *at build time* from
 official PaddlePaddle model archives and packaged inside the APK. No online
 OCR or runtime download. No ncnn, ML Kit, old third-party paddle_ocr_native,
 dual-engine comparisons, local crop retries or crash-marker fallbacks.
