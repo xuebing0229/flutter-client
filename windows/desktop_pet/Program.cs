@@ -87,6 +87,8 @@ internal sealed class DesktopPetWindow : Window
         Background = Brushes.Transparent;
         ShowInTaskbar = false;
         Topmost = true;
+        ShowActivated = false;
+        Opacity = 0;
 
         var root = new Grid
         {
@@ -272,13 +274,17 @@ internal sealed class DesktopPetWindow : Window
 
         if (!IsUsableImage(path))
         {
-            if (!force && _activeImagePath is null) return;
             _activeImagePath = null;
             _activePicture?.Dispose();
             _activePicture = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
-            RefreshBubble();
+            _bubble.Visibility = Visibility.Collapsed;
+            Opacity = 0;
+            if (IsVisible)
+            {
+                Hide();
+            }
             return;
         }
 
@@ -312,12 +318,23 @@ internal sealed class DesktopPetWindow : Window
             _activePicture = picture;
             _activeImagePath = path;
             _petImage.Visibility = Visibility.Visible;
+            Opacity = 1;
+            if (!IsVisible)
+            {
+                Show();
+            }
         }
         catch
         {
             _activeImagePath = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
+            _bubble.Visibility = Visibility.Collapsed;
+            Opacity = 0;
+            if (IsVisible)
+            {
+                Hide();
+            }
         }
 
         RefreshBubble();
@@ -327,8 +344,7 @@ internal sealed class DesktopPetWindow : Window
     {
         if (!IsUsableImage(_config.ImageA))
         {
-            _bubbleText.Text = "请先在冒险者公会 → 桌宠里导入当前预设的 A 图。";
-            _bubble.Visibility = Visibility.Visible;
+            _bubble.Visibility = Visibility.Collapsed;
             return;
         }
 
