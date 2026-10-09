@@ -47,7 +47,8 @@ android {
 
     defaultConfig {
         applicationId = "com.workspace.client.k7m4"
-        minSdk = flutter.minSdkVersion
+        // PaddleOCR native inference requires Android 8.0 / API 26.
+        minSdk = maxOf(26, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
