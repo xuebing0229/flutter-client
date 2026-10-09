@@ -54,7 +54,7 @@ jobs:
         run: flutter analyze
 
 
-      - name: Bundle verified PP-OCRv6 Tiny models
+      - name: Bundle verified PP-OCRv6 Small models
         run: python3 tool/fetch_official_ppocrv6_models.py
 
       - name: Build signed Stable APK
