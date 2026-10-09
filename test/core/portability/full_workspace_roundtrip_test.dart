@@ -28,6 +28,7 @@ void main() {
     'deductionAmount',
     'deductionFeeEnabled',
     'description',
+    'tags',
     'defaultOrder',
     'referenceImages',
     'completedAt',
