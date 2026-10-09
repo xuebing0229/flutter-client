@@ -1,12 +1,17 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Shapes;
+using Path = System.IO.Path;
 using System.Windows.Threading;
 using VPet_Simulator.Core;
 
@@ -25,13 +30,36 @@ internal static class Program
 
         _ = int.TryParse(GetArgument(args, "--parent-pid"), out var parentPid);
 
-        var app = new Application
+        var fullConfigPath = Path.GetFullPath(configPath);
+        var mutexKey = Convert.ToHexString(
+            SHA256.HashData(
+                Encoding.UTF8.GetBytes(fullConfigPath.ToUpperInvariant())
+            )
+        );
+        using var singleInstance = new Mutex(
+            initiallyOwned: true,
+            name: @"Local\AdventurersGuild.DesktopPet." + mutexKey,
+            createdNew: out var createdNew
+        );
+        if (!createdNew)
         {
-            ShutdownMode = ShutdownMode.OnMainWindowClose,
-        };
-        var window = new DesktopPetWindow(Path.GetFullPath(configPath), parentPid);
-        app.Run(window);
-        return 0;
+            return 0;
+        }
+
+        try
+        {
+            var app = new Application
+            {
+                ShutdownMode = ShutdownMode.OnMainWindowClose,
+            };
+            var window = new DesktopPetWindow(fullConfigPath, parentPid);
+            app.Run(window);
+            return 0;
+        }
+        finally
+        {
+            singleInstance.ReleaseMutex();
+        }
     }
 
     private static string? GetArgument(string[] args, string name)
@@ -53,23 +81,29 @@ internal sealed class DesktopPetWindow : Window
     private readonly string _configPath;
     private readonly string _windowStatePath;
     private readonly int _parentPid;
+    private readonly Grid _root;
+    private readonly StackPanel _layoutPanel;
+    private readonly Grid _headerRow;
+    private readonly StackPanel _bubbleHost;
+    private readonly Polygon _bubbleTail;
+    private readonly Border _focusClock;
+    private readonly TextBlock _focusClockText;
+    private readonly Grid _imageViewport;
     private readonly Image _petImage;
     private readonly Border _bubble;
     private readonly TextBlock _bubbleText;
-    private readonly Border _focusClockContainer;
-    private readonly TextBlock _focusClock;
     private readonly DispatcherTimer _reloadDebounce;
     private readonly DispatcherTimer _parentTimer;
     private readonly DispatcherTimer _deadlineTimer;
     private readonly DispatcherTimer _focusTimer;
-    private readonly GlobalKeyboardActivityHook _keyboardHook;
+    private readonly GlobalInputActivityHook _inputHook;
     private readonly GraphCore _graphCore;
 
     private FileSystemWatcher? _watcher;
     private PetConfig _config = new();
     private Picture? _activePicture;
     private string? _activeImagePath;
-    private bool _keyActive;
+    private bool _inputActive;
     private bool _closed;
 
     public DesktopPetWindow(string configPath, int parentPid)
@@ -80,106 +114,111 @@ internal sealed class DesktopPetWindow : Window
         _windowStatePath = Path.Combine(configDirectory, "window-state.json");
 
         Title = "冒险者公会 · 桌宠";
-        Width = 320;
-        Height = 390;
-        MinWidth = 220;
-        MinHeight = 260;
+        SizeToContent = SizeToContent.WidthAndHeight;
+        MinWidth = 0;
+        MinHeight = 0;
+        MaxWidth = 760;
+        MaxHeight = 760;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
         ShowInTaskbar = false;
         Topmost = true;
+        ShowActivated = false;
+        Opacity = 0;
 
-        var root = new Grid
+        _root = new Grid
+        {
+            Background = Brushes.Transparent,
+            Margin = new Thickness(4),
+        };
+
+        _layoutPanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Background = Brushes.Transparent,
+        };
+        _root.Children.Add(_layoutPanel);
+
+        _headerRow = new Grid
         {
             Background = Brushes.Transparent,
         };
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-
-        var topBar = new Grid
-        {
-            Background = Brushes.Transparent,
-        };
-        topBar.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
-        );
-        topBar.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = GridLength.Auto }
-        );
 
         _bubbleText = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Left,
             FontSize = 14,
-            Foreground = new SolidColorBrush(Color.FromRgb(38, 38, 38)),
             MaxWidth = 270,
         };
         _bubble = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(238, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(40, 0, 0, 0)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(16),
             Padding = new Thickness(14, 11, 14, 11),
-            Margin = new Thickness(12, 8, 6, 6),
             Child = _bubbleText,
-            Effect = new DropShadowEffect
-            {
-                BlurRadius = 16,
-                ShadowDepth = 3,
-                Opacity = 0.18,
-            },
         };
-        Grid.SetColumn(_bubble, 0);
-        topBar.Children.Add(_bubble);
-
-        _focusClock = new TextBlock
+        _bubbleTail = new Polygon
         {
-            Text = "00:00:00",
-            FontSize = 13,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(38, 38, 38)),
+            Stretch = Stretch.Fill,
+            Width = 18,
+            Height = 12,
+            StrokeThickness = 1,
+        };
+        _bubbleHost = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        _focusClockContainer = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(238, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(40, 0, 0, 0)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(10, 8, 10, 8),
-            Margin = new Thickness(2, 8, 10, 6),
-            Child = _focusClock,
-            Visibility = Visibility.Collapsed,
-            Effect = new DropShadowEffect
-            {
-                BlurRadius = 14,
-                ShadowDepth = 3,
-                Opacity = 0.16,
-            },
-        };
-        Grid.SetColumn(_focusClockContainer, 1);
-        topBar.Children.Add(_focusClockContainer);
+        _bubbleHost.Children.Add(_bubble);
+        _bubbleHost.Children.Add(_bubbleTail);
 
-        Grid.SetRow(topBar, 0);
-        root.Children.Add(topBar);
+        _focusClockText = new TextBlock
+        {
+            Text = "⏱ 00:00",
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            TextAlignment = TextAlignment.Center,
+        };
+        _focusClock = new Border
+        {
+            CornerRadius = new CornerRadius(999),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 7, 10, 7),
+            Margin = new Thickness(8),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Child = _focusClockText,
+        };
+
+        _imageViewport = new Grid
+        {
+            Width = 280,
+            Height = 280,
+            ClipToBounds = true,
+            Background = Brushes.Transparent,
+            Margin = new Thickness(8, 0, 8, 4),
+        };
 
         _petImage = new Image
         {
             Stretch = Stretch.Uniform,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(8, 0, 8, 4),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            RenderTransformOrigin = new Point(0.5, 0.5),
         };
-        Grid.SetRow(_petImage, 1);
-        root.Children.Add(_petImage);
+        _imageViewport.Children.Add(_petImage);
+        _imageViewport.SizeChanged += (_, _) => ApplyCurrentImagePlacement();
 
-        Content = root;
+        _layoutPanel.Children.Add(_bubbleHost);
+        _layoutPanel.Children.Add(_imageViewport);
 
-        root.MouseLeftButtonDown += (_, e) =>
+        Content = _root;
+
+        _root.MouseLeftButtonDown += (_, e) =>
         {
             if (e.LeftButton != MouseButtonState.Pressed) return;
             try
@@ -223,13 +262,13 @@ internal sealed class DesktopPetWindow : Window
         };
         _focusTimer.Tick += (_, _) => RefreshFocusClock();
 
-        _keyboardHook = new GlobalKeyboardActivityHook();
-        _keyboardHook.ActivityChanged += active =>
+        _inputHook = new GlobalInputActivityHook();
+        _inputHook.ActivityChanged += active =>
         {
             Dispatcher.BeginInvoke(() =>
             {
-                if (_keyActive == active) return;
-                _keyActive = active;
+                if (_inputActive == active) return;
+                _inputActive = active;
                 RefreshImage();
             });
         };
@@ -238,7 +277,7 @@ internal sealed class DesktopPetWindow : Window
         {
             RestorePetWindowState();
             StartConfigWatcher();
-            _keyboardHook.Start();
+            _inputHook.Start();
             _parentTimer.Start();
             _deadlineTimer.Start();
             _focusTimer.Start();
@@ -313,26 +352,221 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
+        ApplyLayoutAndTheme();
         RefreshImage(force: true);
         RefreshBubble();
         RefreshFocusClock();
     }
 
+    private void ApplyLayoutAndTheme()
+    {
+        var petScale = Math.Clamp(_config.PetScale, 0.5, 1.8);
+        var bubbleScale = Math.Clamp(_config.BubbleScale, 0.65, 1.8);
+        var side = string.Equals(
+            _config.BubblePosition,
+            "side",
+            StringComparison.OrdinalIgnoreCase
+        );
+
+        var petSize = 280 * petScale;
+        _imageViewport.Width = petSize;
+        _imageViewport.Height = petSize;
+
+        var background = BrushFromArgb(_config.BubbleBackgroundArgb, 0xFFF7F7F7);
+        var foreground = BrushFromArgb(_config.BubbleForegroundArgb, 0xFF202020);
+        var border = BrushFromArgb(_config.BubbleBorderArgb, 0x33202020);
+        var accentColor = ColorFromArgb(_config.BubbleAccentArgb, 0xFF6C7A6B);
+
+        _bubble.Background = background;
+        _bubble.BorderBrush = border;
+        _bubble.BorderThickness = new Thickness(Math.Max(1, bubbleScale));
+        _bubble.CornerRadius = new CornerRadius(17 * bubbleScale);
+        _bubble.Padding = new Thickness(
+            14 * bubbleScale,
+            10 * bubbleScale,
+            14 * bubbleScale,
+            10 * bubbleScale
+        );
+        _bubbleText.Foreground = foreground;
+        _bubbleText.FontSize = 14 * bubbleScale;
+        _bubbleTail.Fill = background;
+        _bubbleTail.Stroke = border;
+        _bubbleTail.StrokeThickness = Math.Max(1, bubbleScale);
+        _focusClock.Background = background;
+        _focusClock.BorderBrush = border;
+        _focusClockText.Foreground = foreground;
+        _focusClockText.FontSize = 13 * bubbleScale;
+        _focusClock.Padding = new Thickness(
+            10 * bubbleScale,
+            7 * bubbleScale,
+            10 * bubbleScale,
+            7 * bubbleScale
+        );
+        _focusClock.HorizontalAlignment = HorizontalAlignment.Right;
+        _focusClock.VerticalAlignment = VerticalAlignment.Top;
+        _focusClock.Margin = new Thickness(8, 6, 8, 0);
+        _focusClock.Effect = new DropShadowEffect
+        {
+            BlurRadius = 12 * bubbleScale,
+            ShadowDepth = 2 * bubbleScale,
+            Opacity = 0.16,
+            Color = accentColor,
+        };
+        _bubble.Effect = new DropShadowEffect
+        {
+            BlurRadius = 16 * bubbleScale,
+            ShadowDepth = 3 * bubbleScale,
+            Opacity = 0.20,
+            Color = accentColor,
+        };
+
+        _layoutPanel.Children.Clear();
+        _headerRow.Children.Clear();
+        _headerRow.ColumnDefinitions.Clear();
+        _bubbleHost.Children.Clear();
+
+        if (side)
+        {
+            _layoutPanel.Orientation = Orientation.Horizontal;
+            _layoutPanel.VerticalAlignment = VerticalAlignment.Bottom;
+            _bubbleHost.Orientation = Orientation.Horizontal;
+            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Left;
+            _bubbleHost.VerticalAlignment = VerticalAlignment.Center;
+
+            _bubbleText.MaxWidth = 78 * bubbleScale;
+            _bubbleText.MinWidth = 42 * bubbleScale;
+            _bubbleText.TextAlignment = TextAlignment.Center;
+            _bubble.Margin = new Thickness(6, 8, 0, 8);
+
+            _bubbleTail.Width = 12 * bubbleScale;
+            _bubbleTail.Height = 20 * bubbleScale;
+            _bubbleTail.Points = new PointCollection
+            {
+                new Point(0, 0),
+                new Point(12, 10),
+                new Point(0, 20),
+            };
+            _bubbleTail.Margin = new Thickness(-1, 0, 4, 0);
+            _bubbleTail.VerticalAlignment = VerticalAlignment.Center;
+
+            _bubbleHost.Children.Add(_bubble);
+            _bubbleHost.Children.Add(_bubbleTail);
+            _layoutPanel.Children.Add(_bubbleHost);
+            _layoutPanel.Children.Add(_imageViewport);
+            _layoutPanel.Children.Add(_focusClock);
+        }
+        else
+        {
+            _layoutPanel.Orientation = Orientation.Vertical;
+            _layoutPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            _bubbleHost.Orientation = Orientation.Vertical;
+            _bubbleHost.HorizontalAlignment = HorizontalAlignment.Center;
+            _bubbleHost.VerticalAlignment = VerticalAlignment.Top;
+
+            _bubbleText.MaxWidth = 280 * bubbleScale;
+            _bubbleText.MinWidth = 130 * bubbleScale;
+            _bubbleText.TextAlignment = TextAlignment.Left;
+            _bubble.Margin = new Thickness(8, 6, 8, 0);
+
+            _bubbleTail.Width = 20 * bubbleScale;
+            _bubbleTail.Height = 12 * bubbleScale;
+            _bubbleTail.Points = new PointCollection
+            {
+                new Point(0, 0),
+                new Point(20, 0),
+                new Point(10, 12),
+            };
+            _bubbleTail.Margin = new Thickness(0, -1, 0, 3);
+            _bubbleTail.HorizontalAlignment = HorizontalAlignment.Center;
+
+            _bubbleHost.Children.Add(_bubble);
+            _bubbleHost.Children.Add(_bubbleTail);
+
+            _headerRow.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
+            );
+            _headerRow.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = GridLength.Auto }
+            );
+            Grid.SetColumn(_bubbleHost, 0);
+            Grid.SetColumn(_focusClock, 1);
+            _headerRow.Children.Add(_bubbleHost);
+            _headerRow.Children.Add(_focusClock);
+
+            _layoutPanel.Children.Add(_headerRow);
+            _layoutPanel.Children.Add(_imageViewport);
+        }
+    }
+
+    private void RefreshFocusClock()
+    {
+        if (!DateTime.TryParse(_config.FocusStartedAt, out var startedAt))
+        {
+            _focusClockText.Text = "⏱ 00:00";
+            return;
+        }
+
+        var start = startedAt.ToUniversalTime();
+        var elapsed = DateTime.UtcNow - start;
+        if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+        var totalHours = (int)Math.Floor(elapsed.TotalHours);
+        _focusClockText.Text = totalHours > 0
+            ? $"⏱ {totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}"
+            : $"⏱ {elapsed.Minutes:00}:{elapsed.Seconds:00}";
+    }
+
+    private static SolidColorBrush BrushFromArgb(long value, long fallback)
+    {
+        return new SolidColorBrush(ColorFromArgb(value, fallback));
+    }
+
+    private static Color ColorFromArgb(long value, long fallback)
+    {
+        var raw = unchecked((uint)(value == 0 ? fallback : value));
+        return Color.FromArgb(
+            (byte)(raw >> 24),
+            (byte)(raw >> 16),
+            (byte)(raw >> 8),
+            (byte)raw
+        );
+    }
+
     private void RefreshImage(bool force = false)
     {
-        var path = _keyActive && IsUsableImage(_config.ImageB)
-            ? _config.ImageB
-            : _config.ImageA;
-
-        if (!IsUsableImage(path))
+        if (!IsUsableImage(_config.ImageA))
         {
-            if (!force && _activeImagePath is null) return;
             _activeImagePath = null;
             _activePicture?.Dispose();
             _activePicture = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
-            RefreshBubble();
+            _bubbleHost.Visibility = Visibility.Collapsed;
+            Opacity = 0;
+            if (IsVisible)
+            {
+                Hide();
+            }
+            return;
+        }
+
+        var useB = _inputActive && IsUsableImage(_config.ImageB);
+        var path = useB ? _config.ImageB : _config.ImageA;
+        var placement = useB ? _config.PlacementB : _config.PlacementA;
+        ApplyImagePlacement(placement);
+
+        if (!IsUsableImage(path))
+        {
+            _activeImagePath = null;
+            _activePicture?.Dispose();
+            _activePicture = null;
+            _petImage.Source = null;
+            _petImage.Visibility = Visibility.Collapsed;
+            _bubbleHost.Visibility = Visibility.Collapsed;
+            Opacity = 0;
+            if (IsVisible)
+            {
+                Hide();
+            }
             return;
         }
 
@@ -353,7 +587,7 @@ internal sealed class DesktopPetWindow : Window
                 _graphCore,
                 path,
                 new GraphInfo(
-                    _keyActive ? "guild-key-active" : "guild-idle",
+                    _inputActive ? "guild-input-active" : "guild-idle",
                     GraphInfo.GraphType.Common,
                     GraphInfo.AnimatType.Single,
                     IGameSave.ModeType.Nomal
@@ -366,23 +600,59 @@ internal sealed class DesktopPetWindow : Window
             _activePicture = picture;
             _activeImagePath = path;
             _petImage.Visibility = Visibility.Visible;
+            Opacity = 1;
+            if (!IsVisible)
+            {
+                Show();
+            }
         }
         catch
         {
             _activeImagePath = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
+            _bubbleHost.Visibility = Visibility.Collapsed;
+            Opacity = 0;
+            if (IsVisible)
+            {
+                Hide();
+            }
         }
 
         RefreshBubble();
+    }
+
+    private void ApplyCurrentImagePlacement()
+    {
+        var useB = _inputActive && IsUsableImage(_config.ImageB);
+        ApplyImagePlacement(useB ? _config.PlacementB : _config.PlacementA);
+    }
+
+    private void ApplyImagePlacement(PetPlacement? placement)
+    {
+        placement ??= new PetPlacement();
+        var scale = Math.Clamp(placement.Scale, 0.35, 3.0);
+        var offsetX = Math.Clamp(placement.OffsetX, -1.0, 1.0);
+        var offsetY = Math.Clamp(placement.OffsetY, -1.0, 1.0);
+        var width = Math.Max(1, _imageViewport.ActualWidth);
+        var height = Math.Max(1, _imageViewport.ActualHeight);
+
+        var transforms = new TransformGroup();
+        transforms.Children.Add(new ScaleTransform(scale, scale));
+        transforms.Children.Add(
+            new TranslateTransform(
+                offsetX * width / 2.0,
+                offsetY * height / 2.0
+            )
+        );
+        _petImage.RenderTransform = transforms;
     }
 
     private void RefreshBubble()
     {
         if (!IsUsableImage(_config.ImageA))
         {
-            _bubbleText.Text = "请先在冒险者公会 → 桌宠里导入当前预设的 A 图。";
-            _bubble.Visibility = Visibility.Visible;
+            _bubbleHost.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -390,7 +660,7 @@ internal sealed class DesktopPetWindow : Window
         {
             var custom = (_config.CustomText ?? string.Empty).Trim();
             _bubbleText.Text = custom.Length == 0 ? " " : custom;
-            _bubble.Visibility = Visibility.Visible;
+            _bubbleHost.Visibility = Visibility.Visible;
             return;
         }
 
@@ -398,7 +668,7 @@ internal sealed class DesktopPetWindow : Window
         if (title.Length == 0)
         {
             _bubbleText.Text = "当前没有在画订单";
-            _bubble.Visibility = Visibility.Visible;
+            _bubbleHost.Visibility = Visibility.Visible;
             return;
         }
 
@@ -421,29 +691,7 @@ internal sealed class DesktopPetWindow : Window
         _bubbleText.Text = details.Count == 0
             ? title
             : title + Environment.NewLine + string.Join(" · ", details);
-        _bubble.Visibility = Visibility.Visible;
-    }
-
-    private void RefreshFocusClock()
-    {
-        var raw = (_config.ActiveFocusStartedAt ?? string.Empty).Trim();
-        if (raw.Length == 0 ||
-            !DateTimeOffset.TryParse(raw, out var startedAt))
-        {
-            _focusClockContainer.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var elapsed = DateTimeOffset.UtcNow - startedAt.ToUniversalTime();
-        if (elapsed < TimeSpan.Zero)
-        {
-            elapsed = TimeSpan.Zero;
-        }
-
-        var totalHours = Math.Max(0, (long)elapsed.TotalHours);
-        _focusClock.Text =
-            $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
-        _focusClockContainer.Visibility = Visibility.Visible;
+        _bubbleHost.Visibility = Visibility.Visible;
     }
 
     private static string FormatDeadline(DateTime deadline)
@@ -518,14 +766,26 @@ internal sealed class DesktopPetWindow : Window
         }
 
         WindowStartupLocation = WindowStartupLocation.Manual;
-        Left = SystemParameters.WorkArea.Right - Width - 36;
-        Top = SystemParameters.WorkArea.Bottom - Height - 36;
+        var fallbackWidth = ActualWidth > 0 && !double.IsNaN(ActualWidth)
+            ? ActualWidth
+            : 320;
+        var fallbackHeight = ActualHeight > 0 && !double.IsNaN(ActualHeight)
+            ? ActualHeight
+            : 390;
+        Left = SystemParameters.WorkArea.Right - fallbackWidth - 36;
+        Top = SystemParameters.WorkArea.Bottom - fallbackHeight - 36;
     }
 
     private bool IsVisiblePosition(double left, double top)
     {
-        var right = left + Math.Max(120, Width);
-        var bottom = top + Math.Max(120, Height);
+        var windowWidth = ActualWidth > 0 && !double.IsNaN(ActualWidth)
+            ? ActualWidth
+            : 320;
+        var windowHeight = ActualHeight > 0 && !double.IsNaN(ActualHeight)
+            ? ActualHeight
+            : 390;
+        var right = left + Math.Max(120, windowWidth);
+        var bottom = top + Math.Max(120, windowHeight);
         var virtualRight = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth;
         var virtualBottom = SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight;
 
@@ -572,7 +832,7 @@ internal sealed class DesktopPetWindow : Window
             _watcher = null;
         }
 
-        _keyboardHook.Dispose();
+        _inputHook.Dispose();
         _activePicture?.Dispose();
         _activePicture = null;
         _graphCore.Dispose();
@@ -585,55 +845,112 @@ internal sealed class DesktopPetWindow : Window
         public bool Enabled { get; set; }
         public string? ImageA { get; set; }
         public string? ImageB { get; set; }
+        public PetPlacement PlacementA { get; set; } = new();
+        public PetPlacement PlacementB { get; set; } = new();
+        public string BubblePosition { get; set; } = "above";
+        public double PetScale { get; set; } = 1;
+        public double BubbleScale { get; set; } = 1;
+        public long BubbleBackgroundArgb { get; set; } = 0xFFF7F7F7;
+        public long BubbleForegroundArgb { get; set; } = 0xFF202020;
+        public long BubbleBorderArgb { get; set; } = 0x33202020;
+        public long BubbleAccentArgb { get; set; } = 0xFF6C7A6B;
+        public string? FocusStartedAt { get; set; }
         public string? TextMode { get; set; }
         public string? CustomText { get; set; }
         public string? CurrentOrderTitle { get; set; }
         public string? CurrentOrderNode { get; set; }
         public string? CurrentOrderDeadline { get; set; }
-        public string? ActiveFocusStartedAt { get; set; }
+    }
+
+    private sealed class PetPlacement
+    {
+        public double Scale { get; set; } = 1;
+        public double OffsetX { get; set; }
+        public double OffsetY { get; set; }
     }
 }
 
-internal sealed class GlobalKeyboardActivityHook : IDisposable
+internal sealed class GlobalInputActivityHook : IDisposable
 {
     private const int WhKeyboardLl = 13;
+    private const int WhMouseLl = 14;
+
     private const int WmKeyDown = 0x0100;
     private const int WmKeyUp = 0x0101;
     private const int WmSysKeyDown = 0x0104;
     private const int WmSysKeyUp = 0x0105;
 
+    private const int WmLButtonDown = 0x0201;
+    private const int WmLButtonUp = 0x0202;
+    private const int WmRButtonDown = 0x0204;
+    private const int WmRButtonUp = 0x0205;
+    private const int WmMButtonDown = 0x0207;
+    private const int WmMButtonUp = 0x0208;
+
     private readonly HashSet<int> _pressedKeys = new();
-    private readonly LowLevelKeyboardProc _callback;
-    private IntPtr _hook;
+    private readonly HashSet<int> _pressedMouseButtons = new();
+    private readonly LowLevelKeyboardProc _keyboardCallback;
+    private readonly LowLevelMouseProc _mouseCallback;
+
+    private IntPtr _keyboardHook;
+    private IntPtr _mouseHook;
     private bool _active;
 
-    public GlobalKeyboardActivityHook()
+    public GlobalInputActivityHook()
     {
-        _callback = HookCallback;
+        _keyboardCallback = KeyboardHookCallback;
+        _mouseCallback = MouseHookCallback;
     }
 
     public event Action<bool>? ActivityChanged;
 
     public void Start()
     {
-        if (_hook != IntPtr.Zero) return;
         using var process = Process.GetCurrentProcess();
         using var module = process.MainModule;
         var moduleHandle = GetModuleHandle(module?.ModuleName);
-        _hook = SetWindowsHookEx(WhKeyboardLl, _callback, moduleHandle, 0);
+
+        if (_keyboardHook == IntPtr.Zero)
+        {
+            _keyboardHook = SetWindowsHookExKeyboard(
+                WhKeyboardLl,
+                _keyboardCallback,
+                moduleHandle,
+                0
+            );
+        }
+
+        if (_mouseHook == IntPtr.Zero)
+        {
+            _mouseHook = SetWindowsHookExMouse(
+                WhMouseLl,
+                _mouseCallback,
+                moduleHandle,
+                0
+            );
+        }
     }
 
     public void Dispose()
     {
-        if (_hook != IntPtr.Zero)
+        if (_keyboardHook != IntPtr.Zero)
         {
-            UnhookWindowsHookEx(_hook);
-            _hook = IntPtr.Zero;
+            UnhookWindowsHookEx(_keyboardHook);
+            _keyboardHook = IntPtr.Zero;
         }
+
+        if (_mouseHook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_mouseHook);
+            _mouseHook = IntPtr.Zero;
+        }
+
         _pressedKeys.Clear();
+        _pressedMouseButtons.Clear();
+        SetActive(false);
     }
 
-    private IntPtr HookCallback(int code, IntPtr wParam, IntPtr lParam)
+    private IntPtr KeyboardHookCallback(int code, IntPtr wParam, IntPtr lParam)
     {
         if (code >= 0)
         {
@@ -643,16 +960,57 @@ internal sealed class GlobalKeyboardActivityHook : IDisposable
             if (message is WmKeyDown or WmSysKeyDown)
             {
                 _pressedKeys.Add(data.VirtualKeyCode);
-                SetActive(_pressedKeys.Count > 0);
+                RefreshActiveState();
             }
             else if (message is WmKeyUp or WmSysKeyUp)
             {
                 _pressedKeys.Remove(data.VirtualKeyCode);
-                SetActive(_pressedKeys.Count > 0);
+                RefreshActiveState();
             }
         }
 
-        return CallNextHookEx(_hook, code, wParam, lParam);
+        return CallNextHookEx(_keyboardHook, code, wParam, lParam);
+    }
+
+    private IntPtr MouseHookCallback(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0)
+        {
+            switch (wParam.ToInt32())
+            {
+                case WmLButtonDown:
+                    _pressedMouseButtons.Add(1);
+                    RefreshActiveState();
+                    break;
+                case WmLButtonUp:
+                    _pressedMouseButtons.Remove(1);
+                    RefreshActiveState();
+                    break;
+                case WmRButtonDown:
+                    _pressedMouseButtons.Add(2);
+                    RefreshActiveState();
+                    break;
+                case WmRButtonUp:
+                    _pressedMouseButtons.Remove(2);
+                    RefreshActiveState();
+                    break;
+                case WmMButtonDown:
+                    _pressedMouseButtons.Add(3);
+                    RefreshActiveState();
+                    break;
+                case WmMButtonUp:
+                    _pressedMouseButtons.Remove(3);
+                    RefreshActiveState();
+                    break;
+            }
+        }
+
+        return CallNextHookEx(_mouseHook, code, wParam, lParam);
+    }
+
+    private void RefreshActiveState()
+    {
+        SetActive(_pressedKeys.Count > 0 || _pressedMouseButtons.Count > 0);
     }
 
     private void SetActive(bool active)
@@ -673,11 +1031,20 @@ internal sealed class GlobalKeyboardActivityHook : IDisposable
     }
 
     private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
+    private delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookExW")]
+    private static extern IntPtr SetWindowsHookExKeyboard(
         int idHook,
         LowLevelKeyboardProc callback,
+        IntPtr module,
+        uint threadId
+    );
+
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookExW")]
+    private static extern IntPtr SetWindowsHookExMouse(
+        int idHook,
+        LowLevelMouseProc callback,
         IntPtr module,
         uint threadId
     );

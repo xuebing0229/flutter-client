@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/desktop_pet/desktop_pet_service.dart';
+import '../../focus/presentation/focus_panel.dart';
+import '../../focus/state/focus_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
@@ -11,10 +13,16 @@ import '../../shared/presentation/layout_spacing.dart';
 class DesktopPetPage extends StatefulWidget {
   const DesktopPetPage({
     required this.orderStore,
+    required this.focusStore,
+    required this.onOpenOrder,
+    required this.showDesktopPet,
     super.key,
   });
 
   final OrderStore orderStore;
+  final FocusStore focusStore;
+  final Future<void> Function(String orderId) onOpenOrder;
+  final bool showDesktopPet;
 
   @override
   State<DesktopPetPage> createState() => _DesktopPetPageState();
@@ -45,13 +53,63 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
     super.dispose();
   }
 
-  QueueOrder? get _currentOrder {
-    for (final order in widget.orderStore.orders) {
-      if (order.isPinned && !order.isArchived && !order.isCompleted) {
-        return order;
+  List<QueueOrder> get _activeOrders => widget.orderStore.orders
+      .where((order) => !order.isArchived && !order.isCompleted)
+      .toList(growable: false);
+
+  Future<void> _selectCurrentOrder(QueueOrder order) async {
+    final active = widget.focusStore.activeSession;
+    if (active != null && active.orderId != order.id) {
+      final lockedTitle = active.isFreeFocus
+          ? '自由专注'
+          : (active.orderTitleSnapshot ?? '原排单');
+      final action = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('当前专注已锁定'),
+          content: Text(
+            '这次专注开始时锁定的是“$lockedTitle”。\n'
+            '切换“当前在画订单”不会改写正在进行的专注。'
+            '如果现在要开始画“${order.title}”，建议结束本次并新开一次计时。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop('switch'),
+              child: const Text('仅切换'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop('restart'),
+              child: const Text('结束并新开'),
+            ),
+          ],
+        ),
+      );
+      if (action == null) return;
+      if (action == 'restart') {
+        widget.focusStore.stopActive();
+        await _settings.selectCurrentOrder(
+          orderId: order.id,
+          title: order.title,
+          node: order.currentNode.name,
+          deadline: order.deadline,
+        );
+        widget.focusStore.start(order: order);
+        return;
       }
     }
-    return null;
+
+    await _settings.selectCurrentOrder(
+      orderId: order.id,
+      title: order.title,
+      node: order.currentNode.name,
+      deadline: order.deadline,
+    );
   }
 
   Future<String?> _askName({
@@ -70,7 +128,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
             maxLength: 40,
             decoration: const InputDecoration(
               labelText: '桌宠预设名称',
-              hintText: '例如：祁连云工作中',
+              hintText: '给这个预设起个名字',
             ),
             onSubmitted: (value) {
               final normalized = value.trim();
@@ -144,7 +202,48 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
     DesktopPetAssetSlot slot,
   ) async {
     try {
-      await _settings.importAsset(preset.id, slot);
+      final sourcePath = await _settings.pickAssetSource();
+      if (sourcePath == null || !mounted) return;
+
+      final hasCurrentImage = slot == DesktopPetAssetSlot.idleA
+          ? preset.imageA != null
+          : preset.imageB != null;
+      final currentPlacement = slot == DesktopPetAssetSlot.idleA
+          ? preset.placementA
+          : preset.placementB;
+      final otherPlacement = slot == DesktopPetAssetSlot.idleA
+          ? preset.placementB
+          : preset.placementA;
+      final initialPlacement = hasCurrentImage
+          ? currentPlacement
+          : (slot == DesktopPetAssetSlot.keyB && preset.imageA != null
+              ? preset.placementA
+              : (slot == DesktopPetAssetSlot.idleA && preset.imageB != null
+                  ? preset.placementB
+                  : currentPlacement));
+      final guidePath = slot == DesktopPetAssetSlot.idleA
+          ? preset.imageB
+          : preset.imageA;
+
+      final placement = await showDialog<DesktopPetPlacement>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _DesktopPetPlacementDialog(
+          slot: slot,
+          sourcePath: sourcePath,
+          initialPlacement: initialPlacement,
+          guidePath: guidePath,
+          guidePlacement: otherPlacement,
+        ),
+      );
+      if (placement == null) return;
+
+      await _settings.importAssetFromPath(
+        preset.id,
+        slot,
+        sourcePath,
+        placement,
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -179,24 +278,18 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isWindows) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('桌宠')),
-        body: const Center(child: Text('桌宠仅在 Windows 电脑版提供。')),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '桌宠',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Text(
+          widget.showDesktopPet ? '桌宠' : '专注',
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       body: AnimatedBuilder(
         animation: Listenable.merge(<Listenable>[
           _settings,
           widget.orderStore,
+          widget.focusStore,
         ]),
         builder: (context, _) {
           if (!_settings.loaded) {
@@ -204,7 +297,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
           }
 
           final selected = _settings.selectedPreset;
-          final currentOrder = _currentOrder;
+          final activeOrders = _activeOrders;
 
           return ListView(
             padding: AppLayoutSpacing.pageScrollPadding(
@@ -214,10 +307,11 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               right: 16,
             ),
             children: [
-              _InfoCard(
+              if (widget.showDesktopPet) ...[
+                _InfoCard(
                 child: Text(
-                  '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在有按键操作时显示。'
-                  '切换预设会整组切换美术资源。',
+                  '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在键盘按键或鼠标点击时显示。'
+                  '导入时会先进入固定桌宠画布定位，A/B 使用同一坐标系，避免切换时人物跳位。',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -300,8 +394,8 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       ),
                       const Divider(height: 1),
                       _AssetTile(
-                        title: 'B · 按键状态',
-                        subtitle: '有按键操作时显示；停止按键后回到 A',
+                        title: 'B · 操作状态',
+                        subtitle: '键盘按键或鼠标点击时显示；松开后回到 A',
                         path: selected.imageB,
                         onImport: () =>
                             _pick(selected, DesktopPetAssetSlot.keyB),
@@ -310,13 +404,75 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                           DesktopPetAssetSlot.keyB,
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      _PairPlacementPreview(preset: selected),
                     ],
                   ],
                 ],
               ),
               const SizedBox(height: 14),
               _Section(
-                title: '文字框内容',
+                title: '桌面显示',
+                children: [
+                  const SizedBox(height: 4),
+                  Text(
+                    '文字泡位置',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<DesktopPetBubblePosition>(
+                    segments: const [
+                      ButtonSegment(
+                        value: DesktopPetBubblePosition.above,
+                        icon: Icon(Icons.vertical_align_top_rounded),
+                        label: Text('头顶 · 横向'),
+                      ),
+                      ButtonSegment(
+                        value: DesktopPetBubblePosition.side,
+                        icon: Icon(Icons.view_sidebar_outlined),
+                        label: Text('旁边 · 竖向'),
+                      ),
+                    ],
+                    selected: <DesktopPetBubblePosition>{
+                      _settings.bubblePosition,
+                    },
+                    onSelectionChanged: (selection) {
+                      if (selection.isEmpty) return;
+                      unawaited(
+                        _settings.setBubblePosition(selection.first),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _ScaleSetting(
+                    label: '桌宠大小',
+                    value: _settings.petScale,
+                    min: 0.5,
+                    max: 1.8,
+                    onChanged: (value) =>
+                        unawaited(_settings.setPetScale(value)),
+                  ),
+                  const SizedBox(height: 10),
+                  _ScaleSetting(
+                    label: '文字泡大小',
+                    value: _settings.bubbleScale,
+                    min: 0.65,
+                    max: 1.8,
+                    onChanged: (value) =>
+                        unawaited(_settings.setBubbleScale(value)),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '头顶模式使用横向文字泡；旁边模式使用更窄、更高的竖向文字泡。文字泡会和桌宠一起移动，并自动跟随当前主题。',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _Section(
+                title: '文字泡内容',
                 children: [
                   const SizedBox(height: 4),
                   SegmentedButton<DesktopPetTextMode>(
@@ -341,11 +497,11 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                   const SizedBox(height: 14),
                   if (_settings.textMode ==
                       DesktopPetTextMode.currentOrder)
-                    _CurrentOrderPreview(
-                      order: currentOrder,
-                      deadlineText: currentOrder == null
-                          ? null
-                          : _formatDeadline(currentOrder.deadline),
+                    _CurrentOrderPicker(
+                      orders: activeOrders,
+                      selectedOrderId: _settings.currentOrderId,
+                      formatDeadline: _formatDeadline,
+                      onSelected: _selectCurrentOrder,
                     )
                   else
                     TextField(
@@ -364,10 +520,31 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               ),
               const SizedBox(height: 14),
               Text(
-                '“当前在画订单”读取置顶且尚未交稿的排单；桌宠图片和预设只保存在本机电脑。',
+                '“当前在画订单”由你在这里手动选择具体排单；桌宠图片、预设、显示大小和文字泡设置只保存在本机电脑，专注计时与历史记录会随账号在手机和电脑间同步。',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+              ),
+              const SizedBox(height: 14),
+            ],
+              if (!widget.showDesktopPet) ...[
+                _InfoCard(
+                  child: Text(
+                    Platform.isWindows
+                        ? '桌宠当前已关闭，这里只保留专注计时与专注记录；重新开启桌宠后，桌宠设置会回到同一个板块。'
+                        : '手机端不显示桌宠形象，这里保留与电脑双端同步的排单专注计时和专注列表。',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              FocusPanel(
+                orderStore: widget.orderStore,
+                focusStore: widget.focusStore,
+                onOpenOrder: widget.onOpenOrder,
+                desktopSettings: widget.showDesktopPet ? _settings : null,
               ),
             ],
           );
@@ -377,47 +554,542 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
   }
 }
 
-class _CurrentOrderPreview extends StatelessWidget {
-  const _CurrentOrderPreview({
-    required this.order,
-    required this.deadlineText,
+class _DesktopPetPlacementDialog extends StatefulWidget {
+  const _DesktopPetPlacementDialog({
+    required this.slot,
+    required this.sourcePath,
+    required this.initialPlacement,
+    required this.guidePath,
+    required this.guidePlacement,
   });
 
-  final QueueOrder? order;
-  final String? deadlineText;
+  final DesktopPetAssetSlot slot;
+  final String sourcePath;
+  final DesktopPetPlacement initialPlacement;
+  final String? guidePath;
+  final DesktopPetPlacement guidePlacement;
+
+  @override
+  State<_DesktopPetPlacementDialog> createState() =>
+      _DesktopPetPlacementDialogState();
+}
+
+class _DesktopPetPlacementDialogState
+    extends State<_DesktopPetPlacementDialog> {
+  late DesktopPetPlacement _placement;
+  bool _showGuide = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _placement = widget.initialPlacement;
+  }
+
+  void _update({
+    double? scale,
+    double? offsetX,
+    double? offsetY,
+  }) {
+    setState(() {
+      _placement = _placement.copyWith(
+        scale: scale,
+        offsetX: offsetX,
+        offsetY: offsetY,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    if (order == null) {
+    final slotName =
+        widget.slot == DesktopPetAssetSlot.idleA ? 'A · 平时状态' : 'B · 操作状态';
+    final guideFile = widget.guidePath == null ? null : File(widget.guidePath!);
+    final hasGuide = guideFile?.existsSync() == true;
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 760),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '定位 $slotName',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '下面的方框就是桌宠人物的固定显示画布。拖动图片调整位置，用滑杆调整大小；A/B 共用同一套坐标。',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 14),
+              Flexible(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final side = constraints.biggest.shortestSide
+                        .clamp(280.0, 430.0)
+                        .toDouble();
+                    return Center(
+                      child: SizedBox.square(
+                        dimension: side,
+                        child: _PlacementCanvas(
+                          sourcePath: widget.sourcePath,
+                          placement: _placement,
+                          guidePath: hasGuide ? widget.guidePath : null,
+                          guidePlacement: widget.guidePlacement,
+                          showGuide: _showGuide,
+                          onPan: (delta) {
+                            _update(
+                              offsetX: _placement.offsetX +
+                                  delta.dx / (side / 2),
+                              offsetY: _placement.offsetY +
+                                  delta.dy / (side / 2),
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const SizedBox(width: 54, child: Text('大小')),
+                  Expanded(
+                    child: Slider(
+                      min: 0.35,
+                      max: 3,
+                      value: _placement.scale,
+                      onChanged: (value) => _update(scale: value),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      '${_placement.scale.toStringAsFixed(2)}×',
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ],
+              ),
+              if (hasGuide)
+                CheckboxListTile(
+                  value: _showGuide,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('半透明叠加另一张状态图作为对齐参考'),
+                  onChanged: (value) =>
+                      setState(() => _showGuide = value ?? true),
+                ),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () => setState(
+                      () => _placement =
+                          widget.slot == DesktopPetAssetSlot.keyB &&
+                                  hasGuide
+                              ? widget.guidePlacement
+                              : const DesktopPetPlacement(),
+                    ),
+                    icon: const Icon(Icons.restart_alt_rounded),
+                    label: Text(
+                      widget.slot == DesktopPetAssetSlot.keyB && hasGuide
+                          ? '跟随 A 的位置'
+                          : '重置位置',
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(_placement),
+                    child: const Text('保存定位'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlacementCanvas extends StatelessWidget {
+  const _PlacementCanvas({
+    required this.sourcePath,
+    required this.placement,
+    required this.guidePath,
+    required this.guidePlacement,
+    required this.showGuide,
+    required this.onPan,
+  });
+
+  final String sourcePath;
+  final DesktopPetPlacement placement;
+  final String? guidePath;
+  final DesktopPetPlacement guidePlacement;
+  final bool showGuide;
+  final ValueChanged<Offset> onPan;
+
+  Widget _placedImage(
+    String path,
+    DesktopPetPlacement value, {
+    double opacity = 1,
+  }) {
+    return Positioned.fill(
+      child: FractionalTranslation(
+        translation: Offset(value.offsetX / 2, value.offsetY / 2),
+        child: Transform.scale(
+          scale: value.scale,
+          child: Opacity(
+            opacity: opacity,
+            child: Image.file(
+              File(path),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Center(child: Icon(Icons.broken_image_outlined)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final guide = guidePath;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanUpdate: (details) => onPan(details.delta),
+      child: ClipRect(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerLowest,
+            border: Border.all(color: colors.primary, width: 2),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CustomPaint(
+                painter: _DesktopPetCanvasGuidePainter(
+                  lineColor: colors.outlineVariant,
+                ),
+              ),
+              if (showGuide && guide != null)
+                _placedImage(
+                  guide,
+                  guidePlacement,
+                  opacity: 0.28,
+                ),
+              _placedImage(sourcePath, placement),
+              Positioned(
+                left: 10,
+                bottom: 8,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surface.withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      '桌宠显示范围',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopPetCanvasGuidePainter extends CustomPainter {
+  const _DesktopPetCanvasGuidePainter({required this.lineColor});
+
+  final Color lineColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(size.width / 2, 0),
+      Offset(size.width / 2, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      paint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(
+        size.width * 0.08,
+        size.height * 0.08,
+        size.width * 0.84,
+        size.height * 0.84,
+      ),
+      paint..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DesktopPetCanvasGuidePainter oldDelegate) =>
+      oldDelegate.lineColor != lineColor;
+}
+
+class _PairPlacementPreview extends StatelessWidget {
+  const _PairPlacementPreview({required this.preset});
+
+  final DesktopPetPreset preset;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth >= 520
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: width,
+              child: _SinglePlacementPreview(
+                label: 'A · 平时状态',
+                path: preset.imageA,
+                placement: preset.placementA,
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _SinglePlacementPreview(
+                label: 'B · 操作状态',
+                path: preset.imageB,
+                placement: preset.placementB,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SinglePlacementPreview extends StatelessWidget {
+  const _SinglePlacementPreview({
+    required this.label,
+    required this.path,
+    required this.placement,
+  });
+
+  final String label;
+  final String? path;
+  final DesktopPetPlacement placement;
+
+  @override
+  Widget build(BuildContext context) {
+    final file = path == null ? null : File(path!);
+    final exists = file?.existsSync() == true;
+    final colors = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        AspectRatio(
+          aspectRatio: 1,
+          child: ClipRect(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerLow,
+                border: Border.all(color: colors.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: exists
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        FractionalTranslation(
+                          translation: Offset(
+                            placement.offsetX / 2,
+                            placement.offsetY / 2,
+                          ),
+                          child: Transform.scale(
+                            scale: placement.scale,
+                            child: Image.file(file!, fit: BoxFit.contain),
+                          ),
+                        ),
+                        CustomPaint(
+                          painter: _DesktopPetCanvasGuidePainter(
+                            lineColor: colors.outlineVariant,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Center(
+                      child: Text(
+                        '未导入',
+                        style: TextStyle(color: colors.onSurfaceVariant),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CurrentOrderPicker extends StatelessWidget {
+  const _CurrentOrderPicker({
+    required this.orders,
+    required this.selectedOrderId,
+    required this.formatDeadline,
+    required this.onSelected,
+  });
+
+  final List<QueueOrder> orders;
+  final String? selectedOrderId;
+  final String Function(DateTime?) formatDeadline;
+  final Future<void> Function(QueueOrder order) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (orders.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: colors.surfaceContainerLow,
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Text('当前没有置顶且尚未交稿的排单。'),
+        child: const Text('当前没有可选择的进行中排单。'),
       );
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth >= 720
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final order in orders)
+              SizedBox(
+                width: cardWidth,
+                child: _CurrentOrderChoiceCard(
+                  order: order,
+                  selected: order.id == selectedOrderId,
+                  deadlineText: formatDeadline(order.deadline),
+                  onTap: () => onSelected(order),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CurrentOrderChoiceCard extends StatelessWidget {
+  const _CurrentOrderChoiceCard({
+    required this.order,
+    required this.selected,
+    required this.deadlineText,
+    required this.onTap,
+  });
+
+  final QueueOrder order;
+  final bool selected;
+  final String deadlineText;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: selected
+          ? colors.primaryContainer.withValues(alpha: 0.55)
+          : colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            order!.title,
-            style: const TextStyle(fontWeight: FontWeight.w800),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? colors.primary : colors.outlineVariant,
+              width: selected ? 2 : 1,
+            ),
           ),
-          const SizedBox(height: 6),
-          Text('${order!.currentNode.name} · $deadlineText'),
-        ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${order.platform.label} · ${order.clientName.trim().isEmpty ? '未填写单主' : order.clientName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${order.currentNode.name} · $deadlineText',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? colors.primary : colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -480,6 +1152,82 @@ class _AssetTile extends StatelessWidget {
         ],
       ),
       onTap: onImport,
+    );
+  }
+}
+
+class _ScaleSetting extends StatefulWidget {
+  const _ScaleSetting({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_ScaleSetting> createState() => _ScaleSettingState();
+}
+
+class _ScaleSettingState extends State<_ScaleSetting> {
+  late double _draft;
+  bool _dragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _draft = widget.value;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ScaleSetting oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_dragging && (oldWidget.value - widget.value).abs() > 0.001) {
+      _draft = widget.value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _draft.clamp(widget.min, widget.max).toDouble();
+    final percent = (value * 100).round();
+    return Row(
+      children: [
+        SizedBox(
+          width: 88,
+          child: Text(
+            widget.label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            value: value,
+            min: widget.min,
+            max: widget.max,
+            divisions: ((widget.max - widget.min) * 20).round(),
+            onChangeStart: (_) => _dragging = true,
+            onChanged: (next) => setState(() => _draft = next),
+            onChangeEnd: (next) {
+              _dragging = false;
+              widget.onChanged(next);
+            },
+          ),
+        ),
+        SizedBox(
+          width: 52,
+          child: Text(
+            '$percent%',
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ],
     );
   }
 }

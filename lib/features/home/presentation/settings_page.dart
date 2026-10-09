@@ -17,6 +17,7 @@ import '../../../core/update/android_beta_update_installer.dart';
 import '../../../core/update/beta_update_coordinator.dart';
 import '../../../core/update/update_manifest.dart';
 import '../../../core/update/windows_beta_update_installer.dart';
+import '../../focus/state/focus_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/state/order_store.dart';
@@ -30,6 +31,7 @@ class SettingsPage extends StatefulWidget {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    this.focusStore,
     required this.themeStore,
     required this.featureStore,
     required this.accountStore,
@@ -42,6 +44,7 @@ class SettingsPage extends StatefulWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final FocusStore? focusStore;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
@@ -520,7 +523,7 @@ class _SettingsPageState extends State<SettingsPage>
             orderStore: widget.orderStore,
             productStore: widget.productStore,
             nodePresetStore: widget.nodePresetStore,
-            focusStore: widget.syncCoordinator.focusStore,
+            focusStore: widget.focusStore ?? widget.syncCoordinator.focusStore,
           );
           // Apply settings inside the coordinator's restore transaction. This
           // makes the post-restore baseline describe the imported workspace,

@@ -127,10 +127,10 @@ String syncFieldLabel(String field) {
     'desktopNavigationOpen' => '电脑导航栏状态',
     'name' => '预设名称',
     'nodes' => '节点内容',
-    'orderId' => '排单',
-    'orderTitleSnapshot' => '排单标题',
-    'startedAt' => '开始时间',
-    'endedAt' => '结束时间',
+    'startedAt' => '专注开始时间',
+    'endedAt' => '专注结束时间',
+    'orderId' => '专注排单',
+    'orderTitleSnapshot' => '排单标题快照',
     SyncRecord.deletedField => '删除状态',
     _ => field,
   };
@@ -1230,6 +1230,10 @@ class SyncCoordinator extends ChangeNotifier {
       _applyingRemote = false;
     }
 
+    await _persistFocusNormalization(
+      recordsByKind[SyncEntityKind.focusSession]!,
+    );
+
     var gcChanged = false;
     if (!_awaitingInitialRemoteWorkspace) {
       await _gcAckStore.writeSnapshot(
@@ -1745,43 +1749,6 @@ class SyncCoordinator extends ChangeNotifier {
     }
   }
 
-  void _applyFocusRecords(Map<String, SyncRecord> records) {
-    final result = <FocusSession>[];
-
-    for (final existing in focusStore.sessions) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.focusSessionToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.focusSessionFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-    }
-
-    for (final record in records.values) {
-      if (focusStore.contains(record.id)) continue;
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.focusSessionFromFields(fields));
-      } catch (_) {
-        // Invalid remote focus records stay on disk for later repair.
-      }
-    }
-
-    if (!_sameFocusList(focusStore.sessions, result)) {
-      focusStore.replaceAll(result);
-    }
-  }
-
   void _applyPresetRecords(Map<String, SyncRecord> records) {
     final current = <String, NodePreset>{
       for (final preset in nodePresetStore.presets) preset.id: preset,
@@ -1828,6 +1795,65 @@ class SyncCoordinator extends ChangeNotifier {
     };
     if (!syncJsonEquals(currentFields, resultFields)) {
       nodePresetStore.replaceAll(result);
+    }
+  }
+
+  void _applyFocusRecords(Map<String, SyncRecord> records) {
+    final result = <FocusSession>[];
+
+    for (final existing in focusStore.sessions) {
+      final record = records[existing.id];
+      if (record == null) {
+        result.add(existing);
+        continue;
+      }
+      final fields = _mergeEngine.materializeKeepingLocalConflicts(
+        record,
+        SyncEntityCodec.focusSessionToFields(existing),
+      );
+      if (fields == null) continue;
+      try {
+        result.add(SyncEntityCodec.focusSessionFromFields(fields));
+      } catch (_) {
+        result.add(existing);
+      }
+    }
+
+    for (final record in records.values) {
+      if (focusStore.contains(record.id)) continue;
+      final fields = _mergeEngine.materialize(record);
+      if (fields == null) continue;
+      try {
+        result.add(SyncEntityCodec.focusSessionFromFields(fields));
+      } catch (_) {
+        // Invalid remote focus record stays on disk for later repair.
+      }
+    }
+
+    if (!_sameFocusList(focusStore.sessions, result)) {
+      focusStore.replaceAll(result);
+    }
+  }
+
+  Future<void> _persistFocusNormalization(
+    Map<String, SyncRecord> records,
+  ) async {
+    for (final session in focusStore.sessions) {
+      final record = records[session.id];
+      if (record == null) continue;
+      final previous = _mergeEngine.materialize(record);
+      if (previous == null) continue;
+      final next = SyncEntityCodec.focusSessionToFields(session);
+      if (syncJsonEquals(previous, next)) continue;
+
+      final updated = _mergeEngine.applyLocalSnapshot(
+        record: record,
+        previousValues: previous,
+        nextValues: next,
+        deviceId: deviceId,
+      );
+      await _recordStore.write(accountId: accountId, record: updated);
+      records[session.id] = updated;
     }
   }
 

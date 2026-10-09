@@ -38,6 +38,29 @@ class SyncMergeEngine {
         continue;
       }
 
+      if (left.kind == SyncEntityKind.focusSession &&
+          fieldName == 'endedAt' &&
+          !syncJsonEquals(a.value, b.value)) {
+        final aTime = a.value is String ? DateTime.tryParse(a.value as String) : null;
+        final bTime = b.value is String ? DateTime.tryParse(b.value as String) : null;
+        SyncFieldValue winner;
+        if (aTime == null && bTime != null) {
+          winner = b;
+        } else if (bTime == null && aTime != null) {
+          winner = a;
+        } else if (aTime != null && bTime != null) {
+          winner = aTime.isBefore(bTime) ? a : b;
+        } else {
+          winner = _deterministicField(a, b);
+        }
+        fields[fieldName] = SyncFieldValue(
+          value: winner.value,
+          clock: a.clock.merge(b.clock),
+          updatedBy: winner.updatedBy,
+        );
+        continue;
+      }
+
       final relation = a.clock.compare(b.clock);
       switch (relation) {
         case SyncClockRelation.before:

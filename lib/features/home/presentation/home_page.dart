@@ -16,13 +16,13 @@ import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
-import '../../focus/presentation/focus_page.dart';
-import '../../focus/state/focus_store.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
+import '../../focus/state/focus_store.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
 import '../../orders/presentation/node_preset_page.dart';
+import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_queue_page.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/presentation/add_product_page.dart';
@@ -98,6 +98,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _desktopAddEditorOpen = false;
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
+  Timer? _focusPersistenceHeartbeat;
+  String? _focusRecoverySessionId;
+  DateTime? _focusRecoveryCutoff;
   bool _saving = false;
   bool _saveAgain = false;
   bool _notificationPermissionChecked = false;
@@ -185,6 +188,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           nodePresetStore: _nodePresetStore,
           focusStore: _focusStore,
         );
+        final restoredActiveFocus = _focusStore.activeSession;
+        if (restoredActiveFocus != null) {
+          _focusRecoverySessionId = restoredActiveFocus.id;
+          _focusRecoveryCutoff = backup.exportedAt;
+        }
 
         // A bootstrap-only package deliberately contains account identity but no
         // workspace settings. Do not treat it as authoritative local state.
@@ -209,6 +217,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
     _focusStore.addListener(_onFocusStoreChanged);
+    _refreshFocusPersistenceHeartbeat();
 
     if (_localDataHealthy) {
       if (!hasWorkspaceSettings) {
@@ -234,6 +243,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _onSyncCoordinatorChanged();
     unawaited(_syncReminders());
     unawaited(_syncDesktopPet());
+    if (_focusRecoverySessionId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_showFocusRecoveryIfNeeded());
+      });
+    }
 
     if (errorMessage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -326,13 +340,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _onOrderStoreChanged() {
     _scheduleSave();
     _scheduleReminderSync();
-    if (_ready) {
-      unawaited(_syncDesktopPet());
-    }
-  }
-
-  void _onFocusStoreChanged() {
-    _scheduleSave();
     if (_ready) {
       unawaited(_syncDesktopPet());
     }
@@ -471,10 +478,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (leftAbstractMode) {
         _abstractFeatureToggleHidden = false;
       }
-      if (!widget.featureStore.enabled(AppFeature.desktopPet) &&
-          _desktopToolSelection == AppToolMenu.desktopPetTool) {
-        _desktopToolSelection = null;
-      }
       _refreshDesktopCollectionRootIfNeeded();
     });
 
@@ -490,23 +493,115 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  QueueOrder? _currentDesktopPetOrder() {
+  void _onFocusStoreChanged() {
+    _scheduleSave();
+    _refreshFocusPersistenceHeartbeat();
+    if (_ready && Platform.isWindows) {
+      unawaited(_syncDesktopPet());
+    }
+  }
+
+  void _refreshFocusPersistenceHeartbeat() {
+    if (_focusStore.activeSession == null) {
+      _focusPersistenceHeartbeat?.cancel();
+      _focusPersistenceHeartbeat = null;
+      return;
+    }
+    _focusPersistenceHeartbeat ??= Timer.periodic(
+      const Duration(seconds: 30),
+      (_) {
+        if (_ready && _localDataHealthy) {
+          _scheduleSave();
+        }
+      },
+    );
+  }
+
+  Future<void> _showFocusRecoveryIfNeeded() async {
+    final sessionId = _focusRecoverySessionId;
+    final cutoff = _focusRecoveryCutoff;
+    _focusRecoverySessionId = null;
+    _focusRecoveryCutoff = null;
+    if (sessionId == null || cutoff == null || !mounted) return;
+
+    final active = _focusStore.activeSession;
+    if (active == null || active.id != sessionId) return;
+
+    String two(int value) => value.toString().padLeft(2, '0');
+    final local = cutoff.toLocal();
+    final cutoffText =
+        '${local.year}/${two(local.month)}/${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('发现未结束的专注'),
+        content: Text(
+          '上次离开公会时，这次专注还在计时。'
+          '你可以继续计时、按上次离开时间（$cutoffText）结束，或作废这次记录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('discard'),
+            child: const Text('作废本次'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('end'),
+            child: const Text('按离开时间结束'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('continue'),
+            child: const Text('继续计时'),
+          ),
+        ],
+      ),
+    );
+
+    final current = _focusStore.activeSession;
+    if (current == null || current.id != sessionId) return;
+    if (action == 'end') {
+      _focusStore.stopActiveAt(cutoff);
+    } else if (action == 'discard') {
+      _focusStore.discardActive();
+    }
+  }
+
+  Future<QueueOrder?> _currentDesktopPetOrder() async {
+    await _desktopPetService.settings.refresh();
+    final selectedOrderId = _desktopPetService.settings.currentOrderId;
+    if (selectedOrderId == null || selectedOrderId.isEmpty) return null;
+
     for (final order in _orderStore.orders) {
-      if (order.isPinned && !order.isArchived && !order.isCompleted) {
+      if (order.id == selectedOrderId &&
+          !order.isArchived &&
+          !order.isCompleted) {
         return order;
       }
     }
+
+    // The selected order may have been completed, archived, or deleted.
+    // Clear the local-only selection instead of silently switching to
+    // another order.
+    await _desktopPetService.settings.clearCurrentOrderSelection();
     return null;
   }
 
-  Future<void> _syncDesktopPet() {
-    final order = _currentDesktopPetOrder();
-    return _desktopPetService.sync(
+  Future<void> _syncDesktopPet() async {
+    final order = await _currentDesktopPetOrder();
+    if (!mounted) return;
+    final colors = Theme.of(context).colorScheme;
+    await _desktopPetService.sync(
       enabled: widget.featureStore.enabled(AppFeature.desktopPet),
       currentOrderTitle: order?.title,
       currentOrderNode: order?.currentNode.name,
       currentOrderDeadline: order?.deadline,
-      activeFocusStartedAt: _focusStore.activeSession?.startedAt,
+      bubbleBackgroundArgb: colors.surfaceContainerHigh.toARGB32(),
+      bubbleForegroundArgb: colors.onSurface.toARGB32(),
+      bubbleBorderArgb: colors.outlineVariant.toARGB32(),
+      bubbleAccentArgb: colors.primary.toARGB32(),
+      focusStartedAt: _focusStore.activeSession?.startedAt,
     );
   }
 
@@ -514,6 +609,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     _scheduleSave();
     _syncCoordinator.notifySettingsChanged();
+    if (_ready) {
+      unawaited(_syncDesktopPet());
+    }
   }
 
   Map<String, dynamic> _captureSyncSettings() {
@@ -776,6 +874,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _prepareForSignOut() async {
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
+    _focusPersistenceHeartbeat?.cancel();
     if (_ready && _localDataHealthy) {
       await _flushSyncThenPersist();
     }
@@ -786,6 +885,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
+    _focusPersistenceHeartbeat?.cancel();
     widget.themeStore.removeListener(_onThemeSettingsChanged);
     widget.featureStore.removeListener(_onFeatureSettingsChanged);
     widget.accountStore.removeListener(_onAccountStoreChanged);
@@ -1039,6 +1139,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _openOrderFromFocus(String orderId) async {
+    if (!_orderStore.contains(orderId) || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OrderDetailPage(
+          accountId: widget.accountId,
+          store: _orderStore,
+          orderId: orderId,
+          nodePresetStore: _nodePresetStore,
+          featureStore: widget.featureStore,
+        ),
+      ),
+    );
+  }
+
   void _selectDesktopTool(String? tool) {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
@@ -1057,13 +1172,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       AppToolMenu.desktopPetTool => DesktopPetPage(
         orderStore: _orderStore,
-      ),
-      AppToolMenu.focusTool => FocusPage(
-        accountId: widget.accountId,
-        store: _focusStore,
-        orderStore: _orderStore,
-        nodePresetStore: _nodePresetStore,
-        featureStore: widget.featureStore,
+        focusStore: _focusStore,
+        onOpenOrder: _openOrderFromFocus,
+        showDesktopPet:
+            Platform.isWindows &&
+            widget.featureStore.enabled(AppFeature.desktopPet),
       ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
@@ -1087,6 +1200,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         orderStore: _orderStore,
         productStore: _productStore,
         nodePresetStore: _nodePresetStore,
+        focusStore: _focusStore,
         themeStore: widget.themeStore,
         featureStore: widget.featureStore,
         accountStore: widget.accountStore,
@@ -1204,8 +1318,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final title = switch (_desktopToolSelection) {
       AppToolMenu.nodePresetTool => '节点预设',
       AppToolMenu.featureToggleTool => '附加功能开关',
-      AppToolMenu.desktopPetTool => '桌宠',
-      AppToolMenu.focusTool => '专注',
+      AppToolMenu.desktopPetTool =>
+        Platform.isWindows &&
+                widget.featureStore.enabled(AppFeature.desktopPet)
+            ? '桌宠'
+            : '专注',
       AppToolMenu.archiveTool => '归档',
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
@@ -1244,6 +1361,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               orderStore: _orderStore,
               productStore: _productStore,
               nodePresetStore: _nodePresetStore,
+              focusStore: _focusStore,
+              onOpenOrder: _openOrderFromFocus,
               themeStore: widget.themeStore,
               featureStore: widget.featureStore,
               accountStore: widget.accountStore,
@@ -1327,6 +1446,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     orderStore: _orderStore,
                                     productStore: _productStore,
                                     nodePresetStore: _nodePresetStore,
+                                    focusStore: _focusStore,
+                                    onOpenOrder: _openOrderFromFocus,
                                     themeStore: widget.themeStore,
                                     featureStore: widget.featureStore,
                                     accountStore: widget.accountStore,
@@ -1430,10 +1551,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       children: [
         scaffold,
         Positioned(
-          top: 8,
+          top: useDesktopLayout ? 8 : null,
+          bottom: useDesktopLayout
+              ? null
+              : (tabs.length > 1 ? 88 : 12),
           left: 16,
           right: 16,
           child: SafeArea(
+            top: useDesktopLayout,
+            bottom: !useDesktopLayout,
             child: Center(
               child: IgnorePointer(
                 child: ConstrainedBox(

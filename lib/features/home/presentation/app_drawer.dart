@@ -8,9 +8,9 @@ import '../../../core/portability/app_backup_data.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
-import '../../focus/presentation/focus_page.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/presentation/node_preset_page.dart';
+import '../../focus/state/focus_store.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
 import '../../sync/presentation/device_sync_page.dart';
@@ -43,6 +43,8 @@ class AppDrawer extends StatelessWidget {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    required this.focusStore,
+    required this.onOpenOrder,
     required this.themeStore,
     required this.featureStore,
     required this.accountStore,
@@ -58,6 +60,8 @@ class AppDrawer extends StatelessWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final FocusStore focusStore;
+  final Future<void> Function(String orderId) onOpenOrder;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
@@ -81,6 +85,8 @@ class AppDrawer extends StatelessWidget {
           orderStore: orderStore,
           productStore: productStore,
           nodePresetStore: nodePresetStore,
+          focusStore: focusStore,
+          onOpenOrder: onOpenOrder,
           themeStore: themeStore,
           featureStore: featureStore,
           accountStore: accountStore,
@@ -109,12 +115,13 @@ class AppToolMenu extends StatelessWidget {
   static const settingsTool = 'settings';
   static const themeColorTool = 'themeColor';
   static const desktopPetTool = 'desktopPet';
-  static const focusTool = 'focus';
 
   const AppToolMenu({
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    required this.focusStore,
+    required this.onOpenOrder,
     required this.themeStore,
     required this.featureStore,
     required this.accountStore,
@@ -136,6 +143,8 @@ class AppToolMenu extends StatelessWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final FocusStore focusStore;
+  final Future<void> Function(String orderId) onOpenOrder;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
   final AccountStore accountStore;
@@ -186,6 +195,9 @@ class AppToolMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showDesktopPet =
+        Platform.isWindows && featureStore.enabled(AppFeature.desktopPet);
+
     return ListView(
       padding: padding,
       children: [
@@ -213,31 +225,18 @@ class AppToolMenu extends StatelessWidget {
               ),
             ),
           ),
-        if (Platform.isWindows &&
-            featureStore.enabled(AppFeature.desktopPet))
-          _item(
-            icon: Icons.pets_outlined,
-            title: '桌宠',
-            tool: desktopPetTool,
-            onTap: () => _open(
-              context,
-              desktopPetTool,
-              DesktopPetPage(orderStore: orderStore),
-            ),
-          ),
         _item(
-          icon: Icons.timer_outlined,
-          title: '专注',
-          tool: focusTool,
+          icon: showDesktopPet ? Icons.pets_outlined : Icons.timer_outlined,
+          title: showDesktopPet ? '桌宠' : '专注',
+          tool: desktopPetTool,
           onTap: () => _open(
             context,
-            focusTool,
-            FocusPage(
-              accountId: syncCoordinator.accountId,
-              store: syncCoordinator.focusStore,
+            desktopPetTool,
+            DesktopPetPage(
               orderStore: orderStore,
-              nodePresetStore: nodePresetStore,
-              featureStore: featureStore,
+              focusStore: focusStore,
+              onOpenOrder: onOpenOrder,
+              showDesktopPet: showDesktopPet,
             ),
           ),
         ),
@@ -320,6 +319,7 @@ class AppToolMenu extends StatelessWidget {
               orderStore: orderStore,
               productStore: productStore,
               nodePresetStore: nodePresetStore,
+              focusStore: focusStore,
               themeStore: themeStore,
               featureStore: featureStore,
               accountStore: accountStore,

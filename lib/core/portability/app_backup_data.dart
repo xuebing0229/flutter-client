@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import '../account/account_models.dart';
-import '../../features/focus/domain/focus_session.dart';
-import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/data/node_presets.dart';
 import '../../features/orders/domain/queue_order.dart';
+import '../../features/focus/domain/focus_session.dart';
+import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
 import '../../features/products/state/product_store.dart';
@@ -59,9 +59,7 @@ class AppBackupData {
       nodePresets: [
         for (final preset in nodePresetStore.presets) preset.snapshot(),
       ],
-      focusSessions: focusStore == null
-          ? const <FocusSession>[]
-          : <FocusSession>[...focusStore.sessions],
+      focusSessions: [for (final session in focusStore?.sessions ?? const <FocusSession>[]) session],
       accountSyncState: accountSyncState,
       syncRecords: syncRecords,
       settings: settings,
@@ -131,9 +129,10 @@ class AppBackupData {
     final orderList = _asList(payload['orders'], 'orders');
     final productList = _asList(payload['products'], 'products');
     final presetList = _asList(payload['nodePresets'], 'nodePresets');
-    final focusList = payload['focusSessions'] == null
-        ? const <dynamic>[]
-        : _asList(payload['focusSessions'], 'focusSessions');
+    final focusList = _asList(
+      payload['focusSessions'] ?? <dynamic>[],
+      'focusSessions',
+    );
 
     AccountSyncState? accountSyncState;
     if (payload.containsKey('accountSync')) {
@@ -172,7 +171,11 @@ class AppBackupData {
     ];
     final focusSessions = <FocusSession>[
       for (final item in focusList)
-        FocusSession.fromJson(_asMap(item, 'focusSession')),
+        FocusSession.fromJson(
+          _asMap(item, 'focusSession').map(
+            (key, value) => MapEntry(key.toString(), value),
+          ),
+        ),
     ];
 
     _requireUniqueIds(orders.map((item) => item.id), '排单');

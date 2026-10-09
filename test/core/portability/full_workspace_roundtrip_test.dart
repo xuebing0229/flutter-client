@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_app/core/account/account_models.dart';
 import 'package:flutter_app/core/portability/app_backup_data.dart';
 import 'package:flutter_app/core/sync/sync_entity_codec.dart';
-import 'package:flutter_app/features/focus/domain/focus_session.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
 import 'package:flutter_app/features/products/domain/finished_product.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,7 +27,6 @@ void main() {
     'deductionAmount',
     'deductionFeeEnabled',
     'description',
-    'tags',
     'defaultOrder',
     'referenceImages',
     'completedAt',
@@ -58,7 +56,6 @@ void main() {
     'defaultOrder',
     'soldCount',
     'saleRecords',
-    'archivedAt',
     'isArchived',
     'isPinned',
   };
@@ -122,14 +119,6 @@ void main() {
     customRefundAmount: 66.6,
     isArchived: true,
     isPinned: true,
-  );
-
-  final focusSession = FocusSession(
-    id: 'focus-roundtrip',
-    startedAt: DateTime.utc(2026, 10, 6, 8, 0),
-    endedAt: DateTime.utc(2026, 10, 6, 8, 45, 12),
-    orderId: order.id,
-    orderTitleSnapshot: order.title,
   );
 
   final product = FinishedProduct(
@@ -225,7 +214,6 @@ void main() {
       orders: <QueueOrder>[order],
       products: <FinishedProduct>[product],
       nodePresets: const <NodePreset>[preset],
-      focusSessions: <FocusSession>[focusSession],
       accountSyncState: account,
       syncRecords: const <Map<String, dynamic>>[
         <String, dynamic>{
@@ -241,13 +229,11 @@ void main() {
     final restoredOrder = restored.orders.single;
     final restoredProduct = restored.products.single;
     final restoredPreset = restored.nodePresets.single;
-    final restoredFocus = restored.focusSessions.single;
     final restoredAccount = restored.accountSyncState!;
 
     expect(restored.exportedAt.toUtc(), source.exportedAt.toUtc());
     expect(restored.settings, settings);
     expect(restored.syncRecords, source.syncRecords);
-    expect(restoredFocus.toJson(), focusSession.toJson());
 
     expect(restoredOrder.id, order.id);
     expect(restoredOrder.platform, order.platform);
@@ -328,18 +314,15 @@ void main() {
     expect(restoredAccount.toJson(), account.toJson());
   });
 
-  test('sync entity round trip keeps all order, product and focus fields', () {
+  test('sync entity round trip keeps all order and product fields', () {
     final orderFields = SyncEntityCodec.orderToFields(order);
     final productFields = SyncEntityCodec.productToFields(product);
-    final focusFields = SyncEntityCodec.focusSessionToFields(focusSession);
 
     final restoredOrder = SyncEntityCodec.orderFromFields(orderFields);
     final restoredProduct = SyncEntityCodec.productFromFields(productFields);
-    final restoredFocus = SyncEntityCodec.focusSessionFromFields(focusFields);
 
     expect(SyncEntityCodec.orderToFields(restoredOrder), orderFields);
     expect(SyncEntityCodec.productToFields(restoredProduct), productFields);
-    expect(SyncEntityCodec.focusSessionToFields(restoredFocus), focusFields);
   });
 
   test('legacy entities do not require a defaultOrder field', () {

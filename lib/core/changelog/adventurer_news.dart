@@ -58,6 +58,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '专注计时',
     description: '手机和电脑新增专注计时，可锁定一个排单或使用“自由专注”；专注历史会作为独立记录在设备间同步，关联排单仍存在时可确认后跳转查看。Windows 桌宠右上角会同步显示本次专注计时，并与头顶气泡分开占位。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 129,
+    title: '桌宠与专注整合完善',
+    description: '桌宠与专注合并为同一个左侧板块：电脑开启桌宠时显示 A/B 桌宠设置与专注，关闭桌宠或在手机端则保留专注；恢复 A/B 固定画布定位与对齐、桌宠和气泡大小、头顶/侧边气泡、当前在画订单选择与主题跟随。专注历史支持单次记录与按排单合并，按开始时间/时长、累计时长/次数/最近专注时间排序，并保留时间筛选与范围清理。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

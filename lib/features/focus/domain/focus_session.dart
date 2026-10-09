@@ -2,9 +2,9 @@ class FocusSession {
   const FocusSession({
     required this.id,
     required this.startedAt,
-    this.endedAt,
-    this.orderId,
-    this.orderTitleSnapshot,
+    required this.endedAt,
+    required this.orderId,
+    required this.orderTitleSnapshot,
   });
 
   final String id;
@@ -14,34 +14,30 @@ class FocusSession {
   final String? orderTitleSnapshot;
 
   bool get isActive => endedAt == null;
+  bool get isFreeFocus => orderId == null;
 
-  String get displayTitle {
-    if (orderId == null) return '自由专注';
-    final title = orderTitleSnapshot?.trim() ?? '';
-    return title.isEmpty ? '排单' : title;
-  }
-
-  Duration elapsedAt(DateTime now) {
-    final end = endedAt ?? now;
-    final duration = end.difference(startedAt);
-    return duration.isNegative ? Duration.zero : duration;
+  Duration durationAt([DateTime? now]) {
+    final end = endedAt ?? now ?? DateTime.now();
+    if (!end.isAfter(startedAt)) return Duration.zero;
+    return end.difference(startedAt);
   }
 
   FocusSession copyWith({
-    DateTime? startedAt,
     DateTime? endedAt,
-    String? orderId,
-    String? orderTitleSnapshot,
     bool clearEndedAt = false,
-    bool clearOrder = false,
+    String? orderId,
+    bool clearOrderId = false,
+    String? orderTitleSnapshot,
+    bool clearOrderTitleSnapshot = false,
   }) {
     return FocusSession(
       id: id,
-      startedAt: startedAt ?? this.startedAt,
+      startedAt: startedAt,
       endedAt: clearEndedAt ? null : (endedAt ?? this.endedAt),
-      orderId: clearOrder ? null : (orderId ?? this.orderId),
-      orderTitleSnapshot:
-          clearOrder ? null : (orderTitleSnapshot ?? this.orderTitleSnapshot),
+      orderId: clearOrderId ? null : (orderId ?? this.orderId),
+      orderTitleSnapshot: clearOrderTitleSnapshot
+          ? null
+          : (orderTitleSnapshot ?? this.orderTitleSnapshot),
     );
   }
 
@@ -53,44 +49,43 @@ class FocusSession {
         'orderTitleSnapshot': orderTitleSnapshot,
       };
 
-  factory FocusSession.fromJson(Map<String, dynamic> json) {
+  static FocusSession fromJson(Map<String, dynamic> json) {
     final id = json['id'];
-    final startedAtRaw = json['startedAt'];
-    if (id is! String || id.trim().isEmpty || startedAtRaw is! String) {
+    final startedRaw = json['startedAt'];
+    final endedRaw = json['endedAt'];
+    final orderRaw = json['orderId'];
+    final titleRaw = json['orderTitleSnapshot'];
+
+    if (id is! String || id.trim().isEmpty || startedRaw is! String) {
       throw const FormatException('专注记录格式无效。');
     }
-    final startedAt = DateTime.tryParse(startedAtRaw);
+    final startedAt = DateTime.tryParse(startedRaw);
     if (startedAt == null) {
-      throw const FormatException('专注开始时间格式无效。');
+      throw const FormatException('专注开始时间无效。');
     }
-
     DateTime? endedAt;
-    final endedAtRaw = json['endedAt'];
-    if (endedAtRaw != null) {
-      if (endedAtRaw is! String) {
-        throw const FormatException('专注结束时间格式无效。');
+    if (endedRaw != null) {
+      if (endedRaw is! String) {
+        throw const FormatException('专注结束时间无效。');
       }
-      endedAt = DateTime.tryParse(endedAtRaw);
-      if (endedAt == null) {
-        throw const FormatException('专注结束时间格式无效。');
+      endedAt = DateTime.tryParse(endedRaw);
+      if (endedAt == null || endedAt.isBefore(startedAt)) {
+        throw const FormatException('专注结束时间无效。');
       }
     }
-
-    final orderIdRaw = json['orderId'];
-    final orderTitleRaw = json['orderTitleSnapshot'];
-    if (orderIdRaw != null && orderIdRaw is! String) {
-      throw const FormatException('专注排单 ID 格式无效。');
+    if (orderRaw != null && orderRaw is! String) {
+      throw const FormatException('专注排单 ID 无效。');
     }
-    if (orderTitleRaw != null && orderTitleRaw is! String) {
-      throw const FormatException('专注排单标题格式无效。');
+    if (titleRaw != null && titleRaw is! String) {
+      throw const FormatException('专注排单标题无效。');
     }
 
     return FocusSession(
       id: id,
-      startedAt: startedAt.toLocal(),
-      endedAt: endedAt?.toLocal(),
-      orderId: orderIdRaw as String?,
-      orderTitleSnapshot: orderTitleRaw as String?,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      orderId: orderRaw as String?,
+      orderTitleSnapshot: titleRaw as String?,
     );
   }
 }

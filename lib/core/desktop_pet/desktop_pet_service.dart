@@ -8,6 +8,61 @@ import 'package:path_provider/path_provider.dart';
 
 enum DesktopPetAssetSlot { idleA, keyB }
 
+class DesktopPetPlacement {
+  const DesktopPetPlacement({
+    this.scale = 1,
+    this.offsetX = 0,
+    this.offsetY = 0,
+  });
+
+  final double scale;
+  final double offsetX;
+  final double offsetY;
+
+  DesktopPetPlacement copyWith({
+    double? scale,
+    double? offsetX,
+    double? offsetY,
+  }) {
+    return DesktopPetPlacement(
+      scale: (scale ?? this.scale).clamp(0.35, 3.0).toDouble(),
+      offsetX: (offsetX ?? this.offsetX).clamp(-1.0, 1.0).toDouble(),
+      offsetY: (offsetY ?? this.offsetY).clamp(-1.0, 1.0).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'scale': scale,
+        'offsetX': offsetX,
+        'offsetY': offsetY,
+      };
+
+  static DesktopPetPlacement fromJson(Object? raw) {
+    if (raw is! Map) return const DesktopPetPlacement();
+    return DesktopPetPlacement(
+      scale: ((raw['scale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.35, 3.0)
+          .toDouble(),
+      offsetX: ((raw['offsetX'] as num?)?.toDouble() ?? 0)
+          .clamp(-1.0, 1.0)
+          .toDouble(),
+      offsetY: ((raw['offsetY'] as num?)?.toDouble() ?? 0)
+          .clamp(-1.0, 1.0)
+          .toDouble(),
+    );
+  }
+}
+
+enum DesktopPetBubblePosition {
+  above,
+  side;
+
+  String get label => switch (this) {
+        DesktopPetBubblePosition.above => '头顶',
+        DesktopPetBubblePosition.side => '旁边',
+      };
+}
+
 enum DesktopPetTextMode {
   currentOrder,
   custom;
@@ -24,17 +79,23 @@ class DesktopPetPreset {
     required this.name,
     this.imageA,
     this.imageB,
+    this.placementA = const DesktopPetPlacement(),
+    this.placementB = const DesktopPetPlacement(),
   });
 
   final String id;
   final String name;
   final String? imageA;
   final String? imageB;
+  final DesktopPetPlacement placementA;
+  final DesktopPetPlacement placementB;
 
   DesktopPetPreset copyWith({
     String? name,
     String? imageA,
     String? imageB,
+    DesktopPetPlacement? placementA,
+    DesktopPetPlacement? placementB,
     bool clearImageA = false,
     bool clearImageB = false,
   }) {
@@ -43,6 +104,8 @@ class DesktopPetPreset {
       name: name ?? this.name,
       imageA: clearImageA ? null : (imageA ?? this.imageA),
       imageB: clearImageB ? null : (imageB ?? this.imageB),
+      placementA: placementA ?? this.placementA,
+      placementB: placementB ?? this.placementB,
     );
   }
 
@@ -51,6 +114,8 @@ class DesktopPetPreset {
         'name': name,
         'imageA': imageA,
         'imageB': imageB,
+        'placementA': placementA.toJson(),
+        'placementB': placementB.toJson(),
       };
 
   static DesktopPetPreset? fromJson(Object? raw) {
@@ -63,6 +128,8 @@ class DesktopPetPreset {
       name: name.trim().isEmpty ? '未命名桌宠' : name.trim(),
       imageA: raw['imageA'] is String ? raw['imageA'] as String : null,
       imageB: raw['imageB'] is String ? raw['imageB'] as String : null,
+      placementA: DesktopPetPlacement.fromJson(raw['placementA']),
+      placementB: DesktopPetPlacement.fromJson(raw['placementB']),
     );
   }
 }
@@ -74,11 +141,19 @@ class DesktopPetSettings extends ChangeNotifier {
   bool _enabled = false;
   String? _selectedPresetId;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
+  DesktopPetBubblePosition _bubblePosition = DesktopPetBubblePosition.above;
+  double _petScale = 1;
+  double _bubbleScale = 1;
   String _customText = '';
+  String? _currentOrderId;
   String? _currentOrderTitle;
   String? _currentOrderNode;
   DateTime? _currentOrderDeadline;
-  DateTime? _activeFocusStartedAt;
+  int _bubbleBackgroundArgb = 0xFFF7F7F7;
+  int _bubbleForegroundArgb = 0xFF202020;
+  int _bubbleBorderArgb = 0x33202020;
+  int _bubbleAccentArgb = 0xFF6C7A6B;
+  DateTime? _focusStartedAt;
   final List<DesktopPetPreset> _presets = <DesktopPetPreset>[];
 
   bool get loaded => _loaded;
@@ -86,7 +161,11 @@ class DesktopPetSettings extends ChangeNotifier {
   List<DesktopPetPreset> get presets => List<DesktopPetPreset>.unmodifiable(_presets);
   String? get selectedPresetId => _selectedPresetId;
   DesktopPetTextMode get textMode => _textMode;
+  DesktopPetBubblePosition get bubblePosition => _bubblePosition;
+  double get petScale => _petScale;
+  double get bubbleScale => _bubbleScale;
   String get customText => _customText;
+  String? get currentOrderId => _currentOrderId;
 
   DesktopPetPreset? get selectedPreset {
     final selectedId = _selectedPresetId;
@@ -131,11 +210,37 @@ class DesktopPetSettings extends ChangeNotifier {
       _selectedPresetId =
           raw['selectedPresetId'] is String ? raw['selectedPresetId'] as String : null;
       _customText = raw['customText'] is String ? raw['customText'] as String : '';
+      _currentOrderId =
+          raw['currentOrderId'] is String ? raw['currentOrderId'] as String : null;
 
       final modeName = raw['textMode'];
       _textMode = modeName == DesktopPetTextMode.custom.name
           ? DesktopPetTextMode.custom
           : DesktopPetTextMode.currentOrder;
+
+      _bubblePosition = raw['bubblePosition'] == DesktopPetBubblePosition.side.name
+          ? DesktopPetBubblePosition.side
+          : DesktopPetBubblePosition.above;
+      _petScale = ((raw['petScale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.5, 1.8)
+          .toDouble();
+      _bubbleScale = ((raw['bubbleScale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.65, 1.8)
+          .toDouble();
+
+      _bubbleBackgroundArgb =
+          (raw['bubbleBackgroundArgb'] as num?)?.toInt() ??
+              _bubbleBackgroundArgb;
+      _bubbleForegroundArgb =
+          (raw['bubbleForegroundArgb'] as num?)?.toInt() ??
+              _bubbleForegroundArgb;
+      _bubbleBorderArgb =
+          (raw['bubbleBorderArgb'] as num?)?.toInt() ?? _bubbleBorderArgb;
+      _bubbleAccentArgb =
+          (raw['bubbleAccentArgb'] as num?)?.toInt() ?? _bubbleAccentArgb;
+      _focusStartedAt = raw['focusStartedAt'] is String
+          ? DateTime.tryParse(raw['focusStartedAt'] as String)
+          : null;
 
       _currentOrderTitle = raw['currentOrderTitle'] is String
           ? raw['currentOrderTitle'] as String
@@ -145,9 +250,6 @@ class DesktopPetSettings extends ChangeNotifier {
           : null;
       _currentOrderDeadline = raw['currentOrderDeadline'] is String
           ? DateTime.tryParse(raw['currentOrderDeadline'] as String)
-          : null;
-      _activeFocusStartedAt = raw['activeFocusStartedAt'] is String
-          ? DateTime.tryParse(raw['activeFocusStartedAt'] as String)
           : null;
 
       _presets
@@ -169,6 +271,7 @@ class DesktopPetSettings extends ChangeNotifier {
 
   Future<DesktopPetPreset> createPreset(String rawName) async {
     await load();
+    await _readFromDisk();
     final name = rawName.trim().isEmpty ? '未命名桌宠' : rawName.trim();
     final preset = DesktopPetPreset(
       id: 'pet_${DateTime.now().microsecondsSinceEpoch}',
@@ -182,6 +285,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> renamePreset(String id, String rawName) async {
+    await _readFromDisk();
     final name = rawName.trim();
     if (name.isEmpty) return;
     final index = _presets.indexWhere((preset) => preset.id == id);
@@ -192,6 +296,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> selectPreset(String id) async {
+    await _readFromDisk();
     if (_selectedPresetId == id) return;
     if (!_presets.any((preset) => preset.id == id)) return;
     _selectedPresetId = id;
@@ -200,6 +305,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> deletePreset(String id) async {
+    await _readFromDisk();
     final index = _presets.indexWhere((preset) => preset.id == id);
     if (index < 0) return;
 
@@ -217,14 +323,8 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> importAsset(
-    String presetId,
-    DesktopPetAssetSlot slot,
-  ) async {
+  Future<String?> pickAssetSource() async {
     if (!Platform.isWindows) return null;
-    final index = _presets.indexWhere((preset) => preset.id == presetId);
-    if (index < 0) return null;
-
     const typeGroup = XTypeGroup(
       label: '桌宠图片',
       extensions: <String>['png', 'jpg', 'jpeg'],
@@ -232,22 +332,43 @@ class DesktopPetSettings extends ChangeNotifier {
     final selected = await openFile(
       acceptedTypeGroups: const <XTypeGroup>[typeGroup],
     );
-    if (selected == null) return null;
+    return selected?.path;
+  }
+
+  Future<String?> importAssetFromPath(
+    String presetId,
+    DesktopPetAssetSlot slot,
+    String sourcePath,
+    DesktopPetPlacement placement,
+  ) async {
+    if (!Platform.isWindows) return null;
+    await _readFromDisk();
+    final index = _presets.indexWhere((preset) => preset.id == presetId);
+    if (index < 0) return null;
+
+    final source = File(sourcePath);
+    if (!await source.exists()) return null;
 
     final root = await _rootDirectory();
     final folder = Directory('${root.path}/presets/$presetId');
     await folder.create(recursive: true);
 
-    final ext = selected.path.split('.').last.toLowerCase();
+    final ext = source.path.split('.').last.toLowerCase();
     final baseName = slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB';
     final destination = File('${folder.path}/$baseName.$ext');
-    await File(selected.path).copy(destination.path);
+    if (source.absolute.path != destination.absolute.path) {
+      await source.copy(destination.path);
+    }
 
     _presets[index] = switch (slot) {
-      DesktopPetAssetSlot.idleA =>
-        _presets[index].copyWith(imageA: destination.path),
-      DesktopPetAssetSlot.keyB =>
-        _presets[index].copyWith(imageB: destination.path),
+      DesktopPetAssetSlot.idleA => _presets[index].copyWith(
+          imageA: destination.path,
+          placementA: placement,
+        ),
+      DesktopPetAssetSlot.keyB => _presets[index].copyWith(
+          imageB: destination.path,
+          placementB: placement,
+        ),
     };
     await _persist();
     notifyListeners();
@@ -258,6 +379,7 @@ class DesktopPetSettings extends ChangeNotifier {
     String presetId,
     DesktopPetAssetSlot slot,
   ) async {
+    await _readFromDisk();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return;
     _presets[index] = switch (slot) {
@@ -271,15 +393,74 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setTextMode(DesktopPetTextMode mode) async {
+    await _readFromDisk();
     if (_textMode == mode) return;
     _textMode = mode;
     await _persist();
     notifyListeners();
   }
 
+  Future<void> setBubblePosition(DesktopPetBubblePosition position) async {
+    await _readFromDisk();
+    if (_bubblePosition == position) return;
+    _bubblePosition = position;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> setPetScale(double value) async {
+    await _readFromDisk();
+    final normalized = value.clamp(0.5, 1.8).toDouble();
+    if ((_petScale - normalized).abs() < 0.001) return;
+    _petScale = normalized;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> setBubbleScale(double value) async {
+    await _readFromDisk();
+    final normalized = value.clamp(0.65, 1.8).toDouble();
+    if ((_bubbleScale - normalized).abs() < 0.001) return;
+    _bubbleScale = normalized;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setCustomText(String value) async {
+    await _readFromDisk();
     if (_customText == value) return;
     _customText = value;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> selectCurrentOrder({
+    required String orderId,
+    required String title,
+    required String node,
+    required DateTime? deadline,
+  }) async {
+    await _readFromDisk();
+    _currentOrderId = orderId;
+    _currentOrderTitle = title;
+    _currentOrderNode = node;
+    _currentOrderDeadline = deadline;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> clearCurrentOrderSelection() async {
+    await _readFromDisk();
+    if (_currentOrderId == null &&
+        _currentOrderTitle == null &&
+        _currentOrderNode == null &&
+        _currentOrderDeadline == null) {
+      return;
+    }
+    _currentOrderId = null;
+    _currentOrderTitle = null;
+    _currentOrderNode = null;
+    _currentOrderDeadline = null;
     await _persist();
     notifyListeners();
   }
@@ -289,7 +470,11 @@ class DesktopPetSettings extends ChangeNotifier {
     required String? currentOrderTitle,
     required String? currentOrderNode,
     required DateTime? currentOrderDeadline,
-    required DateTime? activeFocusStartedAt,
+    required int bubbleBackgroundArgb,
+    required int bubbleForegroundArgb,
+    required int bubbleBorderArgb,
+    required int bubbleAccentArgb,
+    required DateTime? focusStartedAt,
   }) async {
     await _readFromDisk();
     _loaded = true;
@@ -297,7 +482,11 @@ class DesktopPetSettings extends ChangeNotifier {
     _currentOrderTitle = currentOrderTitle;
     _currentOrderNode = currentOrderNode;
     _currentOrderDeadline = currentOrderDeadline;
-    _activeFocusStartedAt = activeFocusStartedAt;
+    _bubbleBackgroundArgb = bubbleBackgroundArgb;
+    _bubbleForegroundArgb = bubbleForegroundArgb;
+    _bubbleBorderArgb = bubbleBorderArgb;
+    _bubbleAccentArgb = bubbleAccentArgb;
+    _focusStartedAt = focusStartedAt;
     await _persist();
   }
 
@@ -306,17 +495,27 @@ class DesktopPetSettings extends ChangeNotifier {
     await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 4,
+      'schema': 7,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
       'imageB': active?.imageB,
+      'placementA': active?.placementA.toJson(),
+      'placementB': active?.placementB.toJson(),
       'textMode': _textMode.name,
+      'bubblePosition': _bubblePosition.name,
+      'petScale': _petScale,
+      'bubbleScale': _bubbleScale,
       'customText': _customText,
+      'currentOrderId': _currentOrderId,
       'currentOrderTitle': _currentOrderTitle,
       'currentOrderNode': _currentOrderNode,
       'currentOrderDeadline': _currentOrderDeadline?.toIso8601String(),
-      'activeFocusStartedAt': _activeFocusStartedAt?.toUtc().toIso8601String(),
+      'bubbleBackgroundArgb': _bubbleBackgroundArgb,
+      'bubbleForegroundArgb': _bubbleForegroundArgb,
+      'bubbleBorderArgb': _bubbleBorderArgb,
+      'bubbleAccentArgb': _bubbleAccentArgb,
+      'focusStartedAt': _focusStartedAt?.toUtc().toIso8601String(),
       'presets': <Map<String, dynamic>>[
         for (final preset in _presets) preset.toJson(),
       ],
@@ -334,28 +533,59 @@ class DesktopPetService {
 
   final DesktopPetSettings settings;
   Process? _process;
+  Future<void>? _startInFlight;
+  bool _enabledRequested = false;
 
   Future<void> sync({
     required bool enabled,
     String? currentOrderTitle,
     String? currentOrderNode,
     DateTime? currentOrderDeadline,
-    DateTime? activeFocusStartedAt,
+    required int bubbleBackgroundArgb,
+    required int bubbleForegroundArgb,
+    required int bubbleBorderArgb,
+    required int bubbleAccentArgb,
+    required DateTime? focusStartedAt,
   }) async {
     if (!Platform.isWindows) return;
+    _enabledRequested = enabled;
 
     await settings.setRuntimeState(
       enabled: enabled,
       currentOrderTitle: currentOrderTitle,
       currentOrderNode: currentOrderNode,
       currentOrderDeadline: currentOrderDeadline,
-      activeFocusStartedAt: activeFocusStartedAt,
+      bubbleBackgroundArgb: bubbleBackgroundArgb,
+      bubbleForegroundArgb: bubbleForegroundArgb,
+      bubbleBorderArgb: bubbleBorderArgb,
+      bubbleAccentArgb: bubbleAccentArgb,
+      focusStartedAt: focusStartedAt,
     );
 
     if (!enabled) {
       await stop();
       return;
     }
+    if (_process != null) return;
+
+    final existingStart = _startInFlight;
+    if (existingStart != null) {
+      await existingStart;
+      return;
+    }
+
+    final startFuture = _startHost();
+    _startInFlight = startFuture;
+    try {
+      await startFuture;
+    } finally {
+      if (identical(_startInFlight, startFuture)) {
+        _startInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _startHost() async {
     if (_process != null) return;
 
     final executableDirectory = File(Platform.resolvedExecutable).parent;
@@ -366,7 +596,7 @@ class DesktopPetService {
 
     final config = await settings._configFile();
     try {
-      _process = await Process.start(
+      final process = await Process.start(
         host.path,
         <String>[
           '--config',
@@ -376,8 +606,15 @@ class DesktopPetService {
         ],
         mode: ProcessStartMode.detachedWithStdio,
       );
-      unawaited(_process!.exitCode.then((_) {
-        _process = null;
+      if (!_enabledRequested) {
+        process.kill();
+        return;
+      }
+      _process = process;
+      unawaited(process.exitCode.then((_) {
+        if (identical(_process, process)) {
+          _process = null;
+        }
       }));
     } catch (_) {
       _process = null;
@@ -385,6 +622,7 @@ class DesktopPetService {
   }
 
   Future<void> stop() async {
+    _enabledRequested = false;
     final process = _process;
     _process = null;
     if (process == null) return;

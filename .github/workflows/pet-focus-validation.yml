@@ -1,0 +1,42 @@
+name: Pet Focus Validation
+
+on:
+  push:
+    branches:
+      - fix/restore-combined-pet-focus-129
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pet-focus-validation
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Focus and changelog tests
+        run: flutter test test/features/focus/focus_store_test.dart test/core/portability/focus_backup_test.dart test/core/adventurer_news_test.dart
+
+  desktop-pet:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build desktop pet host
+        shell: pwsh
+        run: dotnet build windows/desktop_pet/AdventurersGuild.DesktopPet.csproj -c Release

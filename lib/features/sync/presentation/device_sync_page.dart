@@ -580,7 +580,8 @@ String _conflictSubject(
     case SyncEntityKind.focusSession:
       for (final session in coordinator.focusStore.sessions) {
         if (session.id == view.recordId) {
-          return '专注「${session.displayTitle}」 · ${view.fieldLabel}';
+          final label = session.orderTitleSnapshot?.trim();
+          return '专注「${label == null || label.isEmpty ? '自由专注' : label}」 · ${view.fieldLabel}';
         }
       }
       return '专注记录 · ${view.fieldLabel}';

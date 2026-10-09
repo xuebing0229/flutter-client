@@ -72,17 +72,11 @@ class SyncEntityCodec {
   }
 
   static Map<String, dynamic> focusSessionToFields(FocusSession session) {
-    return <String, dynamic>{
-      'id': session.id,
-      'orderId': session.orderId,
-      'orderTitleSnapshot': session.orderTitleSnapshot,
-      'startedAt': session.startedAt.toUtc().toIso8601String(),
-      'endedAt': session.endedAt?.toUtc().toIso8601String(),
-    };
+    return session.toJson();
   }
 
   static FocusSession focusSessionFromFields(Map<String, dynamic> fields) {
-    return FocusSession.fromJson(fields);
+    return FocusSession.fromJson(Map<String, dynamic>.from(fields));
   }
 
   static String _singleEntityBackup({
