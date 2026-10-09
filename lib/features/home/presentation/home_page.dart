@@ -611,6 +611,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       bubbleForegroundArgb: colors.onSurface.toARGB32(),
       bubbleBorderArgb: colors.outlineVariant.toARGB32(),
       bubbleAccentArgb: colors.primary.toARGB32(),
+      focusEnabled: widget.featureStore.enabled(AppFeature.focus),
       focusStartedAt: widget.featureStore.enabled(AppFeature.focus)
           ? _focusStore.activeSession?.startedAt
           : null,
