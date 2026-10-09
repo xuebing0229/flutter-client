@@ -98,6 +98,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _desktopAddEditorOpen = false;
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
+  Timer? _focusPersistenceHeartbeat;
+  String? _focusRecoverySessionId;
+  DateTime? _focusRecoveryCutoff;
   bool _saving = false;
   bool _saveAgain = false;
   bool _notificationPermissionChecked = false;
@@ -185,6 +188,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           nodePresetStore: _nodePresetStore,
           focusStore: _focusStore,
         );
+        final restoredActiveFocus = _focusStore.activeSession;
+        if (restoredActiveFocus != null) {
+          _focusRecoverySessionId = restoredActiveFocus.id;
+          _focusRecoveryCutoff = backup.exportedAt;
+        }
 
         // A bootstrap-only package deliberately contains account identity but no
         // workspace settings. Do not treat it as authoritative local state.
@@ -209,6 +217,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
     _focusStore.addListener(_onFocusStoreChanged);
+    _refreshFocusPersistenceHeartbeat();
 
     if (_localDataHealthy) {
       if (!hasWorkspaceSettings) {
@@ -234,6 +243,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _onSyncCoordinatorChanged();
     unawaited(_syncReminders());
     unawaited(_syncDesktopPet());
+    if (_focusRecoverySessionId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_showFocusRecoveryIfNeeded());
+      });
+    }
 
     if (errorMessage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -485,8 +499,76 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _onFocusStoreChanged() {
     _scheduleSave();
+    _refreshFocusPersistenceHeartbeat();
     if (_ready && Platform.isWindows) {
       unawaited(_syncDesktopPet());
+    }
+  }
+
+  void _refreshFocusPersistenceHeartbeat() {
+    if (_focusStore.activeSession == null) {
+      _focusPersistenceHeartbeat?.cancel();
+      _focusPersistenceHeartbeat = null;
+      return;
+    }
+    _focusPersistenceHeartbeat ??= Timer.periodic(
+      const Duration(seconds: 30),
+      (_) {
+        if (_ready && _localDataHealthy) {
+          _scheduleSave();
+        }
+      },
+    );
+  }
+
+  Future<void> _showFocusRecoveryIfNeeded() async {
+    final sessionId = _focusRecoverySessionId;
+    final cutoff = _focusRecoveryCutoff;
+    _focusRecoverySessionId = null;
+    _focusRecoveryCutoff = null;
+    if (sessionId == null || cutoff == null || !mounted) return;
+
+    final active = _focusStore.activeSession;
+    if (active == null || active.id != sessionId) return;
+
+    String two(int value) => value.toString().padLeft(2, '0');
+    final local = cutoff.toLocal();
+    final cutoffText =
+        '${local.year}/${two(local.month)}/${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('发现未结束的专注'),
+        content: Text(
+          '上次离开公会时，这次专注还在计时。'
+          '你可以继续计时、按上次离开时间（$cutoffText）结束，或作废这次记录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('discard'),
+            child: const Text('作废本次'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('end'),
+            child: const Text('按离开时间结束'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('continue'),
+            child: const Text('继续计时'),
+          ),
+        ],
+      ),
+    );
+
+    final current = _focusStore.activeSession;
+    if (current == null || current.id != sessionId) return;
+    if (action == 'end') {
+      _focusStore.stopActiveAt(cutoff);
+    } else if (action == 'discard') {
+      _focusStore.discardActive();
     }
   }
 
@@ -796,6 +878,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _prepareForSignOut() async {
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
+    _focusPersistenceHeartbeat?.cancel();
     if (_ready && _localDataHealthy) {
       await _flushSyncThenPersist();
     }
