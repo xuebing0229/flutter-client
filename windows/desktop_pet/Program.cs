@@ -278,6 +278,22 @@ internal sealed class DesktopPetWindow : Window
 
     private void RefreshImage(bool force = false)
     {
+        if (!IsUsableImage(_config.ImageA))
+        {
+            _activeImagePath = null;
+            _activePicture?.Dispose();
+            _activePicture = null;
+            _petImage.Source = null;
+            _petImage.Visibility = Visibility.Collapsed;
+            _bubble.Visibility = Visibility.Collapsed;
+            Opacity = 0;
+            if (IsVisible)
+            {
+                Hide();
+            }
+            return;
+        }
+
         var useB = _inputActive && IsUsableImage(_config.ImageB);
         var path = useB ? _config.ImageB : _config.ImageA;
         var placement = useB ? _config.PlacementB : _config.PlacementA;
