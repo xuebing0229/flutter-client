@@ -17,10 +17,12 @@ import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
+import '../../focus/state/focus_store.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
 import '../../orders/presentation/node_preset_page.dart';
+import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_queue_page.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/presentation/add_product_page.dart';
@@ -65,6 +67,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderStore _orderStore = OrderStore();
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
+  final FocusStore _focusStore = FocusStore();
   final AppDataPersistence _persistence = const AppDataPersistence();
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
@@ -135,6 +138,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
+      focusStore: _focusStore,
       captureSettings: _captureSyncSettings,
       applySettings: _applySyncSettings,
     );
@@ -179,6 +183,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           orderStore: _orderStore,
           productStore: _productStore,
           nodePresetStore: _nodePresetStore,
+          focusStore: _focusStore,
         );
 
         // A bootstrap-only package deliberately contains account identity but no
@@ -203,6 +208,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.addListener(_onOrderStoreChanged);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
+    _focusStore.addListener(_onFocusStoreChanged);
 
     if (_localDataHealthy) {
       if (!hasWorkspaceSettings) {
@@ -477,6 +483,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  void _onFocusStoreChanged() {
+    _scheduleSave();
+    if (_ready && Platform.isWindows) {
+      unawaited(_syncDesktopPet());
+    }
+  }
+
   Future<QueueOrder?> _currentDesktopPetOrder() async {
     await _desktopPetService.settings.refresh();
     final selectedOrderId = _desktopPetService.settings.currentOrderId;
@@ -510,6 +523,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       bubbleForegroundArgb: colors.onSurface.toARGB32(),
       bubbleBorderArgb: colors.outlineVariant.toARGB32(),
       bubbleAccentArgb: colors.primary.toARGB32(),
+      focusStartedAt: _focusStore.activeSession?.startedAt,
     );
   }
 
@@ -742,6 +756,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
+      focusStore: _focusStore,
       accountSyncState: _accountSyncSnapshot,
       settings: <String, dynamic>{
         'syncBaselineRecords': _syncCoordinator.syncBaselineSettings,
@@ -798,6 +813,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.removeListener(_onOrderStoreChanged);
     _productStore.removeListener(_scheduleSave);
     _nodePresetStore.removeListener(_scheduleSave);
+    _focusStore.removeListener(_onFocusStoreChanged);
 
     // Remote revocation can dispose this page without going through the
     // explicit sign-out path. Capture and queue the final local snapshot
@@ -824,6 +840,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.dispose();
     _productStore.dispose();
     _nodePresetStore.dispose();
+    _focusStore.dispose();
     super.dispose();
   }
 
@@ -1042,6 +1059,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _openOrderFromFocus(String orderId) async {
+    if (!_orderStore.contains(orderId) || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OrderDetailPage(
+          accountId: widget.accountId,
+          store: _orderStore,
+          orderId: orderId,
+          nodePresetStore: _nodePresetStore,
+          featureStore: widget.featureStore,
+        ),
+      ),
+    );
+  }
+
   void _selectDesktopTool(String? tool) {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
@@ -1060,6 +1092,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       AppToolMenu.desktopPetTool => DesktopPetPage(
         orderStore: _orderStore,
+        focusStore: _focusStore,
+        onOpenOrder: _openOrderFromFocus,
       ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
@@ -1083,6 +1117,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         orderStore: _orderStore,
         productStore: _productStore,
         nodePresetStore: _nodePresetStore,
+        focusStore: _focusStore,
         themeStore: widget.themeStore,
         featureStore: widget.featureStore,
         accountStore: widget.accountStore,
@@ -1239,6 +1274,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               orderStore: _orderStore,
               productStore: _productStore,
               nodePresetStore: _nodePresetStore,
+              focusStore: _focusStore,
+              onOpenOrder: _openOrderFromFocus,
               themeStore: widget.themeStore,
               featureStore: widget.featureStore,
               accountStore: widget.accountStore,
@@ -1322,6 +1359,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     orderStore: _orderStore,
                                     productStore: _productStore,
                                     nodePresetStore: _nodePresetStore,
+                                    focusStore: _focusStore,
+                                    onOpenOrder: _openOrderFromFocus,
                                     themeStore: widget.themeStore,
                                     featureStore: widget.featureStore,
                                     accountStore: widget.accountStore,
