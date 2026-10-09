@@ -166,17 +166,15 @@ class _FocusPanelState extends State<FocusPanel> {
     if (settings != null) {
       await settings.refresh();
       if (!mounted) return;
-      if (settings.textMode == DesktopPetTextMode.currentOrder) {
-        final selected = _orderById(settings.currentOrderId);
-        if (selected != null &&
-            !selected.isArchived &&
-            !selected.isCompleted) {
-          order = selected;
-        } else {
-          final picked = await _chooseTarget();
-          if (picked == null) return;
-          order = picked.order;
-        }
+      final selected = _orderById(settings.currentOrderId);
+      if (selected != null &&
+          !selected.isArchived &&
+          !selected.isCompleted) {
+        order = selected;
+      } else {
+        final picked = await _chooseTarget();
+        if (picked == null) return;
+        order = picked.order;
       }
     } else {
       final picked = await _chooseTarget();
@@ -493,7 +491,7 @@ class _FocusPanelState extends State<FocusPanel> {
               Text(
                 widget.desktopSettings == null
                     ? '开始时可以选择一个排单，或选择自由专注。'
-                    : '“当前在画订单”模式会锁定当前选择的排单；自定义文字模式会记为自由专注。',
+                    : '有“当前在画订单”时会在开始瞬间锁定该排单；没有时再选择排单或自由专注。',
                 style: TextStyle(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 14),
