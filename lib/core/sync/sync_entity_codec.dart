@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../features/focus/domain/focus_session.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/products/domain/finished_product.dart';
 import '../portability/app_backup_data.dart';
@@ -68,6 +69,14 @@ class SyncEntityCodec {
       ),
     );
     return backup.nodePresets.single;
+  }
+
+  static Map<String, dynamic> focusSessionToFields(FocusSession session) {
+    return session.toJson();
+  }
+
+  static FocusSession focusSessionFromFields(Map<String, dynamic> fields) {
+    return FocusSession.fromJson(Map<String, dynamic>.from(fields));
   }
 
   static String _singleEntityBackup({
