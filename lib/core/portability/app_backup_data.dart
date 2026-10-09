@@ -1,13 +1,15 @@
 import 'dart:convert';
 
 import '../account/account_models.dart';
+import '../../features/focus/domain/focus_session.dart';
+import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/data/node_presets.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
 import '../../features/products/state/product_store.dart';
 
-const int currentBackupSchemaVersion = 6;
+const int currentBackupSchemaVersion = 7;
 const String appBackupKind = 'artist_queue_full_backup';
 
 class AppBackupData {
@@ -16,6 +18,7 @@ class AppBackupData {
     required this.orders,
     required this.products,
     required this.nodePresets,
+    this.focusSessions = const <FocusSession>[],
     this.accountSyncState,
     this.syncRecords,
     this.settings = const <String, dynamic>{},
@@ -25,6 +28,7 @@ class AppBackupData {
   final List<QueueOrder> orders;
   final List<FinishedProduct> products;
   final List<NodePreset> nodePresets;
+  final List<FocusSession> focusSessions;
 
   /// Shared account/device metadata, including the local account name/password.
   /// This stays offline and travels only through the user's own backup/sync flow.
@@ -43,6 +47,7 @@ class AppBackupData {
     required OrderStore orderStore,
     required ProductStore productStore,
     required NodePresetStore nodePresetStore,
+    FocusStore? focusStore,
     AccountSyncState? accountSyncState,
     List<Map<String, dynamic>>? syncRecords,
     Map<String, dynamic> settings = const <String, dynamic>{},
@@ -54,6 +59,9 @@ class AppBackupData {
       nodePresets: [
         for (final preset in nodePresetStore.presets) preset.snapshot(),
       ],
+      focusSessions: focusStore == null
+          ? const <FocusSession>[]
+          : <FocusSession>[...focusStore.sessions],
       accountSyncState: accountSyncState,
       syncRecords: syncRecords,
       settings: settings,
@@ -77,6 +85,9 @@ class AppBackupData {
         'products': [for (final product in products) _productToJson(product)],
         'nodePresets': [
           for (final preset in nodePresets) _presetToJson(preset),
+        ],
+        'focusSessions': [
+          for (final session in focusSessions) session.toJson(),
         ],
         if (accountSyncState != null) 'accountSync': accountSyncState!.toJson(),
         if (syncRecords != null)
@@ -120,6 +131,9 @@ class AppBackupData {
     final orderList = _asList(payload['orders'], 'orders');
     final productList = _asList(payload['products'], 'products');
     final presetList = _asList(payload['nodePresets'], 'nodePresets');
+    final focusList = payload['focusSessions'] == null
+        ? const <dynamic>[]
+        : _asList(payload['focusSessions'], 'focusSessions');
 
     AccountSyncState? accountSyncState;
     if (payload.containsKey('accountSync')) {
@@ -156,16 +170,22 @@ class AppBackupData {
       for (final item in presetList)
         _presetFromJson(_asMap(item, 'nodePreset')),
     ];
+    final focusSessions = <FocusSession>[
+      for (final item in focusList)
+        FocusSession.fromJson(_asMap(item, 'focusSession')),
+    ];
 
     _requireUniqueIds(orders.map((item) => item.id), '排单');
     _requireUniqueIds(products.map((item) => item.id), '成品');
     _requireUniqueIds(nodePresets.map((item) => item.id), '节点预设');
+    _requireUniqueIds(focusSessions.map((item) => item.id), '专注记录');
 
     return AppBackupData(
       exportedAt: exportedAt,
       orders: orders,
       products: products,
       nodePresets: nodePresets,
+      focusSessions: focusSessions,
       accountSyncState: accountSyncState,
       syncRecords: syncRecords,
       settings: settings,
@@ -176,10 +196,12 @@ class AppBackupData {
     required OrderStore orderStore,
     required ProductStore productStore,
     required NodePresetStore nodePresetStore,
+    FocusStore? focusStore,
   }) {
     nodePresetStore.replaceAll(nodePresets);
     orderStore.replaceAll(orders);
     productStore.replaceAll(products);
+    focusStore?.replaceAll(focusSessions);
   }
 }
 
@@ -218,6 +240,7 @@ Map<String, dynamic> _normalizeLegacyPayload(Map<String, dynamic> payload) {
             : item,
     ];
   }
+  normalized['focusSessions'] ??= <dynamic>[];
   normalized['settings'] ??= <String, dynamic>{};
   return normalized;
 }
