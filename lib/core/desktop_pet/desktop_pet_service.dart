@@ -153,6 +153,7 @@ class DesktopPetSettings extends ChangeNotifier {
   int _bubbleForegroundArgb = 0xFF202020;
   int _bubbleBorderArgb = 0x33202020;
   int _bubbleAccentArgb = 0xFF6C7A6B;
+  DateTime? _focusStartedAt;
   final List<DesktopPetPreset> _presets = <DesktopPetPreset>[];
 
   bool get loaded => _loaded;
@@ -237,6 +238,9 @@ class DesktopPetSettings extends ChangeNotifier {
           (raw['bubbleBorderArgb'] as num?)?.toInt() ?? _bubbleBorderArgb;
       _bubbleAccentArgb =
           (raw['bubbleAccentArgb'] as num?)?.toInt() ?? _bubbleAccentArgb;
+      _focusStartedAt = raw['focusStartedAt'] is String
+          ? DateTime.tryParse(raw['focusStartedAt'] as String)
+          : null;
 
       _currentOrderTitle = raw['currentOrderTitle'] is String
           ? raw['currentOrderTitle'] as String
@@ -457,6 +461,7 @@ class DesktopPetSettings extends ChangeNotifier {
     required int bubbleForegroundArgb,
     required int bubbleBorderArgb,
     required int bubbleAccentArgb,
+    required DateTime? focusStartedAt,
   }) async {
     await _readFromDisk();
     _loaded = true;
@@ -468,6 +473,7 @@ class DesktopPetSettings extends ChangeNotifier {
     _bubbleForegroundArgb = bubbleForegroundArgb;
     _bubbleBorderArgb = bubbleBorderArgb;
     _bubbleAccentArgb = bubbleAccentArgb;
+    _focusStartedAt = focusStartedAt;
     await _persist();
   }
 
@@ -496,6 +502,7 @@ class DesktopPetSettings extends ChangeNotifier {
       'bubbleForegroundArgb': _bubbleForegroundArgb,
       'bubbleBorderArgb': _bubbleBorderArgb,
       'bubbleAccentArgb': _bubbleAccentArgb,
+      'focusStartedAt': _focusStartedAt?.toUtc().toIso8601String(),
       'presets': <Map<String, dynamic>>[
         for (final preset in _presets) preset.toJson(),
       ],
@@ -525,6 +532,7 @@ class DesktopPetService {
     required int bubbleForegroundArgb,
     required int bubbleBorderArgb,
     required int bubbleAccentArgb,
+    required DateTime? focusStartedAt,
   }) async {
     if (!Platform.isWindows) return;
     _enabledRequested = enabled;
@@ -538,6 +546,7 @@ class DesktopPetService {
       bubbleForegroundArgb: bubbleForegroundArgb,
       bubbleBorderArgb: bubbleBorderArgb,
       bubbleAccentArgb: bubbleAccentArgb,
+      focusStartedAt: focusStartedAt,
     );
 
     if (!enabled) {
