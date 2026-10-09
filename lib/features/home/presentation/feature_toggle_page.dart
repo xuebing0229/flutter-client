@@ -168,6 +168,21 @@ class FeatureTogglePage extends StatelessWidget {
                   ),
                 ],
               ),
+              if (Platform.isWindows) ...[
+                const SizedBox(height: 14),
+                _FeatureSection(
+                  title: '桌面小助手',
+                  children: [
+                    _FeatureSwitch(
+                      store: store,
+                      feature: AppFeature.desktopPet,
+                      icon: Icons.pets_outlined,
+                      title: '桌宠',
+                      subtitle: '开启后在电脑端左侧栏显示「桌宠」板块，并启用 A/B 工作小人。',
+                    ),
+                  ],
+                ),
+              ],
               if (store.abstractMode) ...[
                 const SizedBox(height: 14),
                 _FeatureSection(
