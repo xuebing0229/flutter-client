@@ -862,7 +862,20 @@ internal sealed class DesktopPetWindow : Window
             grid.Children.Add(cell);
         }
 
-        return grid;
+        var petScale = Math.Clamp(_config.PetScale, 0.5, 1.8);
+        var petSize = 280 * petScale;
+        var viewport = new Viewbox
+        {
+            Stretch = Stretch.Uniform,
+            StretchDirection = StretchDirection.DownOnly,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 52 * bubbleScale,
+            MaxHeight = Math.Max(165 * bubbleScale, petSize * 0.78),
+            Child = grid,
+        };
+
+        return viewport;
     }
 
     private static string FormatDeadline(DateTime deadline)
