@@ -405,7 +405,15 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _PairPlacementPreview(preset: selected),
+                      _PairPlacementPreview(
+                        preset: selected,
+                        onPlacementChanged: (slot, placement) =>
+                            _settings.setPlacement(
+                          selected.id,
+                          slot,
+                          placement,
+                        ),
+                      ),
                     ],
                   ],
                 ],
@@ -856,9 +864,16 @@ class _DesktopPetCanvasGuidePainter extends CustomPainter {
 }
 
 class _PairPlacementPreview extends StatelessWidget {
-  const _PairPlacementPreview({required this.preset});
+  const _PairPlacementPreview({
+    required this.preset,
+    required this.onPlacementChanged,
+  });
 
   final DesktopPetPreset preset;
+  final Future<void> Function(
+    DesktopPetAssetSlot slot,
+    DesktopPetPlacement placement,
+  ) onPlacementChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -877,6 +892,10 @@ class _PairPlacementPreview extends StatelessWidget {
                 label: 'A · 平时状态',
                 path: preset.imageA,
                 placement: preset.placementA,
+                onPlacementChanged: (placement) => onPlacementChanged(
+                  DesktopPetAssetSlot.idleA,
+                  placement,
+                ),
               ),
             ),
             SizedBox(
@@ -885,6 +904,10 @@ class _PairPlacementPreview extends StatelessWidget {
                 label: 'B · 操作状态',
                 path: preset.imageB,
                 placement: preset.placementB,
+                onPlacementChanged: (placement) => onPlacementChanged(
+                  DesktopPetAssetSlot.keyB,
+                  placement,
+                ),
               ),
             ),
           ],
@@ -894,67 +917,196 @@ class _PairPlacementPreview extends StatelessWidget {
   }
 }
 
-class _SinglePlacementPreview extends StatelessWidget {
+class _SinglePlacementPreview extends StatefulWidget {
   const _SinglePlacementPreview({
     required this.label,
     required this.path,
     required this.placement,
+    required this.onPlacementChanged,
   });
 
   final String label;
   final String? path;
   final DesktopPetPlacement placement;
+  final Future<void> Function(DesktopPetPlacement placement)
+      onPlacementChanged;
+
+  @override
+  State<_SinglePlacementPreview> createState() =>
+      _SinglePlacementPreviewState();
+}
+
+class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
+  late DesktopPetPlacement _placement;
+
+  @override
+  void initState() {
+    super.initState();
+    _placement = widget.placement;
+  }
+
+  @override
+  void didUpdateWidget(covariant _SinglePlacementPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path ||
+        !_samePlacement(oldWidget.placement, widget.placement)) {
+      _placement = widget.placement;
+    }
+  }
+
+  bool _samePlacement(
+    DesktopPetPlacement left,
+    DesktopPetPlacement right,
+  ) {
+    return (left.scale - right.scale).abs() < 0.0001 &&
+        (left.offsetX - right.offsetX).abs() < 0.0001 &&
+        (left.offsetY - right.offsetY).abs() < 0.0001;
+  }
+
+  void _move(Offset delta, double side) {
+    if (side <= 0) return;
+    setState(() {
+      _placement = _placement.copyWith(
+        offsetX: _placement.offsetX + delta.dx / (side / 2),
+        offsetY: _placement.offsetY + delta.dy / (side / 2),
+      );
+    });
+  }
+
+  void _setScale(double value) {
+    setState(() {
+      _placement = _placement.copyWith(scale: value);
+    });
+  }
+
+  void _save() {
+    unawaited(widget.onPlacementChanged(_placement));
+  }
+
+  void _reset() {
+    setState(() {
+      _placement = const DesktopPetPlacement();
+    });
+    _save();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final file = path == null ? null : File(path!);
+    final file = widget.path == null ? null : File(widget.path!);
     final exists = file?.existsSync() == true;
     final colors = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.label,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (exists)
+              Text(
+                '直接拖动调整位置',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+              ),
+          ],
+        ),
         const SizedBox(height: 6),
         AspectRatio(
           aspectRatio: 1,
-          child: ClipRect(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerLow,
-                border: Border.all(color: colors.outlineVariant),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final side = constraints.maxWidth;
+              return ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-              ),
-              child: exists
-                  ? Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        FractionalTranslation(
-                          translation: Offset(
-                            placement.offsetX / 2,
-                            placement.offsetY / 2,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerLow,
+                    border: Border.all(color: colors.outlineVariant),
+                  ),
+                  child: exists
+                      ? MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onPanUpdate: (details) =>
+                                _move(details.delta, side),
+                            onPanEnd: (_) => _save(),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                FractionalTranslation(
+                                  translation: Offset(
+                                    _placement.offsetX / 2,
+                                    _placement.offsetY / 2,
+                                  ),
+                                  child: Transform.scale(
+                                    scale: _placement.scale,
+                                    child: Image.file(
+                                      file!,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                                IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: _DesktopPetCanvasGuidePainter(
+                                      lineColor: colors.outlineVariant,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: Transform.scale(
-                            scale: placement.scale,
-                            child: Image.file(file!, fit: BoxFit.contain),
+                        )
+                      : Center(
+                          child: Text(
+                            '未导入',
+                            style: TextStyle(
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ),
-                        CustomPaint(
-                          painter: _DesktopPetCanvasGuidePainter(
-                            lineColor: colors.outlineVariant,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Center(
-                      child: Text(
-                        '未导入',
-                        style: TextStyle(color: colors.onSurfaceVariant),
-                      ),
-                    ),
-            ),
+                ),
+              );
+            },
           ),
         ),
+        if (exists) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const SizedBox(width: 36, child: Text('大小')),
+              Expanded(
+                child: Slider(
+                  min: 0.35,
+                  max: 3,
+                  value: _placement.scale,
+                  onChanged: _setScale,
+                  onChangeEnd: (_) => _save(),
+                ),
+              ),
+              SizedBox(
+                width: 48,
+                child: Text(
+                  '${_placement.scale.toStringAsFixed(2)}×',
+                  textAlign: TextAlign.end,
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: '重置到居中位置',
+                onPressed: _reset,
+                icon: const Icon(Icons.restart_alt_rounded),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
