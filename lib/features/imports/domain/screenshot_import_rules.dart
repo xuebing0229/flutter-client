@@ -23,6 +23,13 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
     return const PlatformGuess(CommissionPlatform.huajia, 1);
   }
 
+  // Huajia completed-product/storefront pages often omit the literal
+  // platform name. Their cards expose the distinctive "查看评价" action
+  // together with a "截稿时间" policy/date line.
+  if (text.contains('查看评价') && text.contains('截稿时间')) {
+    return const PlatformGuess(CommissionPlatform.huajia, 0.95);
+  }
+
   // Both platforms have order DETAILS. Shared words such as "订单",
   // "稿件" and "参考信息" never prove that a page is MiHuashi.
   final huajiaDetail = <String>['订单动态', '改价历史', '真爱永恒']
