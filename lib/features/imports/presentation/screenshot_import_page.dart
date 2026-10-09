@@ -162,6 +162,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           final parsedForReport = <String>[];
           final comparisonNotes = <String>[];
           if (compareEngines) {
+            try {
             comparisonNotes.add('ML Kit 全图：${recognized.lines.length} 行，'
                 '含初始化耗时 ${mlKitTimer.elapsedMilliseconds} ms');
             final paddleFull = await _paddleReview.recognizeFullImage(
@@ -224,6 +225,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 platform: paddlePlatform?.label ?? '待选择',
                 parsedRows: paddleRows,
               ));
+            }
+            } catch (error) {
+              comparisonNotes.add('PaddleOCR 独立解析失败：$error；原 ML Kit 导入不受影响');
             }
           }
           final guess = preselectImportPlatform(
@@ -361,7 +365,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ));
             }
           }
-          _ocrDiagnostics.add(formatScreenshotOcrDiagnostic(
+          if (compareEngines) {
+            comparisonNotes.add('ML Kit 独立解析结果：${parsedForReport.length} 笔');
+          }
+          _ocrDiagnostics.add((compareEngines ? '--- ML Kit 原始识别 ---\n' : '') +
+              formatScreenshotOcrDiagnostic(
             screenshotNumber: _imageSerial,
             ocr: recognized,
             route: _products
