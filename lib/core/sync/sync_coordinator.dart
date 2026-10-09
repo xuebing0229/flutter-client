@@ -511,26 +511,25 @@ class SyncCoordinator extends ChangeNotifier {
     notifyListeners();
 
     final account = accountStore.syncSnapshot;
-    final currentTransportId = account?.devices[deviceId]?.syncTransportId
-        ?.trim();
-    final needsFirstTransportBootstrap =
-        (currentTransportId == null || currentTransportId.isEmpty) &&
-        (account?.activeDevices.any((device) {
-              final remoteTransportId = device.syncTransportId?.trim();
-              return device.id != deviceId &&
-                  remoteTransportId != null &&
-                  remoteTransportId.isNotEmpty;
-            }) ??
-            false);
+    final hasKnownRemoteTransportPeer =
+        account?.activeDevices.any((device) {
+          final remoteTransportId = device.syncTransportId?.trim();
+          return device.id != deviceId &&
+              remoteTransportId != null &&
+              remoteTransportId.isNotEmpty;
+        }) ??
+        false;
 
-    // A newly joined Windows device has received the account identity but has
-    // never created its permanent Syncthing folder, so auto-start is not set
-    // yet. Force that first preparation only when a known remote transport
-    // exists; after pairing succeeds the transport records auto-start normally.
+    // A paired workspace must bring its transport back by itself. In
+    // particular, do not rely only on the platform-local auto-start marker:
+    // older installs or a previously stopped core can otherwise stay offline
+    // until the user opens the sync page on that exact device.
     if (_syncPaused) {
       unawaited(_keepPreparedFolderPaused());
     } else {
-      unawaited(_prepareTransport(force: needsFirstTransportBootstrap));
+      _enqueueBackground(() async {
+        await _prepareTransport(force: hasKnownRemoteTransportPeer);
+      });
     }
 
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
@@ -541,6 +540,7 @@ class SyncCoordinator extends ChangeNotifier {
           await _enqueue<void>(() async {
             await _reconcileFromSyncDirectory(seedMissing: false);
             await _refreshTransportStatus();
+            await _repairTransportIfNeeded();
           }, showBusy: false);
         } catch (_) {
           // Background polling reports through the coordinator state.
@@ -687,9 +687,11 @@ class SyncCoordinator extends ChangeNotifier {
 
   Future<void> refreshNow() {
     return _enqueue(() async {
-      if (!_transportPrepared) {
-        await _prepareTransport(force: true);
-      }
+      // A manual sync is also an explicit repair request. Re-prepare the
+      // transport even when it was prepared earlier, because the embedded
+      // process or the folder's peer configuration may have disappeared since
+      // then. This keeps one-device operation sufficient.
+      await _prepareTransport(force: true);
       if (!_transportPrepared) {
         throw StateError(_lastError ?? '同步核心尚未准备好，请稍后重试。');
       }
@@ -914,6 +916,51 @@ class SyncCoordinator extends ChangeNotifier {
         _lastError = '恢复已知设备同步关系失败：$error';
       }
     }
+  }
+
+  Future<void> _repairTransportIfNeeded() async {
+    if (_disposed || _syncPaused) return;
+
+    final state = accountStore.syncSnapshot;
+    if (state == null ||
+        state.accountId != accountId ||
+        state.isRevoked(deviceId)) {
+      return;
+    }
+
+    final ownTransportId = _transportStatus.deviceId?.trim();
+    final expectedRemoteIds = <String>{
+      for (final device in state.activeDevices)
+        if (device.id != deviceId &&
+            device.syncTransportId?.trim().isNotEmpty == true &&
+            device.syncTransportId!.trim() != ownTransportId)
+          device.syncTransportId!.trim(),
+    };
+    if (expectedRemoteIds.isEmpty) return;
+
+    // If the core died, or this paired account never restored its permanent
+    // folder on this launch, bring it back without requiring a tap on this
+    // device's sync page.
+    if (!_transportPrepared ||
+        !_transportStatus.running ||
+        _transportStatus.folderState == null) {
+      await _prepareTransport(force: true);
+      return;
+    }
+
+    final configuredRemoteIds = <String>{
+      for (final item in _transportStatus.configuredDevices)
+        if ((item['deviceId'] as String?)?.trim().isNotEmpty == true)
+          (item['deviceId'] as String).trim(),
+    };
+    if (expectedRemoteIds.every(configuredRemoteIds.contains)) return;
+
+    // Syncthing can still be running while the account folder has lost one of
+    // its peer shares (for example after an interrupted migration). Repair the
+    // folder config from the account's signed device state.
+    await _pairKnownTransportPeers(state);
+    await _bridge.requestScan(accountId: accountId);
+    await _refreshTransportStatus();
   }
 
   Future<void> _refreshTransportStatus() async {
