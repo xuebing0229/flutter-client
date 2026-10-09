@@ -16,6 +16,8 @@ import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
+import '../../focus/presentation/focus_page.dart';
+import '../../focus/state/focus_store.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
@@ -65,6 +67,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderStore _orderStore = OrderStore();
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
+  final FocusStore _focusStore = FocusStore();
   final AppDataPersistence _persistence = const AppDataPersistence();
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
@@ -135,6 +138,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
+      focusStore: _focusStore,
       captureSettings: _captureSyncSettings,
       applySettings: _applySyncSettings,
     );
@@ -179,6 +183,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           orderStore: _orderStore,
           productStore: _productStore,
           nodePresetStore: _nodePresetStore,
+          focusStore: _focusStore,
         );
 
         // A bootstrap-only package deliberately contains account identity but no
@@ -203,6 +208,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.addListener(_onOrderStoreChanged);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
+    _focusStore.addListener(_onFocusStoreChanged);
 
     if (_localDataHealthy) {
       if (!hasWorkspaceSettings) {
@@ -320,6 +326,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _onOrderStoreChanged() {
     _scheduleSave();
     _scheduleReminderSync();
+    if (_ready) {
+      unawaited(_syncDesktopPet());
+    }
+  }
+
+  void _onFocusStoreChanged() {
+    _scheduleSave();
     if (_ready) {
       unawaited(_syncDesktopPet());
     }
@@ -493,6 +506,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       currentOrderTitle: order?.title,
       currentOrderNode: order?.currentNode.name,
       currentOrderDeadline: order?.deadline,
+      activeFocusStartedAt: _focusStore.activeSession?.startedAt,
     );
   }
 
@@ -722,6 +736,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
+      focusStore: _focusStore,
       accountSyncState: _accountSyncSnapshot,
       settings: <String, dynamic>{
         'syncBaselineRecords': _syncCoordinator.syncBaselineSettings,
@@ -778,6 +793,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.removeListener(_onOrderStoreChanged);
     _productStore.removeListener(_scheduleSave);
     _nodePresetStore.removeListener(_scheduleSave);
+    _focusStore.removeListener(_onFocusStoreChanged);
 
     // Remote revocation can dispose this page without going through the
     // explicit sign-out path. Capture and queue the final local snapshot
@@ -804,6 +820,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.dispose();
     _productStore.dispose();
     _nodePresetStore.dispose();
+    _focusStore.dispose();
     super.dispose();
   }
 
@@ -1041,6 +1058,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.desktopPetTool => DesktopPetPage(
         orderStore: _orderStore,
       ),
+      AppToolMenu.focusTool => FocusPage(
+        accountId: widget.accountId,
+        store: _focusStore,
+        orderStore: _orderStore,
+        nodePresetStore: _nodePresetStore,
+        featureStore: widget.featureStore,
+      ),
       AppToolMenu.archiveTool => ArchivePage(
         accountId: widget.accountId,
         orderStore: _orderStore,
@@ -1181,6 +1205,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.nodePresetTool => '节点预设',
       AppToolMenu.featureToggleTool => '附加功能开关',
       AppToolMenu.desktopPetTool => '桌宠',
+      AppToolMenu.focusTool => '专注',
       AppToolMenu.archiveTool => '归档',
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
