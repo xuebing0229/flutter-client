@@ -4,6 +4,7 @@ enum SyncEntityKind {
   order('orders'),
   product('products'),
   nodePreset('node-presets'),
+  focusSession('focus-sessions'),
   settings('settings');
 
   const SyncEntityKind(this.directoryName);
