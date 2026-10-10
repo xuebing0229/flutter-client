@@ -67,8 +67,8 @@ class DesktopPetOverlayOffset {
     double? y,
   }) {
     return DesktopPetOverlayOffset(
-      x: (x ?? this.x).clamp(-1.5, 1.5).toDouble(),
-      y: (y ?? this.y).clamp(-1.5, 1.5).toDouble(),
+      x: (x ?? this.x).clamp(-0.85, 0.85).toDouble(),
+      y: (y ?? this.y).clamp(-0.85, 0.85).toDouble(),
     );
   }
 
@@ -80,8 +80,8 @@ class DesktopPetOverlayOffset {
   static DesktopPetOverlayOffset fromJson(Object? raw) {
     if (raw is! Map) return const DesktopPetOverlayOffset();
     return DesktopPetOverlayOffset(
-      x: ((raw['x'] as num?)?.toDouble() ?? 0).clamp(-1.5, 1.5).toDouble(),
-      y: ((raw['y'] as num?)?.toDouble() ?? 0).clamp(-1.5, 1.5).toDouble(),
+      x: ((raw['x'] as num?)?.toDouble() ?? 0).clamp(-0.85, 0.85).toDouble(),
+      y: ((raw['y'] as num?)?.toDouble() ?? 0).clamp(-0.85, 0.85).toDouble(),
     );
   }
 }
@@ -116,6 +116,9 @@ class DesktopPetPreset {
     this.placementB = const DesktopPetPlacement(),
     this.importPlacementA,
     this.importPlacementB,
+    this.bubbleAboveOffset = const DesktopPetOverlayOffset(),
+    this.bubbleSideOffset = const DesktopPetOverlayOffset(),
+    this.focusClockOffset = const DesktopPetOverlayOffset(),
   });
 
   final String id;
@@ -126,6 +129,9 @@ class DesktopPetPreset {
   final DesktopPetPlacement placementB;
   final DesktopPetPlacement? importPlacementA;
   final DesktopPetPlacement? importPlacementB;
+  final DesktopPetOverlayOffset bubbleAboveOffset;
+  final DesktopPetOverlayOffset bubbleSideOffset;
+  final DesktopPetOverlayOffset focusClockOffset;
 
   DesktopPetPreset copyWith({
     String? name,
@@ -135,6 +141,9 @@ class DesktopPetPreset {
     DesktopPetPlacement? placementB,
     DesktopPetPlacement? importPlacementA,
     DesktopPetPlacement? importPlacementB,
+    DesktopPetOverlayOffset? bubbleAboveOffset,
+    DesktopPetOverlayOffset? bubbleSideOffset,
+    DesktopPetOverlayOffset? focusClockOffset,
     bool clearImageA = false,
     bool clearImageB = false,
   }) {
@@ -147,6 +156,9 @@ class DesktopPetPreset {
       placementB: placementB ?? this.placementB,
       importPlacementA: importPlacementA ?? this.importPlacementA,
       importPlacementB: importPlacementB ?? this.importPlacementB,
+      bubbleAboveOffset: bubbleAboveOffset ?? this.bubbleAboveOffset,
+      bubbleSideOffset: bubbleSideOffset ?? this.bubbleSideOffset,
+      focusClockOffset: focusClockOffset ?? this.focusClockOffset,
     );
   }
 
@@ -161,6 +173,9 @@ class DesktopPetPreset {
           'importPlacementA': importPlacementA!.toJson(),
         if (importPlacementB != null)
           'importPlacementB': importPlacementB!.toJson(),
+        'bubbleAboveOffset': bubbleAboveOffset.toJson(),
+        'bubbleSideOffset': bubbleSideOffset.toJson(),
+        'focusClockOffset': focusClockOffset.toJson(),
       };
 
   static DesktopPetPreset? fromJson(Object? raw) {
@@ -185,6 +200,12 @@ class DesktopPetPreset {
       importPlacementB: raw['importPlacementB'] is Map
           ? DesktopPetPlacement.fromJson(raw['importPlacementB'])
           : placementB,
+      bubbleAboveOffset:
+          DesktopPetOverlayOffset.fromJson(raw['bubbleAboveOffset']),
+      bubbleSideOffset:
+          DesktopPetOverlayOffset.fromJson(raw['bubbleSideOffset']),
+      focusClockOffset:
+          DesktopPetOverlayOffset.fromJson(raw['focusClockOffset']),
     );
   }
 }
@@ -200,12 +221,6 @@ class DesktopPetSettings extends ChangeNotifier {
   double _petScale = 1;
   double _bubbleTextScale = 1;
   double _focusClockScale = 1;
-  DesktopPetOverlayOffset _bubbleAboveOffset =
-      const DesktopPetOverlayOffset();
-  DesktopPetOverlayOffset _bubbleSideOffset =
-      const DesktopPetOverlayOffset();
-  DesktopPetOverlayOffset _focusClockOffset =
-      const DesktopPetOverlayOffset();
   String _customText = '';
   String? _currentOrderId;
   String? _currentOrderTitle;
@@ -228,13 +243,16 @@ class DesktopPetSettings extends ChangeNotifier {
   double get petScale => _petScale;
   double get bubbleTextScale => _bubbleTextScale;
   double get focusClockScale => _focusClockScale;
-  DesktopPetOverlayOffset get bubbleAboveOffset => _bubbleAboveOffset;
-  DesktopPetOverlayOffset get bubbleSideOffset => _bubbleSideOffset;
-  DesktopPetOverlayOffset get focusClockOffset => _focusClockOffset;
+  DesktopPetOverlayOffset get bubbleAboveOffset =>
+      selectedPreset?.bubbleAboveOffset ?? const DesktopPetOverlayOffset();
+  DesktopPetOverlayOffset get bubbleSideOffset =>
+      selectedPreset?.bubbleSideOffset ?? const DesktopPetOverlayOffset();
+  DesktopPetOverlayOffset get focusClockOffset =>
+      selectedPreset?.focusClockOffset ?? const DesktopPetOverlayOffset();
   DesktopPetOverlayOffset get activeBubbleOffset =>
       _bubblePosition == DesktopPetBubblePosition.side
-          ? _bubbleSideOffset
-          : _bubbleAboveOffset;
+          ? bubbleSideOffset
+          : bubbleAboveOffset;
   String get customText => _customText;
   String? get currentOrderId => _currentOrderId;
 
@@ -304,12 +322,6 @@ class DesktopPetSettings extends ChangeNotifier {
       _focusClockScale = ((raw['focusClockScale'] as num?)?.toDouble() ?? 1)
           .clamp(0.65, 1.8)
           .toDouble();
-      _bubbleAboveOffset =
-          DesktopPetOverlayOffset.fromJson(raw['bubbleAboveOffset']);
-      _bubbleSideOffset =
-          DesktopPetOverlayOffset.fromJson(raw['bubbleSideOffset']);
-      _focusClockOffset =
-          DesktopPetOverlayOffset.fromJson(raw['focusClockOffset']);
 
       _bubbleBackgroundArgb =
           (raw['bubbleBackgroundArgb'] as num?)?.toInt() ??
@@ -536,19 +548,27 @@ class DesktopPetSettings extends ChangeNotifier {
     DesktopPetOverlayOffset offset,
   ) async {
     await _readFromDisk();
+    final selectedId = _selectedPresetId;
+    if (selectedId == null) return;
+    final index = _presets.indexWhere((preset) => preset.id == selectedId);
+    if (index < 0) return;
     final normalized = offset.copyWith();
-    if (position == DesktopPetBubblePosition.side) {
-      _bubbleSideOffset = normalized;
-    } else {
-      _bubbleAboveOffset = normalized;
-    }
+    _presets[index] = position == DesktopPetBubblePosition.side
+        ? _presets[index].copyWith(bubbleSideOffset: normalized)
+        : _presets[index].copyWith(bubbleAboveOffset: normalized);
     await _persist();
     notifyListeners();
   }
 
   Future<void> setFocusClockOffset(DesktopPetOverlayOffset offset) async {
     await _readFromDisk();
-    _focusClockOffset = offset.copyWith();
+    final selectedId = _selectedPresetId;
+    if (selectedId == null) return;
+    final index = _presets.indexWhere((preset) => preset.id == selectedId);
+    if (index < 0) return;
+    _presets[index] = _presets[index].copyWith(
+      focusClockOffset: offset.copyWith(),
+    );
     await _persist();
     notifyListeners();
   }
@@ -645,9 +665,9 @@ class DesktopPetSettings extends ChangeNotifier {
       'petScale': _petScale,
       'bubbleTextScale': _bubbleTextScale,
       'focusClockScale': _focusClockScale,
-      'bubbleAboveOffset': _bubbleAboveOffset.toJson(),
-      'bubbleSideOffset': _bubbleSideOffset.toJson(),
-      'focusClockOffset': _focusClockOffset.toJson(),
+      'bubbleAboveOffset': bubbleAboveOffset.toJson(),
+      'bubbleSideOffset': bubbleSideOffset.toJson(),
+      'focusClockOffset': focusClockOffset.toJson(),
       'customText': _customText,
       'currentOrderId': _currentOrderId,
       'currentOrderTitle': _currentOrderTitle,
