@@ -10,8 +10,10 @@ void main() {
       radius: 18,
     );
     expect(border.dimensions, EdgeInsets.zero);
-    expect(border.getOuterPath(const Rect.fromLTWH(0, 0, 200, 100)),
-        isNotEmpty);
+    expect(
+      border.getOuterPath(const Rect.fromLTWH(0, 0, 200, 100)).getBounds(),
+      const Rect.fromLTWH(0, 0, 200, 100),
+    );
   });
 
   for (final brightness in Brightness.values) {
