@@ -157,9 +157,16 @@ class BetaUpdateSession extends ChangeNotifier {
         _status = '已交给系统下载，完成后会自动打开安装页面';
       }
     } catch (error) {
-      if (Platform.isWindows && _receivedBytes > 0) {
-        _paused = true;
-        _status = '下载中断，已保留断点，点击继续下载';
+      if (Platform.isWindows) {
+        final resumableBytes = await updater.resumableBytes(latest);
+        if (resumableBytes != null && resumableBytes > 0) {
+          _receivedBytes = resumableBytes;
+          _paused = true;
+          _status = '下载中断，已保留断点，点击继续下载';
+        } else {
+          _paused = false;
+          _status = '更新失败：$error';
+        }
       } else {
         _status = '更新失败：$error';
       }
