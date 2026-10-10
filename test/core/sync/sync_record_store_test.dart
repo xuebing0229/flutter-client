@@ -333,6 +333,65 @@ void main() {
     expect(await backupImage.readAsBytes(), <int>[2, 2, 2]);
   });
 
+  test('temporary ZIP asset ownership transfers by directory rename when possible', () async {
+    final imported = await Directory('${temporary.path}/bundle/assets')
+        .create(recursive: true);
+    final art = File('${imported.path}/refs/big-picture.png');
+    await art.parent.create(recursive: true);
+    await art.writeAsBytes(List<int>.filled(1024 * 1024, 7));
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+      assetSourceDirectory: imported,
+      transferImportedAssets: true,
+    );
+
+    final recovered = File('${temporary.path}/assets/refs/big-picture.png');
+    expect(await recovered.length(), 1024 * 1024);
+    expect(await recovered.readAsBytes(), List<int>.filled(1024 * 1024, 7));
+    // The disposable import folder was moved rather than copied, reducing
+    // the simultaneous on-disk footprint when the filesystem supports it.
+    expect(await imported.exists(), isFalse);
+  });
+
+  test('failed restore returns transferred ZIP asset source to caller', () async {
+    final original = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'survivor',
+      values: const <String, dynamic>{'id': 'survivor', 'title': '原来的订单'},
+      deviceId: 'phone',
+    );
+    await store.write(accountId: accountId, record: original);
+    final oldAsset = File('${temporary.path}/assets/refs/file');
+    await oldAsset.parent.create(recursive: true);
+    await oldAsset.writeAsBytes([8, 9, 10]);
+
+    final source = await Directory('${temporary.path}/bundle/assets')
+        .create(recursive: true);
+    final newArt = File('${source.path}/refs/file/image.png');
+    await newArt.parent.create(recursive: true);
+    await newArt.writeAsBytes([4, 5, 6]);
+
+    await expectLater(
+      store.replacePortableRecords(
+        accountId: accountId,
+        records: const <Map<String, dynamic>>[],
+        assetSourceDirectory: source,
+        transferImportedAssets: true,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await oldAsset.readAsBytes(), [8, 9, 10]);
+    expect(await newArt.readAsBytes(), [4, 5, 6]);
+    final restored = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+      recordId: 'survivor',
+    );
+    expect(engine.materialize(restored!)!['title'], '原来的订单');
+  });
+
   test('restore rolls back the entire old root on asset merge failure', () async {
     final original = SyncRecord.bootstrap(
       kind: SyncEntityKind.order,
