@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../shared/presentation/layout_spacing.dart';
@@ -5,7 +8,9 @@ import '../../shared/presentation/layout_spacing.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/adjustment_widgets.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
+import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
+import '../../orders/presentation/order_reference_image_widgets.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
 import 'product_sale_history_page.dart';
@@ -13,12 +18,14 @@ import 'product_summary_card.dart';
 
 class ProductDetailPage extends StatefulWidget {
   const ProductDetailPage({
+    required this.accountId,
     required this.store,
     required this.productId,
     required this.featureStore,
     super.key,
   });
 
+  final String accountId;
   final ProductStore store;
   final String productId;
   final AppFeatureStore featureStore;
@@ -28,7 +35,11 @@ class ProductDetailPage extends StatefulWidget {
 }
 
 class _ProductDetailPageState extends State<ProductDetailPage> {
+  final _referenceImageStore = OrderReferenceImageStore();
+  final _referenceImages = <OrderReferenceImage>[];
+  final _sessionAddedReferenceImages = <OrderReferenceImage>[];
   bool _editing = false;
+  bool _pickingReferenceImages = false;
 
   late final TextEditingController _titleController;
   late final TextEditingController _priceController;
@@ -62,6 +73,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   @override
   void dispose() {
+    if (_sessionAddedReferenceImages.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: List<OrderReferenceImage>.from(_sessionAddedReferenceImages),
+        ),
+      );
+    }
     _titleController.dispose();
     _priceController.dispose();
     _descriptionController.dispose();
@@ -78,6 +97,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         ? ''
         : formatProductPrice(product.price);
     _descriptionController.text = product.description;
+    _referenceImages
+      ..clear()
+      ..addAll(product.referenceImages);
     _soldCountController.text = product.soldCount.toString();
     _platform = product.platform;
     _saleType = product.saleType;
@@ -99,13 +121,91 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   }
 
   void _startEditing() {
+    _sessionAddedReferenceImages.clear();
     _loadDraft(_product);
     setState(() => _editing = true);
   }
 
-  void _cancelEditing() {
+  Future<void> _cancelEditing() async {
+    final added = List<OrderReferenceImage>.from(_sessionAddedReferenceImages);
+    _sessionAddedReferenceImages.clear();
+    if (added.isNotEmpty) {
+      await _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: added,
+      );
+    }
+    if (!mounted) return;
     _loadDraft(_product);
     setState(() => _editing = false);
+  }
+
+  Future<void> _addReferenceImages() async {
+    if (_pickingReferenceImages) return;
+    setState(() => _pickingReferenceImages = true);
+    try {
+      final imported = await _referenceImageStore.pickAndImport(
+        accountId: widget.accountId,
+        orderId: widget.productId,
+      );
+      if (!mounted) {
+        if (imported.isNotEmpty) {
+          await _referenceImageStore.deleteImages(
+            accountId: widget.accountId,
+            images: imported,
+          );
+        }
+        return;
+      }
+      if (imported.isNotEmpty) {
+        _sessionAddedReferenceImages.addAll(imported);
+        setState(() => _referenceImages.addAll(imported));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('添加参考图失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pickingReferenceImages = false);
+    }
+  }
+
+  void _removeReferenceImage(OrderReferenceImage image) {
+    setState(() {
+      _referenceImages.removeWhere((item) => item.id == image.id);
+    });
+    if (_sessionAddedReferenceImages.any((item) => item.id == image.id)) {
+      _sessionAddedReferenceImages.removeWhere((item) => item.id == image.id);
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: <OrderReferenceImage>[image],
+        ),
+      );
+    }
+  }
+
+  bool _sameReferenceImages(
+    List<OrderReferenceImage> left,
+    List<OrderReferenceImage> right,
+  ) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      final a = left[index];
+      final b = right[index];
+      if (a.id != b.id ||
+          a.fileName != b.fileName ||
+          a.relativePath != b.relativePath ||
+          a.addedAt != b.addedAt ||
+          a.sizeBytes != b.sizeBytes) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _editSupplement(FinishedProduct product) async {
@@ -168,6 +268,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final descriptionChanged =
         _descriptionController.text.trim() != _draftBaseline.description;
     final soldCountChanged = soldCount != _draftBaseline.soldCount;
+    final referenceImagesChanged = widget.featureStore.referenceImages &&
+        !_sameReferenceImages(_referenceImages, _draftBaseline.referenceImages);
+    final removedReferenceImages = referenceImagesChanged
+        ? <OrderReferenceImage>[
+            for (final image in _draftBaseline.referenceImages)
+              if (!_referenceImages.any((item) => item.id == image.id)) image,
+          ]
+        : const <OrderReferenceImage>[];
     final saleRecords = [...current.saleRecords];
 
     if (soldCountChanged && soldCount > current.soldCount) {
@@ -200,11 +308,23 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         description: descriptionChanged
             ? _descriptionController.text.trim()
             : current.description,
+        referenceImages: referenceImagesChanged
+            ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
+            : current.referenceImages,
         soldCount: soldCountChanged ? soldCount : current.soldCount,
         saleRecords: soldCountChanged ? saleRecords : current.saleRecords,
       ),
     );
 
+    _sessionAddedReferenceImages.clear();
+    if (removedReferenceImages.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: removedReferenceImages,
+        ),
+      );
+    }
     setState(() => _editing = false);
   }
 
@@ -235,12 +355,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               else ...[
                 IconButton(
                   tooltip: '取消编辑',
-                  onPressed: _cancelEditing,
+                  onPressed: _pickingReferenceImages
+                      ? null
+                      : () => unawaited(_cancelEditing()),
                   icon: const Icon(Icons.close_rounded),
                 ),
                 IconButton(
                   tooltip: '保存',
-                  onPressed: _save,
+                  onPressed: _pickingReferenceImages ? null : _save,
                   icon: const Icon(Icons.check_rounded),
                 ),
               ],
@@ -423,6 +545,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                     decoration: const InputDecoration(hintText: '0'),
                   ),
                 ],
+                if (widget.featureStore.referenceImages) ...[
+                  const SizedBox(height: 14),
+                  OrderReferenceImagesSection(
+                    accountId: widget.accountId,
+                    images: _referenceImages,
+                    store: _referenceImageStore,
+                    editable: true,
+                    onAdd: _pickingReferenceImages
+                        ? null
+                        : () => unawaited(_addReferenceImages()),
+                    onRemove: _removeReferenceImage,
+                  ),
+                ],
                 const SizedBox(height: 14),
                 const FormFieldLabel('描述'),
                 TextField(
@@ -435,7 +570,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _save,
+                    onPressed: _pickingReferenceImages ? null : _save,
                     icon: const Icon(Icons.check_rounded),
                     label: const Text('确认'),
                   ),
