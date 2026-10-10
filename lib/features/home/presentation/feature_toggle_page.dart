@@ -103,6 +103,13 @@ class FeatureTogglePage extends StatelessWidget {
                   ),
                   _FeatureSwitch(
                     store: store,
+                    feature: AppFeature.referenceImages,
+                    icon: Icons.collections_outlined,
+                    title: '参考图',
+                    subtitle: '控制排单和成品的参考图入口。关闭只隐藏功能，已有参考图不会删除。',
+                  ),
+                  _FeatureSwitch(
+                    store: store,
                     feature: AppFeature.nodeProgress,
                     icon: Icons.stacked_line_chart_rounded,
                     title: '节点小进度',
