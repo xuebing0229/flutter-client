@@ -7,6 +7,7 @@ import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/domain/finished_product.dart';
+import '../../products/domain/sale_receipt.dart';
 import '../../products/state/product_store.dart';
 
 class StatisticsPage extends StatefulWidget {
@@ -43,11 +44,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
     }).toList();
   }
 
-  List<FinishedProduct> _productSalesFor(DateTime month) {
-    final sales = <FinishedProduct>[];
+  List<SaleReceipt> _productSalesFor(DateTime month) {
+    final sales = <SaleReceipt>[];
     for (final product in widget.productStore.products) {
-      for (final soldAt in product.saleRecords) {
-        if (_sameMonth(soldAt, month)) sales.add(product);
+      for (final receipt in product.accountedSales) {
+        if (_sameMonth(receipt.soldAt, month)) sales.add(receipt);
       }
     }
     return sales;
@@ -55,7 +56,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
   double _totalFor(
     Iterable<QueueOrder> orders,
-    Iterable<FinishedProduct> sales,
+    Iterable<SaleReceipt> sales,
   ) {
     final orderIncome = orders.fold<double>(
       0,
@@ -63,7 +64,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
     final productIncome = sales.fold<double>(
       0,
-      (sum, product) => sum + product.realIncome,
+      (sum, receipt) => sum + receipt.netIncome,
     );
     return orderIncome + productIncome;
   }
@@ -79,9 +80,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
       result[platform] = (result[platform] ?? 0) + order.settlementIncome;
     }
 
-    for (final product in sales) {
-      final platform = _statisticsPlatform(product.platform);
-      result[platform] = (result[platform] ?? 0) + product.realIncome;
+    for (final receipt in sales) {
+      final platform = _statisticsPlatform(receipt.platform);
+      result[platform] = (result[platform] ?? 0) + receipt.netIncome;
     }
 
     return result;
@@ -536,10 +537,10 @@ class _MonthlyChangeCard extends StatelessWidget {
       if (index != null) values[index] += order.settlementIncome;
     }
     for (final product in productStore.products) {
-      final income = product.realIncome;
-      for (final soldAt in product.saleRecords) {
+      for (final receipt in product.accountedSales) {
+        final soldAt = receipt.soldAt;
         final index = monthIndexes[soldAt.year * 12 + soldAt.month];
-        if (index != null) values[index] += income;
+        if (index != null) values[index] += receipt.netIncome;
       }
     }
 
