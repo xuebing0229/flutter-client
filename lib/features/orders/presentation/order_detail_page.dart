@@ -249,10 +249,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     final loveLevelChanged = _huajiaLoveLevel != _draftBaseline.huajiaLoveLevel;
     final onlinePercentChanged =
         _onlinePercent != _draftBaseline.normalizedOnlinePercent;
-    final referenceImagesChanged = !_sameReferenceImages(
-      _referenceImages,
-      _draftBaseline.referenceImages,
-    );
+    final referenceImagesChanged = widget.featureStore.referenceImages &&
+        !_sameReferenceImages(
+          _referenceImages,
+          _draftBaseline.referenceImages,
+        );
     final removedReferenceImages = referenceImagesChanged
         ? <OrderReferenceImage>[
             for (final image in _draftBaseline.referenceImages)
@@ -500,13 +501,15 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         ? '待交稿'
                         : '已交稿 · ${formatDateTimeValue(order.completedAt!)}',
                   ),
-                const SizedBox(height: 8),
-                OrderReferenceImagesSection(
-                  accountId: widget.accountId,
-                  images: order.referenceImages,
-                  store: _referenceImageStore,
-                ),
-                const SizedBox(height: 8),
+                if (widget.featureStore.referenceImages) ...[
+                  const SizedBox(height: 8),
+                  OrderReferenceImagesSection(
+                    accountId: widget.accountId,
+                    images: order.referenceImages,
+                    store: _referenceImageStore,
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 ReadOnlyDetailRow(
                   label: '描述',
                   value: order.description.trim().isEmpty
@@ -650,17 +653,19 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                OrderReferenceImagesSection(
-                  accountId: widget.accountId,
-                  images: _referenceImages,
-                  store: _referenceImageStore,
-                  editable: true,
-                  onAdd: _pickingReferenceImages
-                      ? null
-                      : () => unawaited(_addReferenceImages()),
-                  onRemove: _removeReferenceImage,
-                ),
+                if (widget.featureStore.referenceImages) ...[
+                  const SizedBox(height: 14),
+                  OrderReferenceImagesSection(
+                    accountId: widget.accountId,
+                    images: _referenceImages,
+                    store: _referenceImageStore,
+                    editable: true,
+                    onAdd: _pickingReferenceImages
+                        ? null
+                        : () => unawaited(_addReferenceImages()),
+                    onRemove: _removeReferenceImage,
+                  ),
+                ],
                 if (widget.featureStore.customTags) ...[
                   const SizedBox(height: 14),
                   OrderTagsEditor(
