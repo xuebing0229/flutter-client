@@ -541,6 +541,11 @@ class SyncMergeEngine {
         }
       }
 
+      // An image ID is never reused. Once the owning order removes that ID,
+      // an old offline peer's earlier add must not resurrect it just because
+      // its device clock is ahead. Fold additions first and removals last,
+      // independent of wall-clock order or the sequence of merged records.
+      final removedImageIds = <String>{};
       for (final operation in imageOperations) {
         final added = operation.metadata['added'];
         if (added is List) {
@@ -558,10 +563,11 @@ class SyncMergeEngine {
 
         final removed = operation.metadata['removed'];
         if (removed is List) {
-          for (final item in removed) {
-            if (item is String) images.remove(item);
-          }
+          removedImageIds.addAll(removed.whereType<String>());
         }
+      }
+      for (final id in removedImageIds) {
+        images.remove(id);
       }
 
       values['referenceImages'] = images.values.toList(growable: false);
