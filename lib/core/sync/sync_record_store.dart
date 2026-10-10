@@ -59,8 +59,11 @@ class SyncRecordStore {
     previous.sort((a, b) => a.path.compareTo(b.path));
     final safeAccountId =
         accountDirectory.uri.pathSegments.where((part) => part.isNotEmpty).last;
-    while (_activeRestores.containsKey(safeAccountId)) {
-      await _activeRestores[safeAccountId]!.future;
+    final replacement = _activeRestores[safeAccountId];
+    if (replacement != null) {
+      await replacement.future;
+      // The listing above may have been taken during the atomic swap.
+      return _recoverDirectorySwap(accountDirectory);
     }
     if (!await target.exists() && previous.isNotEmpty) {
       // A staging import may still be incomplete. Roll back to the last
@@ -72,8 +75,10 @@ class SyncRecordStore {
       for (final directory in [...staging, ...previous]) {
         // Avoid deleting an in-progress staging folder after an async
         // directory listing. Wait for its owner to finish first.
-        while (_activeRestores.containsKey(safeAccountId)) {
-          await _activeRestores[safeAccountId]!.future;
+        final replacement = _activeRestores[safeAccountId];
+        if (replacement != null) {
+          await replacement.future;
+          return _recoverDirectorySwap(accountDirectory);
         }
         try {
           if (await directory.exists()) await directory.delete(recursive: true);
