@@ -301,6 +301,22 @@ void main() {
     );
   });
 
+  test('portable restore retains consensus-gated old art cleanup markers', () async {
+    final marker = File('${temporary.path}/gc-asset-candidates/marked.json');
+    await marker.parent.create(recursive: true);
+    await marker.writeAsString(
+      '{"schemaVersion":1,"relativePath":"assets/order-reference-images/a/b.png"}',
+      flush: true,
+    );
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+    );
+    expect(await marker.exists(), isTrue);
+    expect(await marker.readAsString(), contains('relativePath'));
+  });
+
   test('restore ZIP assets override matching paths while preserving offline-only files', () async {
     final oldShared = File('${temporary.path}/assets/refs/same.png');
     final oldOnly = File('${temporary.path}/assets/refs/offline.png');
