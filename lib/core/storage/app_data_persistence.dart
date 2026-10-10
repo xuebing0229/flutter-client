@@ -10,16 +10,48 @@ class AppDataPersistence {
   const AppDataPersistence();
 
   static const String _fileName = 'app-data-v1.json';
+  static const String _focusForegroundExitFileName = 'focus-last-foreground-exit.txt';
   static const String _accountsDirName = 'accounts';
   static final Map<String, Future<void>> _writeTails = <String, Future<void>>{};
 
   String _safeAccountId(String accountId) => requireValidAccountId(accountId);
 
-  Future<File> _accountFile(String accountId) async {
+  Future<Directory> _accountDirectory(String accountId) async {
     final dir = await getApplicationSupportDirectory();
-    return File(
-      '${dir.path}/$_accountsDirName/${_safeAccountId(accountId)}/$_fileName',
+    return Directory(
+      '${dir.path}/$_accountsDirName/${_safeAccountId(accountId)}',
     );
+  }
+
+  Future<File> _accountFile(String accountId) async {
+    final dir = await _accountDirectory(accountId);
+    return File('${dir.path}/$_fileName');
+  }
+
+  Future<File> _focusForegroundExitFile(String accountId) async {
+    final dir = await _accountDirectory(accountId);
+    return File('${dir.path}/$_focusForegroundExitFileName');
+  }
+
+  Future<DateTime?> loadFocusForegroundExit({
+    required String accountId,
+  }) async {
+    try {
+      final file = await _focusForegroundExitFile(accountId);
+      if (!await file.exists()) return null;
+      return DateTime.tryParse((await file.readAsString()).trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveFocusForegroundExit({
+    required String accountId,
+    required DateTime value,
+  }) async {
+    final file = await _focusForegroundExitFile(accountId);
+    await file.parent.create(recursive: true);
+    await atomicWriteString(file, value.toUtc().toIso8601String());
   }
 
   Future<AppBackupData?> load({required String accountId}) async {
