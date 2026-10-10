@@ -61,7 +61,7 @@ class SaleReceipt {
     }
     return SaleReceipt(
       id: id,
-      soldAt: date,
+      soldAt: date.toLocal(),
       netIncome: amount.toDouble(),
       originalPrice: price.toDouble(),
       serviceFee: fee.toDouble(),
