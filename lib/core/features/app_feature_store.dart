@@ -8,6 +8,7 @@ enum AppFeature {
   clientInfo,
   nodeProgress,
   customTags,
+  referenceImages,
   search,
   sorting,
   viewSwitch,
@@ -41,6 +42,7 @@ class AppFeatureStore extends ChangeNotifier {
   bool get clientInfo => enabled(AppFeature.clientInfo);
   bool get nodeProgress => enabled(AppFeature.nodeProgress);
   bool get customTags => enabled(AppFeature.customTags);
+  bool get referenceImages => enabled(AppFeature.referenceImages);
   bool get search => enabled(AppFeature.search);
   bool get sorting => enabled(AppFeature.sorting);
   bool get viewSwitch => enabled(AppFeature.viewSwitch);
@@ -109,6 +111,7 @@ class AppFeatureStore extends ChangeNotifier {
     // does not silently disable abstract-version effects.
     normalized.putIfAbsent(AppFeature.abstractEffects.name, () => true);
     normalized.putIfAbsent(AppFeature.customTags.name, () => true);
+    normalized.putIfAbsent(AppFeature.referenceImages.name, () => true);
     normalized.putIfAbsent(AppFeature.desktopPet.name, () => false);
     normalized.putIfAbsent(AppFeature.focus.name, () => true);
 
