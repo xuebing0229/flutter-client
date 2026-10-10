@@ -14,6 +14,7 @@ permissions:
 env:
   RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
   BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
+  ACTIVATION_API_BASE_URL: ${{ secrets.ACTIVATION_API_BASE_URL }}
 
 jobs:
   check:
@@ -91,7 +92,8 @@ jobs:
           flutter build apk \
             --release \
             --flavor beta \
-            --dart-define=APP_CHANNEL=beta
+            --dart-define=APP_CHANNEL=beta \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-beta-release.apk app-beta.apk
 
       - name: Upload Android Beta package
@@ -131,7 +133,7 @@ jobs:
 
       - name: Build Windows Beta
         shell: pwsh
-        run: flutter build windows --release --dart-define=APP_CHANNEL=beta
+        run: flutter build windows --release --dart-define=APP_CHANNEL=beta --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
 
       - name: Build VPet desktop companion
         shell: pwsh
