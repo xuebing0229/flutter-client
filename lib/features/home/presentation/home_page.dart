@@ -102,7 +102,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? _focusPersistenceHeartbeat;
   String? _focusRecoverySessionId;
   DateTime? _focusRecoveryCutoff;
-  bool _saving = false;
+  Future<void>? _saveInFlight;
   bool _saveAgain = false;
   bool _saveFailureReported = false;
   bool _notificationPermissionChecked = false;
@@ -909,15 +909,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _persistCurrentData() async {
-    if (!_localDataHealthy) return;
+  Future<void> _persistCurrentData() {
+    if (!_localDataHealthy) return Future<void>.value();
 
-    if (_saving) {
+    final pending = _saveInFlight;
+    if (pending != null) {
+      // An overlapping caller must observe the result of the real disk write,
+      // not report success while an earlier write is still in progress.
       _saveAgain = true;
-      return;
+      return pending;
     }
 
-    _saving = true;
+    final operation = _drainPendingSaves();
+    _saveInFlight = operation;
+    return operation;
+  }
+
+  Future<void> _drainPendingSaves() async {
     try {
       do {
         _saveAgain = false;
@@ -925,7 +933,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await _persistence.save(backup, accountId: widget.accountId);
       } while (_saveAgain);
     } finally {
-      _saving = false;
+      _saveInFlight = null;
     }
   }
 
