@@ -175,7 +175,7 @@ class FinishedProduct {
       receipts.removeRange(desired, receipts.length);
     }
     while (dates.length < desired) {
-      var at = soldAt ?? DateTime.now().toUtc();
+      var at = soldAt ?? DateTime.now();
       if (soldAt == null && dates.contains(at)) {
         at = at.add(Duration(microseconds: dates.length + 1));
       }
