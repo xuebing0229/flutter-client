@@ -40,6 +40,12 @@ void main() {
   });
 
   testWidgets('wide content pane uses four columns', (tester) async {
+    // The default test viewport is only 800 logical pixels wide. Widen it
+    // so the 920px pane is not constrained down to the three-column range.
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(harness(920));
     for (var index = 0; index < 4; index++) {
       expect(tester.getTopLeft(find.byKey(Key('item-$index'))).dy,
