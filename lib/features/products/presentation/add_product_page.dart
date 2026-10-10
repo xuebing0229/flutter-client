@@ -1,19 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
+import '../../orders/presentation/order_reference_image_widgets.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
 
 class AddProductPage extends StatefulWidget {
   const AddProductPage({
+    required this.accountId,
     required this.store,
     required this.featureStore,
     super.key,
   });
 
+  final String accountId;
   final ProductStore store;
   final AppFeatureStore featureStore;
 
@@ -22,6 +28,8 @@ class AddProductPage extends StatefulWidget {
 }
 
 class _AddProductPageState extends State<AddProductPage> {
+  final _referenceImageStore = OrderReferenceImageStore();
+  final _referenceImages = <OrderReferenceImage>[];
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -33,9 +41,26 @@ class _AddProductPageState extends State<AddProductPage> {
   bool _feeEnabled = CommissionPlatform.mihuashi.defaultFeeEnabled;
   HuajiaLoveLevel _huajiaLoveLevel = HuajiaLoveLevel.none;
   double _onlinePercent = 100;
+  late final String _draftProductId;
+  bool _saved = false;
+  bool _pickingReferenceImages = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftProductId = 'product-${DateTime.now().microsecondsSinceEpoch}';
+  }
 
   @override
   void dispose() {
+    if (!_saved && _referenceImages.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: List<OrderReferenceImage>.from(_referenceImages),
+        ),
+      );
+    }
     _titleController.dispose();
     _priceController.dispose();
     _descriptionController.dispose();
@@ -53,6 +78,51 @@ class _AddProductPageState extends State<AddProductPage> {
     });
   }
 
+  Future<void> _addReferenceImages() async {
+    if (_pickingReferenceImages) return;
+    setState(() => _pickingReferenceImages = true);
+    try {
+      final imported = await _referenceImageStore.pickAndImport(
+        accountId: widget.accountId,
+        orderId: _draftProductId,
+      );
+      if (!mounted) {
+        if (imported.isNotEmpty) {
+          await _referenceImageStore.deleteImages(
+            accountId: widget.accountId,
+            images: imported,
+          );
+        }
+        return;
+      }
+      if (imported.isNotEmpty) {
+        setState(() => _referenceImages.addAll(imported));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('添加参考图失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _pickingReferenceImages = false);
+    }
+  }
+
+  void _removeReferenceImage(OrderReferenceImage image) {
+    setState(() {
+      _referenceImages.removeWhere((item) => item.id == image.id);
+    });
+    unawaited(
+      _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: <OrderReferenceImage>[image],
+      ),
+    );
+  }
+
   void _save() {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
@@ -67,7 +137,7 @@ class _AddProductPageState extends State<AddProductPage> {
 
     widget.store.addProduct(
       FinishedProduct(
-        id: 'product-${DateTime.now().microsecondsSinceEpoch}',
+        id: _draftProductId,
         title: title,
         platform: _platform,
         saleType: _saleType,
@@ -78,9 +148,11 @@ class _AddProductPageState extends State<AddProductPage> {
         supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
         deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
         description: _descriptionController.text.trim(),
+        referenceImages: List<OrderReferenceImage>.unmodifiable(_referenceImages),
         defaultOrder: DateTime.now().microsecondsSinceEpoch,
       ),
     );
+    _saved = true;
     Navigator.of(context).pop();
   }
 
@@ -93,7 +165,7 @@ class _AddProductPageState extends State<AddProductPage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
-          TextButton(onPressed: _save, child: const Text('保存')),
+          TextButton(onPressed: _pickingReferenceImages ? null : _save, child: const Text('保存')),
           const SizedBox(width: 6),
         ],
       ),
@@ -162,6 +234,19 @@ class _AddProductPageState extends State<AddProductPage> {
               setState(() => _saleType = value.first);
             },
           ),
+          if (widget.featureStore.referenceImages) ...[
+            const SizedBox(height: 14),
+            OrderReferenceImagesSection(
+              accountId: widget.accountId,
+              images: _referenceImages,
+              store: _referenceImageStore,
+              editable: true,
+              onAdd: _pickingReferenceImages
+                  ? null
+                  : () => unawaited(_addReferenceImages()),
+              onRemove: _removeReferenceImage,
+            ),
+          ],
           const SizedBox(height: 14),
           const FormFieldLabel('描述'),
           TextField(
@@ -174,7 +259,7 @@ class _AddProductPageState extends State<AddProductPage> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _save,
+              onPressed: _pickingReferenceImages ? null : _save,
               icon: const Icon(Icons.check_rounded),
               label: const Text('保存'),
             ),
