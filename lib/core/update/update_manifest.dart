@@ -7,6 +7,8 @@ class UpdateManifest {
     required this.published,
     required this.downloadUri,
     required this.notes,
+    this.sizeBytes,
+    this.sha256,
   });
 
   final int schema;
@@ -16,6 +18,8 @@ class UpdateManifest {
   final bool published;
   final Uri? downloadUri;
   final String notes;
+  final int? sizeBytes;
+  final String? sha256;
 
   bool isNewerThan(int currentBuild) => published && build > currentBuild;
 
@@ -27,6 +31,8 @@ class UpdateManifest {
     final published = json['published'];
     final download = json['download_url'];
     final notes = json['notes'];
+    final sizeBytes = json['size_bytes'];
+    final sha256 = json['sha256'];
 
     if (schema is! int || schema != 1) {
       throw const FormatException('更新信息版本无效。');
@@ -48,6 +54,28 @@ class UpdateManifest {
     }
     if (notes is! String) {
       throw const FormatException('更新说明格式无效。');
+    }
+    if (sizeBytes != null && (sizeBytes is! int || sizeBytes <= 0)) {
+      throw const FormatException('更新文件大小格式无效。');
+    }
+    if (sha256 != null &&
+        (sha256 is! String ||
+            !RegExp(r'^[0-9a-fA-F]{64}
+    return UpdateManifest(
+      schema: schema,
+      channel: channel,
+      version: version,
+      build: build,
+      published: published,
+      downloadUri: download == null ? null : Uri.parse(download as String),
+      notes: notes,
+      sizeBytes: sizeBytes as int?,
+      sha256: (sha256 as String?)?.toLowerCase(),
+    );
+  }
+}
+).hasMatch(sha256))) {
+      throw const FormatException('更新文件校验值格式无效。');
     }
 
     return UpdateManifest(
