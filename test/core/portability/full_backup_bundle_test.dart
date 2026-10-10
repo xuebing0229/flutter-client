@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
+
 import 'package:flutter_app/core/portability/app_backup_data.dart';
 import 'package:flutter_app/core/portability/data_portability_file_bridge.dart';
 import 'package:flutter_app/core/portability/full_backup_bundle_service.dart';
@@ -235,6 +237,76 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(await exportedFile.exists(), isFalse);
+  });
+
+  Future<void> writeCraftedZip({
+    required AppBackupData backup,
+    required Map<String, List<int>> assets,
+    int compression = ZipFileEncoder.store,
+  }) async {
+    final manifest = File('${temporary.path}/fixture-manifest.json');
+    await manifest.writeAsString(backup.encode());
+    final encoder = ZipFileEncoder();
+    encoder.create(exportedFile.path);
+    try {
+      await encoder.addFile(manifest, FullBackupBundleService.manifestFileName);
+      var index = 0;
+      for (final entry in assets.entries) {
+        final source = File('${temporary.path}/asset-${index++}.png');
+        await source.writeAsBytes(entry.value);
+        await encoder.addFile(source, entry.key, compression);
+      }
+    } finally {
+      await encoder.close();
+    }
+  }
+
+  test('ZIP preflight rejects oversized declared asset before extracting', () async {
+    final path = 'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
+    await writeCraftedZip(
+      backup: backupWithImage(sizeBytes: 4),
+      assets: <String, List<int>>{
+        path: <int>[1, 2, 3, 4, 5, 6],
+      },
+    );
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+    );
+    await expectLater(
+      service.readBackupFile(exportedFile, displayName: 'backup.zip'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('文件大小与记录不一致'),
+        ),
+      ),
+    );
+  });
+
+  test('ZIP preflight rejects unreferenced image payloads', () async {
+    final path = 'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
+    final ghost = 'assets/order-reference-images/Z2hvc3Q/extra.png';
+    await writeCraftedZip(
+      backup: backupWithImage(sizeBytes: 4),
+      assets: <String, List<int>>{
+        path: <int>[1, 2, 3, 4],
+        ghost: <int>[7, 8, 9],
+      },
+    );
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+    );
+    await expectLater(
+      service.readBackupFile(exportedFile, displayName: 'backup.zip'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('未被任何排单或成品引用'),
+        ),
+      ),
+    );
   });
 
   test('legacy json backup remains importable but is marked without assets', () async {
