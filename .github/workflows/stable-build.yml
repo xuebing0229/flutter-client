@@ -8,6 +8,7 @@ permissions:
 
 env:
   RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
+  ACTIVATION_API_BASE_URL: ${{ secrets.ACTIVATION_API_BASE_URL }}
 
 jobs:
   build-stable:
@@ -62,7 +63,8 @@ jobs:
           flutter build apk \
             --release \
             --flavor stable \
-            --dart-define=APP_CHANNEL=release
+            --dart-define=APP_CHANNEL=release \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-stable-release.apk app-stable.apk
 
       - name: Upload Stable APK

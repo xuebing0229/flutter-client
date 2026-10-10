@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'account_models.dart';
+import 'activation_api.dart';
 import 'device_descriptor.dart';
 import 'offline_license.dart';
 import '../storage/atomic_file.dart';
@@ -96,13 +97,17 @@ class _LocalAccountRecord {
 class AccountStore extends ChangeNotifier {
   AccountStore({
     OfflineLicenseVerifier verifier = const OfflineLicenseVerifier(),
-  }) : _verifier = verifier;
+    ActivationApiClient activationApi = const ActivationApiClient(),
+  })  : _verifier = verifier,
+        _activationApi = activationApi;
 
   static const String _fileName = 'account-state-v1.json';
   static const String _accountsDirName = 'accounts';
   static const String _deviceIdentityFileName = 'local-device-id.txt';
+  static const String _pendingActivationDirName = 'pending-activations';
 
   final OfflineLicenseVerifier _verifier;
+  final ActivationApiClient _activationApi;
   final Map<String, _LocalAccountRecord> _accounts =
       <String, _LocalAccountRecord>{};
   Future<void> _saveTail = Future<void>.value();
@@ -184,6 +189,60 @@ class AccountStore extends ChangeNotifier {
       '${directory.path}/$_accountsDirName/'
       '$safeAccountId/$_deviceIdentityFileName',
     );
+  }
+
+  Future<File> _pendingActivationFile(String accountId) async {
+    final directory = await getApplicationSupportDirectory();
+    final safeAccountId = requireValidAccountId(accountId);
+    return File(
+      '${directory.path}/$_pendingActivationDirName/$safeAccountId.json',
+    );
+  }
+
+  Future<String> _activationClaimFor(ActivationLicense license) async {
+    final file = await _pendingActivationFile(license.accountId);
+    try {
+      if (await file.exists()) {
+        final decoded = jsonDecode(await file.readAsString());
+        if (decoded is Map) {
+          final map = decoded.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+          final serial = map['serial'];
+          final claimId = map['claimId'];
+          if (serial == license.serial &&
+              claimId is String &&
+              claimId.length >= 16) {
+            return claimId;
+          }
+        }
+      }
+    } catch (_) {
+      // A damaged pending marker can be safely replaced before redemption.
+    }
+
+    final claimId = _randomId();
+    await file.parent.create(recursive: true);
+    await atomicWriteString(
+      file,
+      jsonEncode(<String, dynamic>{
+        'accountId': license.accountId,
+        'serial': license.serial,
+        'claimId': claimId,
+      }),
+    );
+    return claimId;
+  }
+
+  Future<void> _clearActivationClaim(String accountId) async {
+    try {
+      final file = await _pendingActivationFile(accountId);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // The account is already safely local; stale retry metadata is harmless.
+    }
   }
 
   Future<String?> _readDeviceIdentity(AccountSyncState state) async {
@@ -294,6 +353,13 @@ class AccountStore extends ChangeNotifier {
           throw const FormatException('本机当前账号不存在。');
         }
 
+        // Any account that already exists locally has completed activation.
+        // Remove stale retry claims left behind by an interrupted cleanup so
+        // they cannot later be reused after the local account is removed.
+        for (final accountId in _accounts.keys) {
+          await _clearActivationClaim(accountId);
+        }
+
         await _restoreSelectedStatus();
         if (migrated &&
             _accounts.values.every(
@@ -400,9 +466,34 @@ class AccountStore extends ChangeNotifier {
       throw const FormatException('密码至少需要 6 个字符。');
     }
 
+    // Verify the signed code locally first. The server never receives the
+    // account name or password; it only atomically consumes this signed code.
     final license = await _verifier.verify(activationCode);
     if (_accounts.containsKey(license.accountId)) {
       throw const FormatException('这个激活码对应的账号已经存在于本机，请直接登录该账号。');
+    }
+
+    // Persist the claim before the network request. If the server commits the
+    // redemption but the response is lost (or the app crashes before local
+    // save), retrying the same code reuses this claim and is idempotent.
+    final claimId = await _activationClaimFor(license);
+    try {
+      final redemption = await _activationApi.redeem(
+        activationCode: activationCode,
+        claimId: claimId,
+      );
+      if (redemption.accountId != license.accountId ||
+          redemption.serial != license.serial) {
+        throw const FormatException('激活服务器返回的账号身份与激活码不一致。');
+      }
+    } on ActivationApiException catch (error) {
+      // A definitive rejection can never become the same successful claim.
+      // Network/time-out failures deliberately retain the claim for safe retry.
+      if (error.code == 'already_redeemed' ||
+          error.code == 'invalid_code') {
+        await _clearActivationClaim(license.accountId);
+      }
+      throw FormatException(error.message);
     }
 
     final now = DateTime.now().toUtc();
@@ -438,7 +529,10 @@ class AccountStore extends ChangeNotifier {
     _selectedAccountId = license.accountId;
     status = AccountStatus.unlocked;
 
+    // Only after the local account is durably saved do we forget the retry
+    // claim. From this point forward login/use/sync never consults the server.
     await _save();
+    await _clearActivationClaim(license.accountId);
     notifyListeners();
   }
 

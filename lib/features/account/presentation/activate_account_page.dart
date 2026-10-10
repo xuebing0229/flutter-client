@@ -99,7 +99,7 @@ class _ActivateAccountPageState extends State<ActivateAccountPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '激活码只在首次注册时使用。注册成功后会绑定到这个账号，以后登录只需要账号名和密码。',
+                          '首次注册需要联网核销激活码。注册成功后激活码不再参与登录，账号之后可离线使用。',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: colors.onSurfaceVariant),
                         ),
@@ -215,7 +215,7 @@ class _ActivateAccountPageState extends State<ActivateAccountPage> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '账号名和密码保存在应用本地，并随设备同步数据一起迁移；不连接我们的账号服务器。',
+                          '授权服务器只核销激活码，不接收账号名、密码或业务数据；注册成功后登录、使用和设备同步都不依赖它。',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: colors.onSurfaceVariant,
