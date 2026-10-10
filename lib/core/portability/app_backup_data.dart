@@ -297,6 +297,7 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
+  json['referenceImages'] ??= <dynamic>[];
   json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
@@ -495,6 +496,16 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
     'deductionAmount': product.deductionAmount,
     'deductionFeeEnabled': product.deductionFeeEnabled,
     'description': product.description,
+    'referenceImages': [
+      for (final image in product.referenceImages)
+        <String, dynamic>{
+          'id': image.id,
+          'fileName': image.fileName,
+          'relativePath': image.relativePath,
+          'addedAt': image.addedAt.toUtc().toIso8601String(),
+          'sizeBytes': image.sizeBytes,
+        },
+    ],
     if (product.defaultOrder != 0) 'defaultOrder': product.defaultOrder,
     'soldCount': product.soldCount,
     'saleRecords': [
@@ -549,6 +560,13 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       'product.deductionFeeEnabled',
     ),
     description: _asText(json['description'], 'product.description'),
+    referenceImages: <OrderReferenceImage>[
+      for (final item in _asList(
+        json['referenceImages'] ?? <dynamic>[],
+        'product.referenceImages',
+      ))
+        _referenceImageFromJson(_asMap(item, 'product.referenceImage')),
+    ],
     defaultOrder: json['defaultOrder'] == null
         ? 0
         : _asInt(json['defaultOrder'], 'product.defaultOrder'),
