@@ -73,12 +73,14 @@ void main() {
       accountId: accountId,
       deviceId: 'phone',
       recordsByKind: state,
+      assetGcPeers: const {'phone', 'desktop'},
     );
     if (desktop) {
       await acks.writeSnapshot(
         accountId: accountId,
         deviceId: 'desktop',
         recordsByKind: state,
+      assetGcPeers: const {'phone', 'desktop'},
       );
     }
   }
@@ -133,6 +135,7 @@ void main() {
       accountId: accountId,
       deviceId: 'desktop',
       recordsByKind: state,
+      assetGcPeers: const {'phone', 'desktop'},
     );
     final oldAck = File(
       '${temp.path}/gc-acks/'
@@ -148,6 +151,7 @@ void main() {
       accountId: accountId,
       deviceId: 'desktop',
       recordsByKind: state,
+      assetGcPeers: const {'phone', 'desktop'},
     );
     expect(await collect(), 1);
     expect(await image.exists(), isFalse);
@@ -190,6 +194,7 @@ void main() {
       accountId: accountId,
       deviceId: 'phone',
       recordsByKind: current,
+      assetGcPeers: const {'phone', 'desktop'},
     );
     expect(
       await gc.collectAcknowledged(
@@ -205,6 +210,7 @@ void main() {
       accountId: accountId,
       deviceId: 'desktop',
       recordsByKind: current,
+      assetGcPeers: const {'phone', 'desktop'},
     );
     expect(
       await gc.collectAcknowledged(
@@ -346,6 +352,7 @@ void main() {
       accountId: accountId,
       deviceId: 'desktop',
       recordsByKind: state,
+      assetGcPeers: const {'phone', 'desktop'},
     );
     expect(await collect(), 1);
     expect(await image.exists(), isFalse);
