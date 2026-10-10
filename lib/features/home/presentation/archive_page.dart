@@ -211,8 +211,8 @@ class _ArchivePageState extends State<ArchivePage> {
             '${undatedLegacyProducts > 0 ? '\n\n有 $undatedLegacyProducts 个旧版成品没有归档日期，'
                 '本次不会删除。' : ''}'
             '\n\n删除后无法从归档恢复，相关历史收入、日程记录和参考图关联会一起移除，'
-            '并同步到其他设备。参考图原文件会暂时保留，避免离线设备断图，'
-            '因此不会立即释放占用的磁盘空间。'
+            '并同步到其他设备。参考图原文件不会立即删除：只有全部绑定设备确认'
+            '最新数据、经过至少 30 天保护期后才会自动清理，否则继续占用空间。'
             '如需长期留存，建议先导出完整备份。',
           ),
           actions: [
@@ -410,7 +410,7 @@ class _CleanupCard extends StatelessWidget {
           '清理旧归档',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        subtitle: const Text('自选归档时间范围，永久删除对应记录及参考图。'),
+        subtitle: const Text('自选归档时间范围，永久删除记录并解除参考图关联。'),
         trailing: busy
             ? const SizedBox.square(
                 dimension: 20,
