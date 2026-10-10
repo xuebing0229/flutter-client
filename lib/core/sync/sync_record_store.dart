@@ -80,7 +80,11 @@ class SyncRecordStore {
     required SyncEntityKind kind,
     required String recordId,
   }) async {
-    final groups = await _readGroups(accountId, kind);
+    final groups = await _readGroups(
+      accountId,
+      kind,
+      onlyId: recordId,
+    );
     final variants = groups[recordId];
     if (variants == null || variants.isEmpty) return null;
     return _mergeAndCanonicalize(
@@ -351,10 +355,160 @@ class SyncRecordStore {
 
   Future<Map<String, List<_RecordVariant>>> _readGroups(
     String accountId,
-    SyncEntityKind kind,
-  ) async {
+    SyncEntityKind kind, {
+    String? onlyId,
+  }) async {
     final directory = await _entityDirectory(accountId, kind);
     final groups = <String, List<_RecordVariant>>{};
+    // Syncthing conflict files retain the original base64 record stem, e.g.
+    // YXBw.sync-conflict-20261010-DEVICE.json. A single local edit should
+    // not decode every unrelated record in this category. We still decode
+    // filenames outside the standard layout for legacy/unexpected variants.
+    final wantedStem = onlyId == null
+        ? null
+        : base64Url.encode(utf8.encode(onlyId)).replaceAll('=', '');
+    final standardRecordName = RegExp(
+      r'^[A-Za-z0-9_-]+(?:\\.sync-conflict-[A-Za-z0-9._-]+)?\\.json
+
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+
+      if (wantedStem != null) {
+        final name = entity.uri.pathSegments.last;
+        final relevant = name == '$wantedStem.json' ||
+            name.startsWith('$wantedStem.sync-conflict-');
+        if (!relevant && standardRecordName.hasMatch(name)) {
+          // Another record's canonical/Syncthing variant. Don't open it.
+          continue;
+        }
+      }
+
+      try {
+        final source = await entity.readAsString();
+        if (source.trim().isEmpty) continue;
+        var record = SyncRecord.decode(source);
+        if (record.kind != kind) continue;
+        if (onlyId != null && record.id != onlyId) continue;
+        if (record.accountId != null && record.accountId != accountId) {
+          continue;
+        }
+        record = record.copyWith(accountId: accountId);
+        if (!_recordIdentityMatches(record)) continue;
+
+        groups
+            .putIfAbsent(record.id, () => <_RecordVariant>[])
+            .add(_RecordVariant(file: entity, record: record));
+      } catch (_) {
+        // A file can be observed while Syncthing is replacing it.
+        // Leave it untouched and retry during the next scan.
+      }
+    }
+
+    return groups;
+  }
+
+  Future<SyncRecord?> _mergeAndCanonicalize({
+    required String accountId,
+    required SyncEntityKind kind,
+    required String recordId,
+    required List<_RecordVariant> variants,
+  }) async {
+    if (variants.isEmpty) return null;
+
+    var merged = variants.first.record;
+    for (final variant in variants.skip(1)) {
+      merged = _engine.merge(merged, variant.record);
+    }
+
+    final canonical = await _canonicalFile(accountId, kind, recordId);
+    final canonicalVariant = await _findCanonicalVariant(variants, canonical);
+    final needsWrite =
+        variants.length > 1 ||
+        !await canonical.exists() ||
+        canonicalVariant == null ||
+        !syncJsonEquals(canonicalVariant.record.toJson(), merged.toJson());
+
+    if (needsWrite) {
+      await _atomicWrite(canonical, merged.encode());
+    }
+
+    for (final variant in variants) {
+      // Directory enumeration on Windows can return the same file with a
+      // different slash style (for example, '/' versus '\\'). Comparing raw
+      // path strings would mistake the canonical file for a Syncthing conflict
+      // variant and delete the record we just merged.
+      if (await _sameFile(variant.file, canonical)) continue;
+      try {
+        if (await variant.file.exists()) await variant.file.delete();
+      } catch (_) {
+        // Syncthing can still hold a handle briefly. Next scan will retry.
+      }
+    }
+
+    return merged;
+  }
+
+  Future<_RecordVariant?> _findCanonicalVariant(
+    List<_RecordVariant> variants,
+    File canonical,
+  ) async {
+    for (final variant in variants) {
+      if (await _sameFile(variant.file, canonical)) return variant;
+    }
+    return null;
+  }
+
+  Future<bool> _sameFile(File left, File right) async {
+    if (left.path == right.path) return true;
+    try {
+      return await FileSystemEntity.identical(left.path, right.path);
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  Future<File> _canonicalFile(
+    String accountId,
+    SyncEntityKind kind,
+    String recordId,
+  ) async {
+    final directory = await _entityDirectory(accountId, kind);
+    final encoded = base64Url.encode(utf8.encode(recordId)).replaceAll('=', '');
+    return File('${directory.path}/$encoded.json');
+  }
+
+  bool _recordIdentityMatches(SyncRecord record) {
+    final embeddedId = record.fields['id']?.value;
+    return embeddedId is String && embeddedId == record.id;
+  }
+
+  Future<void> _atomicWrite(File file, String content) async {
+    await atomicWriteString(file, content);
+  }
+
+  Future<void> _copyDirectory(Directory source, Directory destination) async {
+    await destination.create(recursive: true);
+    await for (final entity in source.list(followLinks: false)) {
+      final name = entity.uri.pathSegments
+          .where((segment) => segment.isNotEmpty)
+          .last;
+      if (entity is File) {
+        await entity.copy('${destination.path}/$name');
+      } else if (entity is Directory) {
+        await _copyDirectory(entity, Directory('${destination.path}/$name'));
+      }
+    }
+  }
+}
+
+class _RecordVariant {
+  const _RecordVariant({required this.file, required this.record});
+
+  final File file;
+  final SyncRecord record;
+}
+,
+    );
 
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
