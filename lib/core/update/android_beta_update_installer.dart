@@ -23,6 +23,9 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
   }
 
   @override
+  Future<int?> resumableBytes({required String fileName}) async => null;
+
+  @override
   Future<String> downloadAndInstall({
     required Uri uri,
     required String fileName,
