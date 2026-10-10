@@ -253,12 +253,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       _referenceImages,
       _draftBaseline.referenceImages,
     );
-    final removedReferenceImages = referenceImagesChanged
-        ? <OrderReferenceImage>[
-            for (final image in _draftBaseline.referenceImages)
-              if (!_referenceImages.any((item) => item.id == image.id)) image,
-          ]
-        : const <OrderReferenceImage>[];
+    // Remove committed images from this entity's metadata only.
+    // Binary deletion must wait until every bound device has acknowledged
+    // the removal. An offline peer may still have a live reference, and
+    // Syncthing would propagate an immediate file deletion to that peer.
     final reopenDeliveredOrder =
         current.isCompleted && !current.isArchived && nodeChanged;
 
@@ -296,14 +294,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
     widget.store.updateOrder(updated);
     _sessionAddedReferenceImages.clear();
-    if (removedReferenceImages.isNotEmpty) {
-      unawaited(
-        _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: removedReferenceImages,
-        ),
-      );
-    }
+
     setState(() => _editing = false);
   }
 
