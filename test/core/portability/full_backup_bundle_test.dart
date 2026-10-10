@@ -194,7 +194,7 @@ void main() {
     }
   });
 
-  test('full backup refuses same-size ZIP data with corrupted central CRC', () async {
+  test('full backup refuses same-size corrupted art bytes despite valid ZIP headers', () async {
     final bytes = <int>[11, 22, 33, 44, 55];
     final asset = File(
       '${syncRoot.path}/assets/order-reference-images/b3JkZXItMQ/ref-1.png',
@@ -214,21 +214,24 @@ void main() {
       isTrue,
     );
     final zip = await exportedFile.readAsBytes();
-    var header = -1;
-    for (var i = 0; i < zip.length - 24; i++) {
-      // ZIP central-directory file header: 50 4B 01 02.
-      if (zip[i] == 0x50 &&
-          zip[i + 1] == 0x4b &&
-          zip[i + 2] == 0x01 &&
-          zip[i + 3] == 0x02) {
-        header = i;
+    // Art is stored without recompressing it; corrupt its actual payload,
+    // leaving the headers, file length and original CRC intact.
+    var imageOffset = -1;
+    for (var i = 0; i <= zip.length - bytes.length; i++) {
+      var matches = true;
+      for (var k = 0; k < bytes.length; k++) {
+        if (zip[i + k] != bytes[k]) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) {
+        imageOffset = i;
         break;
       }
     }
-    expect(header, greaterThanOrEqualTo(0));
-    // CRC-32 is at offset 16 of the central-directory file header.
-    // Declared sizes are unchanged, so pure length checks would miss this.
-    zip[header + 16] ^= 0x1;
+    expect(imageOffset, greaterThanOrEqualTo(0));
+    zip[imageOffset + 2] ^= 0x1;
     await exportedFile.writeAsBytes(zip, flush: true);
 
     await expectLater(
