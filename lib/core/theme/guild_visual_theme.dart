@@ -147,7 +147,7 @@ class GuildDoubleOutline extends ShapeBorder {
     if (rect.width <= inset * 2 || rect.height <= inset * 2) return;
     RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(
-        (radius - inset).clamp(0.0, double.infinity),
+        (radius > inset ? radius - inset : 0.0),
       ),
       side: BorderSide(color: innerColor, width: 0.7),
     ).paint(
