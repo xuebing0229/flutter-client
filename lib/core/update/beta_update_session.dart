@@ -74,7 +74,22 @@ class BetaUpdateSession extends ChangeNotifier {
     try {
       final latest = await updater.fetchLatest();
       _latest = latest;
-      _status = latest.build > _currentBuild ? '发现新的测试版' : '已经是最新测试版';
+
+      int? resumableBytes;
+      if (Platform.isWindows && latest.build > _currentBuild) {
+        resumableBytes = await updater.resumableBytes(latest);
+      }
+
+      if (resumableBytes != null && resumableBytes > 0) {
+        _receivedBytes = resumableBytes;
+        _totalBytes = null;
+        _paused = true;
+        _status = '发现未完成下载，可继续下载';
+      } else {
+        _paused = false;
+        _status =
+            latest.build > _currentBuild ? '发现新的测试版' : '已经是最新测试版';
+      }
     } on SocketException {
       _status = '网络连接失败，请检查当前网络后重试';
     } catch (error) {
