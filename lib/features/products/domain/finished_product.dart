@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import '../../../core/finance/income_calculator.dart';
+import 'sale_receipt.dart';
 import '../../orders/domain/queue_order.dart';
 
 enum ProductSaleType {
@@ -28,6 +31,7 @@ class FinishedProduct {
     this.defaultOrder = 0,
     this.soldCount = 0,
     this.saleRecords = const <DateTime>[],
+    this.saleReceipts = const <SaleReceipt>[],
     this.archivedAt,
     this.isArchived = false,
     this.isPinned = false,
@@ -60,6 +64,9 @@ class FinishedProduct {
 
   /// Timestamp for each recorded sale.
   final List<DateTime> saleRecords;
+
+  /// Amount/platform snapshots for each sale. Older files have only dates.
+  final List<SaleReceipt> saleReceipts;
 
   /// Timestamp when this product was moved into the archive.
   final DateTime? archivedAt;
@@ -112,6 +119,86 @@ class FinishedProduct {
         deductionFee: deductionFeeAmount,
       );
 
+  /// Reconcile historical dates with frozen receipts. Legacy dates are
+  /// estimated once using the price known at migration; never pretend these
+  /// values were present in the original transaction records.
+  List<SaleReceipt> get accountedSales {
+    final byDate = <int, List<SaleReceipt>>{};
+    for (final receipt in saleReceipts) {
+      byDate.putIfAbsent(
+        receipt.soldAt.toUtc().microsecondsSinceEpoch,
+        () => <SaleReceipt>[],
+      ).add(receipt);
+    }
+    for (final group in byDate.values) {
+      group.sort((a, b) => a.id.compareTo(b.id));
+    }
+
+    final ordinalByDate = <int, int>{};
+    final result = <SaleReceipt>[];
+    for (final at in saleRecords) {
+      final timestamp = at.toUtc().microsecondsSinceEpoch;
+      final ordinal = ordinalByDate.update(
+        timestamp,
+        (value) => value + 1,
+        ifAbsent: () => 0,
+      );
+      final existing = byDate[timestamp];
+      if (existing != null && existing.isNotEmpty) {
+        result.add(existing.removeAt(0));
+      } else {
+        result.add(SaleReceipt(
+          id: 'legacy-$id-$timestamp-$ordinal',
+          soldAt: at,
+          netIncome: realIncome,
+          originalPrice: price,
+          serviceFee: serviceFeeAmount +
+              supplementFeeAmount - deductionFeeAmount,
+          platform: platform,
+          estimated: true,
+        ));
+      }
+    }
+    return List<SaleReceipt>.unmodifiable(result);
+  }
+
+  /// Centralized sale editing; single and multiple sale paths use identical
+  /// immutable bookkeeping so timestamps and snapshots never drift apart.
+  FinishedProduct withSaleCount(int requested, {DateTime? soldAt}) {
+    final desired = saleType == ProductSaleType.single
+        ? requested.clamp(0, 1)
+        : max(0, requested);
+    final dates = <DateTime>[...saleRecords];
+    final receipts = <SaleReceipt>[...accountedSales];
+    if (desired < dates.length) {
+      dates.removeRange(desired, dates.length);
+      receipts.removeRange(desired, receipts.length);
+    }
+    while (dates.length < desired) {
+      var at = soldAt ?? DateTime.now().toUtc();
+      if (soldAt == null && dates.contains(at)) {
+        at = at.add(Duration(microseconds: dates.length + 1));
+      }
+      dates.add(at);
+      final nonce = Random.secure().nextInt(0x7fffffff);
+      receipts.add(SaleReceipt(
+        id: 'sale-${at.toUtc().microsecondsSinceEpoch}-'
+            '${nonce.toRadixString(36)}',
+        soldAt: at,
+        netIncome: realIncome,
+        originalPrice: price,
+        serviceFee: serviceFeeAmount +
+            supplementFeeAmount - deductionFeeAmount,
+        platform: platform,
+      ));
+    }
+    return copyWith(
+      soldCount: desired,
+      saleRecords: dates,
+      saleReceipts: receipts,
+    );
+  }
+
   FinishedProduct copyWith({
     String? title,
     CommissionPlatform? platform,
@@ -129,6 +216,7 @@ class FinishedProduct {
     int? defaultOrder,
     int? soldCount,
     List<DateTime>? saleRecords,
+    List<SaleReceipt>? saleReceipts,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
     bool? isArchived,
@@ -161,6 +249,8 @@ class FinishedProduct {
       defaultOrder: defaultOrder ?? this.defaultOrder,
       soldCount: nextSoldCount,
       saleRecords: saleRecords ?? this.saleRecords,
+      // copyWith seals legacy income at the *old* price before edit.
+      saleReceipts: saleReceipts ?? accountedSales,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       isArchived: isArchived ?? this.isArchived,
       isPinned: isPinned ?? this.isPinned,
