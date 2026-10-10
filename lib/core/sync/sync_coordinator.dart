@@ -1312,10 +1312,11 @@ class SyncCoordinator extends ChangeNotifier {
           !state.isRevoked(deviceId) &&
           (_nextAssetGcCheckAt == null ||
               !now.isBefore(_nextAssetGcCheckAt!))) {
-        // Normal P2P reconciliation stays responsive every four seconds;
-        // expensive multi-peer asset deletion consensus only needs an hourly
-        // check because candidates have a minimum 30-day grace period.
-        _nextAssetGcCheckAt = now.add(const Duration(hours: 1));
+        // No arbitrary retention timer after confirmed unlink. Check for
+        // peer consensus frequently enough to release bytes promptly while
+        // keeping expensive full-record hashing off the four-second poll.
+        // The GC store skips that hashing entirely if nothing is pending.
+        _nextAssetGcCheckAt = now.add(const Duration(seconds: 30));
         try {
           final cleaned = await _assetGcStore.collectAcknowledged(
             accountId: accountId,
