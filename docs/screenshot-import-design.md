@@ -55,7 +55,7 @@
 
 ## 引擎与工程分层
 
-- Android：内置 Google ML Kit 中文识别模型，经 Kotlin 原生桥返回文字坐标，无须 Google Play Services 或网络请求，随 APK 打包。Windows：内置 RapidOcrOnnx 1.2.2 + PP-OCRv3 检测/识别/分类 ONNX 模型，随完整安装包和 ZIP 分发；不要求用户预装 Python/Tesseract。两端复用 Flutter/Dart 的卡片解析、预览去重和提交校验逻辑。
+- Android：内置 Google ML Kit 中文识别模型，经 Kotlin 原生桥返回文字坐标，无须 Google Play Services 或网络请求，随 APK 打包。Windows：改用 PaddleOCR 官方 C++ 本地部署链路，随包内置 Paddle Inference、OpenCV 与 PP-OCRv6 Small 检测/识别模型；不要求用户预装 Python/Tesseract，也不在运行时联网下载模型。Android 与 Windows 底层均采用官方 PaddleOCR 路线，两端继续复用 Flutter/Dart 的卡片解析、预览去重和提交校验逻辑。
 - 模型版本、许可证及模型 hash 固定；先拿用户提供的米画师和画加多卡片截图做准确率验证，不能仅凭基础示例保证结果。
 - 图像及 OCR 中间结果仅保留本地；不上传服务端。
 - **统一交付，不单独发布手机版或只有解析器的半成品**。合并前 CI 要完成 Dart 单元测试/全量分析、Android 原生 APK 编译、Windows Flutter 编译以及 Windows 离线 OCR 模型打包和原生 EXE 启动；真实手机/电脑截图识别须由实际运行 QA 核对。
@@ -73,6 +73,6 @@
 
 - 功能入口：排单与成品 FAB → 手动导入 / 截图导入。支持一次选择多图、各图继续追加、紧凑可展开预览、逐条编辑/移除、批量设置平台/节点预设/手续费/截稿时间、OCR 原图字段框核对。
 - 导入提交前统一验证必填字段和重复项，排单/成品各自单次变更 Store，现有账号数据监听负责落盘与同步；不会从成品橱窗截图生成售出流水或售出次数。
-- Windows 使用 RapidAI/RapidOcrOnnx Apache 2.0 开源库，其模型来自工程包含的 PP-OCRv3。构建脚本下载固定的 1.2.2 版本，必须保留第三方许可证。
+- Windows 使用 PaddleOCR 官方 `deploy/cpp_infer` C++ 产线，固定到上游提交 `dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf`，搭配官方 Paddle Inference 3.2.1、OpenCV 4.12.0 与 PP-OCRv6 Small 模型。构建产物和模型随安装包/ZIP 一并分发，保留 PaddleOCR/OpenCV 等许可证，不依赖运行时网络。
 - Android 采用内置中文 ML Kit 模型的离线 SDK，绝不把客户订单图上传网络 OCR 服务。
 - 所有自动判断只是预选，用户对低质量截图可直接补填并确认；OCR 正确率必须用真实不同平台/窗口尺寸截图来评估，不因规则单测通过就断言百分百准确。
