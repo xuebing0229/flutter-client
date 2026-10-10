@@ -454,6 +454,36 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     },
                   ),
                   const SizedBox(height: 16),
+                  if (selected != null && selected.imageA != null) ...[
+                    _DesktopPetOverlayPreview(
+                      imagePath: selected.imageA!,
+                      placement: selected.placementA,
+                      bubblePosition: _settings.bubblePosition,
+                      bubbleTextScale: _settings.bubbleTextScale,
+                      focusClockScale: _settings.focusClockScale,
+                      bubbleOffset: _settings.activeBubbleOffset,
+                      focusClockOffset: _settings.focusClockOffset,
+                      showFocusClock: widget.showFocus,
+                      onBubbleOffsetChanged: (offset) =>
+                          _settings.setBubbleOffset(
+                        _settings.bubblePosition,
+                        offset,
+                      ),
+                      onFocusClockOffsetChanged:
+                          _settings.setFocusClockOffset,
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    Text(
+                      '导入桌宠 A 图后，可以在这里直接拖动文字泡和计时板，调整它们相对桌宠的位置。',
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   _ScaleSetting(
                     label: '桌宠大小',
                     value: _settings.petScale,
@@ -464,12 +494,12 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                   ),
                   const SizedBox(height: 10),
                   _ScaleSetting(
-                    label: '文字泡大小',
-                    value: _settings.bubbleScale,
+                    label: '文字大小',
+                    value: _settings.bubbleTextScale,
                     min: 0.65,
                     max: 1.8,
                     onChanged: (value) =>
-                        unawaited(_settings.setBubbleScale(value)),
+                        unawaited(_settings.setBubbleTextScale(value)),
                   ),
                   const SizedBox(height: 10),
                   _ScaleSetting(
@@ -482,7 +512,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '头顶模式使用横向文字泡；旁边模式使用瘦长竖向文字泡。文字泡贴人物边界，计时板固定在人物右侧上半部；两者大小可分别调整并自动跟随当前主题。',
+                    '头顶与旁边模式共用同一文字大小；文字泡会按内容自动撑开，短句不会再占一大块。横向和竖向的文字泡位置分别记忆，计时板位置独立记忆；这些位置只在上面的桌宠预览里调整，桌面正常使用时不会误拖乱。',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -1213,6 +1243,356 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
             ],
           ),
         ],
+      ],
+    );
+  }
+}
+
+
+class _DesktopPetOverlayPreview extends StatefulWidget {
+  const _DesktopPetOverlayPreview({
+    required this.imagePath,
+    required this.placement,
+    required this.bubblePosition,
+    required this.bubbleTextScale,
+    required this.focusClockScale,
+    required this.bubbleOffset,
+    required this.focusClockOffset,
+    required this.showFocusClock,
+    required this.onBubbleOffsetChanged,
+    required this.onFocusClockOffsetChanged,
+  });
+
+  final String imagePath;
+  final DesktopPetPlacement placement;
+  final DesktopPetBubblePosition bubblePosition;
+  final double bubbleTextScale;
+  final double focusClockScale;
+  final DesktopPetOverlayOffset bubbleOffset;
+  final DesktopPetOverlayOffset focusClockOffset;
+  final bool showFocusClock;
+  final Future<void> Function(DesktopPetOverlayOffset offset)
+      onBubbleOffsetChanged;
+  final Future<void> Function(DesktopPetOverlayOffset offset)
+      onFocusClockOffsetChanged;
+
+  @override
+  State<_DesktopPetOverlayPreview> createState() =>
+      _DesktopPetOverlayPreviewState();
+}
+
+class _DesktopPetOverlayPreviewState
+    extends State<_DesktopPetOverlayPreview> {
+  late DesktopPetOverlayOffset _bubbleOffset;
+  late DesktopPetOverlayOffset _clockOffset;
+  bool _draggingBubble = false;
+  bool _draggingClock = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bubbleOffset = widget.bubbleOffset;
+    _clockOffset = widget.focusClockOffset;
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopPetOverlayPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_draggingBubble &&
+        (oldWidget.bubblePosition != widget.bubblePosition ||
+            !_sameOffset(oldWidget.bubbleOffset, widget.bubbleOffset))) {
+      _bubbleOffset = widget.bubbleOffset;
+    }
+    if (!_draggingClock &&
+        !_sameOffset(oldWidget.focusClockOffset, widget.focusClockOffset)) {
+      _clockOffset = widget.focusClockOffset;
+    }
+  }
+
+  bool _sameOffset(
+    DesktopPetOverlayOffset left,
+    DesktopPetOverlayOffset right,
+  ) =>
+      (left.x - right.x).abs() < 0.0001 &&
+      (left.y - right.y).abs() < 0.0001;
+
+  void _moveBubble(Offset delta, double petSide) {
+    if (petSide <= 0) return;
+    setState(() {
+      _bubbleOffset = _bubbleOffset.copyWith(
+        x: _bubbleOffset.x + delta.dx / petSide,
+        y: _bubbleOffset.y + delta.dy / petSide,
+      );
+    });
+  }
+
+  void _moveClock(Offset delta, double petSide) {
+    if (petSide <= 0) return;
+    setState(() {
+      _clockOffset = _clockOffset.copyWith(
+        x: _clockOffset.x + delta.dx / petSide,
+        y: _clockOffset.y + delta.dy / petSide,
+      );
+    });
+  }
+
+  Future<void> _saveBubble() async {
+    _draggingBubble = false;
+    await widget.onBubbleOffsetChanged(_bubbleOffset);
+  }
+
+  Future<void> _saveClock() async {
+    _draggingClock = false;
+    await widget.onFocusClockOffsetChanged(_clockOffset);
+  }
+
+  Future<void> _resetBubble() async {
+    const offset = DesktopPetOverlayOffset();
+    setState(() => _bubbleOffset = offset);
+    await widget.onBubbleOffsetChanged(offset);
+  }
+
+  Future<void> _resetClock() async {
+    const offset = DesktopPetOverlayOffset();
+    setState(() => _clockOffset = offset);
+    await widget.onFocusClockOffsetChanged(offset);
+  }
+
+  Widget _petImage(double petSide) {
+    final file = File(widget.imagePath);
+    return ClipRect(
+      child: FractionalTranslation(
+        translation: Offset(
+          widget.placement.offsetX / 2,
+          widget.placement.offsetY / 2,
+        ),
+        child: Transform.scale(
+          scale: widget.placement.scale,
+          child: Image.file(
+            file,
+            width: petSide,
+            height: petSide,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) =>
+                const Center(child: Icon(Icons.broken_image_outlined)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _bubbleSample(ColorScheme colors) {
+    final fontSize = 14 * widget.bubbleTextScale;
+    final decoration = BoxDecoration(
+      color: colors.surface,
+      border: Border.all(color: colors.outlineVariant),
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [
+        BoxShadow(
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+          color: colors.shadow.withValues(alpha: 0.12),
+        ),
+      ],
+    );
+
+    if (widget.bubblePosition == DesktopPetBubblePosition.side) {
+      const chars = ['文', '字', '泡'];
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+        decoration: decoration,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final char in chars)
+              Text(
+                char,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  height: 1.15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: decoration,
+      child: Text(
+        '文字泡示例',
+        style: TextStyle(
+          fontSize: fontSize,
+          height: 1.2,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _clockSample(ColorScheme colors) {
+    final scale = widget.focusClockScale;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: 10 * scale,
+        vertical: 7 * scale,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(10 * scale),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 8 * scale,
+            offset: Offset(0, 2 * scale),
+            color: colors.shadow.withValues(alpha: 0.12),
+          ),
+        ],
+      ),
+      child: Text(
+        '⏱ 00:45:12',
+        style: TextStyle(
+          fontSize: 13 * scale,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '组件位置',
+          style: Theme.of(context)
+              .textTheme
+              .labelLarge
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '在预览里拖动文字泡和计时板。位置按桌宠为基准保存，之后移动桌宠时会一起移动。',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final petSide =
+                (width * 0.42).clamp(140.0, 240.0).toDouble();
+            final stageHeight =
+                (petSide * 1.55).clamp(260.0, 360.0).toDouble();
+            final centerX = width / 2;
+            final centerY = stageHeight * 0.58;
+
+            final bubbleBase = widget.bubblePosition ==
+                    DesktopPetBubblePosition.side
+                ? Offset(-petSide * 0.62, -petSide * 0.02)
+                : Offset(0, -petSide * 0.63);
+            final clockBase = Offset(petSide * 0.62, -petSide * 0.27);
+            final bubbleCenter = Offset(
+              centerX + bubbleBase.dx + _bubbleOffset.x * petSide,
+              centerY + bubbleBase.dy + _bubbleOffset.y * petSide,
+            );
+            final clockCenter = Offset(
+              centerX + clockBase.dx + _clockOffset.x * petSide,
+              centerY + clockBase.dy + _clockOffset.y * petSide,
+            );
+
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                height: stageHeight,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerLow,
+                  border: Border.all(color: colors.outlineVariant),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    Positioned(
+                      left: centerX - petSide / 2,
+                      top: centerY - petSide / 2,
+                      width: petSide,
+                      height: petSide,
+                      child: IgnorePointer(child: _petImage(petSide)),
+                    ),
+                    Positioned(
+                      left: bubbleCenter.dx,
+                      top: bubbleCenter.dy,
+                      child: FractionalTranslation(
+                        translation: const Offset(-0.5, -0.5),
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onPanStart: (_) => _draggingBubble = true,
+                            onPanUpdate: (details) =>
+                                _moveBubble(details.delta, petSide),
+                            onPanEnd: (_) => unawaited(_saveBubble()),
+                            onPanCancel: () => unawaited(_saveBubble()),
+                            child: _bubbleSample(colors),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (widget.showFocusClock)
+                      Positioned(
+                        left: clockCenter.dx,
+                        top: clockCenter.dy,
+                        child: FractionalTranslation(
+                          translation: const Offset(-0.5, -0.5),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.move,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onPanStart: (_) => _draggingClock = true,
+                              onPanUpdate: (details) =>
+                                  _moveClock(details.delta, petSide),
+                              onPanEnd: (_) => unawaited(_saveClock()),
+                              onPanCancel: () => unawaited(_saveClock()),
+                              child: _clockSample(colors),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            TextButton.icon(
+              onPressed: () => unawaited(_resetBubble()),
+              icon: const Icon(Icons.restart_alt_rounded, size: 18),
+              label: Text(
+                widget.bubblePosition == DesktopPetBubblePosition.side
+                    ? '重置竖向文字泡位置'
+                    : '重置横向文字泡位置',
+              ),
+            ),
+            if (widget.showFocusClock)
+              TextButton.icon(
+                onPressed: () => unawaited(_resetClock()),
+                icon: const Icon(Icons.timer_outlined, size: 18),
+                label: const Text('重置计时板位置'),
+              ),
+          ],
+        ),
       ],
     );
   }
