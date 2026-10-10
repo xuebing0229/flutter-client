@@ -86,8 +86,11 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('guild-safe-art-gc-');
     records = _SyncRoot(temp);
-    acks = SyncGcAckStore(recordStore: records);
     now = DateTime.utc(2026, 1, 1);
+    acks = SyncGcAckStore(
+      recordStore: records,
+      clock: () => now,
+    );
     gc = SyncAssetGcStore(
       recordStore: records,
       gcAckStore: acks,
@@ -305,6 +308,7 @@ void main() {
     );
     expect(await image.exists(), isTrue);
     now = now.add(const Duration(days: 1));
+    await ackDevices(current);
     expect(
       await gc.collectAcknowledged(
         accountId: accountId,
@@ -313,6 +317,38 @@ void main() {
       ),
       1,
     );
+  });
+
+  test('a disconnected device ACK expires and must be refreshed', () async {
+    final image = await createImage();
+    await gc.registerUnlinked(
+      accountId: accountId,
+      relativePaths: [imagePath],
+    );
+    now = now.add(const Duration(days: 31));
+    final state = recordSet();
+    await ackDevices(state);
+    now = now.add(const Duration(hours: 73));
+
+    Future<int> collect() => gc.collectAcknowledged(
+      accountId: accountId,
+      activeDeviceIds: {'phone', 'desktop'},
+      recordsByKind: state,
+    );
+    expect(await collect(), 0);
+    expect(await image.exists(), isTrue);
+
+    await ackDevices(state, desktop: false);
+    expect(await collect(), 0);
+    expect(await image.exists(), isTrue);
+
+    await acks.writeSnapshot(
+      accountId: accountId,
+      deviceId: 'desktop',
+      recordsByKind: state,
+    );
+    expect(await collect(), 1);
+    expect(await image.exists(), isFalse);
   });
 
   test('rejects unsafe paths and never deletes a symlink target', () async {
