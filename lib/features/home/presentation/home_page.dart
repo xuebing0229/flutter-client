@@ -389,9 +389,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _onSyncCoordinatorChanged() {
     if (!mounted || !_ready) return;
 
-    final nextProgress = _activeSyncProgress(
-      _syncCoordinator.transportStatus.syncProgress,
-    );
+    final transportStatus = _syncCoordinator.transportStatus;
+    final nextProgress = transportStatus.connectedDeviceIds.isEmpty
+        ? null
+        : _activeSyncProgress(transportStatus.syncProgress);
     final nextSignature = _syncProgressSignature(nextProgress);
     if (nextSignature != _syncProgressOverlaySignature) {
       setState(() {
