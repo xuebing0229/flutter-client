@@ -1,12 +1,21 @@
-name: Complete backup validation
+name: Flutter Regression Validation
 
 on:
   push:
     branches:
-      - 'feat/complete-backup-and-default-order'
+      - main
+      - 'audit/prebeta-*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: flutter-regression-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -22,5 +31,5 @@ jobs:
         run: flutter pub get
       - name: Analyze
         run: flutter analyze
-      - name: Test
+      - name: Run entire Flutter test suite
         run: flutter test
