@@ -591,6 +591,10 @@ class SyncMergeEngine {
         final id = entry['id'];
         if (id is String && id.isNotEmpty) receipts[id] = entry;
       }
+      // Sale IDs are immutable and never reused. A reversal must win over
+      // every older add operation regardless of skewed device clocks or
+      // merge order; applying removals only after all additions ensures it.
+      final removedSaleIds = <String>{};
       for (final operation in receiptOperations) {
         final added = operation.metadata['added'];
         if (added is List) {
@@ -607,10 +611,11 @@ class SyncMergeEngine {
         }
         final removed = operation.metadata['removed'];
         if (removed is List) {
-          for (final id in removed) {
-            if (id is String) receipts.remove(id);
-          }
+          removedSaleIds.addAll(removed.whereType<String>());
         }
+      }
+      for (final id in removedSaleIds) {
+        receipts.remove(id);
       }
       values['saleReceipts'] = receipts.values.toList(growable: false);
     }
