@@ -214,8 +214,9 @@ class _ArchivePageState extends State<ArchivePage> {
             '${imageBytes > 0 ? '（约 ${_formatBytes(imageBytes)}）' : ''}'
             '${undatedLegacyProducts > 0 ? '\n\n有 $undatedLegacyProducts 个旧版成品没有归档日期，'
                 '本次不会删除。' : ''}'
-            '\n\n删除后无法从归档恢复，对应的历史收入、日程记录和参考图也会一起移除，'
-            '并同步删除到其他设备。'
+            '\n\n删除后无法从归档恢复，相关历史收入、日程记录和参考图关联会一起移除，'
+            '并同步到其他设备。参考图原文件会暂时保留，避免离线设备断图，'
+            '因此不会立即释放占用的磁盘空间。'
             '如需长期留存，建议先导出完整备份。',
           ),
           actions: [
@@ -240,11 +241,9 @@ class _ArchivePageState extends State<ArchivePage> {
     setState(() => _cleaning = true);
     String? syncWarning;
     try {
-      await _referenceImageStore.deleteImages(
-        accountId: widget.accountId,
-        images: images,
-      );
-
+      // The order/product references are removed from the shared metadata.
+      // Do not remove their files yet: an offline Syncthing peer can still
+      // have a live reference and might reintroduce it on reconnection.
       widget.orderStore.deleteOrders(orders.map((order) => order.id));
       widget.productStore.deleteProducts(
         products.map((product) => product.id),
@@ -262,7 +261,7 @@ class _ArchivePageState extends State<ArchivePage> {
           content: Text(
             syncWarning ??
                 '已永久删除 ${orders.length} 个排单、${products.length} 个成品'
-                    '${images.isEmpty ? '' : '和 ${images.length} 张参考图'}。',
+                    '${images.isEmpty ? '' : '及 ${images.length} 条参考图关联'}。',
           ),
           behavior: SnackBarBehavior.floating,
         ),
