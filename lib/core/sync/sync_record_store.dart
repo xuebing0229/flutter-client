@@ -368,8 +368,8 @@ class SyncRecordStore {
         ? null
         : base64Url.encode(utf8.encode(onlyId)).replaceAll('=', '');
     final standardRecordName = RegExp(
-      r'^[A-Za-z0-9_-]+(?:\\.sync-conflict-[A-Za-z0-9._-]+)?\\.json
-
+      r'^[A-Za-z0-9_-]+(?:\.sync-conflict-[A-Za-z0-9._-]+)?\.json',
+    );
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
 
@@ -377,7 +377,8 @@ class SyncRecordStore {
         final name = entity.uri.pathSegments.last;
         final relevant = name == '$wantedStem.json' ||
             name.startsWith('$wantedStem.sync-conflict-');
-        if (!relevant && standardRecordName.hasMatch(name)) {
+        final match = standardRecordName.firstMatch(name);
+        if (!relevant && match != null && match.end == name.length) {
           // Another record's canonical/Syncthing variant. Don't open it.
           continue;
         }
