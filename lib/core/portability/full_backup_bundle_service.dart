@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 
 import '../sync/sync_record_store.dart';
+import '../../features/orders/domain/queue_order.dart';
 import 'app_backup_data.dart';
 import 'data_portability_file_bridge.dart';
 
@@ -226,35 +227,34 @@ class FullBackupBundleService {
     final result = <String, File>{};
     final missing = <String>[];
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
-        final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
-          throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
-          );
-        }
-
-        final file = File(_joinRelative(syncRoot.path, relativePath));
-        if (!await file.exists()) {
-          missing.add(image.fileName);
-          continue;
-        }
-
-        final actualSize = await file.length();
-        if (actualSize != image.sizeBytes) {
-          throw StateError(
-            '参考图“${image.fileName}”文件大小与记录不一致，'
-            '请等待设备同步稳定后再导出。',
-          );
-        }
-
-        final previous = result[relativePath];
-        if (previous != null && previous.path != file.path) {
-          throw FormatException('参考图路径重复：$relativePath');
-        }
-        result[relativePath] = file;
+    for (final referenced in _referencedImages(backup)) {
+      final image = referenced.image;
+      final relativePath = image.relativePath;
+      if (!_isReferenceAssetPath(relativePath)) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图路径：$relativePath',
+        );
       }
+
+      final file = File(_joinRelative(syncRoot.path, relativePath));
+      if (!await file.exists()) {
+        missing.add(image.fileName);
+        continue;
+      }
+
+      final actualSize = await file.length();
+      if (actualSize != image.sizeBytes) {
+        throw StateError(
+          '参考图“${image.fileName}”文件大小与记录不一致，'
+          '请等待设备同步稳定后再导出。',
+        );
+      }
+
+      final previous = result[relativePath];
+      if (previous != null && previous.path != file.path) {
+        throw FormatException('参考图路径重复：$relativePath');
+      }
+      result[relativePath] = file;
     }
 
     if (missing.isNotEmpty) {
@@ -275,29 +275,46 @@ class FullBackupBundleService {
   }) async {
     final paths = <String>{};
 
+    for (final referenced in _referencedImages(backup)) {
+      final image = referenced.image;
+      final relativePath = image.relativePath;
+      if (!_isReferenceAssetPath(relativePath)) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图路径：$relativePath',
+        );
+      }
+      if (!paths.add(relativePath)) {
+        continue;
+      }
+
+      final file = File(_joinRelative(extractedRoot.path, relativePath));
+      if (!await file.exists()) {
+        throw FormatException(
+          '完整备份缺少参考图原文件：${image.fileName}',
+        );
+      }
+      if (await file.length() != image.sizeBytes) {
+        throw FormatException(
+          '完整备份中的参考图文件损坏：${image.fileName}',
+        );
+      }
+    }
+  }
+
+  // Both order and finished-product reference images live in the same
+  // asset directory. All owners must participate in export and import
+  // validation or a seemingly successful "full" backup can lose art.
+  Iterable<({String owner, OrderReferenceImage image})> _referencedImages(
+    AppBackupData backup,
+  ) sync* {
     for (final order in backup.orders) {
       for (final image in order.referenceImages) {
-        final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
-          throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
-          );
-        }
-        if (!paths.add(relativePath)) {
-          continue;
-        }
-
-        final file = File(_joinRelative(extractedRoot.path, relativePath));
-        if (!await file.exists()) {
-          throw FormatException(
-            '完整备份缺少参考图原文件：${image.fileName}',
-          );
-        }
-        if (await file.length() != image.sizeBytes) {
-          throw FormatException(
-            '完整备份中的参考图文件损坏：${image.fileName}',
-          );
-        }
+        yield (owner: '排单“${order.title}”', image: image);
+      }
+    }
+    for (final product in backup.products) {
+      for (final image in product.referenceImages) {
+        yield (owner: '成品“${product.title}”', image: image);
       }
     }
   }

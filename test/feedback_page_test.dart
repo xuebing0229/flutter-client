@@ -11,11 +11,17 @@ void main() {
 
     expect(feedbackFormUrl, 'https://v.wjx.cn/vm/YXtnlrL.aspx');
     expect(find.widgetWithText(AppBar, '问题反馈'), findsOneWidget);
+    expect(find.byType(FeedbackPoster), findsOneWidget);
+
+    // Buttons appear below the poster on the default 800x600 test viewport.
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
     expect(find.text('打开反馈问卷'), findsOneWidget);
     expect(find.text('保存反馈图片'), findsOneWidget);
     expect(find.text('复制反馈链接'), findsOneWidget);
-    expect(find.byType(FeedbackPoster), findsOneWidget);
 
+    await tester.drag(find.byType(ListView), const Offset(0, 600));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(FeedbackPoster));
     await tester.pumpAndSettle();
 
@@ -42,6 +48,8 @@ void main() {
           ),
         ),
       );
+      // MaterialApp animates ThemeData changes; read the settled theme.
+      await tester.pumpAndSettle();
       final qr = tester.widget<QrImageView>(find.byType(QrImageView));
       expect(qr.backgroundColor, Colors.white);
       expect(tester.getSize(find.byType(FeedbackPoster)),

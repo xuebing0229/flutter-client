@@ -203,7 +203,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
           if (await target.exists()) await target.delete();
           await partial.rename(target.path);
           onProgress?.call(existingBytes, expectedSizeBytes ?? totalBytes);
-          return _install(target);
+          return await _install(target);
         }
 
         if (await partial.exists()) await partial.delete();
