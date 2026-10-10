@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,13 +15,25 @@ class SyncRecordStore {
 
   final SyncMergeEngine _engine;
 
+  // Shared across store instances on this isolate: an import may spend time
+  // copying gigabytes into its staging folder. A concurrent rootDirectory()
+  // must not mistake it for an abandoned crash remnant and delete it.
+  static final Map<String, Completer<void>> _activeRestores = {};
+
   Future<Directory> rootDirectory(String accountId) async {
-    final support = await getApplicationSupportDirectory();
     final safeAccountId = requireValidAccountId(accountId);
+    while (_activeRestores[safeAccountId] case final pending?) {
+      await pending.future;
+    }
+    final support = await getApplicationSupportDirectory();
     final accountDirectory = Directory(
       '${support.path}/accounts/$safeAccountId',
     );
     await accountDirectory.create(recursive: true);
+    // Another restore may have started while awaiting support-directory IO.
+    while (_activeRestores[safeAccountId] case final pending?) {
+      await pending.future;
+    }
     await _recoverDirectorySwap(accountDirectory);
     final directory = Directory('${accountDirectory.path}/sync-v1');
     await directory.create(recursive: true);
@@ -44,6 +57,11 @@ class SyncRecordStore {
       if (name.startsWith('sync-v1.previous-')) previous.add(entity);
     }
     previous.sort((a, b) => a.path.compareTo(b.path));
+    final safeAccountId =
+        accountDirectory.uri.pathSegments.where((part) => part.isNotEmpty).last;
+    while (_activeRestores[safeAccountId] case final pending?) {
+      await pending.future;
+    }
     if (!await target.exists() && previous.isNotEmpty) {
       // A staging import may still be incomplete. Roll back to the last
       // complete directory if the app stopped between the two renames.
@@ -52,6 +70,11 @@ class SyncRecordStore {
 
     if (await target.exists()) {
       for (final directory in [...staging, ...previous]) {
+        // Avoid deleting an in-progress staging folder after an async
+        // directory listing. Wait for its owner to finish first.
+        while (_activeRestores[safeAccountId] case final pending?) {
+          await pending.future;
+        }
         try {
           if (await directory.exists()) await directory.delete(recursive: true);
         } catch (_) {
@@ -204,7 +227,15 @@ class SyncRecordStore {
 
     // Resolve through rootDirectory so test stores and alternate local
     // roots use the same atomic replacement path as production.
-    final target = await rootDirectory(safeAccountId);
+    var target = await rootDirectory(safeAccountId);
+    // Atomic in the Dart isolate between the last check and assignment.
+    while (_activeRestores[safeAccountId] case final pending?) {
+      await pending.future;
+      target = await rootDirectory(safeAccountId);
+    }
+    final restoreGuard = Completer<void>();
+    _activeRestores[safeAccountId] = restoreGuard;
+    try {
     final accountDirectory = target.parent;
     final suffix = DateTime.now().microsecondsSinceEpoch.toString();
     final staging = Directory(
@@ -317,6 +348,12 @@ class SyncRecordStore {
         } catch (_) {}
       }
       rethrow;
+    }
+    } finally {
+      if (identical(_activeRestores[safeAccountId], restoreGuard)) {
+        _activeRestores.remove(safeAccountId);
+      }
+      restoreGuard.complete();
     }
   }
 
