@@ -222,6 +222,7 @@ class SyncRecordStore {
     Map<SyncEntityKind, Set<String>> requiredIds =
         const <SyncEntityKind, Set<String>>{},
     Directory? assetSourceDirectory,
+    bool transferImportedAssets = false,
   }) async {
     final safeAccountId = requireValidAccountId(accountId);
     final decoded = _decodePortableRecords(
@@ -250,6 +251,9 @@ class SyncRecordStore {
       '${accountDirectory.path}/sync-v1.previous-$suffix',
     );
 
+    var transferredAssets = false;
+    final stageAssets = Directory('${staging.path}/assets');
+
     try {
       await staging.create(recursive: true);
       await File(
@@ -277,10 +281,21 @@ class SyncRecordStore {
       // The imported copy takes precedence when old/new paths overlap.
       if (assetSourceDirectory != null &&
           await assetSourceDirectory.exists()) {
-        await _copyDirectory(
-          assetSourceDirectory,
-          Directory('${staging.path}/assets'),
-        );
+        if (transferImportedAssets) {
+          // A ZIP was extracted into a disposable temporary directory. On
+          // the same filesystem, moving its assets into staging avoids a
+          // second multi-gigabyte copy. Other callers retain copy semantics.
+          // Across volumes (or when Windows holds an open handle), use the
+          // original streamed copy as a safe fallback.
+          try {
+            await assetSourceDirectory.rename(stageAssets.path);
+            transferredAssets = true;
+          } on FileSystemException {
+            await _copyDirectory(assetSourceDirectory, stageAssets);
+          }
+        } else {
+          await _copyDirectory(assetSourceDirectory, stageAssets);
+        }
       }
 
       var movedPrevious = false;
@@ -347,6 +362,21 @@ class SyncRecordStore {
         }
       }
     } catch (_) {
+      // On failure restore the caller's imported temp directory if we
+      // transferred ownership. It remains valid for retry/cleanup, and the
+      // previous live sync root has already been restored by the inner catch.
+      if (transferredAssets &&
+          assetSourceDirectory != null &&
+          await stageAssets.exists()) {
+        try {
+          await stageAssets.rename(assetSourceDirectory.path);
+        } catch (_) {
+          // The ZIP is still the authoritative original if the OS prevents
+          // returning the staged temp directory. Keep the stage intact and
+          // report the original restore error rather than deleting the art.
+          rethrow;
+        }
+      }
       if (await staging.exists()) {
         try {
           await staging.delete(recursive: true);
