@@ -1172,8 +1172,8 @@ class SyncCoordinator extends ChangeNotifier {
 
       // A removed link alone is NOT permission to delete a shared image.
       // Only register binaries from an existing saved entity; safe physical
-      // cleanup is gated on a long grace period and new-protocol ACKs from
-      // every still-bound device.
+      // cleanup is gated on current new-protocol ACKs from every still-bound
+      // device. No age-based waiting or duplicate recovery mechanism.
       if (kind == SyncEntityKind.order || kind == SyncEntityKind.product) {
         final beforeRefs = before == null
             ? <String>{}
@@ -1385,7 +1385,6 @@ class SyncCoordinator extends ChangeNotifier {
     }
 
     var changed = false;
-    final now = DateTime.now().toUtc();
 
     for (final kind in SyncEntityKind.values) {
       final records = recordsByKind[kind]!;
@@ -1403,21 +1402,9 @@ class SyncCoordinator extends ChangeNotifier {
         if (!seenByAll) continue;
 
         if (record.isDeleted) {
-          DateTime? deletedAt;
-          for (final operation in record.operations.values) {
-            if (operation.kind != 'delete') continue;
-            if (deletedAt == null || operation.occurredAt.isAfter(deletedAt)) {
-              deletedAt = operation.occurredAt;
-            }
-          }
-          // Keep a short safety window even after every active device has seen
-          // the tombstone. Revoked devices no longer participate.
-          if (deletedAt == null ||
-              now.difference(deletedAt.toUtc()) <
-                  const Duration(hours: 24)) {
-            continue;
-          }
-
+          // Every still-bound device already ACKed this exact tombstone.
+          // A 24h timeout cannot add safety to a complete peer consensus;
+          // it only retains dead sync files longer than necessary.
           await _recordStore.deleteRecord(
             accountId: accountId,
             kind: kind,
