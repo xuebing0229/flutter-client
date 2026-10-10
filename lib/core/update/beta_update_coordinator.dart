@@ -52,6 +52,8 @@ class BetaUpdateCoordinator {
       fileName: 'app-beta-${manifest.build}',
       onProgress: onProgress,
       shouldPause: shouldPause,
+      expectedSizeBytes: manifest.sizeBytes,
+      expectedSha256: manifest.sha256,
     );
   }
 
