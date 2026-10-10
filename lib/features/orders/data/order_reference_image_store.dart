@@ -52,7 +52,7 @@ class OrderReferenceImageStore {
         );
       }
     } catch (_) {
-      await deleteImages(
+      await discardUnsavedImages(
         accountId: accountId,
         images: imported,
         requestScan: false,
@@ -147,7 +147,14 @@ class OrderReferenceImageStore {
     }
   }
 
-  Future<void> deleteImages({
+  /// Permanently delete **only files imported in an unsaved draft**.
+  ///
+  /// Never call this for images that were already committed to an order or
+  /// finished product. An offline bound device can still reference that asset
+  /// and Syncthing would propagate the deletion before the reference merge.
+  /// Committed images are unlinked in metadata but kept until a future
+  /// acknowledgement-aware asset GC can prove they are unreferenced.
+  Future<void> discardUnsavedImages({
     required String accountId,
     required Iterable<OrderReferenceImage> images,
     bool requestScan = true,
