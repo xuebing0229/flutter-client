@@ -9,6 +9,7 @@ import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/update/beta_update_session.dart';
+import '../../../core/update/update_manifest.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/portability/full_backup_bundle_service.dart';
@@ -66,11 +67,12 @@ class _SettingsPageState extends State<SettingsPage>
 
   bool get _checking => _betaUpdater.busy;
   bool get _downloadingUpdate => _betaUpdater.downloading;
+  bool get _pausedUpdate => _betaUpdater.paused;
   int get _downloadReceivedBytes => _betaUpdater.receivedBytes;
   int? get _downloadTotalBytes => _betaUpdater.totalBytes;
   String get _currentVersion => _betaUpdater.currentVersion;
   int get _currentBuild => _betaUpdater.currentBuild;
-  get _latest => _betaUpdater.latest;
+  UpdateManifest? get _latest => _betaUpdater.latest;
   String get _status => _betaUpdater.status;
   bool get _hasUpdate => _betaUpdater.hasUpdate;
 
@@ -547,6 +549,8 @@ class _SettingsPageState extends State<SettingsPage>
 
   Future<void> _downloadLatest() => _betaUpdater.downloadLatest();
 
+  void _pauseDownload() => _betaUpdater.pauseDownload();
+
   String _formatDownloadBytes(int bytes) {
     const mb = 1024 * 1024;
     if (bytes >= mb) {
@@ -722,7 +726,7 @@ class _SettingsPageState extends State<SettingsPage>
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  if (_downloadingUpdate && Platform.isWindows) ...[
+                  if ((_downloadingUpdate || _pausedUpdate) && Platform.isWindows) ...[
                     const SizedBox(height: 12),
                     LinearProgressIndicator(
                       value:
@@ -748,13 +752,31 @@ class _SettingsPageState extends State<SettingsPage>
                   SizedBox(
                     width: double.infinity,
                     child: _hasUpdate
-                        ? FilledButton.icon(
-                            onPressed: _checking ? null : _downloadLatest,
-                            icon: const Icon(Icons.download_rounded),
-                            label: Text(
-                              Platform.isWindows ? '下载并自动更新' : '下载并更新',
-                            ),
-                          )
+                        ? Platform.isWindows && _downloadingUpdate
+                            ? FilledButton.tonalIcon(
+                                onPressed: _betaUpdater.canPause
+                                    ? _pauseDownload
+                                    : null,
+                                icon: const Icon(Icons.pause_rounded),
+                                label: Text(
+                                  _betaUpdater.canPause ? '暂停下载' : '正在暂停…',
+                                ),
+                              )
+                            : FilledButton.icon(
+                                onPressed: _checking ? null : _downloadLatest,
+                                icon: Icon(
+                                  Platform.isWindows && _pausedUpdate
+                                      ? Icons.play_arrow_rounded
+                                      : Icons.download_rounded,
+                                ),
+                                label: Text(
+                                  Platform.isWindows && _pausedUpdate
+                                      ? '继续下载'
+                                      : Platform.isWindows
+                                      ? '下载并自动更新'
+                                      : '下载并更新',
+                                ),
+                              )
                         : OutlinedButton.icon(
                             onPressed: _checking ? null : _checkForBetaUpdate,
                             icon: _checking
