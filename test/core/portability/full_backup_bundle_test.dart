@@ -144,6 +144,56 @@ void main() {
     }
   });
 
+  test('orphaned synchronized files are retained but excluded from backup', () async {
+    final bytes = <int>[2, 4, 6, 8];
+    final asset = File(
+      '${syncRoot.path}/assets/order-reference-images/b3JkZXItMQ/ref-1.png',
+    );
+    await asset.parent.create(recursive: true);
+    await asset.writeAsBytes(bytes);
+
+    final original = backupWithImage(sizeBytes: bytes.length);
+    // A user removed the reference from an already saved order, but the
+    // physical binary is deliberately retained for any offline peer.
+    final removed = AppBackupData(
+      exportedAt: original.exportedAt,
+      orders: [original.orders.single.copyWith(referenceImages: const [])],
+      products: original.products,
+      nodePresets: original.nodePresets,
+      syncRecords: const [],
+    );
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+
+    expect(
+      await service.exportFullBackup(
+        accountId: 'account',
+        backup: removed,
+        fileName: 'backup.zip',
+      ),
+      isTrue,
+    );
+    expect(await asset.exists(), isTrue);
+    final imported = await service.readBackupFile(
+      exportedFile,
+      displayName: 'backup.zip',
+    );
+    try {
+      expect(imported.backup.orders.single.referenceImages, isEmpty);
+      expect(
+        await File(
+          '${imported.extractedDirectory!.path}/'
+          'assets/order-reference-images/b3JkZXItMQ/ref-1.png',
+        ).exists(),
+        isFalse,
+      );
+    } finally {
+      await imported.dispose();
+    }
+  });
+
   test('full backup refuses to silently omit an unsynced image', () async {
     final service = FullBackupBundleService(
       syncRecordStore: _TemporaryRecordStore(syncRoot),
