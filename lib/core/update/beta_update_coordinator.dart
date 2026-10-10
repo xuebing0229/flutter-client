@@ -30,6 +30,7 @@ class BetaUpdateCoordinator {
   Future<String> downloadAndInstall(
     UpdateManifest manifest, {
     UpdateDownloadProgressCallback? onProgress,
+    UpdateDownloadPauseCallback? shouldPause,
   }) async {
     if (!isBetaBuild) {
       throw StateError('Beta updater is disabled in stable builds.');
@@ -44,6 +45,7 @@ class BetaUpdateCoordinator {
       uri: uri,
       fileName: 'app-beta-${manifest.build}',
       onProgress: onProgress,
+      shouldPause: shouldPause,
     );
   }
 
