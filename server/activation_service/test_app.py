@@ -1,0 +1,182 @@
+"""Local-only regression tests for one-code-one-account activation.
+
+Generate an ephemeral signing key and use a temporary SQLite database.
+No real activation codes, admin tokens, or customer data are involved.
+"""
+
+import base64
+import json
+import tempfile
+import threading
+import unittest
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from server.activation_service import app as service
+
+
+def _url_b64(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+class ActivationServiceTests(unittest.TestCase):
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory(prefix="guild-license-test-")
+        self._previous_db = service.DB_PATH
+        self._previous_key = service.PUBLIC_KEY_B64URL
+        service.DB_PATH = str(Path(self._temp.name) / "licenses.sqlite3")
+        self._signer = Ed25519PrivateKey.generate()
+        public_bytes = self._signer.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        service.PUBLIC_KEY_B64URL = _url_b64(public_bytes)
+        service.init_db()
+
+        conn = service.connect_db()
+        try:
+            conn.execute(
+                """INSERT INTO admins (name, token_hash, created_at)
+                   VALUES (?, ?, ?)""",
+                ("test-admin", service.token_hash("test-admin-token"), service.utc_now()),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), service.Handler)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+        self.base_url = f"http://127.0.0.1:{self.httpd.server_port}"
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=5)
+        service.DB_PATH = self._previous_db
+        service.PUBLIC_KEY_B64URL = self._previous_key
+        self._temp.cleanup()
+
+    def _new_code(self, account_id="account_from_signed_code"):
+        conn = service.connect_db()
+        try:
+            cursor = conn.execute(
+                """INSERT INTO licenses (
+                   account_id, generated_by_admin_id,
+                   generated_by_name, created_at, note
+                ) VALUES (?, 1, 'test-admin', ?, '')""",
+                (account_id, service.utc_now()),
+            )
+            serial = str(cursor.lastrowid).zfill(6)
+            payload = json.dumps(
+                {"v": 2, "a": account_id, "s": serial},
+                separators=(",", ":"),
+            ).encode("utf-8")
+            code = f"AW2.{_url_b64(payload)}.{_url_b64(self._signer.sign(payload))}"
+            conn.execute(
+                "UPDATE licenses SET activation_code = ?, committed_at = ? WHERE account_id = ?",
+                (code, service.utc_now(), account_id),
+            )
+            conn.commit()
+            return code
+        finally:
+            conn.close()
+
+    def _redeem(self, code, claim_id):
+        payload = json.dumps(
+            {"activationCode": code, "claimId": claim_id}
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.base_url}/v1/activate",
+            data=payload,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, json.load(error)
+
+    def _redemption(self, account_id="account_from_signed_code"):
+        conn = service.connect_db()
+        try:
+            return conn.execute(
+                "SELECT redeemed_at, redemption_claim_id FROM licenses WHERE account_id = ?",
+                (account_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+
+    def test_first_activation_consumes_code_and_is_retryable_only_by_same_claim(self):
+        code = self._new_code()
+        claim_a = "claim-a-12345678901234567890"
+        claim_b = "claim-b-12345678901234567890"
+
+        first_status, first = self._redeem(code, claim_a)
+        retry_status, retry = self._redeem(code, claim_a)
+        rejected_status, rejected = self._redeem(code, claim_b)
+
+        self.assertEqual(first_status, 200)
+        self.assertFalse(first["idempotent"])
+        self.assertEqual(retry_status, 200)
+        self.assertTrue(retry["idempotent"])
+        self.assertEqual(first["redeemedAt"], retry["redeemedAt"])
+        self.assertEqual(rejected_status, 409)
+        self.assertEqual(rejected["error"], "already_redeemed")
+        self.assertEqual(self._redemption()["redemption_claim_id"], claim_a)
+
+    def test_concurrent_first_claims_never_create_two_registrations(self):
+        code = self._new_code()
+        gate = threading.Barrier(2)
+
+        def attempt(claim):
+            gate.wait(timeout=5)
+            return self._redeem(code, claim)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            a = executor.submit(attempt, "claim-a-12345678901234567890")
+            b = executor.submit(attempt, "claim-b-12345678901234567890")
+            responses = [a.result(timeout=10), b.result(timeout=10)]
+
+        self.assertEqual(sorted(status for status, _ in responses), [200, 409])
+        self.assertIsNotNone(self._redemption()["redeemed_at"])
+
+    def test_invalid_signature_does_not_redeem_record(self):
+        code = self._new_code()
+        malformed = code.rsplit(".", 1)[0] + ".AAAA"
+        status, payload = self._redeem(
+            malformed, "claim-a-12345678901234567890"
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_code")
+        self.assertIsNone(self._redemption()["redeemed_at"])
+
+    def test_signed_but_unregistered_code_is_rejected(self):
+        code = self._new_code("registered-account")
+        parts = code.split(".")
+        payload = json.dumps(
+            {"v": 2, "a": "unregistered-account", "s": "000999"},
+            separators=(",", ":"),
+        ).encode("utf-8")
+        unregistered_code = (
+            f"AW2.{_url_b64(payload)}.{_url_b64(self._signer.sign(payload))}"
+        )
+        self.assertNotEqual(code, unregistered_code)
+        status, response = self._redeem(
+            unregistered_code, "claim-a-12345678901234567890"
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(response["error"], "invalid_code")
+        self.assertIsNone(self._redemption("registered-account")["redeemed_at"])
+
+
+if __name__ == "__main__":
+    unittest.main()
