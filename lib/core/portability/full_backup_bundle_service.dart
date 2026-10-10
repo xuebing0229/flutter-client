@@ -259,12 +259,9 @@ class FullBackupBundleService {
           '备份包含未被任何排单或成品引用的资源：${entry.name}',
         );
       }
-      // Exporter writes image bytes with ZIP STORE, never deflate. Enforcing
-      // that contract also rules out highly compressible archive bombs while
-      // preserving legitimate 1GB+ pictures at their original size.
-      if (entry.compression != CompressionType.none) {
-        throw FormatException('参考图不允许二次 ZIP 压缩：${entry.name}');
-      }
+      // Check the declared uncompressed size against the manifest before
+      // writing any asset to disk. Do not restrict a compatible ZIP
+      // compression mode: some archive encoders report/store it differently.
       if (entry.size != declared) {
         throw FormatException(
           '备份参考图声明的文件大小与记录不一致：${entry.name}',
