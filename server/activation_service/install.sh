@@ -16,8 +16,14 @@ install -d -o root -g root -m 0755 /opt/adventure-license
 install -d -o adventure-license -g adventure-license -m 0750 /var/lib/adventure-license
 install -d -o root -g adventure-license -m 0750 /etc/adventure-license
 
+python3 -m py_compile app.py
+
 install -o root -g root -m 0755 app.py /opt/adventure-license/app.py
+install -o root -g root -m 0755 backup.sh /opt/adventure-license/backup.sh
+install -o root -g root -m 0755 smoke_test.sh /opt/adventure-license/smoke_test.sh
 install -o root -g root -m 0644 adventure-license.service /etc/systemd/system/adventure-license.service
+install -o root -g root -m 0644 adventure-license-backup.service /etc/systemd/system/adventure-license-backup.service
+install -o root -g root -m 0644 adventure-license-backup.timer /etc/systemd/system/adventure-license-backup.timer
 
 if [[ ! -f /etc/adventure-license/service.env ]]; then
   setup_key="$(python3 - <<'PY'
@@ -42,9 +48,12 @@ fi
 
 systemctl daemon-reload
 systemctl enable --now adventure-license
+systemctl enable --now adventure-license-backup.timer
 systemctl --no-pager --full status adventure-license || true
 
 echo
 echo "Local health check:"
-curl -fsS http://127.0.0.1:8765/health
+LICENSE_DB_PATH=/var/lib/adventure-license/license.db /opt/adventure-license/smoke_test.sh http://127.0.0.1:8765
 echo
+echo "Backup timer:"
+systemctl list-timers adventure-license-backup.timer --no-pager
