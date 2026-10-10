@@ -22,8 +22,8 @@ class SyncRecordStore {
 
   Future<Directory> rootDirectory(String accountId) async {
     final safeAccountId = requireValidAccountId(accountId);
-    while (_activeRestores[safeAccountId] case final pending?) {
-      await pending.future;
+    while (_activeRestores.containsKey(safeAccountId)) {
+      await _activeRestores[safeAccountId]!.future;
     }
     final support = await getApplicationSupportDirectory();
     final accountDirectory = Directory(
@@ -31,8 +31,8 @@ class SyncRecordStore {
     );
     await accountDirectory.create(recursive: true);
     // Another restore may have started while awaiting support-directory IO.
-    while (_activeRestores[safeAccountId] case final pending?) {
-      await pending.future;
+    while (_activeRestores.containsKey(safeAccountId)) {
+      await _activeRestores[safeAccountId]!.future;
     }
     await _recoverDirectorySwap(accountDirectory);
     final directory = Directory('${accountDirectory.path}/sync-v1');
@@ -59,8 +59,8 @@ class SyncRecordStore {
     previous.sort((a, b) => a.path.compareTo(b.path));
     final safeAccountId =
         accountDirectory.uri.pathSegments.where((part) => part.isNotEmpty).last;
-    while (_activeRestores[safeAccountId] case final pending?) {
-      await pending.future;
+    while (_activeRestores.containsKey(safeAccountId)) {
+      await _activeRestores[safeAccountId]!.future;
     }
     if (!await target.exists() && previous.isNotEmpty) {
       // A staging import may still be incomplete. Roll back to the last
@@ -72,8 +72,8 @@ class SyncRecordStore {
       for (final directory in [...staging, ...previous]) {
         // Avoid deleting an in-progress staging folder after an async
         // directory listing. Wait for its owner to finish first.
-        while (_activeRestores[safeAccountId] case final pending?) {
-          await pending.future;
+        while (_activeRestores.containsKey(safeAccountId)) {
+          await _activeRestores[safeAccountId]!.future;
         }
         try {
           if (await directory.exists()) await directory.delete(recursive: true);
