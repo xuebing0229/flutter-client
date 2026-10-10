@@ -165,8 +165,8 @@ class FinishedProduct {
   /// Centralized sale editing; single and multiple sale paths use identical
   /// immutable bookkeeping so timestamps and snapshots never drift apart.
   FinishedProduct withSaleCount(int requested, {DateTime? soldAt}) {
-    final desired = saleType == ProductSaleType.single
-        ? requested.clamp(0, 1)
+    final int desired = saleType == ProductSaleType.single
+        ? (requested <= 0 ? 0 : 1)
         : max(0, requested);
     final dates = <DateTime>[...saleRecords];
     final receipts = <SaleReceipt>[...accountedSales];
