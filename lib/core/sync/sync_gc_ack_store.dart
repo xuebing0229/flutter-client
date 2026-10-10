@@ -83,18 +83,22 @@ class SyncGcAckStore {
     required String accountId,
     required String deviceId,
     required Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
+    Set<String>? assetGcPeers,
   }) async {
     final records = await signatures(recordsByKind);
     final now = _clock().toUtc();
+    final peers = assetGcPeers?.toList()..sort();
     final payload = <String, dynamic>{
       'schemaVersion': 1,
       'deviceId': deviceId,
       // Old clients omit this capability. A file GC must never infer support
       // from a normal record-history acknowledgement.
-      'assetGcVersion': 1,
-      // Freshness prevents an old offline or rolled-back client from leaving
-      // indefinitely valid permission to delete a shared binary.
-      'assetGcObservedAt': now.toIso8601String(),
+      if (peers != null) 'assetGcVersion': 1,
+      // Every peer must agree on the complete bound-device membership, not
+      // just the entity records. A peer freshly paired elsewhere could still
+      // have a valid reference that hasn't reached this device's account.
+      if (peers != null) 'assetGcPeers': peers,
+      if (peers != null) 'assetGcObservedAt': now.toIso8601String(),
       'records': records,
     };
 
@@ -106,6 +110,7 @@ class SyncGcAckStore {
             existing['schemaVersion'] == 1 &&
             existing['deviceId'] == deviceId &&
             existing['assetGcVersion'] == 1 &&
+            syncJsonEquals(existing['assetGcPeers'], peers) &&
             syncJsonEquals(existing['records'], records)) {
           final seen = DateTime.tryParse(
             existing['assetGcObservedAt']?.toString() ?? '',
@@ -144,7 +149,13 @@ class SyncGcAckStore {
   Future<Map<String, Map<String, String>>> readAll(
     String accountId, {
     bool requireAssetGcSupport = false,
+    Set<String>? expectedAssetGcPeers,
   }) async {
+    if (requireAssetGcSupport && expectedAssetGcPeers == null) {
+      // Never authorize physical deletion without a device-membership list.
+      return const <String, Map<String, String>>{};
+    }
+    final requiredPeers = expectedAssetGcPeers?.toList()..sort();
     final directory = await _directory(accountId);
     final result = <String, Map<String, String>>{};
     final assetGcSeen = <String>{};
@@ -176,8 +187,12 @@ class SyncGcAckStore {
         }
         if (decoded['schemaVersion'] != 1) continue;
         if (requireAssetGcSupport) {
-          if (decoded['assetGcVersion'] != 1) {
-            // Old clients cannot grant destructive binary cleanup.
+          if (decoded['assetGcVersion'] != 1 ||
+              !syncJsonEquals(decoded['assetGcPeers'], requiredPeers)) {
+            // Missing or divergent device membership is not consent from
+            // all participants, even if the data record hashes agree.
+            assetGcBlocked.add(deviceId);
+            result.remove(deviceId);
             continue;
           }
           final now = _clock().toUtc();
