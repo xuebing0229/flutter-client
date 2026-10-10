@@ -8,16 +8,10 @@ import 'sync_models.dart';
 import 'sync_record_store.dart';
 
 class SyncGcAckStore {
-  SyncGcAckStore({
-    SyncRecordStore? recordStore,
-    DateTime Function()? clock,
-  }) : _recordStore = recordStore ?? SyncRecordStore(),
-       _clock = clock ?? DateTime.now;
+  SyncGcAckStore({SyncRecordStore? recordStore})
+      : _recordStore = recordStore ?? SyncRecordStore();
 
   final SyncRecordStore _recordStore;
-  final DateTime Function() _clock;
-  static const _assetAckRefresh = Duration(hours: 6);
-  static const _assetAckExpiry = Duration(hours: 72);
   final Sha256 _sha256 = Sha256();
 
   Future<Directory> _directory(String accountId) async {
@@ -86,7 +80,6 @@ class SyncGcAckStore {
     Set<String>? assetGcPeers,
   }) async {
     final records = await signatures(recordsByKind);
-    final now = _clock().toUtc();
     final peers = assetGcPeers?.toList()?..sort();
     final payload = <String, dynamic>{
       'schemaVersion': 1,
@@ -98,33 +91,19 @@ class SyncGcAckStore {
       // just the entity records. A peer freshly paired elsewhere could still
       // have a valid reference that hasn't reached this device's account.
       if (peers != null) 'assetGcPeers': peers,
-      if (peers != null) 'assetGcObservedAt': now.toIso8601String(),
       'records': records,
     };
 
     final file = await _file(accountId, deviceId);
+    final encoded = stableJsonSignature(payload);
     if (await file.exists()) {
       try {
-        final existing = jsonDecode(await file.readAsString());
-        if (existing is Map &&
-            existing['schemaVersion'] == 1 &&
-            existing['deviceId'] == deviceId &&
-            existing['assetGcVersion'] == 1 &&
-            syncJsonEquals(existing['assetGcPeers'], peers) &&
-            syncJsonEquals(existing['records'], records)) {
-          final seen = DateTime.tryParse(
-            existing['assetGcObservedAt']?.toString() ?? '',
-          )?.toUtc();
-          if (seen != null &&
-              !seen.isAfter(now) &&
-              now.difference(seen) < _assetAckRefresh) {
-            // Do not rewrite every four seconds just for a heartbeat.
-            return;
-          }
-        }
+        // No heartbeat and no redundant Syncthing writes: unchanged data
+        // already proves that this device has observed the same state.
+        if (await file.readAsString() == encoded) return;
       } catch (_) {}
     }
-    await atomicWriteString(file, stableJsonSignature(payload));
+    await atomicWriteString(file, encoded);
   }
 
   Future<void> pruneDevices({
@@ -186,28 +165,14 @@ class SyncGcAckStore {
           if (assetGcBlocked.contains(deviceId)) continue;
         }
         if (decoded['schemaVersion'] != 1) continue;
-        if (requireAssetGcSupport) {
-          if (decoded['assetGcVersion'] != 1 ||
-              !syncJsonEquals(decoded['assetGcPeers'], requiredPeers)) {
-            // Missing or divergent device membership is not consent from
-            // all participants, even if the data record hashes agree.
-            assetGcBlocked.add(deviceId);
-            result.remove(deviceId);
-            continue;
-          }
-          final now = _clock().toUtc();
-          final seen = DateTime.tryParse(
-            decoded['assetGcObservedAt']?.toString() ?? '',
-          )?.toUtc();
-          if (seen == null ||
-              seen.isAfter(now) ||
-              now.difference(seen) > _assetAckExpiry) {
-            // Matching records are not enough if a bound device has been
-            // offline, or running an old version, for multiple days.
-            assetGcBlocked.add(deviceId);
-            result.remove(deviceId);
-            continue;
-          }
+        if (requireAssetGcSupport &&
+            (decoded['assetGcVersion'] != 1 ||
+                !syncJsonEquals(decoded['assetGcPeers'], requiredPeers))) {
+          // The client must understand this protocol AND agree on the
+          // entire still-bound peer set. No arbitrary time expiry needed.
+          assetGcBlocked.add(deviceId);
+          result.remove(deviceId);
+          continue;
         }
         final rawRecords = decoded['records'];
         if (deviceId is! String || deviceId.isEmpty || rawRecords is! Map) {
