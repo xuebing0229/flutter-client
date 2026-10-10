@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../sync/windows_syncthing_transport.dart';
 
 class WindowsSelfUpdateLauncher {
   const WindowsSelfUpdateLauncher();
@@ -18,11 +17,9 @@ class WindowsSelfUpdateLauncher {
 
     await _ensureInstallDirectoryWritable(installDirectory);
 
-    // The embedded transport is a separate detached process. Closing the
-    // Flutter window does not stop it, so release its executable before the
-    // updater tries to replace the installation directory.
-    await WindowsSyncthingTransport.instance.shutdown();
-
+    // Do not stop Syncthing before the updater process is known to exist.
+    // The PowerShell updater stops the exact embedded process after this app
+    // exits and immediately before replacing installation files.
     final script = File(
       '${workDirectory.path}${Platform.pathSeparator}apply-windows-update.ps1',
     );
