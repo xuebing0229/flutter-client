@@ -110,6 +110,7 @@ String syncFieldLabel(String field) {
     'features' => '功能开关',
     'feature.clientInfo' => '显示单主信息',
     'feature.customTags' => '自定义标签开关',
+    'feature.referenceImages' => '参考图开关',
     'feature.nodeProgress' => '节点小进度',
     'feature.search' => '搜索',
     'feature.sorting' => '排序',
