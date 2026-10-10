@@ -137,62 +137,52 @@ class SyncGcAckStore {
     final requiredPeers = expectedAssetGcPeers?.toList()?..sort();
     final directory = await _directory(accountId);
     final result = <String, Map<String, String>>{};
-    final assetGcSeen = <String>{};
-    final assetGcBlocked = <String>{};
+    final seenPeerIds = <String>{};
 
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
-      if (requireAssetGcSupport &&
-          entity.path.contains('.sync-conflict-')) {
-        // An unresolvable concurrent rewrite of acknowledgement files can
-        // make a stale peer appear current. Fail closed until Syncthing has
-        // converged, rather than physically deleting shared artwork.
+      if (requireAssetGcSupport && entity.path.contains('.sync-conflict-')) {
+        // Conflicted confirmations are not unanimous approval.
         return const <String, Map<String, String>>{};
       }
       try {
         final decoded = jsonDecode(await entity.readAsString());
-        if (decoded is! Map) continue;
+        if (decoded is! Map || decoded['schemaVersion'] != 1) continue;
         final deviceId = decoded['deviceId'];
-        if (requireAssetGcSupport &&
-            deviceId is String &&
-            deviceId.isNotEmpty) {
-          if (!assetGcSeen.add(deviceId) ||
-              decoded['schemaVersion'] != 1 ||
-              decoded['assetGcVersion'] != 1) {
-            assetGcBlocked.add(deviceId);
-            result.remove(deviceId);
-          }
-          if (assetGcBlocked.contains(deviceId)) continue;
-        }
-        if (decoded['schemaVersion'] != 1) continue;
-        if (requireAssetGcSupport &&
-            (decoded['assetGcVersion'] != 1 ||
-                !syncJsonEquals(decoded['assetGcPeers'], requiredPeers))) {
-          // The client must understand this protocol AND agree on the
-          // entire still-bound peer set. No arbitrary time expiry needed.
-          assetGcBlocked.add(deviceId);
-          result.remove(deviceId);
-          continue;
-        }
         final rawRecords = decoded['records'];
         if (deviceId is! String || deviceId.isEmpty || rawRecords is! Map) {
           continue;
         }
+        if (requireAssetGcSupport &&
+            expectedAssetGcPeers!.contains(deviceId)) {
+          // In strict mode a duplicate, old-protocol, or mismatched
+          // acknowledgement is enough to block physical deletion.
+          if (!seenPeerIds.add(deviceId) ||
+              decoded['assetGcVersion'] != 1 ||
+              !syncJsonEquals(decoded['assetGcPeers'], requiredPeers)) {
+            return const <String, Map<String, String>>{};
+          }
+        }
 
         final records = <String, String>{};
-        var valid = true;
         for (final entry in rawRecords.entries) {
-          final key = entry.key;
-          final value = entry.value;
-          if (key is! String || value is! String) {
-            valid = false;
+          if (entry.key is! String || entry.value is! String) {
+            records.clear();
             break;
           }
-          records[key] = value;
+          records[entry.key as String] = entry.value as String;
         }
-        if (valid) result[deviceId] = records;
+        if (records.isEmpty && rawRecords.isNotEmpty) {
+          if (requireAssetGcSupport &&
+              expectedAssetGcPeers!.contains(deviceId)) {
+            return const <String, Map<String, String>>{};
+          }
+          continue;
+        }
+        result[deviceId] = records;
       } catch (_) {
-        // Syncthing can expose a replacement between rename steps.
+        // In-progress Syncthing file changes may be retried at next scan.
+        // Missing a bound-device confirmation always prevents deletion.
       }
     }
 
