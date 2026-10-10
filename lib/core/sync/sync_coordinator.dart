@@ -1281,6 +1281,11 @@ class SyncCoordinator extends ChangeNotifier {
         accountId: accountId,
         deviceId: deviceId,
         recordsByKind: recordsByKind,
+        assetGcPeers: {
+          for (final device in accountStore.syncSnapshot?.activeDevices ??
+              const <AccountDevice>[])
+            device.id,
+        },
       );
       gcChanged = await _compactAcknowledgedHistory(recordsByKind);
       if (gcChanged) {
@@ -1289,6 +1294,11 @@ class SyncCoordinator extends ChangeNotifier {
           accountId: accountId,
           deviceId: deviceId,
           recordsByKind: recordsByKind,
+          assetGcPeers: {
+            for (final device in accountStore.syncSnapshot?.activeDevices ??
+                const <AccountDevice>[])
+              device.id,
+          },
         );
       }
     }
