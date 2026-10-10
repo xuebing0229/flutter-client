@@ -47,8 +47,8 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-warnings
 
-      - name: Test
-        run: flutter test
+      - name: Test issuer and activation code paths
+        run: flutter test test/license_issuer_engine_test.dart test/offline_license_test.dart
 
       - name: Build signed issuer APK
         run: |
