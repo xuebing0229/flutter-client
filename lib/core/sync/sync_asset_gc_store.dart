@@ -70,7 +70,7 @@ class SyncAssetGcStore {
     final hash = await _sha256.hash(utf8.encode(relativePath));
     final filename = base64UrlEncode(hash.bytes).replaceAll('=', '');
     return File(
-      '${rootPath}${Platform.pathSeparator}gc-asset-candidates'
+      '$rootPath${Platform.pathSeparator}gc-asset-candidates'
       '${Platform.pathSeparator}$filename.json',
     );
   }
