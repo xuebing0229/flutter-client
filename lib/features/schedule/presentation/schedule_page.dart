@@ -127,6 +127,7 @@ class _SchedulePageState extends State<SchedulePage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ProductDetailPage(
+          accountId: widget.accountId,
           store: widget.productStore,
           productId: product.id,
           featureStore: widget.featureStore,
