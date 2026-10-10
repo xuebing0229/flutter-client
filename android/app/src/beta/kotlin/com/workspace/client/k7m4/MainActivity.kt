@@ -56,7 +56,6 @@ class MainActivity : FlutterActivity() {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
 
-        cleanupStaleUpdatePackages()
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -359,13 +358,6 @@ class MainActivity : FlutterActivity() {
             unregisterDownloadReceiver()
             result.error("DOWNLOAD_FAILED", error.message, null)
         }
-    }
-
-    private fun cleanupStaleUpdatePackages() {
-        val baseDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-            ?: return
-        val updateDir = File(baseDir, "updates")
-        cleanupUpdateDirectory(updateDir)
     }
 
     private fun cleanupUpdateDirectory(updateDir: File) {
