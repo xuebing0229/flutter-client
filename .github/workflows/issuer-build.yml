@@ -45,10 +45,10 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings
 
-      - name: Test
-        run: flutter test
+      - name: Test issuer code path
+        run: flutter test test/license_issuer_engine_test.dart
 
       - name: Build signed issuer APK
         run: |

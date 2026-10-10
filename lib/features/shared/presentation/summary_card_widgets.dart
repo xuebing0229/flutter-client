@@ -17,28 +17,81 @@ class SummaryCardSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Ink(
-          padding: EdgeInsets.fromLTRB(
-            compact ? 12 : 18,
-            compact ? 12 : 16,
-            compact ? 12 : 18,
-            compact ? 12 : 16,
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    const radius = 20.0;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: dark ? 0.21 : 0.075),
+            blurRadius: 13,
+            offset: const Offset(0, 4),
           ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: colors.outlineVariant.withValues(alpha: 0.55),
+        ],
+      ),
+      child: Material(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(radius),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(radius),
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: Color.alphaBlend(
+                  colors.primary.withValues(alpha: dark ? 0.35 : 0.27),
+                  colors.outlineVariant,
+                ),
+                width: 1,
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.alphaBlend(
+                    colors.primary.withValues(alpha: dark ? 0.035 : 0.022),
+                    colors.surface,
+                  ),
+                  colors.surface,
+                ],
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Padding(
+                      padding: const EdgeInsets.all(3),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(radius - 4),
+                          border: Border.all(
+                            color: colors.primary.withValues(
+                              alpha: dark ? 0.19 : 0.14,
+                            ),
+                            width: 0.7,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  // Exactly the original spacing: visual strokes add no size.
+                  padding: EdgeInsets.fromLTRB(
+                    compact ? 12 : 18,
+                    compact ? 12 : 16,
+                    compact ? 12 : 18,
+                    compact ? 12 : 16,
+                  ),
+                  child: child,
+                ),
+              ],
             ),
           ),
-          child: child,
         ),
       ),
     );
