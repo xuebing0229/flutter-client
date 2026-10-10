@@ -20,6 +20,7 @@ import 'account_sync_record_store.dart';
 import 'embedded_syncthing_bridge.dart';
 import 'portable_sync_workspace_validator.dart';
 import 'sync_entity_codec.dart';
+import 'sync_asset_gc_store.dart';
 import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
@@ -155,12 +156,19 @@ class SyncCoordinator extends ChangeNotifier {
     SyncRecordStore? recordStore,
     AccountSyncRecordStore? accountSyncStore,
     SyncGcAckStore? gcAckStore,
+    SyncAssetGcStore? assetGcStore,
     EmbeddedSyncthingBridge bridge = const EmbeddedSyncthingBridge(),
   }) : focusStore = focusStore ?? FocusStore(),
        _mergeEngine = mergeEngine ?? SyncMergeEngine(),
        _recordStore = recordStore ?? SyncRecordStore(),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
+       _assetGcStore = assetGcStore ??
+           SyncAssetGcStore(
+             recordStore: recordStore,
+             gcAckStore: gcAckStore,
+             mergeEngine: mergeEngine,
+           ),
        _bridge = bridge;
 
   final String accountId;
@@ -177,6 +185,7 @@ class SyncCoordinator extends ChangeNotifier {
   final SyncRecordStore _recordStore;
   final AccountSyncRecordStore _accountSyncStore;
   final SyncGcAckStore _gcAckStore;
+  final SyncAssetGcStore _assetGcStore;
   final EmbeddedSyncthingBridge _bridge;
   final Lock _pauseLock = Lock();
 
@@ -1159,6 +1168,33 @@ class SyncCoordinator extends ChangeNotifier {
       await _recordStore.write(accountId: accountId, record: record);
       _lastFlushedRecords[kind]![id] = record;
       wrote = true;
+
+      // A removed link alone is NOT permission to delete a shared image.
+      // Only register binaries from an existing saved entity; safe physical
+      // cleanup is gated on a long grace period and new-protocol ACKs from
+      // every still-bound device.
+      if (kind == SyncEntityKind.order || kind == SyncEntityKind.product) {
+        final beforeRefs = before == null
+            ? <String>{}
+            : SyncAssetGcStore.referencePaths(before);
+        final afterRefs = after == null
+            ? <String>{}
+            : SyncAssetGcStore.referencePaths(after);
+        if (beforeRefs != null && afterRefs != null) {
+          final unlinked = beforeRefs.difference(afterRefs);
+          if (unlinked.isNotEmpty) {
+            try {
+              await _assetGcStore.registerUnlinked(
+                accountId: accountId,
+                relativePaths: unlinked,
+              );
+            } catch (_) {
+              // Failed GC bookkeeping may leak disk space, but must never
+              // roll back a successfully committed user edit or lose data.
+            }
+          }
+        }
+      }
     }
 
     return wrote;
@@ -1254,6 +1290,29 @@ class SyncCoordinator extends ChangeNotifier {
           deviceId: deviceId,
           recordsByKind: recordsByKind,
         );
+      }
+    }
+
+    if (!_awaitingInitialRemoteWorkspace) {
+      final state = accountStore.syncSnapshot;
+      if (state != null &&
+          state.accountId == accountId &&
+          !state.isRevoked(deviceId)) {
+        try {
+          final cleaned = await _assetGcStore.collectAcknowledged(
+            accountId: accountId,
+            activeDeviceIds: {
+              for (final device in state.activeDevices) device.id,
+            },
+            recordsByKind: recordsByKind,
+          );
+          if (cleaned > 0 && _transportPrepared) {
+            await _bridge.requestScan(accountId: accountId);
+          }
+        } catch (_) {
+          // Physical asset GC is optional maintenance. Failure to assess
+          // consensus must never interrupt regular P2P sync.
+        }
       }
     }
 
