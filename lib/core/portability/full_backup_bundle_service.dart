@@ -228,33 +228,33 @@ class FullBackupBundleService {
     final missing = <String>[];
 
     for (final referenced in _referencedImages(backup)) {
-        final image = referenced.image;
-        final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
-          throw FormatException(
-            '${referenced.owner}包含无效参考图路径：$relativePath',
-          );
-        }
+      final image = referenced.image;
+      final relativePath = image.relativePath;
+      if (!_isReferenceAssetPath(relativePath)) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图路径：$relativePath',
+        );
+      }
 
-        final file = File(_joinRelative(syncRoot.path, relativePath));
-        if (!await file.exists()) {
-          missing.add(image.fileName);
-          continue;
-        }
+      final file = File(_joinRelative(syncRoot.path, relativePath));
+      if (!await file.exists()) {
+        missing.add(image.fileName);
+        continue;
+      }
 
-        final actualSize = await file.length();
-        if (actualSize != image.sizeBytes) {
-          throw StateError(
-            '参考图“${image.fileName}”文件大小与记录不一致，'
-            '请等待设备同步稳定后再导出。',
-          );
-        }
+      final actualSize = await file.length();
+      if (actualSize != image.sizeBytes) {
+        throw StateError(
+          '参考图“${image.fileName}”文件大小与记录不一致，'
+          '请等待设备同步稳定后再导出。',
+        );
+      }
 
-        final previous = result[relativePath];
-        if (previous != null && previous.path != file.path) {
-          throw FormatException('参考图路径重复：$relativePath');
-        }
-        result[relativePath] = file;
+      final previous = result[relativePath];
+      if (previous != null && previous.path != file.path) {
+        throw FormatException('参考图路径重复：$relativePath');
+      }
+      result[relativePath] = file;
     }
 
     if (missing.isNotEmpty) {
@@ -276,28 +276,28 @@ class FullBackupBundleService {
     final paths = <String>{};
 
     for (final referenced in _referencedImages(backup)) {
-        final image = referenced.image;
-        final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
-          throw FormatException(
-            '${referenced.owner}包含无效参考图路径：$relativePath',
-          );
-        }
-        if (!paths.add(relativePath)) {
-          continue;
-        }
+      final image = referenced.image;
+      final relativePath = image.relativePath;
+      if (!_isReferenceAssetPath(relativePath)) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图路径：$relativePath',
+        );
+      }
+      if (!paths.add(relativePath)) {
+        continue;
+      }
 
-        final file = File(_joinRelative(extractedRoot.path, relativePath));
-        if (!await file.exists()) {
-          throw FormatException(
-            '完整备份缺少参考图原文件：${image.fileName}',
-          );
-        }
-        if (await file.length() != image.sizeBytes) {
-          throw FormatException(
-            '完整备份中的参考图文件损坏：${image.fileName}',
-          );
-        }
+      final file = File(_joinRelative(extractedRoot.path, relativePath));
+      if (!await file.exists()) {
+        throw FormatException(
+          '完整备份缺少参考图原文件：${image.fileName}',
+        );
+      }
+      if (await file.length() != image.sizeBytes) {
+        throw FormatException(
+          '完整备份中的参考图文件损坏：${image.fileName}',
+        );
+      }
     }
   }
 
