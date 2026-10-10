@@ -178,7 +178,7 @@ class SyncMergeEngine {
       final next = nextValues[field];
       if (syncJsonEquals(previous, next)) continue;
 
-      if (field == 'referenceImages' &&
+      if ((field == 'referenceImages' || field == 'saleReceipts') &&
           previous is List &&
           next is List) {
         if (!fields.containsKey(field)) {
@@ -189,11 +189,15 @@ class SyncMergeEngine {
           );
         }
 
-        final metadata = _referenceImageDelta(previous, next);
+        final metadata = field == 'referenceImages'
+            ? _referenceImageDelta(previous, next)
+            : _saleReceiptDelta(previous, next);
         if (metadata.isNotEmpty) {
           final operation = _operation(
             field: field,
-            kind: 'reference-image-delta',
+            kind: field == 'referenceImages'
+                ? 'reference-image-delta'
+                : 'sale-receipt-delta',
             deviceId: deviceId,
             metadata: metadata,
           );
@@ -375,6 +379,8 @@ class SyncMergeEngine {
         foldFields.add('currentNodeProgress');
       } else if (operation.kind == 'reference-image-delta') {
         foldFields.add('referenceImages');
+      } else if (operation.kind == 'sale-receipt-delta') {
+        foldFields.add('saleReceipts');
       }
     }
 
@@ -561,6 +567,54 @@ class SyncMergeEngine {
       values['referenceImages'] = images.values.toList(growable: false);
     }
 
+    final rawReceipts = values['saleReceipts'];
+    final receiptOperations = record.operations.values
+        .where(
+          (operation) =>
+              !operation.compacted &&
+              operation.kind == 'sale-receipt-delta',
+        )
+        .toList()
+      ..sort((a, b) {
+        final byTime = a.occurredAt.compareTo(b.occurredAt);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
+    if (rawReceipts is List || receiptOperations.isNotEmpty) {
+      final receipts = <String, Map<String, dynamic>>{};
+      for (final value in rawReceipts is List
+          ? rawReceipts
+          : const <dynamic>[]) {
+        if (value is! Map) continue;
+        final entry = value.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final id = entry['id'];
+        if (id is String && id.isNotEmpty) receipts[id] = entry;
+      }
+      for (final operation in receiptOperations) {
+        final added = operation.metadata['added'];
+        if (added is List) {
+          for (final item in added) {
+            if (item is! Map) continue;
+            final entry = item.map(
+              (key, value) => MapEntry(key.toString(), value),
+            );
+            final id = entry['id'];
+            if (id is String && id.isNotEmpty) {
+              receipts.putIfAbsent(id, () => entry);
+            }
+          }
+        }
+        final removed = operation.metadata['removed'];
+        if (removed is List) {
+          for (final id in removed) {
+            if (id is String) receipts.remove(id);
+          }
+        }
+      }
+      values['saleReceipts'] = receipts.values.toList(growable: false);
+    }
+
     final rawSaleRecords = values['saleRecords'];
     if (rawSaleRecords is List) {
       final records = <String>[
@@ -702,6 +756,37 @@ class SyncMergeEngine {
     return <String, dynamic>{
       if (added.isNotEmpty) 'added': added,
       if (removed.isNotEmpty) 'removed': removed,
+    };
+  }
+
+  Map<String, dynamic> _saleReceiptDelta(
+    List<dynamic> previous,
+    List<dynamic> next,
+  ) {
+    Map<String, Map<String, dynamic>> indexed(List<dynamic> values) {
+      final result = <String, Map<String, dynamic>>{};
+      for (final value in values) {
+        if (value is! Map) continue;
+        final entry = value.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final id = entry['id'];
+        if (id is String && id.isNotEmpty) result[id] = entry;
+      }
+      return result;
+    }
+
+    final before = indexed(previous);
+    final after = indexed(next);
+    return <String, dynamic>{
+      'added': <Map<String, dynamic>>[
+        for (final entry in after.entries)
+          if (!before.containsKey(entry.key)) entry.value,
+      ],
+      'removed': <String>[
+        for (final id in before.keys)
+          if (!after.containsKey(id)) id,
+      ],
     };
   }
 
@@ -881,6 +966,9 @@ class SyncMergeEngine {
     }
     if (operation.kind == 'reference-image-delta') {
       return field == 'referenceImages';
+    }
+    if (operation.kind == 'sale-receipt-delta') {
+      return field == 'saleReceipts';
     }
     return false;
   }
