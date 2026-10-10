@@ -24,6 +24,7 @@ class FinishedProduct {
     this.deductionAmount = 0,
     this.deductionFeeEnabled = false,
     this.description = '',
+    this.referenceImages = const <OrderReferenceImage>[],
     this.defaultOrder = 0,
     this.soldCount = 0,
     this.saleRecords = const <DateTime>[],
@@ -48,6 +49,7 @@ class FinishedProduct {
   final bool deductionFeeEnabled;
 
   final String description;
+  final List<OrderReferenceImage> referenceImages;
 
   /// Stable cross-device order used by the default list sort.
   final int defaultOrder;
@@ -123,6 +125,7 @@ class FinishedProduct {
     double? deductionAmount,
     bool? deductionFeeEnabled,
     String? description,
+    List<OrderReferenceImage>? referenceImages,
     int? defaultOrder,
     int? soldCount,
     List<DateTime>? saleRecords,
@@ -154,6 +157,7 @@ class FinishedProduct {
       deductionFeeEnabled:
           deductionFeeEnabled ?? this.deductionFeeEnabled,
       description: description ?? this.description,
+      referenceImages: referenceImages ?? this.referenceImages,
       defaultOrder: defaultOrder ?? this.defaultOrder,
       soldCount: nextSoldCount,
       saleRecords: saleRecords ?? this.saleRecords,
