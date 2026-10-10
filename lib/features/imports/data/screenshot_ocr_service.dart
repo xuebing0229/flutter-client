@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../domain/screenshot_layout_parser.dart';
 import 'screenshot_ocr_result.dart';
-import 'windows_rapidocr_onnx.dart';
+import 'windows_official_paddleocr.dart';
 
 /// The native recognizer only sends recognized line text and boxes.
 /// No screenshot or OCR output is uploaded to a remote service.
@@ -31,7 +31,7 @@ class ScreenshotOcrService {
 
   Future<ScreenshotOcrResult> recognize(String imagePath) async {
     if (Platform.isWindows) {
-      return const WindowsRapidOcrOnnx().recognize(imagePath);
+      return const WindowsOfficialPaddleOcr().recognize(imagePath);
     }
     if (!supported) {
       throw UnsupportedError('当前平台尚未接入本地截图识别引擎');
