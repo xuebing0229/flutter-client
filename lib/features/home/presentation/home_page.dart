@@ -97,12 +97,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _desktopRootRefreshPending = false;
   bool _desktopAddEditorOpen = false;
   Timer? _saveDebounce;
+  Timer? _saveRetryTimer;
   Timer? _reminderDebounce;
   Timer? _focusPersistenceHeartbeat;
   String? _focusRecoverySessionId;
   DateTime? _focusRecoveryCutoff;
   bool _saving = false;
   bool _saveAgain = false;
+  bool _saveFailureReported = false;
   bool _notificationPermissionChecked = false;
   bool _localDataHealthy = true;
   bool _abstractFeatureToggleHidden = false;
@@ -236,7 +238,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // The portable history is a one-time handoff. Persist the materialized
         // workspace again without embedding it, otherwise every launch would
         // roll the live sync directory back to the transfer snapshot.
-        await _persistCurrentData();
+        await _persistAndReportFailure();
       }
     }
 
@@ -810,10 +812,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!_ready || !_localDataHealthy) return;
 
     _saveDebounce?.cancel();
+    _saveRetryTimer?.cancel();
     _saveDebounce = Timer(
       const Duration(milliseconds: 350),
-      _persistCurrentData,
+      () => unawaited(_persistAndReportFailure()),
     );
+  }
+
+  // Scheduled writes must never fail silently. Keep the unsaved in-memory
+  // state intact and retry while the page is active (e.g. after disk space
+  // becomes available); do not misreport a failed write as a successful save.
+  Future<void> _persistAndReportFailure() async {
+    if (!mounted || !_localDataHealthy) return;
+    try {
+      await _persistCurrentData();
+      _saveRetryTimer?.cancel();
+      _saveRetryTimer = null;
+      _saveFailureReported = false;
+    } catch (error) {
+      if (!mounted) return;
+      if (!_saveFailureReported) {
+        _saveFailureReported = true;
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(
+            content: Text('本地数据保存失败，将自动重试。请检查存储空间，'
+                '在保存恢复前不要退出应用。'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 8),
+          ),
+        );
+      }
+      _saveRetryTimer?.cancel();
+      _saveRetryTimer = Timer(
+        const Duration(seconds: 5),
+        () => unawaited(_persistAndReportFailure()),
+      );
+    }
   }
 
   void _scheduleReminderSync() {
@@ -902,7 +936,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // A local backup is still more useful than dropping it because the
       // transport is temporarily unavailable.
     }
-    await _persistCurrentData();
+    await _persistAndReportFailure();
   }
 
   AppBackupData _captureCurrentBackup() {
@@ -963,6 +997,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _prepareForSignOut() async {
     _saveDebounce?.cancel();
+    _saveRetryTimer?.cancel();
     _reminderDebounce?.cancel();
     _focusPersistenceHeartbeat?.cancel();
     if (_ready && _localDataHealthy) {
@@ -974,6 +1009,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _saveDebounce?.cancel();
+    _saveRetryTimer?.cancel();
     _reminderDebounce?.cancel();
     _focusPersistenceHeartbeat?.cancel();
     widget.themeStore.removeListener(_onThemeSettingsChanged);
