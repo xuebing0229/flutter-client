@@ -22,6 +22,7 @@ enum _ProductSortMode {
 
 class ProductPage extends StatefulWidget {
   const ProductPage({
+    required this.accountId,
     required this.store,
     required this.featureStore,
     required this.syncCoordinator,
@@ -32,6 +33,7 @@ class ProductPage extends StatefulWidget {
     super.key,
   });
 
+  final String accountId;
   final ProductStore store;
   final AppFeatureStore featureStore;
   final SyncCoordinator syncCoordinator;
@@ -120,6 +122,7 @@ class _ProductPageState extends State<ProductPage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ProductDetailPage(
+          accountId: widget.accountId,
           store: widget.store,
           productId: product.id,
           featureStore: widget.featureStore,
