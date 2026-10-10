@@ -1115,6 +1115,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final route = MaterialPageRoute<void>(
       builder: (_) => AddProductPage(
+        accountId: widget.accountId,
         store: _productStore,
         featureStore: widget.featureStore,
       ),
@@ -1370,6 +1371,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           icon: Icons.image_outlined,
           selectedIcon: Icons.image_rounded,
           page: ProductPage(
+            accountId: widget.accountId,
             store: _productStore,
             featureStore: widget.featureStore,
             syncCoordinator: _syncCoordinator,
