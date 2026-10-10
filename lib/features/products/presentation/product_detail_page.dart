@@ -275,24 +275,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               if (!_referenceImages.any((item) => item.id == image.id)) image,
           ]
         : const <OrderReferenceImage>[];
-    final saleRecords = [...current.saleRecords];
-
-    if (soldCountChanged && soldCount > current.soldCount) {
-      final added = soldCount - current.soldCount;
-      final now = DateTime.now();
-      for (var index = 0; index < added; index++) {
-        saleRecords.add(now.add(Duration(microseconds: index)));
-      }
-    } else if (soldCountChanged && soldCount < current.soldCount) {
-      var removeCount = current.soldCount - soldCount;
-      while (removeCount > 0 && saleRecords.isNotEmpty) {
-        saleRecords.removeLast();
-        removeCount -= 1;
-      }
-    }
-
-    widget.store.updateProduct(
-      current.copyWith(
+    final updated = current.copyWith(
         title: titleChanged ? _titleController.text.trim() : current.title,
         platform: platformChanged ? _platform : current.platform,
         saleType: saleTypeChanged ? _saleType : current.saleType,
@@ -310,9 +293,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         referenceImages: referenceImagesChanged
             ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
             : current.referenceImages,
-        soldCount: soldCountChanged ? soldCount : current.soldCount,
-        saleRecords: soldCountChanged ? saleRecords : current.saleRecords,
-      ),
+      );
+    // Freeze the *edited* price/fee for new sales, while existing receipt
+    // snapshots remain unchanged when the product details are edited.
+    widget.store.updateProduct(
+      soldCountChanged || saleTypeChanged
+          ? updated.withSaleCount(soldCount)
+          : updated,
     );
 
     _sessionAddedReferenceImages.clear();
