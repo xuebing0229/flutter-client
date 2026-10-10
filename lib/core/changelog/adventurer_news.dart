@@ -88,6 +88,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '桌宠文字泡与组件位置优化',
     description: '文字泡改为按内容自动撑开，短句不再占用过大的固定气泡；横向与竖向共用同一文字大小设置，竖排也会按实际字数自适应高度和列数。桌宠页面新增组件位置预览，可分别拖动横向文字泡、竖向文字泡和计时板相对桌宠的位置，并按桌宠预设保存。修复放大文字泡时布局最小值超过最大值导致桌宠宿主闪退的问题，并加强计时板缩放和配置热更新的异常保护。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 135,
+    title: '公会视觉体验焕新',
+    description: '统一精致西幻卡片、弹窗与轻量菜单的细边及柔和层次；页面背景更细腻，搜索框聚焦更清晰，按钮、进度条和标签继续保持简洁。保留全部原版图标、排版与操作，支持所有主题色和深浅色模式。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
