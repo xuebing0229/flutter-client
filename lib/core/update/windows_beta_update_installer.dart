@@ -252,7 +252,12 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     }
 
     if (expectedSha256 != null && expectedSha256.isNotEmpty) {
-      final hash = await Sha256().hashStream(file.openRead());
+      final sink = Sha256().newHashSink();
+      await for (final chunk in file.openRead()) {
+        sink.add(chunk);
+      }
+      sink.close();
+      final hash = await sink.hash();
       final actual = hash.bytes
           .map((value) => value.toRadixString(16).padLeft(2, '0'))
           .join();
