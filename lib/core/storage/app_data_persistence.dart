@@ -67,7 +67,6 @@ class AppDataPersistence {
     if (!await file.exists()) return null;
 
     final backup = await _read(file);
-    if (backup == null) return null;
     _assertAccountBinding(backup, accountId);
     return backup;
   }
@@ -88,10 +87,9 @@ class AppDataPersistence {
 
       try {
         final backup = await _read(file);
-        final account = backup?.accountSyncState;
+        final account = backup.accountSyncState;
         final folderName = entity.path.split(Platform.pathSeparator).last;
-        if (backup != null &&
-            account != null &&
+        if (account != null &&
             account.accountId.isNotEmpty &&
             account.hasCredentials &&
             folderName == _safeAccountId(account.accountId)) {
@@ -145,7 +143,7 @@ class AppDataPersistence {
     }
   }
 
-  Future<AppBackupData?> _read(File file) async {
+  Future<AppBackupData> _read(File file) async {
     final source = await file.readAsString();
     // Missing files represent a fresh account; an existing empty file is
     // damaged data and must never silently initialize an empty workspace.
