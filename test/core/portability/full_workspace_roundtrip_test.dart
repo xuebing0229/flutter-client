@@ -54,6 +54,7 @@ void main() {
     'deductionAmount',
     'deductionFeeEnabled',
     'description',
+    'referenceImages',
     'defaultOrder',
     'soldCount',
     'saleRecords',
