@@ -7,7 +7,13 @@ import '../portability/app_backup_data.dart';
 import 'atomic_file.dart';
 
 class AppDataPersistence {
-  const AppDataPersistence();
+  const AppDataPersistence({Directory? supportDirectory})
+      : _supportDirectory = supportDirectory;
+
+  final Directory? _supportDirectory;
+
+  Future<Directory> _appSupportDirectory() async =>
+      _supportDirectory ?? await getApplicationSupportDirectory();
 
   static const String _fileName = 'app-data-v1.json';
   static const String _focusForegroundExitFileName = 'focus-last-foreground-exit.txt';
@@ -17,7 +23,7 @@ class AppDataPersistence {
   String _safeAccountId(String accountId) => requireValidAccountId(accountId);
 
   Future<Directory> _accountDirectory(String accountId) async {
-    final dir = await getApplicationSupportDirectory();
+    final dir = await _appSupportDirectory();
     return Directory(
       '${dir.path}/$_accountsDirName/${_safeAccountId(accountId)}',
     );
@@ -67,7 +73,7 @@ class AppDataPersistence {
   }
 
   Future<List<AccountSyncState>> discoverRecoverableAccounts() async {
-    final supportDir = await getApplicationSupportDirectory();
+    final supportDir = await _appSupportDirectory();
     final accountsDir = Directory('${supportDir.path}/$_accountsDirName');
     if (!await accountsDir.exists()) {
       return const <AccountSyncState>[];
@@ -141,7 +147,11 @@ class AppDataPersistence {
 
   Future<AppBackupData?> _read(File file) async {
     final source = await file.readAsString();
-    if (source.trim().isEmpty) return null;
+    // Missing files represent a fresh account; an existing empty file is
+    // damaged data and must never silently initialize an empty workspace.
+    if (source.trim().isEmpty) {
+      throw const FormatException('本地数据文件为空，已停止读取以避免覆盖原有数据。');
+    }
     return AppBackupData.decode(source);
   }
 
