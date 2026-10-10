@@ -15,14 +15,13 @@ import 'sync_record_store.dart';
 /// committed binary must be explicitly scheduled when its sync metadata is
 /// removed, then retained until every still-bound device has acknowledged
 /// precisely the same complete sync-record inventory with the new asset-GC
-/// capability. Old/offline devices block collection. No age-only deletion.
+/// capability. Old/offline devices block collection. No time-based hold.
 class SyncAssetGcStore {
   SyncAssetGcStore({
     SyncRecordStore? recordStore,
     SyncGcAckStore? gcAckStore,
     SyncMergeEngine? mergeEngine,
     DateTime Function()? clock,
-    this.minimumAge = const Duration(days: 30),
   }) : _recordStore = recordStore ?? SyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
        _mergeEngine = mergeEngine ?? SyncMergeEngine(),
@@ -32,8 +31,7 @@ class SyncAssetGcStore {
   final SyncGcAckStore _gcAckStore;
   final SyncMergeEngine _mergeEngine;
   final DateTime Function() _clock;
-  final Duration minimumAge;
-  final Sha256 _sha256 = Sha256();
+   final Sha256 _sha256 = Sha256();
 
   static bool isSafeReferencePath(String path) {
     final parts = path.split('/');
@@ -147,7 +145,6 @@ class SyncAssetGcStore {
     }
 
     var removed = 0;
-    final now = _clock().toUtc();
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
       try {
@@ -162,14 +159,10 @@ class SyncAssetGcStore {
         final expected = await _candidateFile(root.path, relativePath);
         if (expected.path != entity.path) continue;
 
-        final firstObservedAt = DateTime.tryParse(
-          decoded['firstObservedAt']?.toString() ?? '',
-        )?.toUtc();
-        if (firstObservedAt == null ||
-            firstObservedAt.isAfter(now) ||
-            now.difference(firstObservedAt) < minimumAge) {
-          continue;
-        }
+        // A confirmed unlink is final. Once every current peer has ACKed
+        // the same full state and no entity still references the binary,
+        // keeping the file for an arbitrary number of days adds no safety.
+        // firstObservedAt remains in the marker for troubleshooting only.
 
         final segments = relativePath.split('/');
         var currentPath = root.path;
