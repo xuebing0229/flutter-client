@@ -235,6 +235,18 @@ class SyncRecordStore {
         await file.writeAsString(record.encode(), flush: true);
       }
 
+      // Stage imported assets *before* making the active Syncthing root
+      // unavailable. A large ZIP may contain gigabytes of artwork; the old
+      // implementation kept the folder renamed away while copying the ZIP.
+      // The imported copy takes precedence when old/new paths overlap.
+      if (assetSourceDirectory != null &&
+          await assetSourceDirectory.exists()) {
+        await _copyDirectory(
+          assetSourceDirectory,
+          Directory('${staging.path}/assets'),
+        );
+      }
+
       var movedPrevious = false;
       if (await target.exists()) {
         await target.rename(previous.path);
@@ -269,19 +281,15 @@ class SyncRecordStore {
           // intentionally kept outside JSON sync history.
           final previousAssets = Directory('${previous.path}/assets');
           if (await previousAssets.exists()) {
+            // Preserve binaries still referenced by offline peers, but do not
+            // copy them a second time when the imported ZIP already contains
+            // the same relative path. Source ZIP assets win, as before.
             await _copyDirectory(
               previousAssets,
               Directory('${staging.path}/assets'),
+              skipExisting: true,
             );
           }
-        }
-
-        if (assetSourceDirectory != null &&
-            await assetSourceDirectory.exists()) {
-          await _copyDirectory(
-            assetSourceDirectory,
-            Directory('${staging.path}/assets'),
-          );
         }
 
         await staging.rename(target.path);
@@ -491,16 +499,26 @@ class SyncRecordStore {
     await atomicWriteString(file, content);
   }
 
-  Future<void> _copyDirectory(Directory source, Directory destination) async {
+  Future<void> _copyDirectory(
+    Directory source,
+    Directory destination, {
+    bool skipExisting = false,
+  }) async {
     await destination.create(recursive: true);
     await for (final entity in source.list(followLinks: false)) {
       final name = entity.uri.pathSegments
           .where((segment) => segment.isNotEmpty)
           .last;
       if (entity is File) {
-        await entity.copy('${destination.path}/$name');
+        final destinationFile = File('${destination.path}/$name');
+        if (skipExisting && await destinationFile.exists()) continue;
+        await entity.copy(destinationFile.path);
       } else if (entity is Directory) {
-        await _copyDirectory(entity, Directory('${destination.path}/$name'));
+        await _copyDirectory(
+          entity,
+          Directory('${destination.path}/$name'),
+          skipExisting: skipExisting,
+        );
       }
     }
   }
