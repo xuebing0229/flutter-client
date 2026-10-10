@@ -14,7 +14,8 @@ class ProductSaleHistoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final records = [...product.saleRecords]..sort();
+    final records = [...product.accountedSales]
+      ..sort((a, b) => a.soldAt.compareTo(b.soldAt));
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -75,7 +76,7 @@ class ProductSaleHistoryPage extends StatelessWidget {
           else
             ...List.generate(records.length, (index) {
               final occurrenceNumber = records.length - index;
-              final soldAt = records[occurrenceNumber - 1];
+              final receipt = records[occurrenceNumber - 1];
 
               return Padding(
                 padding: EdgeInsets.only(
@@ -99,7 +100,11 @@ class ProductSaleHistoryPage extends StatelessWidget {
                           : '第 $occurrenceNumber 次售出',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    subtitle: Text(formatDateTimeValue(soldAt)),
+                    subtitle: Text(
+                      '${formatDateTimeValue(receipt.soldAt)} · '
+                      '实收 ¥${receipt.netIncome.toStringAsFixed(2)}'
+                      '${receipt.estimated ? '（按旧资料估算）' : ''}',
+                    ),
                   ),
                 ),
               );
