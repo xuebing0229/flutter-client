@@ -53,27 +53,33 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return sales;
   }
 
-  double _totalFor(DateTime month) {
-    final orderIncome = _incomeOrdersFor(month).fold<double>(
+  double _totalFor(
+    Iterable<QueueOrder> orders,
+    Iterable<FinishedProduct> sales,
+  ) {
+    final orderIncome = orders.fold<double>(
       0,
       (sum, order) => sum + order.settlementIncome,
     );
-    final productIncome = _productSalesFor(month).fold<double>(
+    final productIncome = sales.fold<double>(
       0,
       (sum, product) => sum + product.realIncome,
     );
     return orderIncome + productIncome;
   }
 
-  Map<CommissionPlatform, double> _platformTotals(DateTime month) {
+  Map<CommissionPlatform, double> _platformTotals(
+    Iterable<QueueOrder> orders,
+    Iterable<FinishedProduct> sales,
+  ) {
     final result = <CommissionPlatform, double>{};
 
-    for (final order in _incomeOrdersFor(month)) {
+    for (final order in orders) {
       final platform = _statisticsPlatform(order.platform);
       result[platform] = (result[platform] ?? 0) + order.settlementIncome;
     }
 
-    for (final product in _productSalesFor(month)) {
+    for (final product in sales) {
       final platform = _statisticsPlatform(product.platform);
       result[platform] = (result[platform] ?? 0) + product.realIncome;
     }
@@ -181,8 +187,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
       builder: (context, _) {
         final monthOrders = _incomeOrdersFor(_selectedMonth);
         final monthSales = _productSalesFor(_selectedMonth);
-        final total = _totalFor(_selectedMonth);
-        final platformTotals = _platformTotals(_selectedMonth);
+        // Reuse the filtered lists instead of traversing all history again.
+        final total = _totalFor(monthOrders, monthSales);
+        final platformTotals = _platformTotals(monthOrders, monthSales);
 
         return ListView(
           padding: AppLayoutSpacing.tabScrollPadding(
