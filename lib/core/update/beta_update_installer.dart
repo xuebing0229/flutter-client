@@ -19,5 +19,7 @@ abstract interface class BetaUpdateInstaller {
     required String fileName,
     UpdateDownloadProgressCallback? onProgress,
     UpdateDownloadPauseCallback? shouldPause,
+    int? expectedSizeBytes,
+    String? expectedSha256,
   });
 }
