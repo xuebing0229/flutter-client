@@ -161,8 +161,14 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     }
   }
 
-  Future<void> _cleanupStaleUpdateFiles(Directory directory) async {
+  Future<void> _cleanupStaleUpdateFiles(
+    Directory directory, {
+    required String keepBaseName,
+  }) async {
     if (!await directory.exists()) return;
+
+    final keepZip = '${keepBaseName.toLowerCase()}.zip';
+    final keepPart = '$keepZip.part';
 
     await for (final entity in directory.list(followLinks: false)) {
       final name = entity.path.split(Platform.pathSeparator).last.toLowerCase();
@@ -170,7 +176,9 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       try {
         if (entity is File &&
             name.startsWith('app-beta-') &&
-            name.endsWith('.zip')) {
+            (name.endsWith('.zip') || name.endsWith('.zip.part')) &&
+            name != keepZip &&
+            name != keepPart) {
           await entity.delete();
         } else if (entity is Directory &&
             (name.startsWith('stage-') || name.startsWith('backup-'))) {
@@ -182,11 +190,19 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     }
   }
 
+  int? _contentRangeTotal(HttpHeaders headers) {
+    final value = headers.value(HttpHeaders.contentRangeHeader);
+    if (value == null) return null;
+    final match = RegExp(r'/([0-9]+)$').firstMatch(value.trim());
+    return match == null ? null : int.tryParse(match.group(1)!);
+  }
+
   @override
   Future<String> downloadAndInstall({
     required Uri uri,
     required String fileName,
     UpdateDownloadProgressCallback? onProgress,
+    UpdateDownloadPauseCallback? shouldPause,
   }) async {
     if (uri.scheme != 'https' || uri.host.toLowerCase() != 'github.com') {
       throw const FormatException('Windows Beta 只能从 GitHub Releases 下载。');
@@ -202,26 +218,68 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       '${Platform.pathSeparator}updates',
     );
     await updateDirectory.create(recursive: true);
-    await _cleanupStaleUpdateFiles(updateDirectory);
 
     final safeBaseName = fileName
         .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
         .replaceFirst(RegExp(r'\.zip$', caseSensitive: false), '');
+    final baseName = safeBaseName.isEmpty ? 'app-windows-beta' : safeBaseName;
     final target = File(
-      '${updateDirectory.path}${Platform.pathSeparator}'
-      '${safeBaseName.isEmpty ? 'app-windows-beta' : safeBaseName}.zip',
+      '${updateDirectory.path}${Platform.pathSeparator}$baseName.zip',
+    );
+    final partial = File('${target.path}.part');
+
+    await _cleanupStaleUpdateFiles(
+      updateDirectory,
+      keepBaseName: baseName,
     );
 
+    // A fully downloaded archive is only created after the stream completed,
+    // so it is safe to reuse if the app was closed before the updater launched.
+    if (await target.exists()) {
+      final length = await target.length();
+      onProgress?.call(length, length);
+      return const WindowsSelfUpdateLauncher().launch(archive: target);
+    }
+
+    var existingBytes = await partial.exists() ? await partial.length() : 0;
     final client = HttpClient();
+
     try {
       final request = await client.getUrl(uri);
       request.followRedirects = true;
       request.headers
         ..set(HttpHeaders.userAgentHeader, _userAgent)
         ..set(HttpHeaders.acceptHeader, 'application/octet-stream');
+      if (existingBytes > 0) {
+        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existingBytes-');
+      }
 
       final response = await request.close();
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+
+      if (response.statusCode == HttpStatus.requestedRangeNotSatisfiable &&
+          existingBytes > 0) {
+        final totalBytes = _contentRangeTotal(response.headers);
+        await response.drain<void>();
+        if (totalBytes != null && totalBytes == existingBytes) {
+          if (await target.exists()) await target.delete();
+          await partial.rename(target.path);
+          onProgress?.call(existingBytes, totalBytes);
+          return const WindowsSelfUpdateLauncher().launch(archive: target);
+        }
+
+        // The partial file no longer matches what the server can resume.
+        // Keep the failure explicit; the next attempt will restart cleanly.
+        if (await partial.exists()) await partial.delete();
+        throw HttpException(
+          '服务器拒绝继续当前断点，请重新点击下载。',
+          uri: uri,
+        );
+      }
+
+      final acceptedRange =
+          existingBytes > 0 && response.statusCode == HttpStatus.partialContent;
+      final acceptedFresh = response.statusCode == HttpStatus.ok;
+      if (!acceptedRange && !acceptedFresh) {
         await response.drain<void>();
         throw HttpException(
           '更新文件下载失败：HTTP ${response.statusCode}',
@@ -229,13 +287,35 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
         );
       }
 
-      final sink = target.openWrite();
-      final totalBytes =
-          response.contentLength > 0 ? response.contentLength : null;
-      var receivedBytes = 0;
+      // Some redirect targets may ignore Range. In that case safely restart
+      // this build instead of appending a full response to the partial file.
+      if (!acceptedRange) {
+        existingBytes = 0;
+      }
+
+      final contentRangeTotal = _contentRangeTotal(response.headers);
+      final totalBytes = contentRangeTotal ??
+          (response.contentLength > 0
+              ? existingBytes + response.contentLength
+              : null);
+      var receivedBytes = existingBytes;
       var lastReportedAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+      final sink = partial.openWrite(
+        mode: acceptedRange ? FileMode.append : FileMode.write,
+      );
+
       try {
+        onProgress?.call(receivedBytes, totalBytes);
+
         await for (final chunk in response) {
+          if (shouldPause?.call() == true) {
+            await sink.flush();
+            await sink.close();
+            onProgress?.call(receivedBytes, totalBytes);
+            return 'paused';
+          }
+
           sink.add(chunk);
           receivedBytes += chunk.length;
 
@@ -249,16 +329,26 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
             onProgress?.call(receivedBytes, totalBytes);
           }
         }
+
         await sink.flush();
         await sink.close();
-        onProgress?.call(receivedBytes, totalBytes);
       } catch (_) {
         await sink.close();
-        if (await target.exists()) {
-          await target.delete();
-        }
+        // Deliberately keep the partial file. A retry, app restart, or manual
+        // resume can continue from the last successfully written byte.
         rethrow;
       }
+
+      onProgress?.call(receivedBytes, totalBytes);
+      if (totalBytes != null && receivedBytes < totalBytes) {
+        throw HttpException(
+          '更新下载提前结束，已保留断点，可继续下载。',
+          uri: uri,
+        );
+      }
+
+      if (await target.exists()) await target.delete();
+      await partial.rename(target.path);
     } finally {
       client.close(force: true);
     }
