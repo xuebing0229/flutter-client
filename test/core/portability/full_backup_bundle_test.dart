@@ -1,6 +1,5 @@
+import 'dart:convert';
 import 'dart:io';
-
-import 'package:archive/archive_io.dart';
 
 import 'package:flutter_app/core/portability/app_backup_data.dart';
 import 'package:flutter_app/core/portability/data_portability_file_bridge.dart';
@@ -240,23 +239,23 @@ void main() {
   });
 
   test('ZIP import rejects duplicate reference image entries', () async {
-    const relativePath =
-        'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
-    final manifest = File('${temporary.path}/manifest.json');
-    await manifest.writeAsString(backupWithImage(sizeBytes: 4).encode());
-    final asset = File('${temporary.path}/asset.png');
-    await asset.writeAsBytes(<int>[1, 2, 3, 4]);
+    // A deliberately malformed, real ZIP with two central-directory entries
+    // for the same asset. ZipFileEncoder deduplicates repeated addFile calls,
+    // so construct this tiny fixture via Python's standard zipfile instead.
+    // No manifest is needed: ambiguous entries must be rejected before
+    // extraction or manifest decoding.
+    const duplicateZipBase64 =
+        'UEsDBBQAAAAAAM48Sl1X7nGSBQAAAAUAAAAyAAAAYXNzZXRzL29yZGVyLXJl'
+        'ZmVyZW5jZS1pbWFnZXMvYjNKa1pYSXRNUS9yZWYtMS5wbmdmaXJzdFBLAwQU'
+        'AAAAAADOPEpdaREftgYAAAAGAAAAMgAAAGFzc2V0cy9vcmRlci1yZWZlcmVu'
+        'Y2UtaW1hZ2VzL2IzSmtaWEl0TVEvcmVmLTEucG5nc2Vjb25kUEsBAhQDFAAA'
+        'AAAAzjxKXVfucZIFAAAABQAAADIAAAAAAAAAAAAAAIABAAAAAGFzc2V0cy9v'
+        'cmRlci1yZWZlcmVuY2UtaW1hZ2VzL2IzSmtaWEl0TVEvcmVmLTEucG5nUEsB'
+        'AhQDFAAAAAAAzjxKXWkRH7YGAAAABgAAADIAAAAAAAAAAAAAAIABVQAAAGFz'
+        'c2V0cy9vcmRlci1yZWZlcmVuY2UtaW1hZ2VzL2IzSmtaWEl0TVEvcmVmLTEu'
+        'cG5nUEsFBgAAAAACAAIAwAAAAKsAAAAAAA==';
 
-    final encoder = ZipFileEncoder();
-    encoder.create(exportedFile.path);
-    try {
-      await encoder.addFile(manifest, FullBackupBundleService.manifestFileName);
-      await encoder.addFile(asset, relativePath);
-      await encoder.addFile(asset, relativePath);
-    } finally {
-      await encoder.close();
-    }
-
+    await exportedFile.writeAsBytes(base64Decode(duplicateZipBase64));
     final service = FullBackupBundleService(
       syncRecordStore: _TemporaryRecordStore(syncRoot),
       fileBridge: _CapturingFileBridge(exportedFile),
