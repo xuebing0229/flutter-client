@@ -823,7 +823,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // state intact and retry while the page is active (e.g. after disk space
   // becomes available); do not misreport a failed write as a successful save.
   Future<void> _persistAndReportFailure() async {
-    if (!mounted || !_localDataHealthy) return;
+    // A foreground-exit save may outlive the Widget; still persist the
+    // captured account data, but never show UI or schedule retries if gone.
+    if (!_localDataHealthy) return;
     try {
       await _persistCurrentData();
       _saveRetryTimer?.cancel();
