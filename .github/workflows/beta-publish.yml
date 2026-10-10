@@ -269,8 +269,25 @@ jobs:
         shell: bash
         run: |
           python3 - <<PY
+          import hashlib
           import json
           from pathlib import Path
+          from urllib.parse import quote
+
+          tag = "beta-v${VERSION}+${BUILD}-run${GITHUB_RUN_NUMBER}"
+          release_base = (
+              "https://github.com/xuebing0229/release-files/releases/download/"
+              + quote(tag, safe="")
+          )
+          android_path = Path("dist/app-beta.apk")
+          windows_path = Path("dist/app-windows-beta.zip")
+
+          def sha256(path):
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
 
           data = {
               "schema": 1,
@@ -278,9 +295,13 @@ jobs:
               "version": "${VERSION}",
               "build": int("${BUILD}"),
               "published": True,
-              "download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-beta.apk",
-              "windows_download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta.zip",
-              "windows_installer_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta-setup.exe",
+              "download_url": release_base + "/app-beta.apk",
+              "android_size_bytes": android_path.stat().st_size,
+              "android_sha256": sha256(android_path),
+              "windows_download_url": release_base + "/app-windows-beta.zip",
+              "windows_size_bytes": windows_path.stat().st_size,
+              "windows_sha256": sha256(windows_path),
+              "windows_installer_url": release_base + "/app-windows-beta-setup.exe",
               "notes": "Beta ${VERSION} (${BUILD})",
           }
           Path("app-beta-latest.json").write_text(
@@ -314,8 +335,25 @@ jobs:
           cd "$RUNNER_TEMP/release-files"
 
           python3 - <<PY
+          import hashlib
           import json
           from pathlib import Path
+          from urllib.parse import quote
+
+          tag = "beta-v${VERSION}+${BUILD}-run${GITHUB_RUN_NUMBER}"
+          release_base = (
+              "https://github.com/xuebing0229/release-files/releases/download/"
+              + quote(tag, safe="")
+          )
+          android_path = Path("${GITHUB_WORKSPACE}/dist/app-beta.apk")
+          windows_path = Path("${GITHUB_WORKSPACE}/dist/app-windows-beta.zip")
+
+          def sha256(path):
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
 
           path = Path("version.json")
           data = json.loads(path.read_text())
@@ -325,9 +363,13 @@ jobs:
               "version": "${VERSION}",
               "build": int("${BUILD}"),
               "published": True,
-              "download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-beta.apk",
-              "windows_download_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta.zip",
-              "windows_installer_url": "https://github.com/xuebing0229/release-files/releases/latest/download/app-windows-beta-setup.exe",
+              "download_url": release_base + "/app-beta.apk",
+              "android_size_bytes": android_path.stat().st_size,
+              "android_sha256": sha256(android_path),
+              "windows_download_url": release_base + "/app-windows-beta.zip",
+              "windows_size_bytes": windows_path.stat().st_size,
+              "windows_sha256": sha256(windows_path),
+              "windows_installer_url": release_base + "/app-windows-beta-setup.exe",
           })
           path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
           PY
