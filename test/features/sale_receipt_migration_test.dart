@@ -56,6 +56,35 @@ void main() {
     );
   });
 
+  test('same-moment sales keep their prices and undo order', () {
+    final at = DateTime.utc(2026, 10, 10, 8);
+    final first = product().withSaleCount(1, soldAt: at);
+    // Batch operations and imported timestamps can repeat at exactly the
+    // same instant, even when they use different local/UTC time zones.
+    final second = first.copyWith(price: 200).withSaleCount(
+      2,
+      soldAt: at.toLocal(),
+    );
+    final sales = second.accountedSales;
+    expect(sales, hasLength(2));
+    expect(sales.map((sale) => sale.netIncome), [95, 190]);
+    expect(sales.first.soldAt.isAtSameMomentAs(at), isTrue);
+    expect(
+      sales.last.soldAt.toUtc().difference(at),
+      const Duration(microseconds: 1),
+    );
+
+    final synced = SyncEntityCodec.productFromFields(
+      SyncEntityCodec.productToFields(second),
+    );
+    expect(synced.accountedSales.map((sale) => sale.netIncome), [95, 190]);
+
+    final corrected = second.withSaleCount(1);
+    expect(corrected.accountedSales.single.id, first.accountedSales.single.id);
+    expect(corrected.accountedSales.single.netIncome, 95);
+    expect(corrected.accountedSales.single.id, isNot(sales.last.id));
+  });
+
   test('old date-only records are sealed as estimates before price edits', () {
     final oldAt = DateTime.utc(2026, 8, 8);
     final legacy = product().copyWith(

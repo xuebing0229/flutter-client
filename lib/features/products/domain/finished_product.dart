@@ -174,10 +174,18 @@ class FinishedProduct {
       dates.removeRange(desired, dates.length);
       receipts.removeRange(desired, receipts.length);
     }
+    // Two sales can share the same supplied timestamp (e.g. batch edits or
+    // clock resolution). Their legacy date-only projection cannot then map
+    // receipts back to their original order, so the wrong sale could be
+    // revoked after a price change. Keep each new instant unique, including
+    // when the caller supplies soldAt explicitly.
+    final occupied = dates
+        .map((at) => at.toUtc().microsecondsSinceEpoch)
+        .toSet();
     while (dates.length < desired) {
       var at = soldAt ?? DateTime.now();
-      if (soldAt == null && dates.contains(at)) {
-        at = at.add(Duration(microseconds: dates.length + 1));
+      while (!occupied.add(at.toUtc().microsecondsSinceEpoch)) {
+        at = at.add(const Duration(microseconds: 1));
       }
       dates.add(at);
       final nonce = Random.secure().nextInt(0x7fffffff);
