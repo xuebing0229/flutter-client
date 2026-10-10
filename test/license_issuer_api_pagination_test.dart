@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_app/license_issuer/license_issuer_api.dart';
+import 'package:flutter_app/core/account/activation_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -115,6 +116,36 @@ void main() {
           'invalid_response',
         ),
       ),
+    );
+  });
+
+  test('NGINX plain-HTML 429 is user-friendly for both issuer and buyer', () async {
+    server.listen((request) async {
+      request.response.statusCode = 429;
+      request.response.headers.contentType = ContentType.html;
+      request.response.write('<html><body>429 Too Many Requests</body></html>');
+      await request.response.close();
+    });
+    final issuer = LicenseIssuerApi(
+      baseUrl: 'http://127.0.0.1:${server.port}',
+    );
+    await expectLater(
+      issuer.listLicenses('test-admin-token'),
+      throwsA(isA<IssuerApiException>()
+          .having((e) => e.statusCode, 'statusCode', 429)
+          .having((e) => e.code, 'code', 'rate_limited')),
+    );
+    final buyer = ActivationApiClient(
+      baseUrl: 'http://127.0.0.1:${server.port}',
+    );
+    await expectLater(
+      buyer.redeem(
+        activationCode: 'AW2.example',
+        claimId: 'test-claim',
+      ),
+      throwsA(isA<ActivationApiException>()
+          .having((e) => e.statusCode, 'statusCode', 429)
+          .having((e) => e.code, 'code', 'rate_limited')),
     );
   });
 
