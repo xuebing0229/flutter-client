@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
@@ -48,6 +49,9 @@ class FullBackupBundleService {
        _fileBridge = fileBridge;
 
   static const String manifestFileName = 'backup.json';
+  // The small JSON index may grow with order count, but large image bytes
+  // must never be materialized in memory just to validate an archive.
+  static const int _maxManifestBytes = 32 * 1024 * 1024;
 
   final SyncRecordStore _syncRecordStore;
   final DataPortabilityFileBridge _fileBridge;
@@ -179,16 +183,25 @@ class FullBackupBundleService {
         throw const FormatException('完整备份缺少 backup.json 数据清单。');
       }
 
+      // Read the small manifest *before* unpacking any large user assets.
+      // ZIP metadata alone must not be trusted to authorize unbounded
+      // extraction. The user's actual image sizes are declared in the
+      // validated manifest; there is deliberately no arbitrary image cap.
+      final manifestEntry = archive.findFile(manifestFileName)!;
+      if (manifestEntry.size < 0 ||
+          manifestEntry.size > _maxManifestBytes) {
+        throw const FormatException('备份数据清单体积异常，已拒绝解压。');
+      }
+      final manifestBytes = manifestEntry.readBytes();
+      if (manifestBytes == null ||
+          manifestBytes.length > _maxManifestBytes) {
+        throw const FormatException('备份数据清单无法安全读取。');
+      }
+      final backup = AppBackupData.decode(utf8.decode(manifestBytes));
+      _validateArchiveAssetInventory(archive, backup);
+
       await extractArchiveToDisk(archive, temporary.path);
 
-      final manifest = File(
-        '${temporary.path}${Platform.pathSeparator}$manifestFileName',
-      );
-      if (!await manifest.exists()) {
-        throw const FormatException('完整备份的数据清单无法读取。');
-      }
-
-      final backup = AppBackupData.decode(await manifest.readAsString());
       await _validateExtractedAssets(
         backup: backup,
         extractedRoot: temporary,
@@ -217,6 +230,53 @@ class FullBackupBundleService {
         }
       } catch (_) {}
       rethrow;
+    }
+  }
+
+  void _validateArchiveAssetInventory(Archive archive, AppBackupData backup) {
+    final expectedSizes = <String, int>{};
+    for (final referenced in _referencedImages(backup)) {
+      final image = referenced.image;
+      final path = image.relativePath;
+      if (!_isReferenceAssetPath(path) || image.sizeBytes < 0) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图记录：${image.fileName}',
+        );
+      }
+      final prior = expectedSizes[path];
+      if (prior != null && prior != image.sizeBytes) {
+        throw FormatException('参考图路径重复且声明尺寸不一致：$path');
+      }
+      expectedSizes[path] = image.sizeBytes;
+    }
+
+    final found = <String>{};
+    for (final entry in archive) {
+      if (!entry.isFile || entry.name == manifestFileName) continue;
+      final declared = expectedSizes[entry.name];
+      if (declared == null) {
+        throw FormatException(
+          '备份包含未被任何排单或成品引用的资源：${entry.name}',
+        );
+      }
+      // Exporter writes image bytes with ZIP STORE, never deflate. Enforcing
+      // that contract also rules out highly compressible archive bombs while
+      // preserving legitimate 1GB+ pictures at their original size.
+      if (entry.compression != CompressionType.none) {
+        throw FormatException('参考图不允许二次 ZIP 压缩：${entry.name}');
+      }
+      if (entry.size != declared) {
+        throw FormatException(
+          '备份参考图声明的文件大小与记录不一致：${entry.name}',
+        );
+      }
+      found.add(entry.name);
+    }
+    final missing = expectedSizes.keys.toSet().difference(found);
+    if (missing.isNotEmpty) {
+      throw FormatException(
+        '完整备份缺少参考图原文件：${missing.first}',
+      );
     }
   }
 
