@@ -191,7 +191,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final restoredActiveFocus = _focusStore.activeSession;
         if (restoredActiveFocus != null) {
           _focusRecoverySessionId = restoredActiveFocus.id;
-          _focusRecoveryCutoff = backup.exportedAt;
+          final foregroundExit = await _persistence.loadFocusForegroundExit(
+            accountId: widget.accountId,
+          );
+          _focusRecoveryCutoff = foregroundExit ?? backup.exportedAt;
         }
 
         // A bootstrap-only package deliberately contains account identity but no
@@ -932,6 +935,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     if (state == AppLifecycleState.inactive) {
+      final leftAt = DateTime.now();
+      unawaited(
+        _persistence.saveFocusForegroundExit(
+          accountId: widget.accountId,
+          value: leftAt,
+        ),
+      );
       _saveDebounce?.cancel();
       unawaited(_flushSyncThenPersist());
       return;
@@ -939,6 +949,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      final leftAt = DateTime.now();
+      unawaited(
+        _persistence.saveFocusForegroundExit(
+          accountId: widget.accountId,
+          value: leftAt,
+        ),
+      );
       unawaited(_leaveForegroundSync());
     }
   }
