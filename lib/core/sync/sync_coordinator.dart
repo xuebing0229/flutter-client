@@ -202,6 +202,7 @@ class SyncCoordinator extends ChangeNotifier {
   bool _awaitingInitialRemoteWorkspace = false;
   Timer? _changeDebounce;
   Timer? _pollTimer;
+  DateTime? _nextAssetGcCheckAt;
   Future<void> _tail = Future<void>.value();
 
   // Every workspace entity, including UI settings, goes through the same
@@ -1305,9 +1306,16 @@ class SyncCoordinator extends ChangeNotifier {
 
     if (!_awaitingInitialRemoteWorkspace) {
       final state = accountStore.syncSnapshot;
+      final now = DateTime.now().toUtc();
       if (state != null &&
           state.accountId == accountId &&
-          !state.isRevoked(deviceId)) {
+          !state.isRevoked(deviceId) &&
+          (_nextAssetGcCheckAt == null ||
+              !now.isBefore(_nextAssetGcCheckAt!))) {
+        // Normal P2P reconciliation stays responsive every four seconds;
+        // expensive multi-peer asset deletion consensus only needs an hourly
+        // check because candidates have a minimum 30-day grace period.
+        _nextAssetGcCheckAt = now.add(const Duration(hours: 1));
         try {
           final cleaned = await _assetGcStore.collectAcknowledged(
             accountId: accountId,
