@@ -331,7 +331,7 @@ void main() {
     expect(await collect(), 1);
   });
 
-  test('waits full grace period even with matching peer acknowledgements',
+  test('cleans immediately on unanimous current ACK, without a day-based hold',
       () async {
     final image = await createImage();
     await gc.registerUnlinked(
@@ -339,18 +339,8 @@ void main() {
       relativePaths: [imagePath],
     );
     final current = recordSet();
-    await ackDevices(current);
-    now = now.add(const Duration(days: 29));
-    expect(
-      await gc.collectAcknowledged(
-        accountId: accountId,
-        activeDeviceIds: {'phone', 'desktop'},
-        recordsByKind: current,
-      ),
-      0,
-    );
-    expect(await image.exists(), isTrue);
-    now = now.add(const Duration(days: 1));
+    // All bound devices already agree that no order or product needs this
+    // binary. No 30-day wait, nor an artificial clock advance, is necessary.
     await ackDevices(current);
     expect(
       await gc.collectAcknowledged(
@@ -360,6 +350,7 @@ void main() {
       ),
       1,
     );
+    expect(await image.exists(), isFalse);
   });
 
   test('a disconnected device ACK expires and must be refreshed', () async {
