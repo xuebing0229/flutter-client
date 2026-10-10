@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_app/core/portability/app_backup_data.dart';
 import 'package:flutter_app/core/sync/sync_entity_codec.dart';
 import 'package:flutter_app/core/sync/sync_merge_engine.dart';
@@ -119,6 +121,64 @@ void main() {
     final remote = SyncEntityCodec.productFromFields(fields);
     expect(remote.accountedSales.single.netIncome, 95);
     expect(remote.accountedSales.single.id, original.accountedSales.single.id);
+  });
+
+  test('schema 7 backup dates import as explicitly estimated snapshots', () {
+    final old = product().copyWith(
+      soldCount: 1,
+      saleRecords: [DateTime.utc(2026, 8, 8)],
+      saleReceipts: const [],
+    );
+    final root = AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 10),
+      orders: const [],
+      products: [old],
+      nodePresets: const [],
+    ).toJson();
+    root['schemaVersion'] = 7;
+    final payload = root['payload'] as Map<String, dynamic>;
+    final products = payload['products'] as List<dynamic>;
+    final legacyProduct = products.single as Map<String, dynamic>;
+    legacyProduct.remove('saleReceipts');
+
+    final decoded = AppBackupData.decode(jsonEncode(root));
+    final store = ProductStore();
+    addTearDown(store.dispose);
+    store.replaceAll(decoded.products);
+    final receipt = store.byId(old.id).accountedSales.single;
+    expect(receipt.estimated, isTrue);
+    expect(receipt.netIncome, 95);
+    expect(receipt.soldAt, DateTime.utc(2026, 8, 8));
+    expect(
+      AppBackupData(
+        exportedAt: DateTime.utc(2026, 10, 10),
+        orders: const [],
+        products: store.products.toList(),
+        nodePresets: const [],
+      ).toJson()['schemaVersion'],
+      currentBackupSchemaVersion,
+    );
+  });
+
+  test('receipt ledger prevents stale date/count fields reviving a sale', () {
+    final engine = SyncMergeEngine();
+    final sold = product().withSaleCount(
+      1,
+      soldAt: DateTime.utc(2026, 10, 10),
+    );
+    final originalFields = SyncEntityCodec.productToFields(sold);
+    final staleFields = <String, dynamic>{...originalFields}
+      ..['saleReceipts'] = <dynamic>[]
+      ..['soldCount'] = 5;
+    final record = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: sold.id,
+      values: staleFields,
+      deviceId: 'phone',
+    );
+    final materialized = engine.materialize(record)!;
+    expect(materialized['soldCount'], 0);
+    expect(materialized['saleRecords'], isEmpty);
   });
 
   test('offline sales merge receipts idempotently and survive GC compaction', () {
