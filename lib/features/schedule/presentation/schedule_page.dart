@@ -272,6 +272,7 @@ class _SchedulePageState extends State<SchedulePage> {
         ProductSummaryCard(
           product: sale.product,
           saleTime: sale.receipt.soldAt,
+          saleReceipt: sale.receipt,
           onTap: () => _openProduct(sale.product),
         ),
       );
