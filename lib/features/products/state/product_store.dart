@@ -31,7 +31,7 @@ class ProductStore extends ChangeNotifier {
   void replaceAll(Iterable<FinishedProduct> products) {
     _products
       ..clear()
-      ..addAll(products);
+      ..addAll(products.map((product) => product.copyWith()));
     _sortDefaultOrder();
     notifyListeners();
   }
@@ -63,12 +63,9 @@ class ProductStore extends ChangeNotifier {
         ? 1
         : product.soldCount + 1;
 
-    _products[index] = product.copyWith(
-      soldCount: nextSoldCount,
-      saleRecords: [
-        ...product.saleRecords,
-        soldAt ?? DateTime.now(),
-      ],
+    _products[index] = product.withSaleCount(
+      nextSoldCount,
+      soldAt: soldAt,
     );
     notifyListeners();
   }
