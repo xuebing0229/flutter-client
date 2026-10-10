@@ -35,7 +35,10 @@ class ActivationRedemption {
 
 class ActivationApiClient {
   const ActivationApiClient({
-    this.baseUrl = const String.fromEnvironment('ACTIVATION_API_BASE_URL'),
+    this.baseUrl = const String.fromEnvironment(
+      'ACTIVATION_API_BASE_URL',
+      defaultValue: 'https://license.apixb.top',
+    ),
   });
 
   final String baseUrl;
