@@ -159,6 +159,88 @@ class ActivationServiceTests(unittest.TestCase):
         self.assertEqual(payload["error"], "invalid_code")
         self.assertIsNone(self._redemption()["redeemed_at"])
 
+    def _list_licenses(self, query="", token="test-admin-token"):
+        request = urllib.request.Request(
+            f"{self.base_url}/v1/licenses?{query}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, json.load(error)
+
+    def test_keyset_pages_cover_more_than_500_licenses_without_duplicates(self):
+        # Keep this fast: ledger history only needs a stored signed-code
+        # marker, not 1,205 expensive signatures for the query test.
+        conn = service.connect_db()
+        try:
+            conn.executemany(
+                """INSERT INTO licenses (
+                    account_id, activation_code, note, generated_by_admin_id,
+                    generated_by_name, created_at
+                ) VALUES (?, ?, '', 1, 'test-admin', ?)""",
+                [
+                    (f"record-{i:05d}", f"code-{i:05d}", service.utc_now())
+                    for i in range(1205)
+                ],
+            )
+            conn.execute(
+                """UPDATE licenses SET voided_at = ?
+                WHERE account_id = 'record-00007'""",
+                (service.utc_now(),),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        records = []
+        before = None
+        pages = 0
+        while True:
+            query = "limit=500"
+            if before is not None:
+                query += f"&beforeId={before}"
+            status, response = self._list_licenses(query)
+            self.assertEqual(status, 200)
+            batch = response["licenses"]
+            self.assertLessEqual(len(batch), 500)
+            records.extend(batch)
+            pages += 1
+            before_next = response["nextBeforeId"]
+            if before_next is None:
+                break
+            self.assertEqual(before_next, int(batch[-1]["serial"]))
+            if before is not None:
+                self.assertLess(before_next, before)
+            before = before_next
+            # New license issued mid-refresh must not shift earlier pages.
+            if pages == 1:
+                self._new_code("inserted_after_first_page")
+        self.assertEqual(pages, 3)
+        self.assertEqual(len(records), 1204)
+        self.assertEqual(len({r["serial"] for r in records}), 1204)
+        self.assertNotIn("record-00007", {r["accountId"] for r in records})
+        self.assertNotIn(
+            "inserted_after_first_page", {r["accountId"] for r in records}
+        )
+        status, fresh = self._list_licenses("limit=1")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            fresh["licenses"][0]["accountId"], "inserted_after_first_page"
+        )
+
+    def test_pagination_rejects_invalid_cursors_and_requires_admin(self):
+        for query in ("limit=0", "limit=501", "limit=nonsense",
+                      "beforeId=0", "beforeId=-5", "beforeId=bad"):
+            status, result = self._list_licenses(query)
+            self.assertEqual(status, 400, msg=query)
+            self.assertEqual(result["error"], "invalid_pagination")
+        status, result = self._list_licenses("limit=2", token="invalid")
+        self.assertEqual(status, 401)
+        self.assertEqual(result["error"], "unauthorized")
+
     def test_signed_but_unregistered_code_is_rejected(self):
         code = self._new_code("registered-account")
         parts = code.split(".")
