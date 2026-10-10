@@ -249,11 +249,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     final loveLevelChanged = _huajiaLoveLevel != _draftBaseline.huajiaLoveLevel;
     final onlinePercentChanged =
         _onlinePercent != _draftBaseline.normalizedOnlinePercent;
-    final referenceImagesChanged = widget.featureStore.referenceImages &&
-        !_sameReferenceImages(
-          _referenceImages,
-          _draftBaseline.referenceImages,
-        );
+    final referenceImagesChanged = !_sameReferenceImages(
+      _referenceImages,
+      _draftBaseline.referenceImages,
+    );
     final removedReferenceImages = referenceImagesChanged
         ? <OrderReferenceImage>[
             for (final image in _draftBaseline.referenceImages)
