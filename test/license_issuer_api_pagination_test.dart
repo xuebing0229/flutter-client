@@ -69,6 +69,30 @@ void main() {
     expect(result.map((e) => e.serial), <String>['000001']);
   });
 
+  test('old server returning 500 records without cursor fails safely', () async {
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'ok': true,
+        'licenses': [for (var id = 500; id >= 1; id--) record(id)],
+      }));
+      await request.response.close();
+    });
+    final api = LicenseIssuerApi(
+      baseUrl: 'http://127.0.0.1:${server.port}',
+    );
+    await expectLater(
+      api.listLicenses('test-admin-token'),
+      throwsA(
+        isA<IssuerApiException>().having(
+          (e) => e.code,
+          'code',
+          'server_upgrade_required',
+        ),
+      ),
+    );
+  });
+
   test('server returning non-progressing cursor fails rather than looping', () async {
     server.listen((request) async {
       final before = request.uri.queryParameters['beforeId'];
