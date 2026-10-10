@@ -11,10 +11,9 @@ import 'windows_beta_update_installer.dart';
 
 /// App-lifetime Beta update state.
 ///
-/// The Settings page is disposable navigation UI. Keeping the actual update
-/// task here means a Windows download is not tied to that page's lifecycle:
-/// switching tools, opening the theme picker, or returning to Settings later
-/// all observe the same in-flight task and progress.
+/// Navigation, theme rebuilds, account switches and SettingsPage disposal must
+/// not own the update task. Windows partial downloads are kept on disk and can
+/// resume after pause, transient network failure, or a later app launch.
 class BetaUpdateSession extends ChangeNotifier {
   BetaUpdateSession._();
 
@@ -31,6 +30,8 @@ class BetaUpdateSession extends ChangeNotifier {
   bool _versionLoaded = false;
   bool _busy = false;
   bool _downloading = false;
+  bool _paused = false;
+  bool _pauseRequested = false;
   int _receivedBytes = 0;
   int? _totalBytes;
   String _currentVersion = '…';
@@ -41,6 +42,9 @@ class BetaUpdateSession extends ChangeNotifier {
   bool get supported => _updater != null;
   bool get busy => _busy;
   bool get downloading => _downloading;
+  bool get paused => _paused;
+  bool get canPause =>
+      Platform.isWindows && _downloading && !_pauseRequested;
   int get receivedBytes => _receivedBytes;
   int? get totalBytes => _totalBytes;
   String get currentVersion => _currentVersion;
@@ -81,22 +85,34 @@ class BetaUpdateSession extends ChangeNotifier {
     }
   }
 
+  void pauseDownload() {
+    if (!canPause) return;
+    _pauseRequested = true;
+    _status = '正在暂停…';
+    notifyListeners();
+  }
+
   Future<void> downloadLatest() async {
     final updater = _updater;
     final latest = _latest;
     if (updater == null || latest == null || _busy) return;
 
+    final resuming = Platform.isWindows && _paused;
     _busy = true;
     _downloading = Platform.isWindows;
-    _receivedBytes = 0;
-    _totalBytes = null;
+    _paused = false;
+    _pauseRequested = false;
+    if (!resuming) {
+      _receivedBytes = 0;
+      _totalBytes = null;
+    }
     if (Platform.isWindows) {
-      _status = '正在下载新版…';
+      _status = resuming ? '正在继续下载…' : '正在下载新版…';
     }
     notifyListeners();
 
     try {
-      final status = await updater.downloadAndInstall(
+      final result = await updater.downloadAndInstall(
         latest,
         onProgress: Platform.isWindows
             ? (receivedBytes, totalBytes) {
@@ -110,9 +126,15 @@ class BetaUpdateSession extends ChangeNotifier {
                 notifyListeners();
               }
             : null,
+        shouldPause: Platform.isWindows ? () => _pauseRequested : null,
       );
 
-      if (status == 'permission_required') {
+      if (result == 'paused') {
+        _paused = true;
+        _status = '已暂停，可继续下载';
+        return;
+      }
+      if (result == 'permission_required') {
         _status = '请允许“安装未知应用”，返回后再次点击下载';
       } else if (Platform.isWindows) {
         _status = '下载完成，正在启动自动更新…';
@@ -120,10 +142,16 @@ class BetaUpdateSession extends ChangeNotifier {
         _status = '已交给系统下载，完成后会自动打开安装页面';
       }
     } catch (error) {
-      _status = '更新失败：$error';
+      if (Platform.isWindows && _receivedBytes > 0) {
+        _paused = true;
+        _status = '下载中断，已保留断点，点击继续下载';
+      } else {
+        _status = '更新失败：$error';
+      }
     } finally {
       _busy = false;
       _downloading = false;
+      _pauseRequested = false;
       notifyListeners();
     }
   }
