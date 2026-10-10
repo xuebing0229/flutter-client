@@ -60,6 +60,7 @@ class _ArchivePageState extends State<ArchivePage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ProductDetailPage(
+          accountId: widget.accountId,
           store: widget.productStore,
           productId: productId,
           featureStore: widget.featureStore,
@@ -177,6 +178,7 @@ class _ArchivePageState extends State<ArchivePage> {
 
     final images = <OrderReferenceImage>[
       for (final order in orders) ...order.referenceImages,
+      for (final product in products) ...product.referenceImages,
     ];
     final imageBytes = images.fold<int>(
       0,
@@ -413,7 +415,7 @@ class _CleanupCard extends StatelessWidget {
           '清理旧归档',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        subtitle: const Text('自选归档时间范围，永久删除对应记录及排单参考图。'),
+        subtitle: const Text('自选归档时间范围，永久删除对应记录及参考图。'),
         trailing: busy
             ? const SizedBox.square(
                 dimension: 20,
