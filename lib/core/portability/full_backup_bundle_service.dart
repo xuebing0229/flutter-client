@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 
 import '../sync/sync_record_store.dart';
+import '../../features/orders/domain/queue_order.dart';
 import 'app_backup_data.dart';
 import 'data_portability_file_bridge.dart';
 
@@ -226,12 +227,12 @@ class FullBackupBundleService {
     final result = <String, File>{};
     final missing = <String>[];
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
+    for (final referenced in _referencedImages(backup)) {
+        final image = referenced.image;
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
+            '${referenced.owner}包含无效参考图路径：$relativePath',
           );
         }
 
@@ -254,7 +255,6 @@ class FullBackupBundleService {
           throw FormatException('参考图路径重复：$relativePath');
         }
         result[relativePath] = file;
-      }
     }
 
     if (missing.isNotEmpty) {
@@ -275,12 +275,12 @@ class FullBackupBundleService {
   }) async {
     final paths = <String>{};
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
+    for (final referenced in _referencedImages(backup)) {
+        final image = referenced.image;
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
+            '${referenced.owner}包含无效参考图路径：$relativePath',
           );
         }
         if (!paths.add(relativePath)) {
@@ -298,6 +298,23 @@ class FullBackupBundleService {
             '完整备份中的参考图文件损坏：${image.fileName}',
           );
         }
+    }
+  }
+
+  // Both order and finished-product reference images live in the same
+  // asset directory. All owners must participate in export and import
+  // validation or a seemingly successful "full" backup can lose art.
+  Iterable<({String owner, OrderReferenceImage image})> _referencedImages(
+    AppBackupData backup,
+  ) sync* {
+    for (final order in backup.orders) {
+      for (final image in order.referenceImages) {
+        yield (owner: '排单“${order.title}”', image: image);
+      }
+    }
+    for (final product in backup.products) {
+      for (final image in product.referenceImages) {
+        yield (owner: '成品“${product.title}”', image: image);
       }
     }
   }
