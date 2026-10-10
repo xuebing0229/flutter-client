@@ -301,4 +301,82 @@ void main() {
     );
   });
 
+  test('restore ZIP assets override matching paths while preserving offline-only files', () async {
+    final oldShared = File('${temporary.path}/assets/refs/same.png');
+    final oldOnly = File('${temporary.path}/assets/refs/offline.png');
+    await oldShared.parent.create(recursive: true);
+    await oldShared.writeAsBytes(<int>[1, 1, 1]);
+    await oldOnly.writeAsBytes(<int>[9, 9, 9]);
+
+    final importDir = await Directory.systemTemp.createTemp('guild-overlay-');
+    addTearDown(() async {
+      if (await importDir.exists()) await importDir.delete(recursive: true);
+    });
+    final backupImage = File('${importDir.path}/refs/same.png');
+    final newOnly = File('${importDir.path}/refs/new.png');
+    await backupImage.parent.create(recursive: true);
+    await backupImage.writeAsBytes(<int>[2, 2, 2]);
+    await newOnly.writeAsBytes(<int>[3, 3, 3]);
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+      assetSourceDirectory: importDir,
+    );
+    expect(await oldShared.readAsBytes(), <int>[2, 2, 2]);
+    expect(await oldOnly.readAsBytes(), <int>[9, 9, 9]);
+    expect(
+      await File('${temporary.path}/assets/refs/new.png').readAsBytes(),
+      <int>[3, 3, 3],
+    );
+    // Pre-staging copies from the imported bundle without consuming it.
+    expect(await backupImage.readAsBytes(), <int>[2, 2, 2]);
+  });
+
+  test('restore rolls back the entire old root on asset merge failure', () async {
+    final original = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'untouched-order',
+      values: const <String, dynamic>{
+        'id': 'untouched-order',
+        'title': 'must survive rollback',
+      },
+      deviceId: 'phone',
+    );
+    await store.write(accountId: accountId, record: original);
+    final oldFile = File('${temporary.path}/assets/refs/shape');
+    await oldFile.parent.create(recursive: true);
+    await oldFile.writeAsBytes(<int>[8, 7, 6]);
+
+    // Import claims that a *file* already in the live root is a directory.
+    // This must fail after staging and after renaming the old root aside,
+    // and then restore the exact old root and all of its assets.
+    final imported = await Directory.systemTemp.createTemp('guild-bad-merge-');
+    addTearDown(() async {
+      if (await imported.exists()) await imported.delete(recursive: true);
+    });
+    final colliding = File('${imported.path}/refs/shape/new.png');
+    await colliding.parent.create(recursive: true);
+    await colliding.writeAsBytes(<int>[1, 2, 3]);
+
+    await expectLater(
+      store.replacePortableRecords(
+        accountId: accountId,
+        records: const <Map<String, dynamic>>[],
+        assetSourceDirectory: imported,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await oldFile.readAsBytes(), <int>[8, 7, 6]);
+    final restored = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+      recordId: 'untouched-order',
+    );
+    expect(restored, isNotNull);
+    expect(engine.materialize(restored!)!['title'], 'must survive rollback');
+    expect(await Directory('${temporary.path}/assets/refs/shape').exists(),
+        isFalse);
+  });
+
 }
