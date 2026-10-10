@@ -18,7 +18,7 @@ void main() {
     );
   });
 
-  testWidgets('compact card keeps its original 12 px content insets', (tester) async {
+  testWidgets('compact card retains its original padding and 1 px border', (tester) async {
     final childKey = GlobalKey();
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
 
@@ -40,9 +40,9 @@ void main() {
 
     final card = tester.getRect(find.byType(SummaryCardSurface));
     final inner = tester.getRect(find.byKey(childKey));
-    expect(inner.left - card.left, 12);
-    expect(inner.top - card.top, 12);
-    expect(card.size, const Size(96, 50));
+    expect(inner.left - card.left, 13);
+    expect(inner.top - card.top, 13);
+    expect(card.size, const Size(98, 52));
   });
 
   test('all existing palette definitions remain available', () {
