@@ -294,6 +294,43 @@ void main() {
     expect(await image.exists(), isTrue);
   });
 
+  test('a newly paired peer known only to the other device blocks cleanup',
+      () async {
+    final image = await createImage();
+    await gc.registerUnlinked(
+      accountId: accountId,
+      relativePaths: [imagePath],
+    );
+    now = now.add(const Duration(days: 32));
+    final current = recordSet();
+    await ackDevices(current);
+    // Desktop learned about a third bound phone before this machine did.
+    // Even though both machines agree on order/product hashes, they have NOT
+    // converged on which peers must be consulted before deleting the art.
+    await acks.writeSnapshot(
+      accountId: accountId,
+      deviceId: 'desktop',
+      recordsByKind: current,
+      assetGcPeers: const {'phone', 'desktop', 'third-phone'},
+    );
+    Future<int> collect() => gc.collectAcknowledged(
+      accountId: accountId,
+      activeDeviceIds: {'phone', 'desktop'},
+      recordsByKind: current,
+    );
+    expect(await collect(), 0);
+    expect(await image.exists(), isTrue);
+    // When all devices eventually agree on membership, a new snapshot may
+    // authorize cleanup (provided its contents also still match).
+    await acks.writeSnapshot(
+      accountId: accountId,
+      deviceId: 'desktop',
+      recordsByKind: current,
+      assetGcPeers: const {'phone', 'desktop'},
+    );
+    expect(await collect(), 1);
+  });
+
   test('waits full grace period even with matching peer acknowledgements',
       () async {
     final image = await createImage();
