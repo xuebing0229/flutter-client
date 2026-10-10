@@ -74,7 +74,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   void dispose() {
     if (_sessionAddedReferenceImages.isNotEmpty) {
       unawaited(
-        _referenceImageStore.deleteImages(
+        _referenceImageStore.discardUnsavedImages(
           accountId: widget.accountId,
           images: List<OrderReferenceImage>.from(_sessionAddedReferenceImages),
         ),
@@ -129,7 +129,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final added = List<OrderReferenceImage>.from(_sessionAddedReferenceImages);
     _sessionAddedReferenceImages.clear();
     if (added.isNotEmpty) {
-      await _referenceImageStore.deleteImages(
+      await _referenceImageStore.discardUnsavedImages(
         accountId: widget.accountId,
         images: added,
       );
@@ -149,7 +149,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       );
       if (!mounted) {
         if (imported.isNotEmpty) {
-          await _referenceImageStore.deleteImages(
+          await _referenceImageStore.discardUnsavedImages(
             accountId: widget.accountId,
             images: imported,
           );
@@ -180,7 +180,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     if (_sessionAddedReferenceImages.any((item) => item.id == image.id)) {
       _sessionAddedReferenceImages.removeWhere((item) => item.id == image.id);
       unawaited(
-        _referenceImageStore.deleteImages(
+        _referenceImageStore.discardUnsavedImages(
           accountId: widget.accountId,
           images: <OrderReferenceImage>[image],
         ),
