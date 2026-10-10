@@ -250,15 +250,15 @@ class SyncRecordStore {
       '${accountDirectory.path}/sync-v1.previous-$suffix',
     );
 
-    await staging.create(recursive: true);
-    await File(
-      '${staging.path}/.stignore',
-    ).writeAsString('(?d)**/*.tmp\n', flush: true);
-    // Preserve Syncthing's folder marker when an already-running transport is
-    // watching this account path.
-    await Directory('${staging.path}/.stfolder').create(recursive: true);
-
     try {
+      await staging.create(recursive: true);
+      await File(
+        '${staging.path}/.stignore',
+      ).writeAsString('(?d)**/*.tmp\n', flush: true);
+      // Preserve Syncthing's folder marker when an already-running transport
+      // is watching this account path.
+      await Directory('${staging.path}/.stfolder').create(recursive: true);
+
       for (final record in decoded) {
         final directory = Directory(
           '${staging.path}/${record.kind.directoryName}',
