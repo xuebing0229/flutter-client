@@ -5,6 +5,7 @@ import 'package:flutter_app/core/portability/data_portability_file_bridge.dart';
 import 'package:flutter_app/core/portability/full_backup_bundle_service.dart';
 import 'package:flutter_app/core/sync/sync_record_store.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
+import 'package:flutter_app/features/products/domain/finished_product.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _TemporaryRecordStore extends SyncRecordStore {
@@ -155,6 +156,85 @@ void main() {
       ),
       throwsA(isA<StateError>()),
     );
+  });
+
+  AppBackupData backupWithProductImage({required int sizeBytes}) {
+    final image = OrderReferenceImage(
+      id: 'ref-product-1',
+      fileName: '成品参考.png',
+      relativePath:
+          'assets/order-reference-images/cHJvZHVjdC0x/ref-product-1.png',
+      addedAt: DateTime.utc(2026, 10, 6, 1),
+      sizeBytes: sizeBytes,
+    );
+    return AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 6, 2),
+      orders: const <QueueOrder>[],
+      products: <FinishedProduct>[
+        FinishedProduct(
+          id: 'product-1',
+          title: '测试成品',
+          platform: CommissionPlatform.huajia,
+          saleType: ProductSaleType.multiple,
+          referenceImages: <OrderReferenceImage>[image],
+        ),
+      ],
+      nodePresets: const <NodePreset>[preset],
+      syncRecords: const <Map<String, dynamic>>[],
+    );
+  }
+
+  test('full backup includes product-only reference image files', () async {
+    final bytes = <int>[11, 22, 33, 44];
+    final relativePath =
+        'assets/order-reference-images/cHJvZHVjdC0x/ref-product-1.png';
+    final asset = File('${syncRoot.path}/$relativePath');
+    await asset.parent.create(recursive: true);
+    await asset.writeAsBytes(bytes, flush: true);
+
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+    final backup = backupWithProductImage(sizeBytes: bytes.length);
+    expect(
+      await service.exportFullBackup(
+        accountId: 'account',
+        backup: backup,
+        fileName: 'backup.zip',
+      ),
+      isTrue,
+    );
+
+    final imported = await service.readBackupFile(
+      exportedFile,
+      displayName: 'backup.zip',
+    );
+    try {
+      expect(imported.backup.products.single.referenceImages.length, 1);
+      final extracted = File(
+        '${imported.extractedDirectory!.path}/$relativePath',
+      );
+      expect(await extracted.readAsBytes(), bytes);
+    } finally {
+      await imported.dispose();
+    }
+  });
+
+  test('full backup refuses missing product reference images', () async {
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+    expect(
+      () => service.exportFullBackup(
+        accountId: 'account',
+        backup: backupWithProductImage(sizeBytes: 4),
+        fileName: 'backup.zip',
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(await exportedFile.exists(), isFalse);
   });
 
   test('legacy json backup remains importable but is marked without assets', () async {
