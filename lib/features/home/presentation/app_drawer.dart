@@ -376,7 +376,10 @@ class AppMenuTile extends StatelessWidget {
         colors.primary.withValues(alpha: 0.11),
         colors.surface,
       ),
-      selectedColor: colors.primary,
+      selectedColor: Color.alphaBlend(
+        colors.onSurface.withValues(alpha: 0.53),
+        colors.primary,
+      ),
       leading: Icon(selected ? (selectedIcon ?? icon) : icon),
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle!),
