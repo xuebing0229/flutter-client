@@ -27,6 +27,12 @@ class BetaUpdateCoordinator {
     return manifest;
   }
 
+  Future<int?> resumableBytes(UpdateManifest manifest) {
+    return _installer.resumableBytes(
+      fileName: 'app-beta-${manifest.build}',
+    );
+  }
+
   Future<String> downloadAndInstall(
     UpdateManifest manifest, {
     UpdateDownloadProgressCallback? onProgress,
