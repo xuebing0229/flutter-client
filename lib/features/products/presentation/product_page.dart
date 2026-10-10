@@ -6,7 +6,6 @@ import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
-import '../../orders/domain/queue_order.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
 import 'product_detail_page.dart';
