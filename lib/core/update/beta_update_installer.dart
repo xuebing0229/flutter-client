@@ -7,6 +7,8 @@ typedef UpdateDownloadProgressCallback = void Function(
   int? totalBytes,
 );
 
+typedef UpdateDownloadPauseCallback = bool Function();
+
 abstract interface class BetaUpdateInstaller {
   Future<Map<String, dynamic>> fetchLatestManifest();
 
@@ -14,5 +16,6 @@ abstract interface class BetaUpdateInstaller {
     required Uri uri,
     required String fileName,
     UpdateDownloadProgressCallback? onProgress,
+    UpdateDownloadPauseCallback? shouldPause,
   });
 }
