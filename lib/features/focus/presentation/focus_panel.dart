@@ -786,6 +786,7 @@ class _FocusPanelState extends State<FocusPanel> {
                             session.orderId!,
                             session.orderTitleSnapshot ?? '排单',
                           ),
+                  onLongPress: () => _confirmDeleteSession(session),
                 )
             else
               for (final group in groups)
