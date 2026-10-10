@@ -257,6 +257,22 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
     }
   }
 
+  Future<void> _pickBubbleImage(DesktopPetPreset preset) async {
+    try {
+      final path = await _settings.pickBubbleImageSource();
+      if (path == null || !mounted) return;
+      await _settings.importBubbleImage(preset.id, path);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('导入气泡图片失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   void _scheduleCustomTextSave(String value) {
     _customTextSaveDebounce?.cancel();
     _customTextSaveDebounce = Timer(
@@ -453,12 +469,69 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       );
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+                  Text(
+                    '文字泡样式',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<DesktopPetBubbleStyle>(
+                    segments: const [
+                      ButtonSegment(
+                        value: DesktopPetBubbleStyle.speech,
+                        icon: Icon(Icons.chat_bubble_outline_rounded),
+                        label: Text('说话'),
+                      ),
+                      ButtonSegment(
+                        value: DesktopPetBubbleStyle.thought,
+                        icon: Icon(Icons.bubble_chart_outlined),
+                        label: Text('思考'),
+                      ),
+                    ],
+                    selected: <DesktopPetBubbleStyle>{
+                      _settings.bubbleStyle,
+                    },
+                    onSelectionChanged: (selection) {
+                      if (selection.isEmpty) return;
+                      unawaited(_settings.setBubbleStyle(selection.first));
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (selected != null) ...[
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => unawaited(_pickBubbleImage(selected)),
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          label: Text(selected.bubbleImage == null
+                              ? '气泡内添加透明 PNG'
+                              : '更换气泡内图片'),
+                        ),
+                        if (selected.bubbleImage != null)
+                          TextButton(
+                            onPressed: () => unawaited(
+                              _settings.clearBubbleImage(selected.id),
+                            ),
+                            child: const Text('移除图片'),
+                          ),
+                      ],
+                    ),
+                    Text(
+                      '可选装饰图会和文字一起显示在气泡内，仅保存在本机当前桌宠预设中。',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (selected != null && selected.imageA != null) ...[
                     _DesktopPetOverlayPreview(
                       imagePath: selected.imageA!,
                       placement: selected.placementA,
                       bubblePosition: _settings.bubblePosition,
+                      bubbleStyle: _settings.bubbleStyle,
+                      bubbleImagePath: selected.bubbleImage,
                       bubbleTextScale: _settings.bubbleTextScale,
                       focusClockScale: _settings.focusClockScale,
                       bubbleOffset: _settings.activeBubbleOffset,
@@ -1254,6 +1327,8 @@ class _DesktopPetOverlayPreview extends StatefulWidget {
     required this.imagePath,
     required this.placement,
     required this.bubblePosition,
+    required this.bubbleStyle,
+    required this.bubbleImagePath,
     required this.bubbleTextScale,
     required this.focusClockScale,
     required this.bubbleOffset,
@@ -1266,6 +1341,8 @@ class _DesktopPetOverlayPreview extends StatefulWidget {
   final String imagePath;
   final DesktopPetPlacement placement;
   final DesktopPetBubblePosition bubblePosition;
+  final DesktopPetBubbleStyle bubbleStyle;
+  final String? bubbleImagePath;
   final double bubbleTextScale;
   final double focusClockScale;
   final DesktopPetOverlayOffset bubbleOffset;
@@ -1383,10 +1460,11 @@ class _DesktopPetOverlayPreviewState
 
   Widget _bubbleSample(ColorScheme colors) {
     final fontSize = 14 * widget.bubbleTextScale;
+    final thought = widget.bubbleStyle == DesktopPetBubbleStyle.thought;
     final decoration = BoxDecoration(
       color: colors.surface,
       border: Border.all(color: colors.outlineVariant),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(thought ? 40 : 12),
       boxShadow: [
         BoxShadow(
           blurRadius: 8,
@@ -1396,40 +1474,87 @@ class _DesktopPetOverlayPreviewState
       ],
     );
 
-    if (widget.bubblePosition == DesktopPetBubblePosition.side) {
-      const chars = ['文', '字', '泡'];
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-        decoration: decoration,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final char in chars)
-              Text(
-                char,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  height: 1.15,
-                  fontWeight: FontWeight.w600,
+    final side = widget.bubblePosition == DesktopPetBubblePosition.side;
+    final image = widget.bubbleImagePath;
+    final text = side
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final char in const ['文', '字', '泡'])
+                Text(
+                  char,
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    height: 1.15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ],
+          )
+        : Text(
+            '文字泡示例',
+            style: TextStyle(
+              fontSize: fontSize,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+            ),
+          );
+    final body = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: side ? 9 : 12,
+        vertical: 8,
+      ),
       decoration: decoration,
-      child: Text(
-        '文字泡示例',
-        style: TextStyle(
-          fontSize: fontSize,
-          height: 1.2,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (image != null) ...[
+            Image.file(
+              File(image),
+              width: 54,
+              height: 54,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.broken_image_outlined),
+            ),
+            const SizedBox(height: 4),
+          ],
+          text,
+        ],
       ),
     );
+
+    if (!thought) return body;
+    Widget dot(double size) => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: colors.surface,
+            shape: BoxShape.circle,
+            border: Border.all(color: colors.outlineVariant),
+          ),
+        );
+    return side
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              body,
+              const SizedBox(width: 3),
+              dot(9),
+              const SizedBox(width: 4),
+              dot(5),
+            ],
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              body,
+              const SizedBox(height: 2),
+              Padding(padding: const EdgeInsets.only(left: 23), child: dot(9)),
+              Padding(padding: const EdgeInsets.only(left: 32), child: dot(5)),
+            ],
+          );
   }
 
   Widget _clockSample(ColorScheme colors) {
