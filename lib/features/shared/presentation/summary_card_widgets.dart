@@ -45,7 +45,7 @@ class SummaryCardSurface extends StatelessWidget {
                   colors.primary.withValues(alpha: dark ? 0.35 : 0.27),
                   colors.outlineVariant,
                 ),
-                width: 0.85,
+                width: 1,
               ),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
