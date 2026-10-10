@@ -67,11 +67,31 @@ if (-not (Test-Path (Join-Path $runtimeCache "ppocr.exe"))) {
   if (-not (Test-Path $paddleExtract)) {
     Expand-Archive -LiteralPath $paddleZip -DestinationPath $paddleExtract -Force
   }
-  $paddleRoot = Get-ChildItem -LiteralPath $paddleExtract -Directory -Recurse |
-    Where-Object { Test-Path (Join-Path $_.FullName "paddle\include") } |
-    Select-Object -First 1
-  if (-not $paddleRoot) { throw "Official Paddle Inference package layout was not recognized." }
-  $paddleRoot = $paddleRoot.FullName
+  $paddleRoot = $null
+  if (Test-Path (Join-Path $paddleExtract "paddle\include")) {
+    $paddleRoot = $paddleExtract
+  } else {
+    $paddleRootEntry = Get-ChildItem -LiteralPath $paddleExtract -Directory -Recurse |
+      Where-Object { Test-Path (Join-Path $_.FullName "paddle\include") } |
+      Select-Object -First 1
+    if ($paddleRootEntry) { $paddleRoot = $paddleRootEntry.FullName }
+  }
+  if (-not $paddleRoot) {
+    $header = Get-ChildItem -LiteralPath $paddleExtract -File -Recurse -Filter "paddle_inference_api.h" |
+      Select-Object -First 1
+    if ($header) {
+      $includeDir = Split-Path $header.FullName
+      if ((Split-Path $includeDir -Leaf) -eq "paddle") {
+        $paddleRoot = Split-Path (Split-Path $includeDir)
+      }
+    }
+  }
+  if (-not $paddleRoot -or -not (Test-Path (Join-Path $paddleRoot "paddle\include"))) {
+    Write-Host "Paddle Inference extracted directories:"
+    Get-ChildItem -LiteralPath $paddleExtract -Directory -Depth 3 |
+      Select-Object -ExpandProperty FullName
+    throw "Official Paddle Inference package layout was not recognized."
+  }
 
   $sevenZip = "C:\Program Files\7-Zip\7z.exe"
   if (-not (Test-Path $sevenZip)) {
@@ -86,11 +106,16 @@ if (-not (Test-Path (Join-Path $runtimeCache "ppocr.exe"))) {
     & $sevenZip x $opencvExe "-o$opencvExtract" -y | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "OpenCV extraction failed." }
   }
-  $opencvBuild = Get-ChildItem -LiteralPath $opencvExtract -Directory -Recurse |
-    Where-Object { Test-Path (Join-Path $_.FullName "x64\vc16\lib") } |
-    Select-Object -First 1
+  $opencvBuild = $null
+  if (Test-Path (Join-Path $opencvExtract "x64\vc16\lib")) {
+    $opencvBuild = $opencvExtract
+  } else {
+    $opencvEntry = Get-ChildItem -LiteralPath $opencvExtract -Directory -Recurse |
+      Where-Object { Test-Path (Join-Path $_.FullName "x64\vc16\lib") } |
+      Select-Object -First 1
+    if ($opencvEntry) { $opencvBuild = $opencvEntry.FullName }
+  }
   if (-not $opencvBuild) { throw "Official OpenCV Windows package layout was not recognized." }
-  $opencvBuild = $opencvBuild.FullName
 
   $cppInfer = Join-Path $src "deploy\cpp_infer"
   Get-File $DirentUrl (Join-Path $cppInfer "dirent.h")
