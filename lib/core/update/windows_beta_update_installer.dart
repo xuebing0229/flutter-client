@@ -224,7 +224,46 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     );
     final safeBaseName = fileName
         .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
-        .replaceFirst(RegExp(r'\.zip
+        .replaceFirst(RegExp(r'\.zip$', caseSensitive: false), '');
+    final baseName = safeBaseName.isEmpty ? 'app-windows-beta' : safeBaseName;
+    return File(
+      '${updateDirectory.path}${Platform.pathSeparator}$baseName.zip.part',
+    );
+  }
+
+  @override
+  Future<int?> resumableBytes({required String fileName}) async {
+    final partial = await _partialFileFor(fileName);
+    if (partial == null || !await partial.exists()) return null;
+    final length = await partial.length();
+    return length > 0 ? length : null;
+  }
+
+  Future<bool> _matchesExpected(
+    File file, {
+    int? expectedSizeBytes,
+    String? expectedSha256,
+  }) async {
+    if (!await file.exists()) return false;
+
+    if (expectedSizeBytes != null) {
+      final actualSize = await file.length();
+      if (actualSize != expectedSizeBytes) return false;
+    }
+
+    if (expectedSha256 != null && expectedSha256.isNotEmpty) {
+      final hash = await Sha256().hashStream(file.openRead());
+      final actual = hash.bytes
+          .map((value) => value.toRadixString(16).padLeft(2, '0'))
+          .join();
+      if (actual.toLowerCase() != expectedSha256.toLowerCase()) return false;
+    }
+
+    return true;
+  }
+
+  @override
+  Future<String> downloadAndInstall({
     required Uri uri,
     required String fileName,
     UpdateDownloadProgressCallback? onProgress,
@@ -261,8 +300,6 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       keepBaseName: baseName,
     );
 
-    // A fully downloaded archive is only created after the stream completed,
-    // so it is safe to reuse if the app was closed before the updater launched.
     if (await target.exists()) {
       if (await _matchesExpected(
         target,
@@ -310,8 +347,6 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
           return const WindowsSelfUpdateLauncher().launch(archive: target);
         }
 
-        // The partial file no longer matches what the server can resume.
-        // Keep the failure explicit; the next attempt will restart cleanly.
         if (await partial.exists()) await partial.delete();
         throw HttpException(
           '服务器拒绝继续当前断点，请重新点击下载。',
@@ -330,8 +365,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
         );
       }
 
-      // Some redirect targets may ignore Range. In that case safely restart
-      // this build instead of appending a full response to the partial file.
+      // A redirect target may ignore Range. Restart this build cleanly instead
+      // of appending a full response to the partial archive.
       if (!acceptedRange) {
         existingBytes = 0;
       }
@@ -378,8 +413,7 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
         await sink.close();
       } catch (_) {
         await sink.close();
-        // Deliberately keep the partial file. A retry, app restart, or manual
-        // resume can continue from the last successfully written byte.
+        // Keep the partial archive so retry/relaunch can continue from it.
         rethrow;
       }
 
@@ -398,203 +432,6 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       )) {
         if (await partial.exists()) await partial.delete();
         throw const FormatException('更新包完整性校验失败，请重新下载。');
-      }
-
-      if (await target.exists()) await target.delete();
-      await partial.rename(target.path);
-    } finally {
-      client.close(force: true);
-    }
-
-    return const WindowsSelfUpdateLauncher().launch(archive: target);
-  }
-}
-, caseSensitive: false), '');
-    final baseName = safeBaseName.isEmpty ? 'app-windows-beta' : safeBaseName;
-    return File(
-      '${updateDirectory.path}${Platform.pathSeparator}$baseName.zip.part',
-    );
-  }
-
-  @override
-  Future<int?> resumableBytes({required String fileName}) async {
-    final partial = await _partialFileFor(fileName);
-    if (partial == null || !await partial.exists()) return null;
-    final length = await partial.length();
-    return length > 0 ? length : null;
-  }
-
-  Future<bool> _matchesExpected(
-    File file, {
-    int? expectedSizeBytes,
-    String? expectedSha256,
-  }) async {
-    if (!await file.exists()) return false;
-
-    if (expectedSizeBytes != null) {
-      final actualSize = await file.length();
-      if (actualSize != expectedSizeBytes) return false;
-    }
-
-    if (expectedSha256 != null && expectedSha256.isNotEmpty) {
-      final hash = await Sha256().hashStream(file.openRead());
-      final actual = hash.bytes
-          .map((value) => value.toRadixString(16).padLeft(2, '0'))
-          .join();
-      if (actual.toLowerCase() != expectedSha256.toLowerCase()) return false;
-    }
-
-    return true;
-  }
-
-  @override
-  Future<String> downloadAndInstall({
-    required Uri uri,
-    required String fileName,
-    UpdateDownloadProgressCallback? onProgress,
-    UpdateDownloadPauseCallback? shouldPause,
-  }) async {
-    if (uri.scheme != 'https' || uri.host.toLowerCase() != 'github.com') {
-      throw const FormatException('Windows Beta 只能从 GitHub Releases 下载。');
-    }
-
-    final downloads = await getDownloadsDirectory();
-    if (downloads == null) {
-      throw StateError('无法获取 Windows 下载目录。');
-    }
-
-    final updateDirectory = Directory(
-      '${downloads.path}${Platform.pathSeparator}AdventurersGuild'
-      '${Platform.pathSeparator}updates',
-    );
-    await updateDirectory.create(recursive: true);
-
-    final safeBaseName = fileName
-        .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
-        .replaceFirst(RegExp(r'\.zip$', caseSensitive: false), '');
-    final baseName = safeBaseName.isEmpty ? 'app-windows-beta' : safeBaseName;
-    final target = File(
-      '${updateDirectory.path}${Platform.pathSeparator}$baseName.zip',
-    );
-    final partial = File('${target.path}.part');
-
-    await _cleanupStaleUpdateFiles(
-      updateDirectory,
-      keepBaseName: baseName,
-    );
-
-    // A fully downloaded archive is only created after the stream completed,
-    // so it is safe to reuse if the app was closed before the updater launched.
-    if (await target.exists()) {
-      final length = await target.length();
-      onProgress?.call(length, length);
-      return const WindowsSelfUpdateLauncher().launch(archive: target);
-    }
-
-    var existingBytes = await partial.exists() ? await partial.length() : 0;
-    final client = HttpClient();
-
-    try {
-      final request = await client.getUrl(uri);
-      request.followRedirects = true;
-      request.headers
-        ..set(HttpHeaders.userAgentHeader, _userAgent)
-        ..set(HttpHeaders.acceptHeader, 'application/octet-stream');
-      if (existingBytes > 0) {
-        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existingBytes-');
-      }
-
-      final response = await request.close();
-
-      if (response.statusCode == HttpStatus.requestedRangeNotSatisfiable &&
-          existingBytes > 0) {
-        final totalBytes = _contentRangeTotal(response.headers);
-        await response.drain<void>();
-        if (totalBytes != null && totalBytes == existingBytes) {
-          if (await target.exists()) await target.delete();
-          await partial.rename(target.path);
-          onProgress?.call(existingBytes, totalBytes);
-          return const WindowsSelfUpdateLauncher().launch(archive: target);
-        }
-
-        // The partial file no longer matches what the server can resume.
-        // Keep the failure explicit; the next attempt will restart cleanly.
-        if (await partial.exists()) await partial.delete();
-        throw HttpException(
-          '服务器拒绝继续当前断点，请重新点击下载。',
-          uri: uri,
-        );
-      }
-
-      final acceptedRange =
-          existingBytes > 0 && response.statusCode == HttpStatus.partialContent;
-      final acceptedFresh = response.statusCode == HttpStatus.ok;
-      if (!acceptedRange && !acceptedFresh) {
-        await response.drain<void>();
-        throw HttpException(
-          '更新文件下载失败：HTTP ${response.statusCode}',
-          uri: uri,
-        );
-      }
-
-      // Some redirect targets may ignore Range. In that case safely restart
-      // this build instead of appending a full response to the partial file.
-      if (!acceptedRange) {
-        existingBytes = 0;
-      }
-
-      final contentRangeTotal = _contentRangeTotal(response.headers);
-      final totalBytes = contentRangeTotal ??
-          (response.contentLength > 0
-              ? existingBytes + response.contentLength
-              : null);
-      var receivedBytes = existingBytes;
-      var lastReportedAt = DateTime.fromMillisecondsSinceEpoch(0);
-
-      final sink = partial.openWrite(
-        mode: acceptedRange ? FileMode.append : FileMode.write,
-      );
-
-      try {
-        onProgress?.call(receivedBytes, totalBytes);
-
-        await for (final chunk in response) {
-          if (shouldPause?.call() == true) {
-            await sink.flush();
-            await sink.close();
-            onProgress?.call(receivedBytes, totalBytes);
-            return 'paused';
-          }
-
-          sink.add(chunk);
-          receivedBytes += chunk.length;
-
-          final now = DateTime.now();
-          final shouldReport =
-              totalBytes != null && receivedBytes >= totalBytes ||
-              now.difference(lastReportedAt) >=
-                  const Duration(milliseconds: 120);
-          if (shouldReport) {
-            lastReportedAt = now;
-            onProgress?.call(receivedBytes, totalBytes);
-          }
-        }
-
-        await sink.flush();
-        await sink.close();
-      } catch (_) {
-        await sink.close();
-        // Deliberately keep the partial file. A retry, app restart, or manual
-        // resume can continue from the last successfully written byte.
-        rethrow;
-      }
-
-      onProgress?.call(receivedBytes, totalBytes);
-      if (totalBytes != null && receivedBytes < totalBytes) {
-        throw HttpException(
-          '更新下载提前结束，已保留断点，可继续下载。',
-          uri: uri,
-        );
       }
 
       if (await target.exists()) await target.delete();
