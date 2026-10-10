@@ -328,6 +328,20 @@ class SyncRecordStore {
               Directory('${staging.path}/revocation-acks'),
             );
           }
+          // These long-lived, consensus-gated unlink candidates must survive
+          // full backup restoration. Dropping them would make already
+          // unlinked 1 GiB+ assets permanent leaks; retaining them cannot
+          // delete a restored reference because asset GC rechecks the new
+          // entity inventory and ALL bound-device acknowledgements.
+          final previousAssetGc = Directory(
+            '${previous.path}/gc-asset-candidates',
+          );
+          if (await previousAssetGc.exists()) {
+            await _copyDirectory(
+              previousAssetGc,
+              Directory('${staging.path}/gc-asset-candidates'),
+            );
+          }
           // Reference-image binaries share this Syncthing root but are
           // intentionally kept outside JSON sync history.
           final previousAssets = Directory('${previous.path}/assets');
