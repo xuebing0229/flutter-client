@@ -83,6 +83,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '专注、参考图与 Windows 截图识别升级',
     description: '专注记录支持长按单条删除，时间范围筛选的“从/到”边界更符合直觉，并修复未结束专注在恢复时误用同步时间作为结束时间的问题。参考图新增附加功能开关，关闭只隐藏入口、不删除已有图片，成品也支持多张参考图查看、编辑、备份与双端同步。设备同步在其他设备离线时不再长期悬挂 99% 进度提示。Windows 截图识别改用 PaddleOCR 官方 C++ + Paddle Inference + PP-OCRv6 Small 离线链路，与手机继续共用同一套截图解析与导入规则。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 134,
+    title: '桌宠文字泡与组件位置优化',
+    description: '文字泡改为按内容自动撑开，短句不再占用过大的固定气泡；横向与竖向共用同一文字大小设置，竖排也会按实际字数自适应高度和列数。桌宠页面新增组件位置预览，可分别拖动横向文字泡、竖向文字泡和计时板相对桌宠的位置，并按桌宠预设保存。修复放大文字泡时布局最小值超过最大值导致桌宠宿主闪退的问题，并加强计时板缩放和配置热更新的异常保护。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
