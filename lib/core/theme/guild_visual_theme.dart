@@ -15,6 +15,10 @@ abstract final class GuildVisualTheme {
       colors.primary.withValues(alpha: dark ? 0.18 : 0.11),
       colors.surfaceContainer,
     );
+    final selectedForeground = Color.alphaBlend(
+      colors.onSurface.withValues(alpha: dark ? 0.48 : 0.53),
+      colors.primary,
+    );
     final dialogOutline = GuildDoubleOutline(
       outerColor: outline,
       innerColor: innerOutline,
@@ -44,6 +48,13 @@ abstract final class GuildVisualTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: colors.surfaceContainer,
         indicatorColor: selectedSurface,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? selectedForeground
+                : colors.onSurfaceVariant,
+          ),
+        ),
         height: 70,
       ),
       cardTheme: CardThemeData(
