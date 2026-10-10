@@ -1,22 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
-import '../../../core/build/build_channel.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/theme/app_theme_store.dart';
+import '../../../core/update/beta_update_session.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/portability/full_backup_bundle_service.dart';
-import '../../../core/update/android_beta_update_installer.dart';
-import '../../../core/update/beta_update_coordinator.dart';
-import '../../../core/update/update_manifest.dart';
-import '../../../core/update/windows_beta_update_installer.dart';
 import '../../focus/state/focus_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/node_presets.dart';
@@ -59,39 +53,37 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage>
     with WidgetsBindingObserver {
-  late final BetaUpdateCoordinator? _betaUpdater = !isBetaBuild
-      ? null
-      : Platform.isAndroid
-      ? BetaUpdateCoordinator(installer: const AndroidBetaUpdateInstaller())
-      : Platform.isWindows
-      ? BetaUpdateCoordinator(installer: const WindowsBetaUpdateInstaller())
-      : null;
-
+  final BetaUpdateSession _betaUpdater = BetaUpdateSession.instance;
   final DataPortabilityFileBridge _fileBridge =
       const DataPortabilityFileBridge();
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
 
-  bool _checking = false;
-  bool _downloadingUpdate = false;
-  int _downloadReceivedBytes = 0;
-  int? _downloadTotalBytes;
   bool _reminderBusy = false;
   Map<String, dynamic> _reminderDiagnostics = const <String, dynamic>{};
   bool _backupBusy = false;
-  String _currentVersion = '…';
-  int _currentBuild = 0;
-  UpdateManifest? _latest;
-  String _status = '尚未检查';
 
-  bool get _hasUpdate => _latest != null && _latest!.build > _currentBuild;
+  bool get _checking => _betaUpdater.busy;
+  bool get _downloadingUpdate => _betaUpdater.downloading;
+  int get _downloadReceivedBytes => _betaUpdater.receivedBytes;
+  int? get _downloadTotalBytes => _betaUpdater.totalBytes;
+  String get _currentVersion => _betaUpdater.currentVersion;
+  int get _currentBuild => _betaUpdater.currentBuild;
+  get _latest => _betaUpdater.latest;
+  String get _status => _betaUpdater.status;
+  bool get _hasUpdate => _betaUpdater.hasUpdate;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadInstalledVersion();
+    _betaUpdater.addListener(_onBetaUpdateChanged);
+    _betaUpdater.ensureLoaded();
     _refreshReminderDiagnostics();
+  }
+
+  void _onBetaUpdateChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -115,18 +107,9 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  Future<void> _loadInstalledVersion() async {
-    final info = await PackageInfo.fromPlatform();
-    if (!mounted) return;
-
-    setState(() {
-      _currentVersion = info.version;
-      _currentBuild = int.tryParse(info.buildNumber) ?? 0;
-    });
-  }
-
   @override
   void dispose() {
+    _betaUpdater.removeListener(_onBetaUpdateChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -559,90 +542,9 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  Future<void> _checkForBetaUpdate() async {
-    final updater = _betaUpdater;
-    if (updater == null || _checking) return;
+  Future<void> _checkForBetaUpdate() => _betaUpdater.checkForUpdate();
 
-    setState(() {
-      _checking = true;
-      _status = '正在检查…';
-    });
-
-    try {
-      final latest = await updater.fetchLatest();
-      if (!mounted) return;
-
-      setState(() {
-        _latest = latest;
-        _status = latest.build > _currentBuild ? '发现新的测试版' : '已经是最新测试版';
-      });
-    } on SocketException {
-      if (!mounted) return;
-      setState(() => _status = '网络连接失败，请检查当前网络后重试');
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _status = '检查失败：$error');
-    } finally {
-      if (mounted) {
-        setState(() => _checking = false);
-      }
-    }
-  }
-
-  Future<void> _downloadLatest() async {
-    final updater = _betaUpdater;
-    final latest = _latest;
-    if (updater == null || latest == null || _checking) return;
-
-    setState(() {
-      _checking = true;
-      _downloadingUpdate = Platform.isWindows;
-      _downloadReceivedBytes = 0;
-      _downloadTotalBytes = null;
-      if (Platform.isWindows) {
-        _status = '正在下载新版…';
-      }
-    });
-
-    try {
-      final status = await updater.downloadAndInstall(
-        latest,
-        onProgress: Platform.isWindows
-            ? (receivedBytes, totalBytes) {
-                if (!mounted) return;
-                setState(() {
-                  _downloadReceivedBytes = receivedBytes;
-                  _downloadTotalBytes = totalBytes;
-                  if (totalBytes != null &&
-                      totalBytes > 0 &&
-                      receivedBytes >= totalBytes) {
-                    _status = '下载完成，正在准备自动更新…';
-                  }
-                });
-              }
-            : null,
-      );
-      if (!mounted) return;
-
-      setState(() {
-        if (status == 'permission_required') {
-          _status = '请允许“安装未知应用”，返回后再次点击下载';
-        } else {
-          _status = '已交给系统下载，完成后会自动打开安装页面';
-        }
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _status = '更新失败：$error');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _checking = false;
-          _downloadingUpdate = false;
-        });
-      }
-    }
-  }
+  Future<void> _downloadLatest() => _betaUpdater.downloadLatest();
 
   String _formatDownloadBytes(int bytes) {
     const mb = 1024 * 1024;
@@ -658,7 +560,7 @@ class _SettingsPageState extends State<SettingsPage>
 
   @override
   Widget build(BuildContext context) {
-    final updater = _betaUpdater;
+    final updater = _betaUpdater.supported ? _betaUpdater : null;
 
     return Scaffold(
       appBar: AppBar(
