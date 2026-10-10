@@ -87,7 +87,7 @@ class SyncGcAckStore {
   }) async {
     final records = await signatures(recordsByKind);
     final now = _clock().toUtc();
-    final peers = assetGcPeers?.toList()..sort();
+    final peers = assetGcPeers?.toList()?..sort();
     final payload = <String, dynamic>{
       'schemaVersion': 1,
       'deviceId': deviceId,
@@ -155,7 +155,7 @@ class SyncGcAckStore {
       // Never authorize physical deletion without a device-membership list.
       return const <String, Map<String, String>>{};
     }
-    final requiredPeers = expectedAssetGcPeers?.toList()..sort();
+    final requiredPeers = expectedAssetGcPeers?.toList()?..sort();
     final directory = await _directory(accountId);
     final result = <String, Map<String, String>>{};
     final assetGcSeen = <String>{};
