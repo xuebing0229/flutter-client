@@ -68,6 +68,8 @@ class _SettingsPageState extends State<SettingsPage>
   bool get _checking => _betaUpdater.busy;
   bool get _downloadingUpdate => _betaUpdater.downloading;
   bool get _pausedUpdate => _betaUpdater.paused;
+  bool get _managedUpdateDownload =>
+      Platform.isWindows || Platform.isAndroid;
   int get _downloadReceivedBytes => _betaUpdater.receivedBytes;
   int? get _downloadTotalBytes => _betaUpdater.totalBytes;
   String get _currentVersion => _betaUpdater.currentVersion;
@@ -726,7 +728,8 @@ class _SettingsPageState extends State<SettingsPage>
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  if ((_downloadingUpdate || _pausedUpdate) && Platform.isWindows) ...[
+                  if ((_downloadingUpdate || _pausedUpdate) &&
+                      _managedUpdateDownload) ...[
                     const SizedBox(height: 12),
                     LinearProgressIndicator(
                       value:
@@ -752,7 +755,7 @@ class _SettingsPageState extends State<SettingsPage>
                   SizedBox(
                     width: double.infinity,
                     child: _hasUpdate
-                        ? Platform.isWindows && _downloadingUpdate
+                        ? _managedUpdateDownload && _downloadingUpdate
                             ? FilledButton.tonalIcon(
                                 onPressed: _betaUpdater.canPause
                                     ? _pauseDownload
@@ -765,12 +768,12 @@ class _SettingsPageState extends State<SettingsPage>
                             : FilledButton.icon(
                                 onPressed: _checking ? null : _downloadLatest,
                                 icon: Icon(
-                                  Platform.isWindows && _pausedUpdate
+                                  _managedUpdateDownload && _pausedUpdate
                                       ? Icons.play_arrow_rounded
                                       : Icons.download_rounded,
                                 ),
                                 label: Text(
-                                  Platform.isWindows && _pausedUpdate
+                                  _managedUpdateDownload && _pausedUpdate
                                       ? '继续下载'
                                       : Platform.isWindows
                                       ? '下载并自动更新'
