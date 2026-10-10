@@ -153,6 +153,7 @@ class _AddProductPageState extends State<AddProductPage> {
       ),
     );
     _saved = true;
+    _referenceImageStore.markCommitted(_referenceImages);
     Navigator.of(context).pop();
   }
 
