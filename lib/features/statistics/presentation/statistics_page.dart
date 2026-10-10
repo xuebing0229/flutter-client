@@ -6,7 +6,6 @@ import '../../shared/presentation/layout_spacing.dart';
 
 import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
-import '../../products/domain/finished_product.dart';
 import '../../products/domain/sale_receipt.dart';
 import '../../products/state/product_store.dart';
 
@@ -71,7 +70,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
   Map<CommissionPlatform, double> _platformTotals(
     Iterable<QueueOrder> orders,
-    Iterable<FinishedProduct> sales,
+    Iterable<SaleReceipt> sales,
   ) {
     final result = <CommissionPlatform, double>{};
 
