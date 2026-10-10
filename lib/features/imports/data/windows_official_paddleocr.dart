@@ -21,12 +21,12 @@ class WindowsOfficialPaddleOcr {
     }
 
     final root = File(Platform.resolvedExecutable).parent.path;
-    final runtime = Directory('${root}\\\\paddleocr');
-    final engine = File('${root}\\\\paddleocr\\\\ppocr.exe');
+    final runtime = Directory('${root}\\paddleocr');
+    final engine = File('${root}\\paddleocr\\ppocr.exe');
     final detModel =
-        Directory('${root}\\\\paddleocr\\\\models\\\\PP-OCRv6_small_det_infer');
+        Directory('${root}\\paddleocr\\models\\PP-OCRv6_small_det_infer');
     final recModel =
-        Directory('${root}\\\\paddleocr\\\\models\\\\PP-OCRv6_small_rec_infer');
+        Directory('${root}\\paddleocr\\models\\PP-OCRv6_small_rec_infer');
     if (!await engine.exists() ||
         !await detModel.exists() ||
         !await recModel.exists()) {
@@ -44,9 +44,9 @@ class WindowsOfficialPaddleOcr {
       final extension = imageFile.contains('.')
           ? imageFile.substring(imageFile.lastIndexOf('.'))
           : '.png';
-      final local = File('${temp.path}\\\\screenshot$extension');
+      final local = File('${temp.path}\\screenshot$extension');
       await local.writeAsBytes(sourceBytes, flush: true);
-      final output = Directory('${temp.path}\\\\output');
+      final output = Directory('${temp.path}\\output');
       await output.create(recursive: true);
 
       String slash(String value) =>
@@ -95,7 +95,7 @@ class WindowsOfficialPaddleOcr {
         );
       }
 
-      final expected = File('${output.path}\\\\screenshot.json');
+      final expected = File('${output.path}\\screenshot.json');
       File? resultFile;
       if (await expected.exists()) {
         resultFile = expected;
