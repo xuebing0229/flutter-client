@@ -9,6 +9,7 @@ import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_summary_card.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/domain/finished_product.dart';
+import '../../products/domain/sale_receipt.dart';
 import '../../products/presentation/product_detail_page.dart';
 import '../../products/presentation/product_summary_card.dart';
 import '../../products/state/product_store.dart';
@@ -69,9 +70,12 @@ class _SchedulePageState extends State<SchedulePage> {
     final result = <_ProductSaleOccurrence>[];
 
     for (final product in widget.productStore.products) {
-      for (final soldAt in product.saleRecords) {
-        if (_sameDay(soldAt, date)) {
-          result.add(_ProductSaleOccurrence(product: product, soldAt: soldAt));
+      for (final receipt in product.accountedSales) {
+        if (_sameDay(receipt.soldAt, date)) {
+          result.add(_ProductSaleOccurrence(
+            product: product,
+            receipt: receipt,
+          ));
         }
       }
     }
@@ -103,7 +107,7 @@ class _SchedulePageState extends State<SchedulePage> {
     }
 
     for (final sale in _productSalesOn(date)) {
-      total += sale.product.realIncome;
+      total += sale.receipt.netIncome;
     }
 
     return total;
@@ -267,7 +271,7 @@ class _SchedulePageState extends State<SchedulePage> {
       widgets.add(
         ProductSummaryCard(
           product: sale.product,
-          saleTime: sale.soldAt,
+          saleTime: sale.receipt.soldAt,
           onTap: () => _openProduct(sale.product),
         ),
       );
@@ -591,10 +595,14 @@ class _CalendarCountLabel extends StatelessWidget {
 }
 
 class _ProductSaleOccurrence {
-  const _ProductSaleOccurrence({required this.product, required this.soldAt});
+  const _ProductSaleOccurrence({
+    required this.product,
+    required this.receipt,
+  });
 
   final FinishedProduct product;
-  final DateTime soldAt;
+  final SaleReceipt receipt;
+  DateTime get soldAt => receipt.soldAt;
 }
 
 class _SectionTitle extends StatelessWidget {
