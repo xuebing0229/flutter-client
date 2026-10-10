@@ -193,12 +193,26 @@ class FullBackupBundleService {
           manifestEntry.size > _maxManifestBytes) {
         throw const FormatException('备份数据清单体积异常，已拒绝解压。');
       }
-      final manifestBytes = manifestEntry.readBytes();
-      if (manifestBytes == null ||
-          manifestBytes.length > _maxManifestBytes) {
-        throw const FormatException('备份数据清单无法安全读取。');
+      // Never call manifestEntry.readBytes() on an untrusted ZIP. Even its
+      // declared size might lie; stream into a strict 32 MiB bounded file.
+      final manifest = File(
+        '${temporary.path}${Platform.pathSeparator}$manifestFileName',
+      );
+      final manifestSink = BoundedArchiveFileOutput(
+        manifest.path,
+        manifestEntry.size,
+      );
+      try {
+        manifestEntry.writeContent(manifestSink);
+        if (manifestSink.length != manifestEntry.size) {
+          throw const FormatException('备份数据清单解压长度无效。');
+        }
+      } finally {
+        await manifestSink.close();
       }
-      final backup = AppBackupData.decode(utf8.decode(manifestBytes));
+      final backup = AppBackupData.decode(
+        await manifest.readAsString(encoding: utf8),
+      );
       _validateArchiveAssetInventory(archive, backup);
 
       // archive's generic disk extraction may swallow individual entry
@@ -207,7 +221,6 @@ class FullBackupBundleService {
       await _extractVerifiedAssets(
         archive: archive,
         temporary: temporary,
-        manifestBytes: manifestBytes,
         backup: backup,
       );
 
@@ -245,14 +258,8 @@ class FullBackupBundleService {
   Future<void> _extractVerifiedAssets({
     required Archive archive,
     required Directory temporary,
-    required List<int> manifestBytes,
     required AppBackupData backup,
   }) async {
-    final manifest = File(
-      '${temporary.path}${Platform.pathSeparator}$manifestFileName',
-    );
-    await manifest.writeAsBytes(manifestBytes, flush: true);
-
     // The inventory was validated before entering this function. All entries
     // are allowlisted relative paths from the manifest, never arbitrary ZIP
     // names. Each binary is streamed to a bounded OutputStream and checked
