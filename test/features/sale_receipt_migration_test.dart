@@ -148,7 +148,7 @@ void main() {
     final receipt = store.byId(old.id).accountedSales.single;
     expect(receipt.estimated, isTrue);
     expect(receipt.netIncome, 95);
-    expect(receipt.soldAt, DateTime.utc(2026, 8, 8));
+    expect(receipt.soldAt.isAtSameMomentAs(DateTime.utc(2026, 8, 8)), isTrue);
     expect(
       AppBackupData(
         exportedAt: DateTime.utc(2026, 10, 10),
