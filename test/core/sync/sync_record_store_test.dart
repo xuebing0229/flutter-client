@@ -178,7 +178,7 @@ void main() {
     expect(all.length, 251);
   });
 
-  test('unexpectedly named legacy sync variant remains mergeable', () async {
+  test('full reconciliation recovers oddly named JSON without slowing edits', () async {
     final value = SyncRecord.bootstrap(
       kind: SyncEntityKind.settings,
       id: 'app',
@@ -190,11 +190,18 @@ void main() {
     await unusual.parent.create(recursive: true);
     await unusual.writeAsString(value.copyWith(accountId: accountId).encode());
 
-    final merged = await store.readMergedRecord(
+    // Targeted reads avoid arbitrary unrelated filenames. A full sync still
+    // discovers this unusual file and normalizes it without discarding data.
+    final narrow = await store.readMergedRecord(
       accountId: accountId,
       kind: SyncEntityKind.settings,
       recordId: 'app',
     );
+    expect(narrow, isNull);
+    final merged = (await store.readAllMerged(
+      accountId: accountId,
+      kind: SyncEntityKind.settings,
+    ))['app'];
     expect(merged, isNotNull);
     expect(engine.materialize(merged!)!['themeMode'], 'system');
     expect(await unusual.exists(), isFalse);
