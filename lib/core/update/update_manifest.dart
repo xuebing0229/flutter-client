@@ -60,21 +60,7 @@ class UpdateManifest {
     }
     if (sha256 != null &&
         (sha256 is! String ||
-            !RegExp(r'^[0-9a-fA-F]{64}
-    return UpdateManifest(
-      schema: schema,
-      channel: channel,
-      version: version,
-      build: build,
-      published: published,
-      downloadUri: download == null ? null : Uri.parse(download as String),
-      notes: notes,
-      sizeBytes: sizeBytes as int?,
-      sha256: (sha256 as String?)?.toLowerCase(),
-    );
-  }
-}
-).hasMatch(sha256))) {
+            !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(sha256))) {
       throw const FormatException('更新文件校验值格式无效。');
     }
 
@@ -86,6 +72,8 @@ class UpdateManifest {
       published: published,
       downloadUri: download == null ? null : Uri.parse(download as String),
       notes: notes,
+      sizeBytes: sizeBytes as int?,
+      sha256: (sha256 as String?)?.toLowerCase(),
     );
   }
 }
