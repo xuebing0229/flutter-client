@@ -214,6 +214,77 @@ void main() {
     expect(await image.exists(), isFalse);
   });
 
+  test('Syncthing conflict variant of a device ACK blocks all art deletion',
+      () async {
+    final image = await createImage();
+    await gc.registerUnlinked(
+      accountId: accountId,
+      relativePaths: [imagePath],
+    );
+    now = now.add(const Duration(days: 32));
+    final current = recordSet();
+    await ackDevices(current);
+    final original = File(
+      '${temp.path}/gc-acks/'
+      '${base64UrlEncode(utf8.encode('desktop')).replaceAll('=', '')}.json',
+    );
+    final conflict = File(
+      original.path.replaceFirst('.json', '.sync-conflict-20261010-pc.json'),
+    );
+    await original.copy(conflict.path);
+    expect(
+      await gc.collectAcknowledged(
+        accountId: accountId,
+        activeDeviceIds: {'phone', 'desktop'},
+        recordsByKind: current,
+      ),
+      0,
+    );
+    expect(await image.exists(), isTrue);
+
+    await conflict.delete();
+    expect(
+      await gc.collectAcknowledged(
+        accountId: accountId,
+        activeDeviceIds: {'phone', 'desktop'},
+        recordsByKind: current,
+      ),
+      1,
+    );
+  });
+
+  test('other entity still referencing image prevents GC after original removed',
+      () async {
+    final image = await createImage();
+    await gc.registerUnlinked(
+      accountId: accountId,
+      relativePaths: [imagePath],
+    );
+    now = now.add(const Duration(days: 40));
+    final data = recordSet();
+    data[SyncEntityKind.order]!['another-order'] = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'another-order',
+      values: <String, dynamic>{
+        'id': 'another-order',
+        'referenceImages': <Map<String, dynamic>>[
+          {'id': 'shared', 'relativePath': imagePath},
+        ],
+      },
+      deviceId: 'desktop',
+    );
+    await ackDevices(data);
+    expect(
+      await gc.collectAcknowledged(
+        accountId: accountId,
+        activeDeviceIds: {'phone', 'desktop'},
+        recordsByKind: data,
+      ),
+      0,
+    );
+    expect(await image.exists(), isTrue);
+  });
+
   test('waits full grace period even with matching peer acknowledgements',
       () async {
     final image = await createImage();
