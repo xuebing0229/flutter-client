@@ -26,6 +26,14 @@ cd "$SCRIPT_DIR"
 chmod +x install.sh backup.sh smoke_test.sh
 ./install.sh
 
+# Limits live in the nginx http context (conf.d), not inside the server
+# block. Registration is especially sensitive to setup-key guessing.
+# Keep generous activation bursts for shared carrier NATs and retrying users.
+cat >/etc/nginx/conf.d/adventure-license-rates.conf <<'RATES'
+limit_req_zone $binary_remote_addr zone=guild_admin_enroll:10m rate=3r/m;
+limit_req_zone $binary_remote_addr zone=guild_activation:10m rate=30r/m;
+RATES
+
 cat >/etc/nginx/sites-available/adventure-license <<EOF
 server {
     listen 80;
@@ -34,15 +42,27 @@ server {
 
     client_max_body_size 1m;
 
+    limit_req_status 429;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 15s;
+
+    location = /v1/admin/register {
+        limit_req zone=guild_admin_enroll burst=3 nodelay;
+        proxy_pass http://127.0.0.1:8765;
+    }
+
+    location = /v1/activate {
+        limit_req zone=guild_activation burst=15 nodelay;
+        proxy_pass http://127.0.0.1:8765;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8765;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_connect_timeout 5s;
-        proxy_read_timeout 15s;
     }
 }
 EOF
