@@ -1492,7 +1492,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             )
           : null,
-      body: !_ready
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [
+              Color.alphaBlend(
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.045),
+                Theme.of(context).scaffoldBackgroundColor,
+              ),
+              Theme.of(context).scaffoldBackgroundColor,
+            ],
+          ),
+        ),
+        child: !_ready
           ? const Center(child: CircularProgressIndicator())
           : !_localDataHealthy
           ? _buildLocalDataFailure(context)
@@ -1594,6 +1608,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ],
             )
           : tabBody,
+      ),
       floatingActionButton:
           !_ready ||
               !_localDataHealthy ||

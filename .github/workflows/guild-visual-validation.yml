@@ -1,0 +1,30 @@
+name: Guild Visual Validation
+
+on:
+  pull_request:
+    paths:
+      - 'lib/app/app.dart'
+      - 'lib/core/theme/**'
+      - 'lib/features/home/presentation/home_page.dart'
+      - 'lib/features/home/presentation/app_drawer.dart'
+      - 'lib/features/shared/presentation/**'
+      - 'test/core/guild_visual_theme_test.dart'
+      - '.github/workflows/guild-visual-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-ui-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test test/core/guild_visual_theme_test.dart

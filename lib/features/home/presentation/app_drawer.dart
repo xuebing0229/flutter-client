@@ -362,10 +362,21 @@ class AppMenuTile extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: selected
+            ? BorderSide(
+                color: colors.primary.withValues(alpha: 0.38),
+                width: 0.8,
+              )
+            : BorderSide.none,
+      ),
       selected: selected,
-      selectedTileColor: colors.secondaryContainer,
-      selectedColor: colors.onSecondaryContainer,
+      selectedTileColor: Color.alphaBlend(
+        colors.primary.withValues(alpha: 0.11),
+        colors.surface,
+      ),
+      selectedColor: colors.primary,
       leading: Icon(selected ? (selectedIcon ?? icon) : icon),
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle!),

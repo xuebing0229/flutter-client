@@ -85,27 +85,57 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: widget.controller,
-            focusNode: _focusNode,
-            onChanged: widget.onChanged,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _focusNode.unfocus(),
-            decoration: InputDecoration(
-              hintText: widget.hintText,
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: searching
-                  ? IconButton(
-                      tooltip: '退出搜索',
-                      onPressed: _exitSearch,
-                      icon: const Icon(Icons.close_rounded),
-                    )
-                  : null,
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 2,
+                  offset: const Offset(0, 1),
+                  blurStyle: BlurStyle.inner,
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _focusNode,
+              onChanged: widget.onChanged,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _focusNode.unfocus(),
+              decoration: InputDecoration(
+                hintText: widget.hintText,
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: searching
+                    ? IconButton(
+                        tooltip: '退出搜索',
+                        onPressed: _exitSearch,
+                        icon: const Icon(Icons.close_rounded),
+                      )
+                    : null,
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.48),
+                    width: 0.7,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1.2,
+                  ),
+                ),
               ),
             ),
           ),
