@@ -1,5 +1,6 @@
 import 'package:flutter_app/core/portability/app_backup_data.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
+import 'package:flutter_app/features/products/domain/finished_product.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -56,5 +57,44 @@ void main() {
     );
     expect(image.addedAt, addedAt);
     expect(image.sizeBytes, 2048);
+  });
+
+  test('product reference image metadata survives backup round trip', () {
+    final addedAt = DateTime(2026, 10, 10, 9, 30);
+    final product = FinishedProduct(
+      id: 'product-1',
+      title: '成品测试',
+      platform: CommissionPlatform.huajia,
+      saleType: ProductSaleType.multiple,
+      referenceImages: <OrderReferenceImage>[
+        OrderReferenceImage(
+          id: 'ref-product-1',
+          fileName: '成品参考.webp',
+          relativePath:
+              'assets/order-reference-images/cHJvZHVjdC0x/ref-product-1.webp',
+          addedAt: addedAt,
+          sizeBytes: 4096,
+        ),
+      ],
+    );
+
+    final encoded = AppBackupData(
+      exportedAt: DateTime(2026, 10, 10, 10),
+      orders: const <QueueOrder>[],
+      products: <FinishedProduct>[product],
+      nodePresets: const <NodePreset>[],
+    ).encode(pretty: false);
+
+    final decoded = AppBackupData.decode(encoded);
+    final image = decoded.products.single.referenceImages.single;
+
+    expect(image.id, 'ref-product-1');
+    expect(image.fileName, '成品参考.webp');
+    expect(
+      image.relativePath,
+      'assets/order-reference-images/cHJvZHVjdC0x/ref-product-1.webp',
+    );
+    expect(image.addedAt, addedAt);
+    expect(image.sizeBytes, 4096);
   });
 }
