@@ -96,6 +96,16 @@ enum DesktopPetBubblePosition {
       };
 }
 
+enum DesktopPetBubbleStyle {
+  speech,
+  thought;
+
+  String get label => switch (this) {
+        DesktopPetBubbleStyle.speech => '说话气泡',
+        DesktopPetBubbleStyle.thought => '思考气泡',
+      };
+}
+
 enum DesktopPetTextMode {
   currentOrder,
   custom;
@@ -112,6 +122,7 @@ class DesktopPetPreset {
     required this.name,
     this.imageA,
     this.imageB,
+    this.bubbleImage,
     this.placementA = const DesktopPetPlacement(),
     this.placementB = const DesktopPetPlacement(),
     this.importPlacementA,
@@ -125,6 +136,7 @@ class DesktopPetPreset {
   final String name;
   final String? imageA;
   final String? imageB;
+  final String? bubbleImage;
   final DesktopPetPlacement placementA;
   final DesktopPetPlacement placementB;
   final DesktopPetPlacement? importPlacementA;
@@ -137,6 +149,7 @@ class DesktopPetPreset {
     String? name,
     String? imageA,
     String? imageB,
+    String? bubbleImage,
     DesktopPetPlacement? placementA,
     DesktopPetPlacement? placementB,
     DesktopPetPlacement? importPlacementA,
@@ -146,12 +159,14 @@ class DesktopPetPreset {
     DesktopPetOverlayOffset? focusClockOffset,
     bool clearImageA = false,
     bool clearImageB = false,
+    bool clearBubbleImage = false,
   }) {
     return DesktopPetPreset(
       id: id,
       name: name ?? this.name,
       imageA: clearImageA ? null : (imageA ?? this.imageA),
       imageB: clearImageB ? null : (imageB ?? this.imageB),
+      bubbleImage: clearBubbleImage ? null : (bubbleImage ?? this.bubbleImage),
       placementA: placementA ?? this.placementA,
       placementB: placementB ?? this.placementB,
       importPlacementA: importPlacementA ?? this.importPlacementA,
@@ -167,6 +182,7 @@ class DesktopPetPreset {
         'name': name,
         'imageA': imageA,
         'imageB': imageB,
+        'bubbleImage': bubbleImage,
         'placementA': placementA.toJson(),
         'placementB': placementB.toJson(),
         if (importPlacementA != null)
@@ -190,6 +206,7 @@ class DesktopPetPreset {
       name: name.trim().isEmpty ? '未命名桌宠' : name.trim(),
       imageA: raw['imageA'] is String ? raw['imageA'] as String : null,
       imageB: raw['imageB'] is String ? raw['imageB'] as String : null,
+      bubbleImage: raw['bubbleImage'] is String ? raw['bubbleImage'] as String : null,
       placementA: placementA,
       placementB: placementB,
       // Older configs did not preserve an import baseline. Use the last
@@ -218,6 +235,7 @@ class DesktopPetSettings extends ChangeNotifier {
   String? _selectedPresetId;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
   DesktopPetBubblePosition _bubblePosition = DesktopPetBubblePosition.above;
+  DesktopPetBubbleStyle _bubbleStyle = DesktopPetBubbleStyle.speech;
   double _petScale = 1;
   double _bubbleTextScale = 1;
   double _focusClockScale = 1;
@@ -240,6 +258,7 @@ class DesktopPetSettings extends ChangeNotifier {
   String? get selectedPresetId => _selectedPresetId;
   DesktopPetTextMode get textMode => _textMode;
   DesktopPetBubblePosition get bubblePosition => _bubblePosition;
+  DesktopPetBubbleStyle get bubbleStyle => _bubbleStyle;
   double get petScale => _petScale;
   double get bubbleTextScale => _bubbleTextScale;
   double get focusClockScale => _focusClockScale;
@@ -310,6 +329,9 @@ class DesktopPetSettings extends ChangeNotifier {
       _bubblePosition = raw['bubblePosition'] == DesktopPetBubblePosition.side.name
           ? DesktopPetBubblePosition.side
           : DesktopPetBubblePosition.above;
+      _bubbleStyle = raw['bubbleStyle'] == DesktopPetBubbleStyle.thought.name
+          ? DesktopPetBubbleStyle.thought
+          : DesktopPetBubbleStyle.speech;
       _petScale = ((raw['petScale'] as num?)?.toDouble() ?? 1)
           .clamp(0.5, 1.8)
           .toDouble();
@@ -525,6 +547,54 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setBubbleStyle(DesktopPetBubbleStyle style) async {
+    await _readFromDisk();
+    if (_bubbleStyle == style) return;
+    _bubbleStyle = style;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<String?> pickBubbleImageSource() async {
+    if (!Platform.isWindows) return null;
+    final selected = await openFile(
+      acceptedTypeGroups: const <XTypeGroup>[
+        XTypeGroup(label: '透明背景 PNG', extensions: <String>['png']),
+      ],
+    );
+    return selected?.path;
+  }
+
+  Future<void> importBubbleImage(String presetId, String sourcePath) async {
+    if (!Platform.isWindows) return;
+    await _readFromDisk();
+    final index = _presets.indexWhere((preset) => preset.id == presetId);
+    if (index < 0 || !sourcePath.toLowerCase().endsWith('.png')) return;
+    final source = File(sourcePath);
+    if (!await source.exists()) return;
+    final root = await _rootDirectory();
+    final folder = Directory('${root.path}/presets/$presetId');
+    await folder.create(recursive: true);
+    final destination = File('${folder.path}/bubble-image.png');
+    if (source.absolute.path != destination.absolute.path) {
+      await source.copy(destination.path);
+    }
+    _presets[index] = _presets[index].copyWith(
+      bubbleImage: destination.path,
+    );
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> clearBubbleImage(String presetId) async {
+    await _readFromDisk();
+    final index = _presets.indexWhere((preset) => preset.id == presetId);
+    if (index < 0 || _presets[index].bubbleImage == null) return;
+    _presets[index] = _presets[index].copyWith(clearBubbleImage: true);
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setPetScale(double value) async {
     await _readFromDisk();
     final normalized = value.clamp(0.5, 1.8).toDouble();
@@ -653,15 +723,17 @@ class DesktopPetSettings extends ChangeNotifier {
     await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 8,
+      'schema': 9,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
       'imageB': active?.imageB,
+      'bubbleImage': active?.bubbleImage,
       'placementA': active?.placementA.toJson(),
       'placementB': active?.placementB.toJson(),
       'textMode': _textMode.name,
       'bubblePosition': _bubblePosition.name,
+      'bubbleStyle': _bubbleStyle.name,
       'petScale': _petScale,
       'bubbleTextScale': _bubbleTextScale,
       'focusClockScale': _focusClockScale,

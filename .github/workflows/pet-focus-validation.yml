@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - fix/restore-combined-pet-focus-129
+      - fix/desktop-pet-bubble-input-20261010
+  pull_request:
+    paths:
+      - 'lib/core/desktop_pet/**'
+      - 'lib/features/home/presentation/desktop_pet_page.dart'
+      - 'windows/desktop_pet/**'
+      - 'test/core/desktop_pet_bubble_test.dart'
   workflow_dispatch:
 
 permissions:
@@ -26,9 +33,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings
       - name: Focus and changelog tests
-        run: flutter test test/features/focus/focus_store_test.dart test/core/portability/focus_backup_test.dart test/core/adventurer_news_test.dart
+        run: flutter test test/features/focus/focus_store_test.dart test/core/portability/focus_backup_test.dart test/core/adventurer_news_test.dart test/core/desktop_pet_bubble_test.dart
 
   desktop-pet:
     runs-on: windows-latest

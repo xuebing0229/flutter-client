@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Path = System.IO.Path;
 using System.Windows.Threading;
@@ -86,6 +87,11 @@ internal sealed class DesktopPetWindow : Window
     private readonly Grid _headerRow;
     private readonly StackPanel _bubbleHost;
     private readonly Polygon _bubbleTail;
+    private readonly StackPanel _thoughtDots;
+    private readonly Ellipse _thoughtDotLarge;
+    private readonly Ellipse _thoughtDotSmall;
+    private readonly StackPanel _bubbleContent;
+    private readonly Image _bubbleArt;
     private readonly Border _focusClock;
     private readonly TextBlock _focusClockText;
     private readonly Grid _imageViewport;
@@ -96,13 +102,16 @@ internal sealed class DesktopPetWindow : Window
     private readonly DispatcherTimer _parentTimer;
     private readonly DispatcherTimer _deadlineTimer;
     private readonly DispatcherTimer _focusTimer;
-    private readonly GlobalInputActivityHook _inputHook;
+    private readonly GlobalInputActivityMonitor _inputHook;
     private readonly GraphCore _graphCore;
 
     private FileSystemWatcher? _watcher;
     private PetConfig _config = new();
     private Picture? _activePicture;
     private string? _activeImagePath;
+    private string? _bubbleArtPath;
+    private DateTime _bubbleArtChangedAt;
+    private ImageSource? _bubbleArtCache;
     private bool _inputActive;
     private bool _closed;
 
@@ -167,6 +176,23 @@ internal sealed class DesktopPetWindow : Window
             Height = 12,
             StrokeThickness = 1,
         };
+        _thoughtDotLarge = new Ellipse { Width = 10, Height = 10 };
+        _thoughtDotSmall = new Ellipse { Width = 5, Height = 5 };
+        _thoughtDots = new StackPanel { Orientation = Orientation.Vertical };
+        _thoughtDots.Children.Add(_thoughtDotLarge);
+        _thoughtDots.Children.Add(_thoughtDotSmall);
+        _bubbleArt = new Image
+        {
+            Width = 88,
+            MaxHeight = 100,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        _bubbleContent = new StackPanel { Orientation = Orientation.Vertical };
+        _bubble.Child = null;
+        _bubbleContent.Children.Add(_bubbleText);
+        _bubble.Child = _bubbleContent;
         _bubbleHost = new StackPanel
         {
             Orientation = Orientation.Vertical,
@@ -262,7 +288,7 @@ internal sealed class DesktopPetWindow : Window
         };
         _focusTimer.Tick += (_, _) => RefreshFocusClock();
 
-        _inputHook = new GlobalInputActivityHook();
+        _inputHook = new GlobalInputActivityMonitor();
         _inputHook.ActivityChanged += active =>
         {
             Dispatcher.BeginInvoke(() =>
@@ -386,6 +412,7 @@ internal sealed class DesktopPetWindow : Window
             StringComparison.OrdinalIgnoreCase
         );
 
+        var thought = string.Equals(_config.BubbleStyle, "thought", StringComparison.OrdinalIgnoreCase);
         var petSize = 280 * petScale;
         _imageViewport.Width = petSize;
         _imageViewport.Height = petSize;
@@ -399,7 +426,7 @@ internal sealed class DesktopPetWindow : Window
         _bubble.Background = background;
         _bubble.BorderBrush = border;
         _bubble.BorderThickness = new Thickness(1);
-        _bubble.CornerRadius = new CornerRadius(15);
+        _bubble.CornerRadius = new CornerRadius(thought ? 40 : 15);
         _bubble.Padding = new Thickness(13, 9, 13, 9);
         _bubble.Margin = new Thickness(0);
         _bubble.MinWidth = 0;
@@ -413,6 +440,12 @@ internal sealed class DesktopPetWindow : Window
         _bubbleTail.Fill = background;
         _bubbleTail.Stroke = Brushes.Transparent;
         _bubbleTail.StrokeThickness = 0;
+        _thoughtDotLarge.Fill = background;
+        _thoughtDotLarge.Stroke = border;
+        _thoughtDotLarge.StrokeThickness = 1;
+        _thoughtDotSmall.Fill = background;
+        _thoughtDotSmall.Stroke = border;
+        _thoughtDotSmall.StrokeThickness = 1;
 
         _focusClock.Background = background;
         _focusClock.BorderBrush = border;
@@ -502,7 +535,19 @@ internal sealed class DesktopPetWindow : Window
             _bubbleTail.Margin = new Thickness(-1.5, 34, 0, 0);
 
             _bubbleHost.Children.Add(_bubble);
-            _bubbleHost.Children.Add(_bubbleTail);
+            if (thought)
+            {
+                _thoughtDots.Orientation = Orientation.Horizontal;
+                _thoughtDots.VerticalAlignment = VerticalAlignment.Center;
+                _thoughtDots.Margin = new Thickness(1, 16, 0, 0);
+                _thoughtDotLarge.Margin = new Thickness(0, 0, 5, 0);
+                _thoughtDotSmall.Margin = new Thickness(0, 12, 0, 0);
+                _bubbleHost.Children.Add(_thoughtDots);
+            }
+            else
+            {
+                _bubbleHost.Children.Add(_bubbleTail);
+            }
 
             Grid.SetColumn(_bubbleHost, 0);
             Grid.SetRow(_bubbleHost, 0);
@@ -557,7 +602,19 @@ internal sealed class DesktopPetWindow : Window
             _bubbleTail.Margin = new Thickness(38, -1.5, 0, 0);
 
             _bubbleHost.Children.Add(_bubble);
-            _bubbleHost.Children.Add(_bubbleTail);
+            if (thought)
+            {
+                _thoughtDots.Orientation = Orientation.Vertical;
+                _thoughtDots.HorizontalAlignment = HorizontalAlignment.Left;
+                _thoughtDots.Margin = new Thickness(36, 0, 0, 0);
+                _thoughtDotLarge.Margin = new Thickness(0, -1, 0, 3);
+                _thoughtDotSmall.Margin = new Thickness(13, 0, 0, 0);
+                _bubbleHost.Children.Add(_thoughtDots);
+            }
+            else
+            {
+                _bubbleHost.Children.Add(_bubbleTail);
+            }
 
             Grid.SetColumn(_bubbleHost, 0);
             Grid.SetRow(_bubbleHost, 0);
@@ -812,16 +869,61 @@ internal sealed class DesktopPetWindow : Window
             "side",
             StringComparison.OrdinalIgnoreCase
         );
-        if (side)
+        _bubbleContent.Children.Clear();
+        var art = LoadBubbleArt(_config.BubbleImage);
+        if (art is not null)
         {
-            _bubble.Child = BuildVerticalBubbleContent(text);
+            _bubbleArt.Source = art;
+            _bubbleContent.Children.Add(_bubbleArt);
         }
         else
         {
-            _bubble.Child = _bubbleText;
+            _bubbleArt.Source = null;
+        }
+        if (side)
+        {
+            _bubbleContent.Children.Add(BuildVerticalBubbleContent(text));
+        }
+        else
+        {
             _bubbleText.Text = text;
+            _bubbleContent.Children.Add(_bubbleText);
         }
         _bubbleHost.Visibility = Visibility.Visible;
+    }
+
+    private ImageSource? LoadBubbleArt(string? path)
+    {
+        if (!IsUsableImage(path))
+        {
+            _bubbleArtPath = null;
+            _bubbleArtCache = null;
+            return null;
+        }
+        try
+        {
+            var fullPath = Path.GetFullPath(path!);
+            var changedAt = File.GetLastWriteTimeUtc(fullPath);
+            if (string.Equals(_bubbleArtPath, fullPath, StringComparison.OrdinalIgnoreCase)
+                && _bubbleArtChangedAt == changedAt) return _bubbleArtCache;
+
+            // Keep transparency; decode once without locking the source PNG.
+            using var stream = File.OpenRead(fullPath);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.DecodePixelWidth = 192;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            _bubbleArtCache = bitmap;
+            _bubbleArtPath = fullPath;
+            _bubbleArtChangedAt = changedAt;
+            return bitmap;
+        }
+        catch (IOException) { return null; }
+        catch (ArgumentException) { return null; }
+        catch (NotSupportedException) { return null; }
     }
 
     private UIElement BuildVerticalBubbleContent(string value)
@@ -1061,6 +1163,8 @@ internal sealed class DesktopPetWindow : Window
         public PetPlacement PlacementA { get; set; } = new();
         public PetPlacement PlacementB { get; set; } = new();
         public string BubblePosition { get; set; } = "above";
+        public string BubbleStyle { get; set; } = "speech";
+        public string? BubbleImage { get; set; }
         public double PetScale { get; set; } = 1;
         public double BubbleScale { get; set; } = 1;
         public double? BubbleTextScale { get; set; }
@@ -1095,197 +1199,59 @@ internal sealed class DesktopPetWindow : Window
     }
 }
 
-internal sealed class GlobalInputActivityHook : IDisposable
+// Global WH_KEYBOARD_LL / WH_MOUSE_LL hooks can stall input system-wide
+// if screenshot software blocks the installing WPF UI thread.
+// Polling does not intercept input and survives lost key-up events.
+internal sealed class GlobalInputActivityMonitor : IDisposable
 {
-    private const int WhKeyboardLl = 13;
-    private const int WhMouseLl = 14;
-
-    private const int WmKeyDown = 0x0100;
-    private const int WmKeyUp = 0x0101;
-    private const int WmSysKeyDown = 0x0104;
-    private const int WmSysKeyUp = 0x0105;
-
-    private const int WmLButtonDown = 0x0201;
-    private const int WmLButtonUp = 0x0202;
-    private const int WmRButtonDown = 0x0204;
-    private const int WmRButtonUp = 0x0205;
-    private const int WmMButtonDown = 0x0207;
-    private const int WmMButtonUp = 0x0208;
-
-    private readonly HashSet<int> _pressedKeys = new();
-    private readonly HashSet<int> _pressedMouseButtons = new();
-    private readonly LowLevelKeyboardProc _keyboardCallback;
-    private readonly LowLevelMouseProc _mouseCallback;
-
-    private IntPtr _keyboardHook;
-    private IntPtr _mouseHook;
+    private readonly DispatcherTimer _timer;
+    private DateTime _holdUntil = DateTime.MinValue;
     private bool _active;
 
-    public GlobalInputActivityHook()
+    public GlobalInputActivityMonitor()
     {
-        _keyboardCallback = KeyboardHookCallback;
-        _mouseCallback = MouseHookCallback;
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        _timer.Tick += (_, _) => Poll();
     }
 
     public event Action<bool>? ActivityChanged;
 
-    public void Start()
+    public void Start() => _timer.Start();
+
+    private void Poll()
     {
-        using var process = Process.GetCurrentProcess();
-        using var module = process.MainModule;
-        var moduleHandle = GetModuleHandle(module?.ModuleName);
-
-        if (_keyboardHook == IntPtr.Zero)
+        var pressed = false;
+        for (var key = 0x08; key <= 0xFE; key++)
         {
-            _keyboardHook = SetWindowsHookExKeyboard(
-                WhKeyboardLl,
-                _keyboardCallback,
-                moduleHandle,
-                0
-            );
+            if ((GetAsyncKeyState(key) & 0x8000) == 0) continue;
+            pressed = true;
+            break;
         }
-
-        if (_mouseHook == IntPtr.Zero)
+        if (!pressed)
         {
-            _mouseHook = SetWindowsHookExMouse(
-                WhMouseLl,
-                _mouseCallback,
-                moduleHandle,
-                0
-            );
-        }
-    }
-
-    public void Dispose()
-    {
-        if (_keyboardHook != IntPtr.Zero)
-        {
-            UnhookWindowsHookEx(_keyboardHook);
-            _keyboardHook = IntPtr.Zero;
-        }
-
-        if (_mouseHook != IntPtr.Zero)
-        {
-            UnhookWindowsHookEx(_mouseHook);
-            _mouseHook = IntPtr.Zero;
-        }
-
-        _pressedKeys.Clear();
-        _pressedMouseButtons.Clear();
-        SetActive(false);
-    }
-
-    private IntPtr KeyboardHookCallback(int code, IntPtr wParam, IntPtr lParam)
-    {
-        if (code >= 0)
-        {
-            var message = wParam.ToInt32();
-            var data = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
-
-            if (message is WmKeyDown or WmSysKeyDown)
+            for (var button = 0x01; button <= 0x06; button++)
             {
-                _pressedKeys.Add(data.VirtualKeyCode);
-                RefreshActiveState();
-            }
-            else if (message is WmKeyUp or WmSysKeyUp)
-            {
-                _pressedKeys.Remove(data.VirtualKeyCode);
-                RefreshActiveState();
+                if ((GetAsyncKeyState(button) & 0x8000) == 0) continue;
+                pressed = true;
+                break;
             }
         }
 
-        return CallNextHookEx(_keyboardHook, code, wParam, lParam);
-    }
-
-    private IntPtr MouseHookCallback(int code, IntPtr wParam, IntPtr lParam)
-    {
-        if (code >= 0)
-        {
-            switch (wParam.ToInt32())
-            {
-                case WmLButtonDown:
-                    _pressedMouseButtons.Add(1);
-                    RefreshActiveState();
-                    break;
-                case WmLButtonUp:
-                    _pressedMouseButtons.Remove(1);
-                    RefreshActiveState();
-                    break;
-                case WmRButtonDown:
-                    _pressedMouseButtons.Add(2);
-                    RefreshActiveState();
-                    break;
-                case WmRButtonUp:
-                    _pressedMouseButtons.Remove(2);
-                    RefreshActiveState();
-                    break;
-                case WmMButtonDown:
-                    _pressedMouseButtons.Add(3);
-                    RefreshActiveState();
-                    break;
-                case WmMButtonUp:
-                    _pressedMouseButtons.Remove(3);
-                    RefreshActiveState();
-                    break;
-            }
-        }
-
-        return CallNextHookEx(_mouseHook, code, wParam, lParam);
-    }
-
-    private void RefreshActiveState()
-    {
-        SetActive(_pressedKeys.Count > 0 || _pressedMouseButtons.Count > 0);
-    }
-
-    private void SetActive(bool active)
-    {
+        // Brief hold catches taps; absent an input, always fall back to A.
+        if (pressed) _holdUntil = DateTime.UtcNow.AddMilliseconds(120);
+        var active = DateTime.UtcNow < _holdUntil;
         if (_active == active) return;
         _active = active;
         ActivityChanged?.Invoke(active);
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct KbdLlHookStruct
+    public void Dispose()
     {
-        public readonly int VirtualKeyCode;
-        public readonly int ScanCode;
-        public readonly int Flags;
-        public readonly int Time;
-        public readonly UIntPtr ExtraInfo;
+        _timer.Stop();
+        _holdUntil = DateTime.MinValue;
+        _active = false;
     }
 
-    private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
-    private delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookExW")]
-    private static extern IntPtr SetWindowsHookExKeyboard(
-        int idHook,
-        LowLevelKeyboardProc callback,
-        IntPtr module,
-        uint threadId
-    );
-
-    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookExW")]
-    private static extern IntPtr SetWindowsHookExMouse(
-        int idHook,
-        LowLevelMouseProc callback,
-        IntPtr module,
-        uint threadId
-    );
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWindowsHookEx(IntPtr hook);
-
     [DllImport("user32.dll")]
-    private static extern IntPtr CallNextHookEx(
-        IntPtr hook,
-        int code,
-        IntPtr wParam,
-        IntPtr lParam
-    );
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr GetModuleHandle(string? moduleName);
+    private static extern short GetAsyncKeyState(int virtualKey);
 }
