@@ -8,10 +8,16 @@ import 'sync_models.dart';
 import 'sync_record_store.dart';
 
 class SyncGcAckStore {
-  SyncGcAckStore({SyncRecordStore? recordStore})
-      : _recordStore = recordStore ?? SyncRecordStore();
+  SyncGcAckStore({
+    SyncRecordStore? recordStore,
+    DateTime Function()? clock,
+  }) : _recordStore = recordStore ?? SyncRecordStore(),
+       _clock = clock ?? DateTime.now;
 
   final SyncRecordStore _recordStore;
+  final DateTime Function() _clock;
+  static const _assetAckRefresh = Duration(hours: 6);
+  static const _assetAckExpiry = Duration(hours: 72);
   final Sha256 _sha256 = Sha256();
 
   Future<Directory> _directory(String accountId) async {
@@ -79,23 +85,41 @@ class SyncGcAckStore {
     required Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
   }) async {
     final records = await signatures(recordsByKind);
+    final now = _clock().toUtc();
     final payload = <String, dynamic>{
       'schemaVersion': 1,
       'deviceId': deviceId,
       // Old clients omit this capability. A file GC must never infer support
       // from a normal record-history acknowledgement.
       'assetGcVersion': 1,
+      // Freshness prevents an old offline or rolled-back client from leaving
+      // indefinitely valid permission to delete a shared binary.
+      'assetGcObservedAt': now.toIso8601String(),
       'records': records,
     };
 
     final file = await _file(accountId, deviceId);
-    final encoded = stableJsonSignature(payload);
     if (await file.exists()) {
       try {
-        if (await file.readAsString() == encoded) return;
+        final existing = jsonDecode(await file.readAsString());
+        if (existing is Map &&
+            existing['schemaVersion'] == 1 &&
+            existing['deviceId'] == deviceId &&
+            existing['assetGcVersion'] == 1 &&
+            syncJsonEquals(existing['records'], records)) {
+          final seen = DateTime.tryParse(
+            existing['assetGcObservedAt']?.toString() ?? '',
+          )?.toUtc();
+          if (seen != null &&
+              !seen.isAfter(now) &&
+              now.difference(seen) < _assetAckRefresh) {
+            // Do not rewrite every four seconds just for a heartbeat.
+            return;
+          }
+        }
       } catch (_) {}
     }
-    await atomicWriteString(file, encoded);
+    await atomicWriteString(file, stableJsonSignature(payload));
   }
 
   Future<void> pruneDevices({
@@ -151,10 +175,24 @@ class SyncGcAckStore {
           if (assetGcBlocked.contains(deviceId)) continue;
         }
         if (decoded['schemaVersion'] != 1) continue;
-        if (requireAssetGcSupport && decoded['assetGcVersion'] != 1) {
-          // A legacy installation knows record-history GC, but not this
-          // destructive binary-asset protocol. Keep its art until upgraded.
-          continue;
+        if (requireAssetGcSupport) {
+          if (decoded['assetGcVersion'] != 1) {
+            // Old clients cannot grant destructive binary cleanup.
+            continue;
+          }
+          final now = _clock().toUtc();
+          final seen = DateTime.tryParse(
+            decoded['assetGcObservedAt']?.toString() ?? '',
+          )?.toUtc();
+          if (seen == null ||
+              seen.isAfter(now) ||
+              now.difference(seen) > _assetAckExpiry) {
+            // Matching records are not enough if a bound device has been
+            // offline, or running an old version, for multiple days.
+            assetGcBlocked.add(deviceId);
+            result.remove(deviceId);
+            continue;
+          }
         }
         final rawRecords = decoded['records'];
         if (deviceId is! String || deviceId.isEmpty || rawRecords is! Map) {
