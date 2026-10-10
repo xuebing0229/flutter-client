@@ -27,6 +27,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     required Uri uri,
     required String fileName,
     UpdateDownloadProgressCallback? onProgress,
+    UpdateDownloadPauseCallback? shouldPause,
   }) async {
     final result = await _channel.invokeMethod<String>(
       'downloadAndInstall',
