@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
+
 import 'package:flutter_app/core/portability/app_backup_data.dart';
 import 'package:flutter_app/core/portability/data_portability_file_bridge.dart';
 import 'package:flutter_app/core/portability/full_backup_bundle_service.dart';
@@ -235,6 +237,41 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(await exportedFile.exists(), isFalse);
+  });
+
+  test('ZIP import rejects duplicate reference image entries', () async {
+    const relativePath =
+        'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
+    final manifest = File('${temporary.path}/manifest.json');
+    await manifest.writeAsString(backupWithImage(sizeBytes: 4).encode());
+    final asset = File('${temporary.path}/asset.png');
+    await asset.writeAsBytes(<int>[1, 2, 3, 4]);
+
+    final encoder = ZipFileEncoder();
+    encoder.create(exportedFile.path);
+    try {
+      await encoder.addFile(manifest, FullBackupBundleService.manifestFileName);
+      await encoder.addFile(asset, relativePath);
+      await encoder.addFile(asset, relativePath);
+    } finally {
+      await encoder.close();
+    }
+
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+
+    await expectLater(
+      service.readBackupFile(exportedFile, displayName: 'backup.zip'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('重复文件'),
+        ),
+      ),
+    );
   });
 
   test('legacy json backup remains importable but is marked without assets', () async {
