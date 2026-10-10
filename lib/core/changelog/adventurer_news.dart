@@ -78,6 +78,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '竖排气泡排版修复',
     description: '修复桌宠侧边竖排气泡文字高低不齐、数字和标点错位的问题：改为固定字格逐字排版，两列等宽等距；当文字较长或可用空间不足时会整体等比缩小，不再依赖手工换行或空格拼排。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 133,
+    title: '专注、参考图与 Windows 截图识别升级',
+    description: '专注记录支持长按单条删除，时间范围筛选的“从/到”边界更符合直觉，并修复未结束专注在恢复时误用同步时间作为结束时间的问题。参考图新增附加功能开关，关闭只隐藏入口、不删除已有图片，成品也支持多张参考图查看、编辑、备份与双端同步。设备同步在其他设备离线时不再长期悬挂 99% 进度提示。Windows 截图识别改用 PaddleOCR 官方 C++ + Paddle Inference + PP-OCRv6 Small 离线链路，与手机继续共用同一套截图解析与导入规则。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
