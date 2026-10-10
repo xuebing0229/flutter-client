@@ -91,7 +91,10 @@ class _FocusPanelState extends State<FocusPanel> {
         '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
   }
 
-  Future<DateTime?> _pickDateTime(DateTime? current) async {
+  Future<DateTime?> _pickDateTime(
+    DateTime? current, {
+    required bool isEnd,
+  }) async {
     final now = DateTime.now();
     final seed = current ?? now;
     final date = await showDatePicker(
@@ -101,12 +104,25 @@ class _FocusPanelState extends State<FocusPanel> {
       initialDate: seed,
     );
     if (date == null || !mounted) return null;
+    final initialTime = current == null
+        ? (isEnd
+              ? const TimeOfDay(hour: 23, minute: 59)
+              : const TimeOfDay(hour: 0, minute: 0))
+        : TimeOfDay.fromDateTime(seed);
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(seed),
+      initialTime: initialTime,
     );
     if (time == null) return null;
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+      isEnd ? 59 : 0,
+      isEnd ? 999 : 0,
+    );
   }
 
   Future<_FocusTarget?> _chooseTarget() async {
@@ -384,7 +400,7 @@ class _FocusPanelState extends State<FocusPanel> {
                     label: '从',
                     value: start,
                     onTap: () async {
-                      final picked = await _pickDateTime(start);
+                      final picked = await _pickDateTime(start, isEnd: false);
                       if (picked != null) {
                         setDialogState(() => start = picked);
                       }
@@ -398,7 +414,7 @@ class _FocusPanelState extends State<FocusPanel> {
                     label: '到',
                     value: end,
                     onTap: () async {
-                      final picked = await _pickDateTime(end);
+                      final picked = await _pickDateTime(end, isEnd: true);
                       if (picked != null) {
                         setDialogState(() => end = picked);
                       }
@@ -716,7 +732,7 @@ class _FocusPanelState extends State<FocusPanel> {
                   label: '从',
                   value: _filterStart,
                   onTap: () async {
-                    final picked = await _pickDateTime(_filterStart);
+                    final picked = await _pickDateTime(_filterStart, isEnd: false);
                     if (picked != null) setState(() => _filterStart = picked);
                   },
                   onClear: _filterStart == null
@@ -727,7 +743,7 @@ class _FocusPanelState extends State<FocusPanel> {
                   label: '到',
                   value: _filterEnd,
                   onTap: () async {
-                    final picked = await _pickDateTime(_filterEnd);
+                    final picked = await _pickDateTime(_filterEnd, isEnd: true);
                     if (picked != null) setState(() => _filterEnd = picked);
                   },
                   onClear: _filterEnd == null
