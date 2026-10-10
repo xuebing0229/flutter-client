@@ -104,6 +104,104 @@ void main() {
     expect(reread!.toJson(), merged.toJson());
   });
 
+  test('targeted local edit merges conflict variants without reading unrelated records', () async {
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'chosen-order',
+      values: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 120,
+      },
+      deviceId: 'phone',
+    );
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 120,
+      },
+      nextValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '手机编辑',
+        'price': 120,
+      },
+      deviceId: 'phone',
+    );
+    final pc = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 120,
+      },
+      nextValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 245,
+      },
+      deviceId: 'desktop',
+    );
+    await store.write(accountId: accountId, record: phone);
+    final canonical = _recordFile(temporary, SyncEntityKind.order, 'chosen-order');
+    final conflict = File('${canonical.path.substring(0, canonical.path.length - 5)}'
+        '.sync-conflict-20261010-desktop.json');
+    await conflict.writeAsString(pc.copyWith(accountId: accountId).encode());
+    for (var i = 0; i < 250; i++) {
+      final unrelated = SyncRecord.bootstrap(
+        kind: SyncEntityKind.order,
+        id: 'unrelated-$i',
+        values: <String, dynamic>{
+          'id': 'unrelated-$i',
+          'title': '无关历史订单',
+        },
+        deviceId: 'phone',
+      );
+      await store.write(accountId: accountId, record: unrelated);
+    }
+
+    final targeted = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+      recordId: 'chosen-order',
+    );
+    expect(targeted, isNotNull);
+    expect(engine.materialize(targeted!)!['title'], '手机编辑');
+    expect(engine.materialize(targeted)!['price'], 245);
+    expect(await conflict.exists(), isFalse);
+    expect(await canonical.exists(), isTrue);
+    final all = await store.readAllMerged(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+    );
+    expect(all.length, 251);
+  });
+
+  test('unexpectedly named legacy sync variant remains mergeable', () async {
+    final value = SyncRecord.bootstrap(
+      kind: SyncEntityKind.settings,
+      id: 'app',
+      values: const <String, dynamic>{'id': 'app', 'themeMode': 'system'},
+      deviceId: 'phone',
+    );
+    final unusual = File('${temporary.path}/${SyncEntityKind.settings.directoryName}/'
+        'manual-backup.copy.json');
+    await unusual.parent.create(recursive: true);
+    await unusual.writeAsString(value.copyWith(accountId: accountId).encode());
+
+    final merged = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.settings,
+      recordId: 'app',
+    );
+    expect(merged, isNotNull);
+    expect(engine.materialize(merged!)!['themeMode'], 'system');
+    expect(await unusual.exists(), isFalse);
+    expect(await _recordFile(temporary, SyncEntityKind.settings, 'app').exists(),
+        isTrue);
+  });
+
   test('settings survive successive phone and desktop edits in both directions', () async {
     final phoneRoot = await Directory('${temporary.path}/phone').create();
     final desktopRoot = await Directory('${temporary.path}/desktop').create();
