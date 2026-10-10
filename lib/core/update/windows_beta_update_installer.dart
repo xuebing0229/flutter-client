@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'beta_update_installer.dart';
@@ -39,6 +40,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     final version = json['version'];
     final build = json['build'];
     final windowsDownload = json['windows_download_url'];
+    final windowsSize = json['windows_size_bytes'];
+    final windowsSha256 = json['windows_sha256'];
     final notes = json['notes'];
 
     if (schema != 1 ||
@@ -60,6 +63,9 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       'build': build,
       'published': true,
       'download_url': windowsDownload,
+      if (windowsSize is int && windowsSize > 0) 'size_bytes': windowsSize,
+      if (windowsSha256 is String && windowsSha256.isNotEmpty)
+        'sha256': windowsSha256,
       'notes': notes is String ? notes : '',
     };
   }
@@ -94,6 +100,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     }
 
     String? downloadUrl;
+    int? sizeBytes;
+    String? sha256;
     final assets = json['assets'];
     if (assets is List) {
       for (final rawAsset in assets) {
@@ -102,6 +110,13 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
         final rawUrl = rawAsset['browser_download_url'];
         if (rawUrl is String && rawUrl.isNotEmpty) {
           downloadUrl = rawUrl;
+          final rawSize = rawAsset['size'];
+          if (rawSize is int && rawSize > 0) sizeBytes = rawSize;
+          final rawDigest = rawAsset['digest'];
+          if (rawDigest is String &&
+              rawDigest.toLowerCase().startsWith('sha256:')) {
+            sha256 = rawDigest.substring('sha256:'.length);
+          }
           break;
         }
       }
@@ -120,6 +135,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       'build': build,
       'published': true,
       'download_url': downloadUrl,
+      if (sizeBytes != null) 'size_bytes': sizeBytes,
+      if (sha256 != null) 'sha256': sha256,
       'notes': json['body'] is String ? json['body'] : '',
     };
   }
@@ -212,6 +229,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     required String fileName,
     UpdateDownloadProgressCallback? onProgress,
     UpdateDownloadPauseCallback? shouldPause,
+    int? expectedSizeBytes,
+    String? expectedSha256,
   }) async {
     if (uri.scheme != 'https' || uri.host.toLowerCase() != 'github.com') {
       throw const FormatException('Windows Beta 只能从 GitHub Releases 下载。');
@@ -245,9 +264,16 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     // A fully downloaded archive is only created after the stream completed,
     // so it is safe to reuse if the app was closed before the updater launched.
     if (await target.exists()) {
-      final length = await target.length();
-      onProgress?.call(length, length);
-      return const WindowsSelfUpdateLauncher().launch(archive: target);
+      if (await _matchesExpected(
+        target,
+        expectedSizeBytes: expectedSizeBytes,
+        expectedSha256: expectedSha256,
+      )) {
+        final length = await target.length();
+        onProgress?.call(length, expectedSizeBytes ?? length);
+        return const WindowsSelfUpdateLauncher().launch(archive: target);
+      }
+      await target.delete();
     }
 
     var existingBytes = await partial.exists() ? await partial.length() : 0;
@@ -270,9 +296,17 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
         final totalBytes = _contentRangeTotal(response.headers);
         await response.drain<void>();
         if (totalBytes != null && totalBytes == existingBytes) {
+          if (!await _matchesExpected(
+            partial,
+            expectedSizeBytes: expectedSizeBytes,
+            expectedSha256: expectedSha256,
+          )) {
+            if (await partial.exists()) await partial.delete();
+            throw const FormatException('更新包完整性校验失败，请重新下载。');
+          }
           if (await target.exists()) await target.delete();
           await partial.rename(target.path);
-          onProgress?.call(existingBytes, totalBytes);
+          onProgress?.call(existingBytes, expectedSizeBytes ?? totalBytes);
           return const WindowsSelfUpdateLauncher().launch(archive: target);
         }
 
@@ -303,7 +337,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
       }
 
       final contentRangeTotal = _contentRangeTotal(response.headers);
-      final totalBytes = contentRangeTotal ??
+      final totalBytes = expectedSizeBytes ??
+          contentRangeTotal ??
           (response.contentLength > 0
               ? existingBytes + response.contentLength
               : null);
@@ -356,6 +391,15 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
         );
       }
 
+      if (!await _matchesExpected(
+        partial,
+        expectedSizeBytes: expectedSizeBytes,
+        expectedSha256: expectedSha256,
+      )) {
+        if (await partial.exists()) await partial.delete();
+        throw const FormatException('更新包完整性校验失败，请重新下载。');
+      }
+
       if (await target.exists()) await target.delete();
       await partial.rename(target.path);
     } finally {
@@ -378,6 +422,29 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     if (partial == null || !await partial.exists()) return null;
     final length = await partial.length();
     return length > 0 ? length : null;
+  }
+
+  Future<bool> _matchesExpected(
+    File file, {
+    int? expectedSizeBytes,
+    String? expectedSha256,
+  }) async {
+    if (!await file.exists()) return false;
+
+    if (expectedSizeBytes != null) {
+      final actualSize = await file.length();
+      if (actualSize != expectedSizeBytes) return false;
+    }
+
+    if (expectedSha256 != null && expectedSha256.isNotEmpty) {
+      final hash = await Sha256().hashStream(file.openRead());
+      final actual = hash.bytes
+          .map((value) => value.toRadixString(16).padLeft(2, '0'))
+          .join();
+      if (actual.toLowerCase() != expectedSha256.toLowerCase()) return false;
+    }
+
+    return true;
   }
 
   @override
