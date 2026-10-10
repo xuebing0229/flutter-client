@@ -80,4 +80,12 @@ void main() {
     final picked = newsBetweenBuilds(131, 132);
     expect(picked.map((e) => e.title).toList(), ['竖排气泡排版修复']);
   });
+
+  test('133 向 132 用户补充本轮专注参考图与 Windows OCR 见闻', () {
+    final picked = newsBetweenBuilds(132, 133);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['专注、参考图与 Windows 截图识别升级'],
+    );
+  });
 }
