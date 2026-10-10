@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/presentation/summary_card_widgets.dart';
 import '../domain/finished_product.dart';
+import '../domain/sale_receipt.dart';
 
 class ProductSummaryCard extends StatelessWidget {
   const ProductSummaryCard({
@@ -10,6 +11,7 @@ class ProductSummaryCard extends StatelessWidget {
     this.onLongPress,
     this.onMarkSold,
     this.saleTime,
+    this.saleReceipt,
     this.showPlatform = true,
     this.compact = false,
     this.hasSyncConflict = false,
@@ -21,6 +23,7 @@ class ProductSummaryCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onMarkSold;
   final DateTime? saleTime;
+  final SaleReceipt? saleReceipt;
   final bool showPlatform;
   final bool compact;
   final bool hasSyncConflict;
@@ -41,7 +44,7 @@ class ProductSummaryCard extends StatelessWidget {
                 Row(
                   children: [
                     if (showPlatform)
-                      SummaryTag(text: product.platform.label, compact: true),
+                      SummaryTag(text: saleReceipt?.platform.label ?? product.platform.label, compact: true),
                     const Spacer(),
                     if (hasSyncConflict) ...[
                       const Tooltip(
@@ -71,7 +74,7 @@ class ProductSummaryCard extends StatelessWidget {
                 Row(
                   children: [
                     if (showPlatform) ...[
-                      SummaryTag(text: product.platform.label),
+                      SummaryTag(text: saleReceipt?.platform.label ?? product.platform.label),
                       const SizedBox(width: 10),
                     ],
                     Expanded(
@@ -128,9 +131,12 @@ class ProductSummaryCard extends StatelessWidget {
               SizedBox(height: compact ? 7 : 9),
               SummaryMetaItem(
                 icon: Icons.payments_outlined,
-                label: product.price == 0
-                    ? '未定价'
-                    : '实收 ¥ ${formatProductPrice(product.realIncome)}',
+                label: saleReceipt != null
+                    ? '实收 ¥ ${formatProductPrice(saleReceipt!.netIncome)}'
+                      '${saleReceipt!.estimated ? '（历史估算）' : ''}'
+                    : product.price == 0
+                        ? '未定价'
+                        : '实收 ¥ ${formatProductPrice(product.realIncome)}',
                 compact: compact,
               ),
               if (onMarkSold != null) ...[
