@@ -121,7 +121,7 @@ if (-not (Test-Path (Join-Path $runtimeCache "ppocr.exe"))) {
   Get-File $DirentUrl (Join-Path $cppInfer "dirent.h")
 
   $build = Join-Path $CacheDir "cpp-build-$PaddleOcrCommit"
-  & cmake -S $cppInfer -B $build -A x64 "-DPADDLE_LIB=$paddleRoot" "-DOPENCV_DIR=$opencvBuild" -DWITH_GPU=OFF -DWITH_MKL=ON -DWITH_STATIC_LIB=ON -DUSE_FREETYPE=OFF
+  & cmake -S $cppInfer -B $build -A x64 "-DPADDLE_LIB=$paddleRoot" "-DOPENCV_DIR=$opencvBuild" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DWITH_GPU=OFF -DWITH_MKL=ON -DWITH_STATIC_LIB=ON -DUSE_FREETYPE=OFF
   if ($LASTEXITCODE -ne 0) { throw "Official PaddleOCR C++ configure failed." }
 
   & cmake --build $build --config Release --target ppocr --parallel 2
