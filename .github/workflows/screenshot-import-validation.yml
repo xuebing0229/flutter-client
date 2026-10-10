@@ -29,7 +29,7 @@ jobs:
       - name: Install
         run: flutter pub get
       - name: Test import domain
-        run: flutter test test/features/screenshot_import_rules_test.dart test/features/screenshot_layout_parser_test.dart test/features/import_batch_preset_state_test.dart test/features/screenshot_duplicate_review_test.dart test/features/screenshot_product_dedup_test.dart test/features/screenshot_import_draft_test.dart test/features/screenshot_product_layout_parser_test.dart test/features/windows_rapidocr_onnx_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/screenshot_ocr_real_world_regression_test.dart
+        run: flutter test test/features/screenshot_import_rules_test.dart test/features/screenshot_layout_parser_test.dart test/features/import_batch_preset_state_test.dart test/features/screenshot_duplicate_review_test.dart test/features/screenshot_product_dedup_test.dart test/features/screenshot_import_draft_test.dart test/features/screenshot_product_layout_parser_test.dart test/features/windows_official_paddleocr_test.dart test/features/screenshot_real_layout_regression_test.dart test/features/screenshot_ocr_real_world_regression_test.dart
       - name: Static analysis
         run: flutter analyze lib/features/imports lib/features/home/presentation/home_page.dart
 
@@ -71,6 +71,12 @@ jobs:
       - name: Compile Windows
         shell: pwsh
         run: flutter build windows --debug
-      - name: Bundle and check offline OCR
+      - name: Cache official PaddleOCR Windows runtime
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ag-official-paddleocr
+          key: official-paddleocr-windows-dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf-paddle3.2.1-opencv4.12.0-v1
+
+      - name: Bundle and check official offline OCR
         shell: pwsh
-        run: ./tool/bundle_windows_rapidocr.ps1 -OutputDir "build/windows/x64/runner/Debug"
+        run: ./tool/bundle_windows_official_paddleocr.ps1 -OutputDir "build/windows/x64/runner/Debug"
