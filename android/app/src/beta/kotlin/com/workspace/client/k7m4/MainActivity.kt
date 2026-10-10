@@ -1,13 +1,8 @@
 package com.workspace.client.k7m4
 
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -28,9 +23,6 @@ class MainActivity : FlutterActivity() {
         private const val USER_AGENT = "artist-queue-beta-updater"
     }
 
-    private var activeDownloadId = -1L
-    private var downloadReceiver: BroadcastReceiver? = null
-    private var activeApk: File? = null
     private lateinit var backupFileBridge: BackupFileBridge
     private lateinit var feedbackLinkBridge: FeedbackLinkBridge
     private lateinit var orderReminderBridge: OrderReminderBridge
@@ -63,7 +55,7 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "fetchLatestManifest" -> handleFetchLatestManifest(result)
-                "downloadAndInstall" -> handleDownloadAndInstall(call, result)
+                "installDownloadedUpdate" -> handleInstallDownloadedUpdate(call, result)
                 else -> result.notImplemented()
             }
         }
@@ -106,6 +98,8 @@ class MainActivity : FlutterActivity() {
         val version = json.optString("version", "")
         val build = json.optInt("build", -1)
         val downloadUrl = json.optString("download_url", "")
+        val sizeBytes = json.optLong("android_size_bytes", -1L)
+        val sha256 = json.optString("android_sha256", "")
 
         if (
             schema != 1 ||
@@ -125,6 +119,8 @@ class MainActivity : FlutterActivity() {
             "build" to build,
             "published" to published,
             "download_url" to downloadUrl,
+            "size_bytes" to sizeBytes.takeIf { it > 0L },
+            "sha256" to sha256.takeIf { it.isNotBlank() },
             "notes" to json.optString("notes", ""),
         )
     }
@@ -151,6 +147,8 @@ class MainActivity : FlutterActivity() {
             ?: throw IllegalStateException("Latest Beta release build is invalid.")
 
         var downloadUrl = ""
+        var sizeBytes = -1L
+        var sha256 = ""
         val assets = json.optJSONArray("assets")
         if (assets != null) {
             for (index in 0 until assets.length()) {
@@ -158,6 +156,11 @@ class MainActivity : FlutterActivity() {
                 if (asset.optString("name") == "app-beta.apk") {
                     downloadUrl =
                         asset.optString("browser_download_url", "")
+                    sizeBytes = asset.optLong("size", -1L)
+                    val digest = asset.optString("digest", "")
+                    if (digest.startsWith("sha256:", ignoreCase = true)) {
+                        sha256 = digest.substringAfter(":")
+                    }
                     break
                 }
             }
@@ -176,6 +179,8 @@ class MainActivity : FlutterActivity() {
             "build" to build,
             "published" to true,
             "download_url" to downloadUrl,
+            "size_bytes" to sizeBytes.takeIf { it > 0L },
+            "sha256" to sha256.takeIf { it.isNotBlank() },
             "notes" to json.optString("body", ""),
         )
     }
@@ -228,22 +233,36 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun handleDownloadAndInstall(
+    private fun handleInstallDownloadedUpdate(
         call: MethodCall,
         result: MethodChannel.Result,
     ) {
-        val url = call.argument<String>("url").orEmpty()
-        val requestedName = call.argument<String>("fileName").orEmpty()
+        val rawPath = call.argument<String>("path").orEmpty()
+        if (rawPath.isBlank()) {
+            result.error(
+                "INVALID_UPDATE_FILE",
+                "Downloaded update path is missing.",
+                null,
+            )
+            return
+        }
 
-        val uri = runCatching { Uri.parse(url) }.getOrNull()
+        val apk = runCatching { File(rawPath).canonicalFile }.getOrNull()
+        val allowedRoot = runCatching { filesDir.canonicalFile }.getOrNull()
+        val allowedPrefix = allowedRoot?.path?.let {
+            if (it.endsWith(File.separator)) it else it + File.separator
+        }
+
         if (
-            uri == null ||
-            uri.scheme != "https" ||
-            uri.host?.lowercase() != "github.com"
+            apk == null ||
+            allowedPrefix == null ||
+            !apk.path.startsWith(allowedPrefix) ||
+            !apk.name.lowercase().endsWith(".apk") ||
+            !apk.isFile
         ) {
             result.error(
-                "INVALID_URL",
-                "Beta updates may only be downloaded from GitHub Releases.",
+                "INVALID_UPDATE_FILE",
+                "Downloaded update file is invalid or outside app storage.",
                 null,
             )
             return
@@ -264,111 +283,15 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        val safeName = requestedName
-            .ifBlank { "app-beta-update.apk" }
-            .replace(Regex("[^A-Za-z0-9._-]"), "_")
-            .let { if (it.lowercase().endsWith(".apk")) it else "$it.apk" }
-
-        val baseDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-        if (baseDir == null) {
-            result.error(
-                "DOWNLOAD_DIR_UNAVAILABLE",
-                "Android download directory is unavailable.",
-                null,
-            )
-            return
-        }
-
-        val updateDir = File(baseDir, "updates")
-        if (!updateDir.exists() && !updateDir.mkdirs()) {
-            result.error(
-                "DOWNLOAD_DIR_FAILED",
-                "Unable to create the update directory.",
-                null,
-            )
-            return
-        }
-
-        cleanupUpdateDirectory(updateDir)
-
-        val apk = File(updateDir, safeName)
-        if (apk.exists()) {
-            apk.delete()
-        }
-        activeApk = apk
-
-        val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        unregisterDownloadReceiver()
-
-        downloadReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                val completedId =
-                    intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: -1L
-                if (completedId != activeDownloadId) return
-
-                try {
-                    val query = DownloadManager.Query().setFilterById(completedId)
-                    manager.query(query).use { cursor ->
-                        if (!cursor.moveToFirst()) return@use
-
-                        val status = cursor.getInt(
-                            cursor.getColumnIndexOrThrow(
-                                DownloadManager.COLUMN_STATUS,
-                            ),
-                        )
-
-                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            activeApk?.let(::openInstaller)
-                        }
-                    }
-                } finally {
-                    unregisterDownloadReceiver()
-                }
-            }
-        }
-
-        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(
-                downloadReceiver,
-                filter,
-                Context.RECEIVER_NOT_EXPORTED,
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            registerReceiver(downloadReceiver, filter)
-        }
-
         try {
-            val request = DownloadManager.Request(uri).apply {
-                setTitle("测试版更新")
-                setDescription("正在下载 $safeName")
-                setMimeType("application/vnd.android.package-archive")
-                setNotificationVisibility(
-                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED,
-                )
-                setDestinationUri(Uri.fromFile(apk))
-                setAllowedOverMetered(true)
-                setAllowedOverRoaming(false)
-            }
-
-            activeDownloadId = manager.enqueue(request)
-            result.success("downloading")
+            openInstaller(apk)
+            result.success("installing")
         } catch (error: Exception) {
-            unregisterDownloadReceiver()
-            result.error("DOWNLOAD_FAILED", error.message, null)
-        }
-    }
-
-    private fun cleanupUpdateDirectory(updateDir: File) {
-        if (!updateDir.exists()) return
-
-        runCatching {
-            updateDir.listFiles()?.forEach { file ->
-                if (file.isFile && file.name.lowercase().endsWith(".apk")) {
-                    file.delete()
-                }
-            }
+            result.error(
+                "INSTALL_LAUNCH_FAILED",
+                error.message ?: "Could not open the Android package installer.",
+                null,
+            )
         }
     }
 
@@ -384,16 +307,6 @@ class MainActivity : FlutterActivity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
-    }
-
-    private fun unregisterDownloadReceiver() {
-        val receiver = downloadReceiver ?: return
-        try {
-            unregisterReceiver(receiver)
-        } catch (_: IllegalArgumentException) {
-            // Receiver was already gone.
-        }
-        downloadReceiver = null
     }
 
     override fun onRequestPermissionsResult(
@@ -429,7 +342,6 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         if (::screenshotOcrBridge.isInitialized) screenshotOcrBridge.close()
-        unregisterDownloadReceiver()
         super.onDestroy()
     }
 }
