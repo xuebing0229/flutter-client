@@ -21,12 +21,12 @@ class WindowsOfficialPaddleOcr {
     }
 
     final root = File(Platform.resolvedExecutable).parent.path;
-    final runtime = Directory('${root}\\paddleocr');
-    final engine = File('${root}\\paddleocr\\ppocr.exe');
+    final runtime = Directory('$root\\paddleocr');
+    final engine = File('$root\\paddleocr\\ppocr.exe');
     final detModel =
-        Directory('${root}\\paddleocr\\models\\PP-OCRv6_small_det_infer');
+        Directory('$root\\paddleocr\\models\\PP-OCRv6_small_det_infer');
     final recModel =
-        Directory('${root}\\paddleocr\\models\\PP-OCRv6_small_rec_infer');
+        Directory('$root\\paddleocr\\models\\PP-OCRv6_small_rec_infer');
     if (!await engine.exists() ||
         !await detModel.exists() ||
         !await recModel.exists()) {
