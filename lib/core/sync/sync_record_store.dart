@@ -229,8 +229,8 @@ class SyncRecordStore {
     // roots use the same atomic replacement path as production.
     var target = await rootDirectory(safeAccountId);
     // Atomic in the Dart isolate between the last check and assignment.
-    while (_activeRestores[safeAccountId] case final pending?) {
-      await pending.future;
+    while (_activeRestores.containsKey(safeAccountId)) {
+      await _activeRestores[safeAccountId]!.future;
       target = await rootDirectory(safeAccountId);
     }
     final restoreGuard = Completer<void>();
