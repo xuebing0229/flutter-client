@@ -12,6 +12,8 @@ typedef UpdateDownloadPauseCallback = bool Function();
 abstract interface class BetaUpdateInstaller {
   Future<Map<String, dynamic>> fetchLatestManifest();
 
+  Future<int?> resumableBytes({required String fileName});
+
   Future<String> downloadAndInstall({
     required Uri uri,
     required String fileName,
