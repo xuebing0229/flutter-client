@@ -24,7 +24,16 @@ class OfflineLicenseVerifier {
   Future<ActivationLicense> verify(String source) async {
     final normalized = source.trim();
     final parts = normalized.split('.');
-    if (parts.length != 3 || parts.first != 'AW1') {
+    if (parts.length != 3) {
+      throw const FormatException('激活码格式不正确。');
+    }
+
+    final expectedPayloadVersion = switch (parts.first) {
+      'AW1' => 1,
+      'AW2' => 2,
+      _ => null,
+    };
+    if (expectedPayloadVersion == null) {
       throw const FormatException('激活码格式不正确。');
     }
 
@@ -56,8 +65,8 @@ class OfflineLicenseVerifier {
       (key, value) => MapEntry(key.toString(), value),
     );
 
-    if (payload['v'] != 1) {
-      throw const FormatException('暂不支持这个版本的激活码。');
+    if (payload['v'] != expectedPayloadVersion) {
+      throw const FormatException('激活码版本不匹配。');
     }
 
     final accountId = payload['a'];
