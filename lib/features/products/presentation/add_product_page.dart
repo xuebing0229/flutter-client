@@ -55,7 +55,7 @@ class _AddProductPageState extends State<AddProductPage> {
   void dispose() {
     if (!_saved && _referenceImages.isNotEmpty) {
       unawaited(
-        _referenceImageStore.deleteImages(
+        _referenceImageStore.discardUnsavedImages(
           accountId: widget.accountId,
           images: List<OrderReferenceImage>.from(_referenceImages),
         ),
@@ -88,7 +88,7 @@ class _AddProductPageState extends State<AddProductPage> {
       );
       if (!mounted) {
         if (imported.isNotEmpty) {
-          await _referenceImageStore.deleteImages(
+          await _referenceImageStore.discardUnsavedImages(
             accountId: widget.accountId,
             images: imported,
           );
@@ -116,7 +116,7 @@ class _AddProductPageState extends State<AddProductPage> {
       _referenceImages.removeWhere((item) => item.id == image.id);
     });
     unawaited(
-      _referenceImageStore.deleteImages(
+      _referenceImageStore.discardUnsavedImages(
         accountId: widget.accountId,
         images: <OrderReferenceImage>[image],
       ),
