@@ -1298,8 +1298,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
         onApplyWorkspaceSettings: _applySyncSettings,
-        onOpenThemeColor: () =>
-            _selectDesktopTool(AppToolMenu.themeColorTool),
+        // Keep SettingsPage alive while opening the palette picker. The update
+        // download state lives in SettingsPage, so replacing the whole desktop
+        // tool page here would make an in-progress Windows update appear to
+        // restart after changing the UI theme color.
       ),
       AppToolMenu.themeColorTool => ThemeColorPage(
         store: widget.themeStore,
