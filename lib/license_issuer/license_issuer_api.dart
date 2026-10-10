@@ -363,6 +363,13 @@ class LicenseIssuerApi {
       }
 
       final response = await request.close().timeout(const Duration(seconds: 12));
+      if (response.statusCode == 429) {
+        throw const IssuerApiException(
+          '操作过于频繁，请稍后重试。',
+          code: 'rate_limited',
+          statusCode: 429,
+        );
+      }
       final responseBody = await utf8.decoder.bind(response).join();
       Map<String, dynamic> json = <String, dynamic>{};
       if (responseBody.isNotEmpty) {
