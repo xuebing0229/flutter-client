@@ -34,6 +34,18 @@ jobs:
       - name: Run complete Flutter regression suite
         run: flutter test
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: server/activation_service/requirements.txt
+
+      - name: Install activation service test dependencies
+        run: python -m pip install -r server/activation_service/requirements.txt
+
+      - name: Run activation API regression tests
+        run: python -m unittest server.activation_service.test_app -v
+
       - name: Analyze
         run: flutter analyze
 
