@@ -673,6 +673,37 @@ class SyncMergeEngine {
       }
     }
 
+    // After upgrading, immutable receipts are the source of truth. The
+    // older soldCount/saleRecords fields stay serialized for compatibility,
+    // but a stale sale-delta cannot resurrect a receipt that was voided.
+    // An *absent* receipt field denotes a legacy peer and keeps its original
+    // date-only semantics until it is migrated by the product store.
+    final ledger = values['saleReceipts'];
+    if (ledger is List) {
+      final entries = <Map<String, dynamic>>[
+        for (final value in ledger)
+          if (value is Map)
+            value.map((key, value) => MapEntry(key.toString(), value)),
+      ];
+      entries.sort((a, b) {
+        final aTime = a['soldAt']?.toString() ?? '';
+        final bTime = b['soldAt']?.toString() ?? '';
+        final byDate = aTime.compareTo(bTime);
+        return byDate != 0
+            ? byDate
+            : (a['id']?.toString() ?? '').compareTo(b['id']?.toString() ?? '');
+      });
+      if (values['saleType'] == 'single' && entries.length > 1) {
+        entries.removeRange(1, entries.length);
+      }
+      values['saleReceipts'] = entries;
+      values['saleRecords'] = <String>[
+        for (final entry in entries)
+          if (entry['soldAt'] is String) entry['soldAt'] as String,
+      ];
+      values['soldCount'] = entries.length;
+    }
+
     return values;
   }
 
