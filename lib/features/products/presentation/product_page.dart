@@ -7,6 +7,7 @@ import '../../../core/sync/sync_coordinator.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../../orders/data/order_reference_image_store.dart';
+import '../../orders/domain/queue_order.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
 import 'product_detail_page.dart';
@@ -250,14 +251,14 @@ class _ProductPageState extends State<ProductPage> {
     );
 
     if (confirmed == true) {
-      final images = <dynamic>[
+      final images = <OrderReferenceImage>[
         for (final product in widget.store.products)
           if (ids.contains(product.id)) ...product.referenceImages,
       ];
       if (images.isNotEmpty) {
         await _referenceImageStore.deleteImages(
           accountId: widget.accountId,
-          images: images.cast(),
+          images: images,
         );
       }
       widget.store.deleteProducts(ids);
