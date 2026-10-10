@@ -128,7 +128,16 @@ class LicenseIssuerApi {
       }
 
       final next = json['nextBeforeId'];
-      if (next == null) break; // Compatible with older single-page servers.
+      if (!json.containsKey('nextBeforeId') && raw.length == 500) {
+        // Old servers return only the last 500 records without any paging
+        // metadata. Treat that as an incomplete refresh, not an empty tail:
+        // LicenseIssuerStore preserves its previous cache on this failure.
+        throw const IssuerApiException(
+          '激活服务器尚未支持完整历史分页，无法安全刷新超过 500 条的记录。请先升级服务器。',
+          code: 'server_upgrade_required',
+        );
+      }
+      if (next == null) break; // Compatible with short legacy responses.
       if (next is! int ||
           next <= 0 ||
           (beforeId != null && next >= beforeId) ||
