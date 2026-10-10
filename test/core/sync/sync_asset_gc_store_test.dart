@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_app/core/sync/sync_asset_gc_store.dart';
 import 'package:flutter_app/core/sync/sync_gc_ack_store.dart';
-import 'package:flutter_app/core/sync/sync_merge_engine.dart';
 import 'package:flutter_app/core/sync/sync_models.dart';
 import 'package:flutter_app/core/sync/sync_record_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,7 +30,6 @@ void main() {
 
   Map<SyncEntityKind, Map<String, SyncRecord>> recordSet({
     bool referenced = false,
-    bool conflict = false,
   }) {
     final values = <String, dynamic>{
       'id': 'test-product',
