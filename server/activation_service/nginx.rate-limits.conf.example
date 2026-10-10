@@ -1,0 +1,5 @@
+# Install as /etc/nginx/conf.d/adventure-license-rates.conf
+# This file MUST be included inside nginx's HTTP context, not server { }.
+# Do not trust user-provided X-Forwarded-For unless the reverse proxy is owned.
+limit_req_zone $binary_remote_addr zone=guild_admin_enroll:10m rate=3r/m;
+limit_req_zone $binary_remote_addr zone=guild_activation:10m rate=30r/m;
