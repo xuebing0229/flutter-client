@@ -1,0 +1,39 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission
+        android:name="android.permission.CAMERA"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.RECEIVE_BOOT_COMPLETED"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.USE_EXACT_ALARM"
+        tools:node="remove"/>
+
+    <application
+        android:label="激活码生成器"
+        tools:replace="android:label">
+        <service
+            android:name=".SyncthingService"
+            tools:node="remove"/>
+        <receiver
+            android:name=".OrderReminderReceiver"
+            tools:node="remove"/>
+        <receiver
+            android:name=".OrderReminderSystemReceiver"
+            tools:node="remove"/>
+    </application>
+</manifest>
