@@ -181,6 +181,63 @@ void main() {
     expect(materialized['saleRecords'], isEmpty);
   });
 
+  test('voided receipt stays removed after stale sync and compaction', () {
+    final engine = SyncMergeEngine();
+    final blank = product();
+    final before = SyncEntityCodec.productToFields(blank);
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: blank.id,
+      values: before,
+      deviceId: 'phone',
+    );
+    final withSale = blank.withSaleCount(
+      1,
+      soldAt: DateTime.utc(2026, 10, 11, 20),
+    );
+    final soldFields = SyncEntityCodec.productToFields(withSale);
+    final created = engine.applyLocalSnapshot(
+      record: base,
+      previousValues: before,
+      nextValues: soldFields,
+      deviceId: 'phone',
+    );
+    final reversed = engine.applyLocalSnapshot(
+      record: created,
+      previousValues: soldFields,
+      nextValues: SyncEntityCodec.productToFields(withSale.withSaleCount(0)),
+      deviceId: 'computer',
+    );
+    for (final state in [
+      engine.merge(reversed, created),
+      engine.merge(created, reversed),
+    ]) {
+      final materialized = engine.materialize(state)!;
+      expect(materialized['soldCount'], 0);
+      expect(materialized['saleRecords'], isEmpty);
+      expect(materialized['saleReceipts'], isEmpty);
+      final compacted = engine.compactAcknowledgedOperations(
+        state,
+        deviceId: 'computer',
+      );
+      final again = engine.merge(compacted, created);
+      expect(engine.materialize(again)!['soldCount'], 0);
+      expect(engine.materialize(again)!['saleReceipts'], isEmpty);
+    }
+  });
+
+  test('changing multi-sale product to single keeps only one receipt', () {
+    final source = product().withSaleCount(2);
+    final original = source.accountedSales.first;
+    final changed = source.copyWith(
+      saleType: ProductSaleType.single,
+    ).withSaleCount(1);
+    expect(changed.soldCount, 1);
+    expect(changed.saleRecords.length, 1);
+    expect(changed.accountedSales.single.id, original.id);
+    expect(changed.accountedSales.single.netIncome, original.netIncome);
+  });
+
   test('offline sales merge receipts idempotently and survive GC compaction', () {
     final engine = SyncMergeEngine();
     final baselineProduct = product();
