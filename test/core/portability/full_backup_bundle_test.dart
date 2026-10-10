@@ -194,6 +194,55 @@ void main() {
     }
   });
 
+  test('full backup refuses same-size ZIP data with corrupted central CRC', () async {
+    final bytes = <int>[11, 22, 33, 44, 55];
+    final asset = File(
+      '${syncRoot.path}/assets/order-reference-images/b3JkZXItMQ/ref-1.png',
+    );
+    await asset.parent.create(recursive: true);
+    await asset.writeAsBytes(bytes, flush: true);
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+    expect(
+      await service.exportFullBackup(
+        accountId: 'account',
+        backup: backupWithImage(sizeBytes: bytes.length),
+        fileName: 'backup.zip',
+      ),
+      isTrue,
+    );
+    final zip = await exportedFile.readAsBytes();
+    var header = -1;
+    for (var i = 0; i < zip.length - 24; i++) {
+      // ZIP central-directory file header: 50 4B 01 02.
+      if (zip[i] == 0x50 &&
+          zip[i + 1] == 0x4b &&
+          zip[i + 2] == 0x01 &&
+          zip[i + 3] == 0x02) {
+        header = i;
+        break;
+      }
+    }
+    expect(header, greaterThanOrEqualTo(0));
+    // CRC-32 is at offset 16 of the central-directory file header.
+    // Declared sizes are unchanged, so pure length checks would miss this.
+    zip[header + 16] ^= 0x1;
+    await exportedFile.writeAsBytes(zip, flush: true);
+
+    await expectLater(
+      service.readBackupFile(exportedFile, displayName: 'backup.zip'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('CRC'),
+        ),
+      ),
+    );
+  });
+
   test('full backup refuses to silently omit an unsynced image', () async {
     final service = FullBackupBundleService(
       syncRecordStore: _TemporaryRecordStore(syncRoot),
