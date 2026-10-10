@@ -13,6 +13,7 @@ import '../core/sync/account_sync_record_store.dart';
 import '../core/sync/embedded_syncthing_bridge.dart';
 import '../core/sync/portable_sync_workspace_validator.dart';
 import '../core/theme/app_theme_store.dart';
+import '../core/theme/guild_visual_theme.dart';
 import '../features/account/presentation/account_gate.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/orders/data/node_presets.dart';
@@ -279,51 +280,11 @@ class _AppState extends State<App> {
     );
   }
 
-  ThemeData _lightTheme() {
-    final scheme = _paletteScheme(Brightness.light);
+  ThemeData _lightTheme() =>
+      GuildVisualTheme.build(_paletteScheme(Brightness.light));
 
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surface,
-      appBarTheme: AppBarTheme(
-        centerTitle: false,
-        backgroundColor: scheme.surface,
-        surfaceTintColor: Colors.transparent,
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surfaceContainer,
-        indicatorColor: scheme.secondaryContainer,
-        height: 70,
-      ),
-    );
-  }
-
-  ThemeData _darkTheme() {
-    final scheme = _paletteScheme(Brightness.dark);
-
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surface,
-      appBarTheme: AppBarTheme(
-        centerTitle: false,
-        backgroundColor: scheme.surface,
-        surfaceTintColor: Colors.transparent,
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surfaceContainer,
-        indicatorColor: scheme.secondaryContainer,
-        height: 70,
-      ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: scheme.surface,
-      ),
-      cardTheme: CardThemeData(
-        color: scheme.surface,
-      ),
-    );
-  }
+  ThemeData _darkTheme() =>
+      GuildVisualTheme.build(_paletteScheme(Brightness.dark));
 
   @override
   Widget build(BuildContext context) {
