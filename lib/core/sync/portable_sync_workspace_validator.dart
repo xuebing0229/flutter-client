@@ -133,7 +133,15 @@ class PortableSyncWorkspaceValidator {
                   materialized.containsKey('features')
               ? (<String, dynamic>{...materialized}..remove('features'))
               : materialized;
-          if (!syncJsonEquals(local, comparable)) {
+          // Backups written before transaction receipts existed have only
+          // saleRecords. Importing them creates explicitly estimated local
+          // receipts, which cannot be present in the older sync snapshot.
+          // Compare all original fields, but allow this ONE additive migration.
+          final expectedLocal = record.kind == SyncEntityKind.product &&
+                  !comparable.containsKey('saleReceipts')
+              ? (<String, dynamic>{...local}..remove('saleReceipts'))
+              : local;
+          if (!syncJsonEquals(expectedLocal, comparable)) {
             return false;
           }
           seen[record.kind]!.add(record.id);
