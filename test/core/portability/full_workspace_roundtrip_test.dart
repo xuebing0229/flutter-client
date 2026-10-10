@@ -58,6 +58,7 @@ void main() {
     'defaultOrder',
     'soldCount',
     'saleRecords',
+    'saleReceipts',
     'archivedAt',
     'isArchived',
     'isPinned',
