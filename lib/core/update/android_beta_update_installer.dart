@@ -31,6 +31,8 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     required String fileName,
     UpdateDownloadProgressCallback? onProgress,
     UpdateDownloadPauseCallback? shouldPause,
+    int? expectedSizeBytes,
+    String? expectedSha256,
   }) async {
     final result = await _channel.invokeMethod<String>(
       'downloadAndInstall',
