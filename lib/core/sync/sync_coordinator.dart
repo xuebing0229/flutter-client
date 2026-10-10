@@ -430,6 +430,7 @@ class SyncCoordinator extends ChangeNotifier {
     required AppBackupData backup,
     required Future<void> Function() applyWorkspace,
     Directory? assetSourceDirectory,
+    bool transferImportedAssets = false,
   }) {
     if (_disposed || !_initialized) {
       throw StateError('同步协调器尚未准备好，不能恢复同步历史。');
@@ -441,6 +442,7 @@ class SyncCoordinator extends ChangeNotifier {
         backup: backup,
         applyWorkspace: applyWorkspace,
         assetSourceDirectory: assetSourceDirectory,
+        transferImportedAssets: transferImportedAssets,
       );
 
       _lastEntityValues = _captureEntities();
@@ -459,6 +461,7 @@ class SyncCoordinator extends ChangeNotifier {
     required AppBackupData backup,
     required Future<void> Function()? applyWorkspace,
     Directory? assetSourceDirectory,
+    bool transferImportedAssets = false,
   }) async {
     PortableSyncWorkspaceValidator.validateBackup(
       backup: backup,
@@ -470,6 +473,7 @@ class SyncCoordinator extends ChangeNotifier {
       accountId: accountId,
       records: records,
       assetSourceDirectory: assetSourceDirectory,
+      transferImportedAssets: transferImportedAssets,
       requiredIds: <SyncEntityKind, Set<String>>{
         SyncEntityKind.order: <String>{
           for (final order in backup.orders) order.id,
