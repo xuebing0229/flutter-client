@@ -30,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Run screenshot parser regression tests
-        run: flutter test test/features/screenshot_layout_parser_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_ocr_real_world_regression_test.dart
+      - name: Run complete Flutter regression suite
+        run: flutter test
 
       - name: Analyze
         run: flutter analyze
