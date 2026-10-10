@@ -138,7 +138,11 @@ class SyncRecordStore {
     required String recordId,
   }) async {
     requireValidAccountId(accountId);
-    final groups = await _readGroups(accountId, kind);
+    final groups = await _readGroups(
+      accountId,
+      kind,
+      onlyId: recordId,
+    );
     final variants = groups[recordId];
     if (variants == null) return;
 
