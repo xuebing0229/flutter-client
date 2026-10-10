@@ -26,7 +26,6 @@ void main() {
   late _SyncRoot records;
   late SyncGcAckStore acks;
   late SyncAssetGcStore gc;
-  late DateTime now;
 
   Map<SyncEntityKind, Map<String, SyncRecord>> recordSet({
     bool referenced = false,
@@ -88,16 +87,8 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('guild-safe-art-gc-');
     records = _SyncRoot(temp);
-    now = DateTime.utc(2026, 1, 1);
-    acks = SyncGcAckStore(
-      recordStore: records,
-      clock: () => now,
-    );
-    gc = SyncAssetGcStore(
-      recordStore: records,
-      gcAckStore: acks,
-      clock: () => now,
-    );
+    acks = SyncGcAckStore(recordStore: records);
+    gc = SyncAssetGcStore(recordStore: records, gcAckStore: acks);
   });
 
   tearDown(() async {
@@ -106,7 +97,7 @@ void main() {
     }
   });
 
-  test('offline or older devices block physical deletion, even after 30 days',
+  test('offline or old-device ACKs block physical deletion',
       () async {
     final image = await createImage();
     final state = recordSet();
@@ -114,7 +105,6 @@ void main() {
       accountId: accountId,
       relativePaths: [imagePath],
     );
-    now = now.add(const Duration(days: 31));
 
     Future<int> collect() => gc.collectAcknowledged(
       accountId: accountId,
@@ -165,7 +155,6 @@ void main() {
       accountId: accountId,
       relativePaths: [imagePath],
     );
-    now = now.add(const Duration(days: 35));
     final referenced = recordSet(referenced: true);
     await ackDevices(referenced);
     expect(
@@ -186,7 +175,6 @@ void main() {
       accountId: accountId,
       relativePaths: [imagePath],
     );
-    now = now.add(const Duration(days: 31));
     final stale = recordSet(referenced: true);
     final current = recordSet();
     await ackDevices(stale);
@@ -230,7 +218,6 @@ void main() {
       accountId: accountId,
       relativePaths: [imagePath],
     );
-    now = now.add(const Duration(days: 32));
     final current = recordSet();
     await ackDevices(current);
     final original = File(
@@ -269,7 +256,6 @@ void main() {
       accountId: accountId,
       relativePaths: [imagePath],
     );
-    now = now.add(const Duration(days: 40));
     final data = recordSet();
     data[SyncEntityKind.order]!['another-order'] = SyncRecord.bootstrap(
       kind: SyncEntityKind.order,
@@ -301,7 +287,6 @@ void main() {
       accountId: accountId,
       relativePaths: [imagePath],
     );
-    now = now.add(const Duration(days: 32));
     final current = recordSet();
     await ackDevices(current);
     // Desktop learned about a third bound phone before this machine did.
@@ -353,36 +338,29 @@ void main() {
     expect(await image.exists(), isFalse);
   });
 
-  test('a disconnected device ACK expires and must be refreshed', () async {
+  test('unchanged ACKs are reusable without refreshing a clock', () async {
+    final current = recordSet();
+    await ackDevices(current);
+    final file = File(
+      '${temp.path}/gc-acks/'
+      '${base64UrlEncode(utf8.encode('phone')).replaceAll('=', '')}.json',
+    );
+    final before = await file.readAsString();
+    await ackDevices(current);
+    expect(await file.readAsString(), before);
     final image = await createImage();
     await gc.registerUnlinked(
       accountId: accountId,
       relativePaths: [imagePath],
     );
-    now = now.add(const Duration(days: 31));
-    final state = recordSet();
-    await ackDevices(state);
-    now = now.add(const Duration(hours: 73));
-
-    Future<int> collect() => gc.collectAcknowledged(
-      accountId: accountId,
-      activeDeviceIds: {'phone', 'desktop'},
-      recordsByKind: state,
+    expect(
+      await gc.collectAcknowledged(
+        accountId: accountId,
+        activeDeviceIds: {'phone', 'desktop'},
+        recordsByKind: current,
+      ),
+      1,
     );
-    expect(await collect(), 0);
-    expect(await image.exists(), isTrue);
-
-    await ackDevices(state, desktop: false);
-    expect(await collect(), 0);
-    expect(await image.exists(), isTrue);
-
-    await acks.writeSnapshot(
-      accountId: accountId,
-      deviceId: 'desktop',
-      recordsByKind: state,
-      assetGcPeers: const {'phone', 'desktop'},
-    );
-    expect(await collect(), 1);
     expect(await image.exists(), isFalse);
   });
 
@@ -407,7 +385,6 @@ void main() {
     );
     final current = recordSet();
     await ackDevices(current);
-    now = now.add(const Duration(days: 31));
     // Replace the image with a link to a non-account file. Deleting it must
     // be forbidden even though every peer has agreed on the reference state.
     final outside = File('${temp.parent.path}/external-guild-target.png');
@@ -437,7 +414,6 @@ void main() {
     final image = await createImage();
     final current = recordSet();
     await ackDevices(current);
-    now = now.add(const Duration(days: 365));
     expect(
       await gc.collectAcknowledged(
         accountId: accountId,
