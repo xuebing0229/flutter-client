@@ -82,6 +82,9 @@ class SyncGcAckStore {
     final payload = <String, dynamic>{
       'schemaVersion': 1,
       'deviceId': deviceId,
+      // Old clients omit this capability. A file GC must never infer support
+      // from a normal record-history acknowledgement.
+      'assetGcVersion': 1,
       'records': records,
     };
 
@@ -114,7 +117,10 @@ class SyncGcAckStore {
     }
   }
 
-  Future<Map<String, Map<String, String>>> readAll(String accountId) async {
+  Future<Map<String, Map<String, String>>> readAll(
+    String accountId, {
+    bool requireAssetGcSupport = false,
+  }) async {
     final directory = await _directory(accountId);
     final result = <String, Map<String, String>>{};
 
@@ -123,6 +129,12 @@ class SyncGcAckStore {
       try {
         final decoded = jsonDecode(await entity.readAsString());
         if (decoded is! Map || decoded['schemaVersion'] != 1) continue;
+        if (requireAssetGcSupport && decoded['assetGcVersion'] != 1) {
+          // A legacy installation can understand older record GC but not
+          // the per-asset deletion protocol. Its acknowledgement is not
+          // sufficient authorization to delete shared artwork.
+          continue;
+        }
         final deviceId = decoded['deviceId'];
         final rawRecords = decoded['records'];
         if (deviceId is! String || deviceId.isEmpty || rawRecords is! Map) {
