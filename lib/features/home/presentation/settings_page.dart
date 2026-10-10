@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -78,7 +79,7 @@ class _SettingsPageState extends State<SettingsPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _betaUpdater.addListener(_onBetaUpdateChanged);
-    _betaUpdater.ensureLoaded();
+    unawaited(_betaUpdater.ensureLoaded());
     _refreshReminderDiagnostics();
   }
 
