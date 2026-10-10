@@ -147,6 +147,7 @@ class FullBackupBundleService {
       archive = ZipDecoder().decodeStream(input);
 
       var hasManifest = false;
+      final seenFiles = <String>{};
       for (final entry in archive) {
         if (entry.isSymbolicLink) {
           throw const FormatException('备份中包含不允许的符号链接。');
@@ -158,10 +159,13 @@ class FullBackupBundleService {
         }
 
         if (entry.isFile) {
+          // Our exporter never emits the same asset path twice. Reject
+          // ambiguous third-party ZIP entries before disk extraction; ZIP
+          // readers can otherwise disagree about which payload wins.
+          if (!seenFiles.add(name)) {
+            throw FormatException('备份中存在重复文件：$name');
+          }
           if (name == manifestFileName) {
-            if (hasManifest) {
-              throw const FormatException('备份中存在重复的数据清单。');
-            }
             hasManifest = true;
             continue;
           }
