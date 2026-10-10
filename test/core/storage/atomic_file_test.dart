@@ -21,7 +21,7 @@ void main() {
     final file = File('${temporary.path}/state.json');
     final payloads = <String>[
       for (var index = 0; index < 32; index++)
-        '${index.toString().padLeft(2, '0')}:${'x' * (128 * 1024 + index)}',
+        '${index.toString().padLeft(2, '0')}:${'x'.padRight(128 * 1024 + index, 'x')}',
     ];
 
     // This used to race on state.json.tmp: concurrent writers could truncate
