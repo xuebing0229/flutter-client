@@ -778,15 +778,17 @@ class SyncMergeEngine {
 
     final before = indexed(previous);
     final after = indexed(next);
+    final added = <Map<String, dynamic>>[
+      for (final entry in after.entries)
+        if (!before.containsKey(entry.key)) entry.value,
+    ];
+    final removed = <String>[
+      for (final id in before.keys)
+        if (!after.containsKey(id)) id,
+    ];
     return <String, dynamic>{
-      'added': <Map<String, dynamic>>[
-        for (final entry in after.entries)
-          if (!before.containsKey(entry.key)) entry.value,
-      ],
-      'removed': <String>[
-        for (final id in before.keys)
-          if (!after.containsKey(id)) id,
-      ],
+      if (added.isNotEmpty) 'added': added,
+      if (removed.isNotEmpty) 'removed': removed,
     };
   }
 
