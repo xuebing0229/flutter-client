@@ -363,6 +363,33 @@ void main() {
     }
   }
 
+  test('compressed legacy ZIP art restores with exact streamed size and CRC', () async {
+    final path = 'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
+    final bytes = List<int>.generate(
+      128 * 1024,
+      (index) => index % 193,
+    );
+    await writeCraftedZip(
+      backup: backupWithImage(sizeBytes: bytes.length),
+      assets: <String, List<int>>{path: bytes},
+      compression: ZipFileEncoder.gzip,
+    );
+
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+    );
+    final imported = await service.readBackupFile(
+      exportedFile,
+      displayName: 'backup.zip',
+    );
+    try {
+      final restored = File('${imported.extractedDirectory!.path}/$path');
+      expect(await restored.readAsBytes(), bytes);
+    } finally {
+      await imported.dispose();
+    }
+  });
+
   test('ZIP preflight rejects oversized declared asset before extracting', () async {
     final path = 'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
     await writeCraftedZip(
