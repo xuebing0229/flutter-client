@@ -117,8 +117,8 @@ internal sealed class DesktopPetWindow : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         MinWidth = 0;
         MinHeight = 0;
-        MaxWidth = 760;
-        MaxHeight = 760;
+        MaxWidth = 1400;
+        MaxHeight = 1400;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -352,16 +352,33 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
-        ApplyLayoutAndTheme();
-        RefreshImage(force: true);
-        RefreshBubble();
-        RefreshFocusClock();
+        try
+        {
+            ApplyLayoutAndTheme();
+            RefreshImage(force: true);
+            RefreshBubble();
+            RefreshFocusClock();
+        }
+        catch (ArgumentException)
+        {
+            // A malformed or mid-write layout value must never terminate the
+            // optional desktop-pet host. Keep the last valid frame instead.
+        }
+        catch (InvalidOperationException)
+        {
+            // WPF can reject a layout mutation while it is re-measuring after
+            // a config reload. The next watcher tick will retry safely.
+        }
     }
 
     private void ApplyLayoutAndTheme()
     {
         var petScale = Math.Clamp(_config.PetScale, 0.5, 1.8);
-        var bubbleScale = Math.Clamp(_config.BubbleScale, 0.65, 1.8);
+        var bubbleTextScale = Math.Clamp(
+            _config.BubbleTextScale ?? _config.BubbleScale,
+            0.65,
+            1.8
+        );
         var clockScale = Math.Clamp(_config.FocusClockScale, 0.65, 1.8);
         var side = string.Equals(
             _config.BubblePosition,
@@ -381,18 +398,17 @@ internal sealed class DesktopPetWindow : Window
 
         _bubble.Background = background;
         _bubble.BorderBrush = border;
-        _bubble.BorderThickness = new Thickness(Math.Max(1, bubbleScale));
-        _bubble.CornerRadius = new CornerRadius(15 * bubbleScale);
-        _bubble.Padding = new Thickness(
-            13 * bubbleScale,
-            9 * bubbleScale,
-            13 * bubbleScale,
-            9 * bubbleScale
-        );
+        _bubble.BorderThickness = new Thickness(1);
+        _bubble.CornerRadius = new CornerRadius(15);
+        _bubble.Padding = new Thickness(13, 9, 13, 9);
         _bubble.Margin = new Thickness(0);
+        _bubble.MinWidth = 0;
+        _bubble.MinHeight = 0;
+        _bubble.MaxWidth = double.PositiveInfinity;
+        _bubble.MaxHeight = double.PositiveInfinity;
 
         _bubbleText.Foreground = foreground;
-        _bubbleText.FontSize = 14 * bubbleScale;
+        _bubbleText.FontSize = 14 * bubbleTextScale;
 
         _bubbleTail.Fill = background;
         _bubbleTail.Stroke = Brushes.Transparent;
@@ -430,8 +446,8 @@ internal sealed class DesktopPetWindow : Window
         };
         _bubble.Effect = new DropShadowEffect
         {
-            BlurRadius = 14 * bubbleScale,
-            ShadowDepth = 2 * bubbleScale,
+            BlurRadius = 14,
+            ShadowDepth = 2,
             Opacity = 0.18,
             Color = accentColor,
         };
@@ -472,13 +488,9 @@ internal sealed class DesktopPetWindow : Window
             _bubbleText.MaxWidth = double.PositiveInfinity;
             _bubbleText.MinHeight = 0;
             _bubbleText.MaxHeight = double.PositiveInfinity;
-            _bubble.MinWidth = 44 * bubbleScale;
-            _bubble.MaxWidth = 82 * bubbleScale;
-            _bubble.MinHeight = 185 * bubbleScale;
-            _bubble.MaxHeight = Math.Max(210, petSize * 0.9);
 
-            _bubbleTail.Width = 15 * bubbleScale;
-            _bubbleTail.Height = 22 * bubbleScale;
+            _bubbleTail.Width = 15;
+            _bubbleTail.Height = 22;
             _bubbleTail.Points = new PointCollection
             {
                 new Point(0, 0),
@@ -487,12 +499,7 @@ internal sealed class DesktopPetWindow : Window
             };
             _bubbleTail.VerticalAlignment = VerticalAlignment.Top;
             _bubbleTail.HorizontalAlignment = HorizontalAlignment.Left;
-            _bubbleTail.Margin = new Thickness(
-                -1.5 * bubbleScale,
-                48 * bubbleScale,
-                0,
-                0
-            );
+            _bubbleTail.Margin = new Thickness(-1.5, 34, 0, 0);
 
             _bubbleHost.Children.Add(_bubble);
             _bubbleHost.Children.Add(_bubbleTail);
@@ -526,22 +533,19 @@ internal sealed class DesktopPetWindow : Window
             _bubbleHost.Orientation = Orientation.Vertical;
             _bubbleHost.HorizontalAlignment = HorizontalAlignment.Center;
             _bubbleHost.VerticalAlignment = VerticalAlignment.Bottom;
-            _bubbleHost.Margin = new Thickness(0, 0, 0, -1 * bubbleScale);
+            _bubbleHost.Margin = new Thickness(0, 0, 0, -1);
             _bubbleHost.Width = double.NaN;
 
             _bubbleText.TextWrapping = TextWrapping.Wrap;
             _bubbleText.TextAlignment = TextAlignment.Left;
-            _bubbleText.MinWidth = 170 * bubbleScale;
-            _bubbleText.MaxWidth = Math.Max(220, petSize * 0.95);
+            _bubbleText.MinWidth = 0;
+            _bubbleText.MaxWidth = Math.Clamp(petSize * 0.95, 180, 320);
             _bubbleText.MinHeight = 0;
             _bubbleText.MaxHeight = double.PositiveInfinity;
-            _bubble.MinWidth = 190 * bubbleScale;
-            _bubble.MaxWidth = Math.Max(250, petSize * 1.06);
-            _bubble.MinHeight = 0;
-            _bubble.MaxHeight = double.PositiveInfinity;
+            _bubble.MaxWidth = _bubbleText.MaxWidth + 26;
 
-            _bubbleTail.Width = 22 * bubbleScale;
-            _bubbleTail.Height = 14 * bubbleScale;
+            _bubbleTail.Width = 22;
+            _bubbleTail.Height = 14;
             _bubbleTail.Points = new PointCollection
             {
                 new Point(0, 0),
@@ -550,12 +554,7 @@ internal sealed class DesktopPetWindow : Window
             };
             _bubbleTail.HorizontalAlignment = HorizontalAlignment.Left;
             _bubbleTail.VerticalAlignment = VerticalAlignment.Top;
-            _bubbleTail.Margin = new Thickness(
-                38 * bubbleScale,
-                -1.5 * bubbleScale,
-                0,
-                0
-            );
+            _bubbleTail.Margin = new Thickness(38, -1.5, 0, 0);
 
             _bubbleHost.Children.Add(_bubble);
             _bubbleHost.Children.Add(_bubbleTail);
@@ -572,7 +571,40 @@ internal sealed class DesktopPetWindow : Window
             _headerRow.Children.Add(_focusClock);
         }
 
+        ApplyOverlayOffsets(petSize);
         _layoutPanel.Children.Add(_headerRow);
+    }
+
+    private void ApplyOverlayOffsets(double petSize)
+    {
+        var bubbleOffset = string.Equals(
+            _config.BubblePosition,
+            "side",
+            StringComparison.OrdinalIgnoreCase
+        )
+            ? _config.BubbleSideOffset
+            : _config.BubbleAboveOffset;
+        bubbleOffset ??= new PetOverlayOffset();
+        var clockOffset = _config.FocusClockOffset ?? new PetOverlayOffset();
+
+        var bubbleX = Math.Clamp(bubbleOffset.X, -0.85, 0.85) * petSize;
+        var bubbleY = Math.Clamp(bubbleOffset.Y, -0.85, 0.85) * petSize;
+        var clockX = Math.Clamp(clockOffset.X, -0.85, 0.85) * petSize;
+        var clockY = Math.Clamp(clockOffset.Y, -0.85, 0.85) * petSize;
+
+        _bubbleHost.RenderTransform = new TranslateTransform(bubbleX, bubbleY);
+        _focusClock.RenderTransform = new TranslateTransform(clockX, clockY);
+
+        var leftPad = Math.Max(0, Math.Max(-bubbleX, -clockX));
+        var topPad = Math.Max(0, Math.Max(-bubbleY, -clockY));
+        var rightPad = Math.Max(0, Math.Max(bubbleX, clockX));
+        var bottomPad = Math.Max(0, Math.Max(bubbleY, clockY));
+        _root.Margin = new Thickness(
+            4 + leftPad,
+            4 + topPad,
+            4 + rightPad,
+            4 + bottomPad
+        );
     }
 
     private void RefreshFocusClock()
@@ -809,17 +841,27 @@ internal sealed class DesktopPetWindow : Window
         }
 
         const int rowsPerColumn = 14;
-        const int maxCharacters = rowsPerColumn * 2;
+        const int maxColumns = 4;
+        const int maxCharacters = rowsPerColumn * maxColumns;
         if (runes.Count > maxCharacters)
         {
             runes = runes.Take(maxCharacters - 1).ToList();
             runes.Add("…");
         }
 
-        var bubbleScale = Math.Clamp(_config.BubbleScale, 0.65, 1.8);
-        var columns = runes.Count > rowsPerColumn ? 2 : 1;
-        var cellWidth = 23 * bubbleScale;
-        var cellHeight = 20 * bubbleScale;
+        var textScale = Math.Clamp(
+            _config.BubbleTextScale ?? _config.BubbleScale,
+            0.65,
+            1.8
+        );
+        var characterCount = Math.Max(1, runes.Count);
+        var columns = Math.Max(
+            1,
+            (int)Math.Ceiling(characterCount / (double)rowsPerColumn)
+        );
+        var rows = Math.Min(rowsPerColumn, characterCount);
+        var cellWidth = 23 * textScale;
+        var cellHeight = 20 * textScale;
 
         var grid = new Grid
         {
@@ -833,7 +875,7 @@ internal sealed class DesktopPetWindow : Window
                 new ColumnDefinition { Width = new GridLength(cellWidth) }
             );
         }
-        for (var row = 0; row < rowsPerColumn; row++)
+        for (var row = 0; row < rows; row++)
         {
             grid.RowDefinitions.Add(
                 new RowDefinition { Height = new GridLength(cellHeight) }
@@ -850,7 +892,7 @@ internal sealed class DesktopPetWindow : Window
                 Text = runes[index],
                 Foreground = _bubbleText.Foreground,
                 FontFamily = _bubbleText.FontFamily,
-                FontSize = 14 * bubbleScale,
+                FontSize = 14 * textScale,
                 FontWeight = _bubbleText.FontWeight,
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -862,20 +904,7 @@ internal sealed class DesktopPetWindow : Window
             grid.Children.Add(cell);
         }
 
-        var petScale = Math.Clamp(_config.PetScale, 0.5, 1.8);
-        var petSize = 280 * petScale;
-        var viewport = new Viewbox
-        {
-            Stretch = Stretch.Uniform,
-            StretchDirection = StretchDirection.DownOnly,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            MaxWidth = 52 * bubbleScale,
-            MaxHeight = Math.Max(165 * bubbleScale, petSize * 0.78),
-            Child = grid,
-        };
-
-        return viewport;
+        return grid;
     }
 
     private static string FormatDeadline(DateTime deadline)
@@ -1034,7 +1063,11 @@ internal sealed class DesktopPetWindow : Window
         public string BubblePosition { get; set; } = "above";
         public double PetScale { get; set; } = 1;
         public double BubbleScale { get; set; } = 1;
+        public double? BubbleTextScale { get; set; }
         public double FocusClockScale { get; set; } = 1;
+        public PetOverlayOffset BubbleAboveOffset { get; set; } = new();
+        public PetOverlayOffset BubbleSideOffset { get; set; } = new();
+        public PetOverlayOffset FocusClockOffset { get; set; } = new();
         public bool FocusEnabled { get; set; } = true;
         public long BubbleBackgroundArgb { get; set; } = 0xFFF7F7F7;
         public long BubbleForegroundArgb { get; set; } = 0xFF202020;
@@ -1053,6 +1086,12 @@ internal sealed class DesktopPetWindow : Window
         public double Scale { get; set; } = 1;
         public double OffsetX { get; set; }
         public double OffsetY { get; set; }
+    }
+
+    private sealed class PetOverlayOffset
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
     }
 }
 
