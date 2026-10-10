@@ -214,6 +214,34 @@ class _FocusPanelState extends State<FocusPanel> {
     }
   }
 
+  Future<void> _confirmDeleteSession(FocusSession session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除这条专注记录？'),
+        content: Text(
+          '${_targetLabel(session)}\n'
+          '时长 ${_formatDuration(session.durationAt())}\n'
+          '删除后无法恢复。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      widget.focusStore.removeById(session.id);
+    }
+  }
+
+
   List<FocusSession> get _filteredSessions {
     final result = widget.focusStore.sessions.where((session) {
       if (session.isActive) return false;
@@ -893,6 +921,7 @@ class _SessionTile extends StatelessWidget {
     required this.endText,
     required this.durationText,
     required this.onTap,
+    required this.onLongPress,
   });
 
   final FocusSession session;
@@ -901,6 +930,7 @@ class _SessionTile extends StatelessWidget {
   final String endText;
   final String durationText;
   final VoidCallback? onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -910,6 +940,7 @@ class _SessionTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
           child: Row(
