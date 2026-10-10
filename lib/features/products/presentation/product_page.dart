@@ -6,7 +6,6 @@ import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
-import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
@@ -49,7 +48,6 @@ class ProductPage extends StatefulWidget {
 }
 
 class _ProductPageState extends State<ProductPage> {
-  final OrderReferenceImageStore _referenceImageStore = OrderReferenceImageStore();
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String _searchField = 'all';
