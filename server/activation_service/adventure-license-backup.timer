@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Adventure Guild activation database backup
+
+[Timer]
+OnCalendar=*-*-* 04:20:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=adventure-license-backup.service
+
+[Install]
+WantedBy=timers.target
