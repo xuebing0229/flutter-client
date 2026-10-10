@@ -27,6 +27,7 @@ void main() {
     'deductionAmount',
     'deductionFeeEnabled',
     'description',
+    'tags',
     'defaultOrder',
     'referenceImages',
     'completedAt',
@@ -56,6 +57,7 @@ void main() {
     'defaultOrder',
     'soldCount',
     'saleRecords',
+    'archivedAt',
     'isArchived',
     'isPinned',
   };
