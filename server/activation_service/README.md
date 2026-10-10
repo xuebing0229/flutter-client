@@ -45,11 +45,19 @@ App 只有在服务器核销成功后才创建本地账号。创建完成后，�
 
 token 原文保存在发码器 Android Keystore 加密存储中，服务器只保存 SHA-256 摘要。
 
-## Debian 12 安装
+## Debian / Ubuntu 一键部署
 
-将本目录放到服务器后运行：chmod +x install.sh && ./install.sh
+准备好指向服务器的域名后，在本目录运行：
+
+`chmod +x deploy.sh && LICENSE_DOMAIN=license.example.com CERTBOT_EMAIL=you@example.com ./deploy.sh`
+
+`deploy.sh` 会完成依赖安装、systemd 服务、Nginx、Let's Encrypt HTTPS、SQLite 初始化、每日备份和首次健康检查。
+
+如果只是先安装本地 API、不配域名，可以单独运行 `install.sh`。
 
 API 默认只监听 127.0.0.1:8765，由 Nginx 对外提供 HTTPS。
+
+每日 SQLite 快照默认保存在 `/var/backups/adventure-license`，保留 14 天；对应 systemd timer 为 `adventure-license-backup.timer`。
 
 ## 域名与构建
 
@@ -77,3 +85,7 @@ API 默认只监听 127.0.0.1:8765，由 Nginx 对外提供 HTTPS。
 - POST /v1/licenses/{accountId}/sold
 - DELETE /v1/licenses/{accountId}
 - POST /v1/activate
+
+## 给部署 Agent
+
+仓库内已经提供 `DEPLOY_AGENT.md`，包含稀疏拉取、部署、安全边界、验收命令和最终报告要求。
