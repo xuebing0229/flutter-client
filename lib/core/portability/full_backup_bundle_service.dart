@@ -7,6 +7,7 @@ import '../sync/sync_record_store.dart';
 import '../../features/orders/domain/queue_order.dart';
 import 'app_backup_data.dart';
 import 'data_portability_file_bridge.dart';
+import 'bounded_archive_file_output.dart';
 
 class ImportedBackupBundle {
   ImportedBackupBundle({
@@ -200,7 +201,15 @@ class FullBackupBundleService {
       final backup = AppBackupData.decode(utf8.decode(manifestBytes));
       _validateArchiveAssetInventory(archive, backup);
 
-      await extractArchiveToDisk(archive, temporary.path);
+      // archive's generic disk extraction may swallow individual entry
+      // decoder errors; we need *actual* byte-count enforcement and failures
+      // to abort the entire import before touching live account data.
+      await _extractVerifiedAssets(
+        archive: archive,
+        temporary: temporary,
+        manifestBytes: manifestBytes,
+        backup: backup,
+      );
 
       await _validateExtractedAssets(
         backup: backup,
@@ -230,6 +239,45 @@ class FullBackupBundleService {
         }
       } catch (_) {}
       rethrow;
+    }
+  }
+
+  Future<void> _extractVerifiedAssets({
+    required Archive archive,
+    required Directory temporary,
+    required List<int> manifestBytes,
+    required AppBackupData backup,
+  }) async {
+    final manifest = File(
+      '${temporary.path}${Platform.pathSeparator}$manifestFileName',
+    );
+    await manifest.writeAsBytes(manifestBytes, flush: true);
+
+    // The inventory was validated before entering this function. All entries
+    // are allowlisted relative paths from the manifest, never arbitrary ZIP
+    // names. Each binary is streamed to a bounded OutputStream and checked
+    // again after the decoder finishes. An exception propagates; the caller
+    // removes the entire temporary folder and leaves live data untouched.
+    final declaredSizes = <String, int>{
+      for (final reference in _referencedImages(backup))
+        reference.image.relativePath: reference.image.sizeBytes,
+    };
+    for (final entry in archive) {
+      if (!entry.isFile || entry.name == manifestFileName) continue;
+      final expected = declaredSizes[entry.name]!;
+      final destination = File(_joinRelative(temporary.path, entry.name));
+      await destination.parent.create(recursive: true);
+      final sink = BoundedArchiveFileOutput(destination.path, expected);
+      try {
+        entry.writeContent(sink);
+        if (sink.length != expected) {
+          throw FormatException(
+            '备份参考图实际解压大小与记录不一致：${entry.name}',
+          );
+        }
+      } finally {
+        await sink.close();
+      }
     }
   }
 
