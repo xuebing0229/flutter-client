@@ -6,6 +6,7 @@ No real activation codes, admin tokens, or customer data are involved.
 
 import base64
 import json
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -229,6 +230,29 @@ class ActivationServiceTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(
             fresh["licenses"][0]["accountId"], "inserted_after_first_page"
+        )
+
+    def test_deployment_rate_limits_are_scoped_to_sensitive_endpoints(self):
+        folder = Path(__file__).parent
+        script = (folder / "deploy.sh").read_text(encoding="utf-8")
+        example = (folder / "nginx.conf.example").read_text(encoding="utf-8")
+        zones = (folder / "nginx.rate-limits.conf.example").read_text(
+            encoding="utf-8"
+        )
+        subprocess.run(["bash", "-n", str(folder / "deploy.sh")], check=True)
+        for text in (script, example):
+            self.assertIn("location = /v1/admin/register", text)
+            self.assertIn("location = /v1/activate", text)
+            self.assertIn("limit_req_status 429;", text)
+            self.assertIn("zone=guild_admin_enroll burst=3 nodelay;", text)
+            self.assertIn("zone=guild_activation burst=15 nodelay;", text)
+        self.assertIn(
+            "limit_req_zone $binary_remote_addr zone=guild_admin_enroll",
+            zones,
+        )
+        self.assertIn(
+            "limit_req_zone $binary_remote_addr zone=guild_activation",
+            zones,
         )
 
     def test_pagination_rejects_invalid_cursors_and_requires_admin(self):
