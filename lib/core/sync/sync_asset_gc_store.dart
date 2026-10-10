@@ -31,7 +31,7 @@ class SyncAssetGcStore {
   final SyncGcAckStore _gcAckStore;
   final SyncMergeEngine _mergeEngine;
   final DateTime Function() _clock;
-   final Sha256 _sha256 = Sha256();
+  final Sha256 _sha256 = Sha256();
 
   static bool isSafeReferencePath(String path) {
     final parts = path.split('/');
@@ -112,6 +112,9 @@ class SyncAssetGcStore {
     final root = await _recordStore.rootDirectory(accountId);
     final directory = Directory('${root.path}/gc-asset-candidates');
     if (!await directory.exists()) return 0;
+    // Most users have no pending unlink candidates. Skip all record hashing
+    // and device-ACK reads when the candidate directory is empty.
+    if (await directory.list(followLinks: false).isEmpty) return 0;
 
     final referenced = <String>{};
     for (final kind in const [SyncEntityKind.order, SyncEntityKind.product]) {
