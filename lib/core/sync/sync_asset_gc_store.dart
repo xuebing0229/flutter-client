@@ -134,6 +134,7 @@ class SyncAssetGcStore {
     final acknowledgements = await _gcAckStore.readAll(
       accountId,
       requireAssetGcSupport: true,
+      expectedAssetGcPeers: activeDeviceIds,
     );
     if (!activeDeviceIds.every(acknowledgements.containsKey)) return 0;
     final current = await _gcAckStore.signatures(recordsByKind);
