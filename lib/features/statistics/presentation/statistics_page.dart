@@ -521,24 +521,27 @@ class _MonthlyChangeCard extends StatelessWidget {
       ),
     );
 
-    final values = months.map((month) {
-      final orderIncome = store.orders.where((order) {
-        final incomeAt = _incomeDate(order);
-        return order.isArchived &&
-            incomeAt != null &&
-            _sameMonth(incomeAt, month);
-      }).fold<double>(0, (sum, order) => sum + order.settlementIncome);
-
-      var productIncome = 0.0;
-      for (final product in productStore.products) {
-        final saleCount = product.saleRecords
-            .where((soldAt) => _sameMonth(soldAt, month))
-            .length;
-        productIncome += product.realIncome * saleCount;
+    // Bucket each event once rather than rescanning the entire order and
+    // sale history separately for every bar in the five-month chart.
+    final monthIndexes = <int, int>{
+      for (var index = 0; index < months.length; index++)
+        months[index].year * 12 + months[index].month: index,
+    };
+    final values = List<double>.filled(months.length, 0);
+    for (final order in store.orders) {
+      if (!order.isArchived) continue;
+      final at = _incomeDate(order);
+      if (at == null) continue;
+      final index = monthIndexes[at.year * 12 + at.month];
+      if (index != null) values[index] += order.settlementIncome;
+    }
+    for (final product in productStore.products) {
+      final income = product.realIncome;
+      for (final soldAt in product.saleRecords) {
+        final index = monthIndexes[soldAt.year * 12 + soldAt.month];
+        if (index != null) values[index] += income;
       }
-
-      return orderIncome + productIncome;
-    }).toList();
+    }
 
     final maxValue = values.fold<double>(
       0,
