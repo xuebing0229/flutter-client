@@ -48,7 +48,7 @@ void main() {
       await store.exists(accountId: 'sample-account', image: committed),
       isTrue,
     );
-    store.markCommitted(<dynamic>[committed].cast());
+    store.markCommitted([committed]);
     // Even if an old caller tries to discard this image, it is durable and
     // must be preserved while a different device may still be offline.
     await store.discardUnsavedImages(
