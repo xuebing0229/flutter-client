@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'audit/prebeta-*'
   pull_request:
     branches:
       - main
