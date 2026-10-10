@@ -13,7 +13,7 @@ permissions:
 
 env:
   BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
-  ACTIVATION_API_BASE_URL: ${{ secrets.ACTIVATION_API_BASE_URL }}
+  ACTIVATION_API_BASE_URL: https://license.apixb.top
 
 jobs:
   build-issuer:
