@@ -44,7 +44,7 @@ class BetaUpdateSession extends ChangeNotifier {
   bool get downloading => _downloading;
   bool get paused => _paused;
   bool get canPause =>
-      Platform.isWindows && _downloading && !_pauseRequested;
+      _managedDownload && _downloading && !_pauseRequested;
   int get receivedBytes => _receivedBytes;
   int? get totalBytes => _totalBytes;
   String get currentVersion => _currentVersion;
@@ -52,6 +52,8 @@ class BetaUpdateSession extends ChangeNotifier {
   UpdateManifest? get latest => _latest;
   String get status => _status;
   bool get hasUpdate => _latest != null && _latest!.build > _currentBuild;
+  bool get _managedDownload =>
+      Platform.isWindows || Platform.isAndroid;
 
   Future<void> ensureLoaded() async {
     if (_versionLoaded || !supported) return;
@@ -76,7 +78,7 @@ class BetaUpdateSession extends ChangeNotifier {
       _latest = latest;
 
       int? resumableBytes;
-      if (Platform.isWindows && latest.build > _currentBuild) {
+      if (_managedDownload && latest.build > _currentBuild) {
         resumableBytes = await updater.resumableBytes(latest);
       }
 
@@ -112,16 +114,16 @@ class BetaUpdateSession extends ChangeNotifier {
     final latest = _latest;
     if (updater == null || latest == null || _busy) return;
 
-    final resuming = Platform.isWindows && _paused;
+    final resuming = _managedDownload && _paused;
     _busy = true;
-    _downloading = Platform.isWindows;
+    _downloading = _managedDownload;
     _paused = false;
     _pauseRequested = false;
     if (!resuming) {
       _receivedBytes = 0;
       _totalBytes = null;
     }
-    if (Platform.isWindows) {
+    if (_managedDownload) {
       _status = resuming ? '正在继续下载…' : '正在下载新版…';
     }
     notifyListeners();
@@ -129,7 +131,7 @@ class BetaUpdateSession extends ChangeNotifier {
     try {
       final result = await updater.downloadAndInstall(
         latest,
-        onProgress: Platform.isWindows
+        onProgress: _managedDownload
             ? (receivedBytes, totalBytes) {
                 _receivedBytes = receivedBytes;
                 _totalBytes = totalBytes;
@@ -141,7 +143,7 @@ class BetaUpdateSession extends ChangeNotifier {
                 notifyListeners();
               }
             : null,
-        shouldPause: Platform.isWindows ? () => _pauseRequested : null,
+        shouldPause: _managedDownload ? () => _pauseRequested : null,
       );
 
       if (result == 'paused') {
@@ -151,13 +153,15 @@ class BetaUpdateSession extends ChangeNotifier {
       }
       if (result == 'permission_required') {
         _status = '请允许“安装未知应用”，返回后再次点击下载';
-      } else if (Platform.isWindows) {
-        _status = '下载完成，正在启动自动更新…';
+      } else if (_managedDownload) {
+        _status = Platform.isWindows
+            ? '下载完成，正在启动自动更新…'
+            : '下载完成，已打开安装页面';
       } else {
-        _status = '已交给系统下载，完成后会自动打开安装页面';
+        _status = '更新任务已启动';
       }
     } catch (error) {
-      if (Platform.isWindows) {
+      if (_managedDownload) {
         final resumableBytes = await updater.resumableBytes(latest);
         if (resumableBytes != null && resumableBytes > 0) {
           _receivedBytes = resumableBytes;
