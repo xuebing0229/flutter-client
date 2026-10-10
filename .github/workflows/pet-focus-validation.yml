@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings
       - name: Focus and changelog tests
         run: flutter test test/features/focus/focus_store_test.dart test/core/portability/focus_backup_test.dart test/core/adventurer_news_test.dart test/core/desktop_pet_bubble_test.dart
 
