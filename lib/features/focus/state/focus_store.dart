@@ -102,6 +102,14 @@ class FocusStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool removeById(String id) {
+    final index = _sessions.indexWhere((session) => session.id == id);
+    if (index < 0 || _sessions[index].isActive) return false;
+    _sessions.removeAt(index);
+    notifyListeners();
+    return true;
+  }
+
   int removeStartedInRange({
     DateTime? start,
     DateTime? end,
