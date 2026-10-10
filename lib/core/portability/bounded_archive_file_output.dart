@@ -22,6 +22,10 @@ class BoundedArchiveFileOutput extends OutputStream {
   final int maxBytes;
   final OutputFileStream _file;
 
+  int _crc32 = 0;
+  /// CRC-32 of the bytes actually written, calculated incrementally.
+  int get crc32 => _crc32;
+
   @override
   int get length => _file.length;
 
@@ -40,6 +44,7 @@ class BoundedArchiveFileOutput extends OutputStream {
   void writeByte(int value) {
     _requireCapacity(1);
     _file.writeByte(value);
+    _crc32 = getCrc32([value], _crc32);
   }
 
   @override
@@ -50,12 +55,28 @@ class BoundedArchiveFileOutput extends OutputStream {
     }
     _requireCapacity(count);
     _file.writeBytes(bytes, length: count);
+    // Avoid copying the entire reference image. Input is at most one
+    // decompression chunk, and the CRC folds into its running 32-bit state.
+    _crc32 = getCrc32(
+      count == bytes.length ? bytes : bytes.sublist(0, count),
+      _crc32,
+    );
   }
 
   @override
   void writeBackReference(int distance, int count) {
     _requireCapacity(count);
+    final before = length;
     _file.writeBackReference(distance, count);
+    // ZIP/DEFLATE overlap copies must also contribute to the CRC, including
+    // when the decoder writes via back-references instead of writeBytes.
+    for (var offset = before; offset < length;) {
+      final next = offset + 64 * 1024 < length
+          ? offset + 64 * 1024
+          : length;
+      _crc32 = getCrc32(_file.subset(offset, next), _crc32);
+      offset = next;
+    }
   }
 
   @override
