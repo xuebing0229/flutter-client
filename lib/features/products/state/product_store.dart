@@ -37,7 +37,7 @@ class ProductStore extends ChangeNotifier {
   }
 
   void addProduct(FinishedProduct product) {
-    _products.add(product);
+    _products.add(product.copyWith());
     _sortDefaultOrder();
     notifyListeners();
   }
@@ -46,7 +46,7 @@ class ProductStore extends ChangeNotifier {
     final index = _products.indexWhere((product) => product.id == updated.id);
     if (index == -1) return;
 
-    _products[index] = updated;
+    _products[index] = updated.copyWith();
     notifyListeners();
   }
 
