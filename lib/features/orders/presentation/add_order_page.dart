@@ -186,6 +186,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
 
     _saved = true;
     widget.store.addOrder(order);
+    _referenceImageStore.markCommitted(_referenceImages);
     Navigator.of(context).pop();
   }
 
