@@ -123,19 +123,39 @@ class SyncGcAckStore {
   }) async {
     final directory = await _directory(accountId);
     final result = <String, Map<String, String>>{};
+    final assetGcSeen = <String>{};
+    final assetGcBlocked = <String>{};
 
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
+      if (requireAssetGcSupport &&
+          entity.path.contains('.sync-conflict-')) {
+        // An unresolvable concurrent rewrite of acknowledgement files can
+        // make a stale peer appear current. Fail closed until Syncthing has
+        // converged, rather than physically deleting shared artwork.
+        return const <String, Map<String, String>>{};
+      }
       try {
         final decoded = jsonDecode(await entity.readAsString());
-        if (decoded is! Map || decoded['schemaVersion'] != 1) continue;
+        if (decoded is! Map) continue;
+        final deviceId = decoded['deviceId'];
+        if (requireAssetGcSupport &&
+            deviceId is String &&
+            deviceId.isNotEmpty) {
+          if (!assetGcSeen.add(deviceId) ||
+              decoded['schemaVersion'] != 1 ||
+              decoded['assetGcVersion'] != 1) {
+            assetGcBlocked.add(deviceId);
+            result.remove(deviceId);
+          }
+          if (assetGcBlocked.contains(deviceId)) continue;
+        }
+        if (decoded['schemaVersion'] != 1) continue;
         if (requireAssetGcSupport && decoded['assetGcVersion'] != 1) {
-          // A legacy installation can understand older record GC but not
-          // the per-asset deletion protocol. Its acknowledgement is not
-          // sufficient authorization to delete shared artwork.
+          // A legacy installation knows record-history GC, but not this
+          // destructive binary-asset protocol. Keep its art until upgraded.
           continue;
         }
-        final deviceId = decoded['deviceId'];
         final rawRecords = decoded['records'];
         if (deviceId is! String || deviceId.isEmpty || rawRecords is! Map) {
           continue;
