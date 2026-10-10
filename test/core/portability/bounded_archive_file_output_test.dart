@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
+
 import 'package:flutter_app/core/portability/bounded_archive_file_output.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +26,8 @@ void main() {
       await output.close();
     }
     expect(await File(path).readAsBytes(), [1, 2, 3, 4]);
+    // Corruption with the same byte length must still be detected.
+    expect(output.crc32, getCrc32([1, 2, 3, 4]));
   });
 
   test('rejects decoder writing one byte beyond the metadata budget', () async {
@@ -48,6 +52,21 @@ void main() {
       await output.close();
     }
     expect(await File(path).readAsBytes(), [1, 2, 3]);
+  });
+
+  test('CRC includes output generated from decompression back-references', () async {
+    final path = '${temp.path}/backreference.bin';
+    final output = BoundedArchiveFileOutput(path, 7);
+    try {
+      output.writeBytes([1, 2, 3, 4]);
+      output.writeBackReference(3, 3);
+      expect(output.length, 7);
+    } finally {
+      await output.close();
+    }
+    final bytes = await File(path).readAsBytes();
+    expect(bytes, [1, 2, 3, 4, 2, 3, 4]);
+    expect(output.crc32, getCrc32(bytes));
   });
 
   test('rejects an empty declared resource when bytes are actually emitted', () async {
