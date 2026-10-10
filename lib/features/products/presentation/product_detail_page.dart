@@ -300,6 +300,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           : updated,
     );
 
+    _referenceImageStore.markCommitted(_sessionAddedReferenceImages);
     _sessionAddedReferenceImages.clear();
 
     setState(() => _editing = false);
