@@ -269,12 +269,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final soldCountChanged = soldCount != _draftBaseline.soldCount;
     final referenceImagesChanged = widget.featureStore.referenceImages &&
         !_sameReferenceImages(_referenceImages, _draftBaseline.referenceImages);
-    final removedReferenceImages = referenceImagesChanged
-        ? <OrderReferenceImage>[
-            for (final image in _draftBaseline.referenceImages)
-              if (!_referenceImages.any((item) => item.id == image.id)) image,
-          ]
-        : const <OrderReferenceImage>[];
+    // Remove committed images from this entity's metadata only.
+    // Binary deletion must wait until every bound device has acknowledged
+    // the removal. An offline peer may still have a live reference, and
+    // Syncthing would propagate an immediate file deletion to that peer.
     final updated = current.copyWith(
         title: titleChanged ? _titleController.text.trim() : current.title,
         platform: platformChanged ? _platform : current.platform,
@@ -303,14 +301,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     );
 
     _sessionAddedReferenceImages.clear();
-    if (removedReferenceImages.isNotEmpty) {
-      unawaited(
-        _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: removedReferenceImages,
-        ),
-      );
-    }
+
     setState(() => _editing = false);
   }
 
