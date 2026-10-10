@@ -1,0 +1,35 @@
+name: Archive Lockfile Refresh (Temporary Audit)
+
+on:
+  push:
+    branches:
+      - feat/sale-ledger-migration-audit
+    paths:
+      - .github/workflows/archive-lockfile-refresh.yml
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Resolve updated archive and publish lockfile as bounded compressed output
+        run: |
+          flutter pub upgrade archive
+          python3 - <<'PY'
+          import base64
+          import gzip
+          from pathlib import Path
+          lock = Path('pubspec.lock').read_bytes()
+          assert len(lock) < 500_000
+          print('RESOLVED_LOCKFILE_BEGIN')
+          print(base64.b64encode(gzip.compress(lock)).decode())
+          print('RESOLVED_LOCKFILE_END')
+          PY
