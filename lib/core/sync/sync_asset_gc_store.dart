@@ -21,16 +21,13 @@ class SyncAssetGcStore {
     SyncRecordStore? recordStore,
     SyncGcAckStore? gcAckStore,
     SyncMergeEngine? mergeEngine,
-    DateTime Function()? clock,
   }) : _recordStore = recordStore ?? SyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
-       _mergeEngine = mergeEngine ?? SyncMergeEngine(),
-       _clock = clock ?? DateTime.now;
+       _mergeEngine = mergeEngine ?? SyncMergeEngine();
 
   final SyncRecordStore _recordStore;
   final SyncGcAckStore _gcAckStore;
   final SyncMergeEngine _mergeEngine;
-  final DateTime Function() _clock;
   final Sha256 _sha256 = Sha256();
 
   static bool isSafeReferencePath(String path) {
@@ -92,7 +89,6 @@ class SyncAssetGcStore {
         jsonEncode(<String, dynamic>{
           'schemaVersion': 1,
           'relativePath': path,
-          'firstObservedAt': _clock().toUtc().toIso8601String(),
         }),
       );
     }
@@ -161,11 +157,6 @@ class SyncAssetGcStore {
         }
         final expected = await _candidateFile(root.path, relativePath);
         if (expected.path != entity.path) continue;
-
-        // A confirmed unlink is final. Once every current peer has ACKed
-        // the same full state and no entity still references the binary,
-        // keeping the file for an arbitrary number of days adds no safety.
-        // firstObservedAt remains in the marker for troubleshooting only.
 
         final segments = relativePath.split('/');
         var currentPath = root.path;
