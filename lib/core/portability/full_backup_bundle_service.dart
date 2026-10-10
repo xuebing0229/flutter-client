@@ -207,6 +207,10 @@ class FullBackupBundleService {
         if (manifestSink.length != manifestEntry.size) {
           throw const FormatException('备份数据清单解压长度无效。');
         }
+        if (manifestEntry.crc32 != null &&
+            manifestSink.crc32 != manifestEntry.crc32) {
+          throw const FormatException('备份数据清单 CRC 校验失败。');
+        }
       } finally {
         await manifestSink.close();
       }
@@ -281,6 +285,9 @@ class FullBackupBundleService {
           throw FormatException(
             '备份参考图实际解压大小与记录不一致：${entry.name}',
           );
+        }
+        if (entry.crc32 != null && sink.crc32 != entry.crc32) {
+          throw FormatException('备份参考图 CRC 校验失败：${entry.name}');
         }
       } finally {
         await sink.close();
