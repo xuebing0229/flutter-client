@@ -153,9 +153,15 @@ jobs:
         shell: pwsh
         run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.5
 
-      - name: Bundle PaddleOCR ONNX Chinese screenshot recognition
+      - name: Cache official PaddleOCR Windows runtime
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ag-official-paddleocr
+          key: official-paddleocr-windows-dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf-paddle3.2.1-opencv4.12.0-v1
+
+      - name: Bundle official PaddleOCR C++ screenshot recognition
         shell: pwsh
-        run: ./tool/bundle_windows_rapidocr.ps1
+        run: ./tool/bundle_windows_official_paddleocr.ps1
 
       - name: Bundle current Windows icon
         shell: pwsh
