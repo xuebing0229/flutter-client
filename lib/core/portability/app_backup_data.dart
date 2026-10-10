@@ -10,7 +10,7 @@ import '../../features/products/domain/finished_product.dart';
 import '../../features/products/domain/sale_receipt.dart';
 import '../../features/products/state/product_store.dart';
 
-const int currentBackupSchemaVersion = 7;
+const int currentBackupSchemaVersion = 8;
 const String appBackupKind = 'artist_queue_full_backup';
 
 class AppBackupData {
@@ -143,7 +143,7 @@ class AppBackupData {
       }
       accountSyncState = AccountSyncState.fromCompatibleJson(
         rawAccountSync.map((key, value) => MapEntry(key.toString(), value)),
-        allowMissingPassword: schema < currentBackupSchemaVersion,
+        allowMissingPassword: schema < 7,
       );
     }
 
