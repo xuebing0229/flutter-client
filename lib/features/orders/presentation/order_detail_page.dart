@@ -293,6 +293,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
 
     widget.store.updateOrder(updated);
+    _referenceImageStore.markCommitted(_sessionAddedReferenceImages);
     _sessionAddedReferenceImages.clear();
 
     setState(() => _editing = false);
