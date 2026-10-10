@@ -26,7 +26,7 @@
 Ed25519 私钥仍只保留在发码器设备安全存储中，不上传服务器。
 
 1. POST /v1/licenses/reserve：服务器原子分配全局编号和 accountId。
-2. 发码器在本机用既有 Ed25519 私钥签出 AW1 激活码。
+2. 发码器在本机用既有 Ed25519 私钥签出 AW2 激活码。
 3. POST /v1/licenses/{accountId}/commit：服务器用内置公钥验签并登记完整激活码。
 
 旧版离线发码历史在首次连接时通过 POST /v1/licenses/import 迁移，服务器会重新验签并尽量保持原编号。
