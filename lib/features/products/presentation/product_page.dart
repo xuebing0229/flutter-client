@@ -251,16 +251,8 @@ class _ProductPageState extends State<ProductPage> {
     );
 
     if (confirmed == true) {
-      final images = <OrderReferenceImage>[
-        for (final product in widget.store.products)
-          if (ids.contains(product.id)) ...product.referenceImages,
-      ];
-      if (images.isNotEmpty) {
-        await _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: images,
-        );
-      }
+      // Removing a committed product removes its sync metadata but must not
+      // delete shared image binaries while other bound devices may be offline.
       widget.store.deleteProducts(ids);
     }
   }
@@ -319,12 +311,8 @@ class _ProductPageState extends State<ProductPage> {
       title: product.title,
     );
     if (confirmed) {
-      if (product.referenceImages.isNotEmpty) {
-        await _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: product.referenceImages,
-        );
-      }
+      // Keep committed binaries until an acknowledgement-aware asset GC can
+      // prove no offline device still references them.
       widget.store.deleteProduct(product.id);
     }
   }
