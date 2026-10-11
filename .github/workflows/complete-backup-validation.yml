@@ -3,15 +3,15 @@ name: Core data validation
 on:
   pull_request:
     paths:
-      - 'lib/core/account/account_models.dart'
+      - 'lib/core/account/**'
       - 'lib/core/portability/**'
+      - 'lib/core/storage/**'
       - 'lib/core/sync/**'
       - 'lib/features/focus/**'
+      - 'lib/features/home/presentation/home_page.dart'
       - 'lib/features/orders/**'
       - 'lib/features/products/**'
-      - 'test/core/portability/**'
-      - 'test/core/sync/**'
-      - 'test/features/focus/**'
+      - 'test/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/complete-backup-validation.yml'
