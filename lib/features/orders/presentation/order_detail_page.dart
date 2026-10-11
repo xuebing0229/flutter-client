@@ -230,6 +230,23 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
   void _save() {
     FocusManager.instance.primaryFocus?.unfocus();
+    final title = _titleController.text.trim();
+    final client = _clientController.text.trim();
+    if (title.isEmpty ||
+        (widget.featureStore.clientInfo && client.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.featureStore.clientInfo
+                ? '图名和单主需要填写'
+                : '图名需要填写',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final current = _order;
     final price = double.tryParse(_priceController.text.trim()) ?? 0;
     if (!price.isFinite || price < 0) {
@@ -241,9 +258,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
       return;
     }
-    final titleChanged = _titleController.text.trim() != _draftBaseline.title;
-    final clientChanged =
-        _clientController.text.trim() != _draftBaseline.clientName;
+    final titleChanged = title != _draftBaseline.title;
+    final clientChanged = client != _draftBaseline.clientName;
     final platformChanged = _platform != _draftBaseline.platform;
     final deadlineChanged = _deadline != _draftBaseline.deadline;
     final presetChanged = _presetId != _draftBaseline.nodePresetId;
@@ -267,10 +283,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         current.isCompleted && !current.isArchived && nodeChanged;
 
     final updated = current.copyWith(
-      title: titleChanged ? _titleController.text.trim() : current.title,
-      clientName: clientChanged
-          ? _clientController.text.trim()
-          : current.clientName,
+      title: titleChanged ? title : current.title,
+      clientName: clientChanged ? client : current.clientName,
       platform: platformChanged ? _platform : current.platform,
       deadline: deadlineChanged ? _deadline : current.deadline,
       clearDeadline: deadlineChanged && _deadline == null,
