@@ -14,6 +14,7 @@ class DesktopPetPage extends StatefulWidget {
   const DesktopPetPage({
     required this.orderStore,
     required this.focusStore,
+    required this.settings,
     required this.onOpenOrder,
     required this.showDesktopPet,
     required this.showFocus,
@@ -22,6 +23,7 @@ class DesktopPetPage extends StatefulWidget {
 
   final OrderStore orderStore;
   final FocusStore focusStore;
+  final DesktopPetSettings settings;
   final Future<void> Function(String orderId) onOpenOrder;
   final bool showDesktopPet;
   final bool showFocus;
@@ -31,13 +33,14 @@ class DesktopPetPage extends StatefulWidget {
 }
 
 class _DesktopPetPageState extends State<DesktopPetPage> {
-  final DesktopPetSettings _settings = DesktopPetSettings();
+  late final DesktopPetSettings _settings;
   final TextEditingController _customTextController = TextEditingController();
   Timer? _customTextSaveDebounce;
 
   @override
   void initState() {
     super.initState();
+    _settings = widget.settings;
     unawaited(_initialize());
   }
 
@@ -51,7 +54,6 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
   void dispose() {
     _customTextSaveDebounce?.cancel();
     _customTextController.dispose();
-    _settings.dispose();
     super.dispose();
   }
 
