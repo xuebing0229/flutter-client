@@ -464,6 +464,10 @@ class SyncMergeEngine {
     return _materialize(record);
   }
 
+  Map<String, dynamic> materializeIncludingDeleted(SyncRecord record) {
+    return _materialize(record, ignoreDeletion: true)!;
+  }
+
   Map<String, dynamic>? _materialize(
     SyncRecord record, {
     bool ignoreDeletion = false,
