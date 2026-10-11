@@ -1333,7 +1333,6 @@ class SyncCoordinator extends ChangeNotifier {
     }
 
     var changed = false;
-    final now = DateTime.now().toUtc();
 
     for (final kind in SyncEntityKind.values) {
       final records = recordsByKind[kind]!;
@@ -1351,21 +1350,10 @@ class SyncCoordinator extends ChangeNotifier {
         if (!seenByAll) continue;
 
         if (record.isDeleted) {
-          DateTime? deletedAt;
-          for (final operation in record.operations.values) {
-            if (operation.kind != 'delete') continue;
-            if (deletedAt == null || operation.occurredAt.isAfter(deletedAt)) {
-              deletedAt = operation.occurredAt;
-            }
-          }
-          // Keep a short safety window even after every active device has seen
-          // the tombstone. Revoked devices no longer participate.
-          if (deletedAt == null ||
-              now.difference(deletedAt.toUtc()) <
-                  const Duration(hours: 24)) {
-            continue;
-          }
-
+          // Once every currently active device has acknowledged this exact
+          // tombstone signature, keeping it for an arbitrary extra delay does
+          // not add another synchronization guarantee. Revoked devices are
+          // deliberately excluded from the active acknowledgement set.
           await _deleteRecordReferenceImages(kind, record);
           await _recordStore.deleteRecord(
             accountId: accountId,
