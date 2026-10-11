@@ -85,6 +85,36 @@ void main() {
     expect((images.single as Map)['id'], 'first');
   });
 
+  test('deleted record still materializes operation-only reference images', () {
+    final engine = SyncMergeEngine();
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-1',
+      values: <String, dynamic>{
+        'referenceImages': <dynamic>[],
+      },
+      deviceId: 'device-a',
+    );
+
+    final withImage = engine.applyLocalSnapshot(
+      record: base,
+      previousValues: <String, dynamic>{
+        'referenceImages': <dynamic>[],
+      },
+      nextValues: <String, dynamic>{
+        'referenceImages': <dynamic>[image('added-before-delete')],
+      },
+      deviceId: 'device-a',
+    );
+    final deleted = engine.markDeleted(withImage, deviceId: 'device-a');
+
+    expect(engine.materialize(deleted), isNull);
+    final payload = engine.materializeIncludingDeleted(deleted);
+    final images = payload['referenceImages'] as List<dynamic>;
+    expect(images, hasLength(1));
+    expect((images.single as Map)['id'], 'added-before-delete');
+  });
+
   test('reference image removal and concurrent addition both survive merge', () {
     final engine = SyncMergeEngine();
     final baseImages = <dynamic>[image('a')];
