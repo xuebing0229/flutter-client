@@ -162,7 +162,7 @@ void main() {
     }
   });
 
-  test('portable restore overlays bundled assets without dropping existing ones', () async {
+  test('full portable restore replaces old assets with bundled assets', () async {
     final existing = File(
       '${temporary.path}/assets/order-reference-images/old/old.png',
     );
@@ -192,8 +192,8 @@ void main() {
     expect(
       await File(
         '${temporary.path}/assets/order-reference-images/old/old.png',
-      ).readAsBytes(),
-      <int>[1, 2, 3],
+      ).exists(),
+      isFalse,
     );
     expect(
       await File(
@@ -201,6 +201,21 @@ void main() {
       ).readAsBytes(),
       <int>[9, 8, 7],
     );
+  });
+
+  test('legacy portable restore keeps existing assets when no bundle exists', () async {
+    final existing = File(
+      '${temporary.path}/assets/order-reference-images/old/old.png',
+    );
+    await existing.parent.create(recursive: true);
+    await existing.writeAsBytes(<int>[1, 2, 3], flush: true);
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+    );
+
+    expect(await existing.readAsBytes(), <int>[1, 2, 3]);
   });
 
 }
