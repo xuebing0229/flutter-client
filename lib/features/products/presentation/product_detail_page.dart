@@ -259,6 +259,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final platformChanged = _platform != _draftBaseline.platform;
     final saleTypeChanged = _saleType != _draftBaseline.saleType;
     final price = double.tryParse(_priceController.text.trim()) ?? 0;
+    if (!price.isFinite || price < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final priceChanged = price != _draftBaseline.price;
     final feeChanged = _feeEnabled != _draftBaseline.feeEnabled;
     final loveLevelChanged = _huajiaLoveLevel != _draftBaseline.huajiaLoveLevel;
