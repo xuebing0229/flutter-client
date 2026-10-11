@@ -199,6 +199,16 @@ class _FocusPanelState extends State<FocusPanel> {
       order = picked.order;
     }
 
+    if (widget.focusStore.activeSession != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('另一台设备已经开始专注，本次没有重复启动。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     widget.focusStore.start(order: order);
   }
 
@@ -226,7 +236,18 @@ class _FocusPanelState extends State<FocusPanel> {
       ),
     );
     if (confirmed == true) {
-      widget.focusStore.stopActive();
+      final stopped = widget.focusStore.stopSessionAt(
+        active.id,
+        DateTime.now(),
+      );
+      if (stopped == null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('这次专注状态已经在另一台设备更新，没有结束其他专注。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
