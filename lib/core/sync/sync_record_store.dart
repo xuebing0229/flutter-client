@@ -257,14 +257,19 @@ class SyncRecordStore {
               Directory('${staging.path}/revocation-acks'),
             );
           }
-          // Reference-image binaries share this Syncthing root but are
-          // intentionally kept outside JSON sync history.
-          final previousAssets = Directory('${previous.path}/assets');
-          if (await previousAssets.exists()) {
-            await _copyDirectory(
-              previousAssets,
-              Directory('${staging.path}/assets'),
-            );
+          // A legacy JSON backup does not carry image binaries, so keep the
+          // current shared assets in that case. A full ZIP backup does carry
+          // every referenced image and is an exact workspace replacement:
+          // copying old assets into it would leave permanently orphaned files,
+          // which can be very large.
+          if (assetSourceDirectory == null) {
+            final previousAssets = Directory('${previous.path}/assets');
+            if (await previousAssets.exists()) {
+              await _copyDirectory(
+                previousAssets,
+                Directory('${staging.path}/assets'),
+              );
+            }
           }
         }
 
