@@ -107,6 +107,8 @@ $WorkRoot = Split-Path -Parent $ArchivePath
 $LogPath = Join-Path $WorkRoot 'windows-update.log'
 $StageDir = Join-Path $WorkRoot ('stage-' + [Guid]::NewGuid().ToString('N'))
 $BackupDir = Join-Path $WorkRoot ('backup-' + [Guid]::NewGuid().ToString('N'))
+$CreatedItems = @()
+$ApplyStarted = $false
 
 function Write-UpdateLog {
   param([string]$Message)
@@ -116,11 +118,27 @@ function Write-UpdateLog {
 
 
 function Restore-Backup {
-  if (-not (Test-Path -LiteralPath $BackupDir)) {
+  if (-not $ApplyStarted) {
+    Write-UpdateLog 'Application files were not modified; rollback is unnecessary.'
     return
   }
 
   Write-UpdateLog 'Restoring previous application files.'
+
+  # Package entries that did not exist before the update are not represented
+  # in the backup directory. Remove only those exact top-level entries so a
+  # failed update cannot leave a mixed old/new installation behind.
+  foreach ($Name in $CreatedItems) {
+    $Destination = Join-Path $InstallDir $Name
+    if (Test-Path -LiteralPath $Destination) {
+      Remove-Item -LiteralPath $Destination -Recurse -Force
+    }
+  }
+
+  if (-not (Test-Path -LiteralPath $BackupDir)) {
+    throw 'Update rollback backup is missing.'
+  }
+
   Get-ChildItem -LiteralPath $BackupDir -Force | ForEach-Object {
     $Destination = Join-Path $InstallDir $_.Name
     if ($_.PSIsContainer) {
@@ -325,10 +343,13 @@ try {
       } else {
         Copy-Item -LiteralPath $Destination -Destination (Join-Path $BackupDir $Item.Name) -Force
       }
+    } else {
+      $CreatedItems += $Item.Name
     }
   }
 
   Write-UpdateLog 'Applying new application files.'
+  $ApplyStarted = $true
   foreach ($Item in $SourceItems) {
     $Destination = Join-Path $InstallDir $Item.Name
 
