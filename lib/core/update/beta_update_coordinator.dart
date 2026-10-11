@@ -41,6 +41,9 @@ class BetaUpdateCoordinator {
     if (!isBetaBuild) {
       throw StateError('Beta updater is disabled in stable builds.');
     }
+    if (!manifest.published) {
+      throw StateError('未发布的测试版不能下载安装。');
+    }
 
     final uri = manifest.downloadUri;
     if (uri == null) {
