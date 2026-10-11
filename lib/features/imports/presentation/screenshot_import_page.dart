@@ -60,6 +60,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   int _imageSerial = 0;
   int _rowSerial = 0;
   bool _working = false;
+  bool _committing = false;
   String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
 
@@ -845,6 +846,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   }
 
   Future<void> _confirm() async {
+    if (_committing) return;
     // Titles and buyers can change in the editable preview. Recheck against
     // both local records and all other screenshot rows just before writing.
     final previouslySelected = _rows.where((row) => row.selected).length;
@@ -886,7 +888,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     );
     if (!mounted || ok != true) return;
 
-    final now = DateTime.now().microsecondsSinceEpoch;
+    setState(() => _committing = true);
+    try {
+      final now = DateTime.now().microsecondsSinceEpoch;
     if (_products) {
       final created = <FinishedProduct>[];
       final keys = <String>{};
@@ -955,6 +959,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         _message('导入成功，但本机截图去重记录保存失败；下次请检查疑似重复提示。');
       }
     }
+    } finally {
+      if (mounted) setState(() => _committing = false);
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -967,13 +974,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         actions: [
           IconButton(
             tooltip: '复制 OCR 诊断（不会上传原图）',
-            onPressed: _working || _ocrDiagnostics.isEmpty
+            onPressed: _working || _committing || _ocrDiagnostics.isEmpty
                 ? null
                 : () => unawaited(_copyOcrDiagnostic()),
             icon: const Icon(Icons.bug_report_outlined),
           ),
           TextButton.icon(
-            onPressed: _working ? null : () => unawaited(_pickAndRecognize()),
+            onPressed: _working || _committing
+                ? null
+                : () => unawaited(_pickAndRecognize()),
             icon: const Icon(Icons.add_photo_alternate_outlined),
             label: const Text('选择截图'),
           ),
@@ -1146,7 +1155,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
         child: FilledButton.icon(
-          onPressed: _working || count == 0 ? null : _confirm,
+          onPressed: _working || _committing || count == 0 ? null : _confirm,
           icon: const Icon(Icons.check_circle_outline_rounded),
           label: Text('确认导入（' + count.toString() + '）'),
         ),
