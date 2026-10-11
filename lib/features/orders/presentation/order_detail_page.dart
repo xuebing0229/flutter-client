@@ -299,7 +299,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           : current.description,
       tags: tagsChanged ? normalizeOrderTags(_tags) : current.tags,
       referenceImages: referenceImagesChanged
-          ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
+          ? mergeReferenceImageEdits(
+              baseline: _draftBaseline.referenceImages,
+              draft: _referenceImages,
+              current: current.referenceImages,
+            )
           : current.referenceImages,
     );
 
