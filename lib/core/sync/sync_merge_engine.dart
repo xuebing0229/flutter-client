@@ -403,7 +403,7 @@ class SyncMergeEngine {
 
     if (record.isDeleted) {
       return record.copyWith(
-        operations: _compactedOperationMarkers(record.operations),
+        operations: _compactedOperationMarkers(record),
       );
     }
 
@@ -442,8 +442,7 @@ class SyncMergeEngine {
       );
     }
 
-    final operations = _compactedOperationMarkers(record.operations);
-
+    final operations = _compactedOperationMarkers(record);
 
     return record.copyWith(
       fields: fields,
@@ -452,10 +451,64 @@ class SyncMergeEngine {
   }
 
   Map<String, SyncOperation> _compactedOperationMarkers(
-    Map<String, SyncOperation> operations,
+    SyncRecord record,
   ) {
+    final referenceImagesById = <String, Map<String, dynamic>>{};
+
+    void collectReferenceImage(Object? raw) {
+      if (raw is! Map) return;
+      final image = raw.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      final id = image['id'];
+      if (id is String && id.isNotEmpty) {
+        referenceImagesById[id] = image;
+      }
+    }
+
+    final baseImages = record.fields['referenceImages']?.value;
+    if (baseImages is List) {
+      for (final image in baseImages) {
+        collectReferenceImage(image);
+      }
+    }
+    for (final operation in record.operations.values) {
+      final added = operation.metadata['added'];
+      if (added is List) {
+        for (final image in added) {
+          collectReferenceImage(image);
+        }
+      }
+      final removedImages = operation.metadata['removedImages'];
+      if (removedImages is List) {
+        for (final image in removedImages) {
+          collectReferenceImage(image);
+        }
+      }
+    }
+
+    Map<String, dynamic> compactedMetadata(SyncOperation operation) {
+      if (operation.kind != 'reference-image-delta') {
+        return const <String, dynamic>{};
+      }
+
+      final metadata = <String, dynamic>{...operation.metadata};
+      final removed = metadata['removed'];
+      if (removed is List) {
+        final removedImages = <Map<String, dynamic>>[
+          for (final item in removed)
+            if (item is String && referenceImagesById[item] != null)
+              referenceImagesById[item]!,
+        ];
+        if (removedImages.isNotEmpty) {
+          metadata['removedImages'] = removedImages;
+        }
+      }
+      return metadata;
+    }
+
     return <String, SyncOperation>{
-      for (final entry in operations.entries)
+      for (final entry in record.operations.entries)
         entry.key: entry.value.compacted
             ? entry.value
             : SyncOperation(
@@ -466,10 +519,10 @@ class SyncMergeEngine {
                 occurredAt: entry.value.occurredAt,
                 // Reference-image metadata remains until the second GC phase
                 // so every device can delete its local copy after seeing the
-                // first all-device acknowledgement marker.
-                metadata: entry.value.kind == 'reference-image-delta'
-                    ? entry.value.metadata
-                    : const <String, dynamic>{},
+                // first all-device acknowledgement marker. Removed images are
+                // expanded from IDs before the base field is folded, otherwise
+                // their file metadata would be lost at exactly this boundary.
+                metadata: compactedMetadata(entry.value),
                 compacted: true,
               ),
     };
