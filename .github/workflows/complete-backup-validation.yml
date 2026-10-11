@@ -1,9 +1,21 @@
-name: Complete backup validation
+name: Core data validation
 
 on:
-  push:
-    branches:
-      - 'feat/complete-backup-and-default-order'
+  pull_request:
+    paths:
+      - 'lib/core/account/account_models.dart'
+      - 'lib/core/portability/**'
+      - 'lib/core/sync/**'
+      - 'lib/features/focus/**'
+      - 'lib/features/orders/**'
+      - 'lib/features/products/**'
+      - 'test/core/portability/**'
+      - 'test/core/sync/**'
+      - 'test/features/focus/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/complete-backup-validation.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
