@@ -6,6 +6,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/atomic_file.dart';
+
 enum DesktopPetAssetSlot { idleA, keyB }
 
 class DesktopPetPlacement {
@@ -755,9 +757,9 @@ class DesktopPetSettings extends ChangeNotifier {
         for (final preset in _presets) preset.toJson(),
       ],
     };
-    await file.writeAsString(
+    await atomicWriteString(
+      file,
       const JsonEncoder.withIndent('  ').convert(payload),
-      flush: true,
     );
   }
 }
