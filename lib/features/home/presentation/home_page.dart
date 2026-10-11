@@ -1458,6 +1458,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               productStore: _productStore,
               nodePresetStore: _nodePresetStore,
               focusStore: _focusStore,
+              desktopPetSettings: _desktopPetService.settings,
               onOpenOrder: _openOrderFromFocus,
               themeStore: widget.themeStore,
               featureStore: widget.featureStore,
@@ -1557,6 +1558,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     productStore: _productStore,
                                     nodePresetStore: _nodePresetStore,
                                     focusStore: _focusStore,
+                                    desktopPetSettings:
+                                        _desktopPetService.settings,
                                     onOpenOrder: _openOrderFromFocus,
                                     themeStore: widget.themeStore,
                                     featureStore: widget.featureStore,
