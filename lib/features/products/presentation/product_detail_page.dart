@@ -278,12 +278,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final soldCountChanged = soldCount != _draftBaseline.soldCount;
     final referenceImagesChanged = widget.featureStore.referenceImages &&
         !_sameReferenceImages(_referenceImages, _draftBaseline.referenceImages);
-    final removedReferenceImages = referenceImagesChanged
-        ? <OrderReferenceImage>[
-            for (final image in _draftBaseline.referenceImages)
-              if (!_referenceImages.any((item) => item.id == image.id)) image,
-          ]
-        : const <OrderReferenceImage>[];
     final saleRecords = [...current.saleRecords];
 
     if (soldCountChanged && soldCount > current.soldCount) {
@@ -329,14 +323,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     );
 
     _sessionAddedReferenceImages.clear();
-    if (removedReferenceImages.isNotEmpty) {
-      unawaited(
-        _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: removedReferenceImages,
-        ),
-      );
-    }
     setState(() => _editing = false);
   }
 
