@@ -245,6 +245,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   void _save() {
     FocusManager.instance.primaryFocus?.unfocus();
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请先填写图名'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     var soldCount = _saleType == ProductSaleType.multiple
         ? int.tryParse(_soldCountController.text.trim()) ?? 0
         : _soldCount;
@@ -255,7 +266,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     }
 
     final current = _product;
-    final titleChanged = _titleController.text.trim() != _draftBaseline.title;
+    final titleChanged = title != _draftBaseline.title;
     final platformChanged = _platform != _draftBaseline.platform;
     final saleTypeChanged = _saleType != _draftBaseline.saleType;
     final price = double.tryParse(_priceController.text.trim()) ?? 0;
@@ -333,7 +344,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
     widget.store.updateProduct(
       current.copyWith(
-        title: titleChanged ? _titleController.text.trim() : current.title,
+        title: titleChanged ? title : current.title,
         platform: platformChanged ? _platform : current.platform,
         saleType: saleTypeChanged ? _saleType : current.saleType,
         price: priceChanged ? price : current.price,
