@@ -12,6 +12,7 @@ import '../portability/app_backup_data.dart';
 import '../../features/focus/domain/focus_session.dart';
 import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/data/node_presets.dart';
+import '../../features/orders/data/order_reference_image_store.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
@@ -24,6 +25,7 @@ import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
+import 'sync_reference_image_gc.dart';
 
 typedef SyncSettingsCapture = Map<String, dynamic> Function();
 typedef SyncSettingsApply = Future<void> Function(Map<String, dynamic> settings);
@@ -159,6 +161,9 @@ class SyncCoordinator extends ChangeNotifier {
   }) : focusStore = focusStore ?? FocusStore(),
        _mergeEngine = mergeEngine ?? SyncMergeEngine(),
        _recordStore = recordStore ?? SyncRecordStore(),
+       _referenceImageStore = OrderReferenceImageStore(
+         syncRecordStore: recordStore,
+       ),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
        _bridge = bridge;
@@ -175,6 +180,7 @@ class SyncCoordinator extends ChangeNotifier {
   final SyncSettingsApply applySettings;
   final SyncMergeEngine _mergeEngine;
   final SyncRecordStore _recordStore;
+  final OrderReferenceImageStore _referenceImageStore;
   final AccountSyncRecordStore _accountSyncStore;
   final SyncGcAckStore _gcAckStore;
   final EmbeddedSyncthingBridge _bridge;
@@ -1303,7 +1309,10 @@ class SyncCoordinator extends ChangeNotifier {
     }
 
     var changed = false;
-    final now = DateTime.now().toUtc();
+    final protectedReferencePaths = syncGcProtectedReferencePaths(
+      recordsByKind: recordsByKind,
+      mergeEngine: _mergeEngine,
+    );
 
     for (final kind in SyncEntityKind.values) {
       final records = recordsByKind[kind]!;
@@ -1321,19 +1330,16 @@ class SyncCoordinator extends ChangeNotifier {
         if (!seenByAll) continue;
 
         if (record.isDeleted) {
-          DateTime? deletedAt;
-          for (final operation in record.operations.values) {
-            if (operation.kind != 'delete') continue;
-            if (deletedAt == null || operation.occurredAt.isAfter(deletedAt)) {
-              deletedAt = operation.occurredAt;
-            }
-          }
-          // Keep a short safety window even after every active device has seen
-          // the tombstone. Revoked devices no longer participate.
-          if (deletedAt == null ||
-              now.difference(deletedAt.toUtc()) <
-                  const Duration(hours: 24)) {
-            continue;
+          final orphanedImages = syncGcOrphanReferenceImages(
+            record: record,
+            protectedPaths: protectedReferencePaths,
+          );
+          if (orphanedImages.isNotEmpty) {
+            await _referenceImageStore.deleteImages(
+              accountId: accountId,
+              images: orphanedImages,
+              requestScan: false,
+            );
           }
 
           await _recordStore.deleteRecord(
@@ -1349,6 +1355,18 @@ class SyncCoordinator extends ChangeNotifier {
         final hasFullOperations =
             record.operations.values.any((operation) => !operation.compacted);
         if (hasFullOperations) {
+          final orphanedImages = syncGcOrphanReferenceImages(
+            record: record,
+            protectedPaths: protectedReferencePaths,
+          );
+          if (orphanedImages.isNotEmpty) {
+            await _referenceImageStore.deleteImages(
+              accountId: accountId,
+              images: orphanedImages,
+              requestScan: false,
+            );
+          }
+
           final compacted = _mergeEngine.compactAcknowledgedOperations(
             record,
             deviceId: deviceId,
