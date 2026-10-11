@@ -6,6 +6,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/atomic_file.dart';
+
 enum DesktopPetAssetSlot { idleA, keyB }
 
 class DesktopPetPlacement {
@@ -294,6 +296,57 @@ class DesktopPetSettings extends ChangeNotifier {
     return File('${root.path}/config.json');
   }
 
+  Future<Directory> _presetDirectory(String presetId) async {
+    final root = await _rootDirectory();
+    return Directory(
+      '${root.path}${Platform.pathSeparator}presets'
+      '${Platform.pathSeparator}$presetId',
+    );
+  }
+
+  Future<void> _deleteOwnedPresetFile(
+    String presetId,
+    String? path,
+  ) async {
+    final raw = path?.trim();
+    if (raw == null || raw.isEmpty) return;
+
+    final folder = await _presetDirectory(presetId);
+    final expectedPrefix =
+        '${folder.absolute.path}${Platform.pathSeparator}';
+    final file = File(raw).absolute;
+    if (!file.path.startsWith(expectedPrefix)) return;
+
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // Asset cleanup is best effort. Metadata has already stopped referring
+      // to the file, so a locked Windows handle can be retried on replacement
+      // or preset deletion without risking the active preset.
+    }
+  }
+
+  Future<void> _deleteStaleSlotFiles({
+    required String presetId,
+    required String baseName,
+    required String keepPath,
+  }) async {
+    final folder = await _presetDirectory(presetId);
+    if (!await folder.exists()) return;
+    final keep = File(keepPath).absolute.path;
+    await for (final entity in folder.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments
+          .where((segment) => segment.isNotEmpty)
+          .last;
+      if (!name.startsWith('$baseName.')) continue;
+      if (entity.absolute.path == keep) continue;
+      try {
+        await entity.delete();
+      } catch (_) {}
+    }
+  }
+
   Future<void> load() async {
     if (_loaded) return;
     await _readFromDisk();
@@ -469,17 +522,21 @@ class DesktopPetSettings extends ChangeNotifier {
     final source = File(sourcePath);
     if (!await source.exists()) return null;
 
-    final root = await _rootDirectory();
-    final folder = Directory('${root.path}/presets/$presetId');
+    final folder = await _presetDirectory(presetId);
     await folder.create(recursive: true);
 
     final ext = source.path.split('.').last.toLowerCase();
+    if (!const <String>{'png', 'jpg', 'jpeg'}.contains(ext)) return null;
     final baseName = slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB';
     final destination = File('${folder.path}/$baseName.$ext');
     if (source.absolute.path != destination.absolute.path) {
       await source.copy(destination.path);
     }
 
+    final previousPath = switch (slot) {
+      DesktopPetAssetSlot.idleA => _presets[index].imageA,
+      DesktopPetAssetSlot.keyB => _presets[index].imageB,
+    };
     _presets[index] = switch (slot) {
       DesktopPetAssetSlot.idleA => _presets[index].copyWith(
           imageA: destination.path,
@@ -491,6 +548,15 @@ class DesktopPetSettings extends ChangeNotifier {
         ),
     };
     await _persist();
+    await _deleteOwnedPresetFile(
+      presetId,
+      previousPath == destination.path ? null : previousPath,
+    );
+    await _deleteStaleSlotFiles(
+      presetId: presetId,
+      baseName: baseName,
+      keepPath: destination.path,
+    );
     notifyListeners();
     return destination.path;
   }
@@ -502,6 +568,10 @@ class DesktopPetSettings extends ChangeNotifier {
     await _readFromDisk();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return;
+    final previousPath = switch (slot) {
+      DesktopPetAssetSlot.idleA => _presets[index].imageA,
+      DesktopPetAssetSlot.keyB => _presets[index].imageB,
+    };
     _presets[index] = switch (slot) {
       DesktopPetAssetSlot.idleA =>
         _presets[index].copyWith(clearImageA: true),
@@ -509,6 +579,7 @@ class DesktopPetSettings extends ChangeNotifier {
         _presets[index].copyWith(clearImageB: true),
     };
     await _persist();
+    await _deleteOwnedPresetFile(presetId, previousPath);
     notifyListeners();
   }
 
@@ -572,8 +643,7 @@ class DesktopPetSettings extends ChangeNotifier {
     if (index < 0 || !sourcePath.toLowerCase().endsWith('.png')) return;
     final source = File(sourcePath);
     if (!await source.exists()) return;
-    final root = await _rootDirectory();
-    final folder = Directory('${root.path}/presets/$presetId');
+    final folder = await _presetDirectory(presetId);
     await folder.create(recursive: true);
     final destination = File('${folder.path}/bubble-image.png');
     if (source.absolute.path != destination.absolute.path) {
@@ -590,8 +660,10 @@ class DesktopPetSettings extends ChangeNotifier {
     await _readFromDisk();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0 || _presets[index].bubbleImage == null) return;
+    final previousPath = _presets[index].bubbleImage;
     _presets[index] = _presets[index].copyWith(clearBubbleImage: true);
     await _persist();
+    await _deleteOwnedPresetFile(presetId, previousPath);
     notifyListeners();
   }
 
@@ -755,9 +827,9 @@ class DesktopPetSettings extends ChangeNotifier {
         for (final preset in _presets) preset.toJson(),
       ],
     };
-    await file.writeAsString(
+    await atomicWriteString(
+      file,
       const JsonEncoder.withIndent('  ').convert(payload),
-      flush: true,
     );
   }
 }
