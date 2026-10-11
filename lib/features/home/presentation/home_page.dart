@@ -17,6 +17,7 @@ import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
+import '../../focus/presentation/focus_recovery_dialog.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
@@ -554,36 +555,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final active = _focusStore.activeSession;
     if (active == null || active.id != sessionId) return;
 
-    String two(int value) => value.toString().padLeft(2, '0');
-    final local = cutoff.toLocal();
-    final cutoffText =
-        '${local.year}/${two(local.month)}/${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
-
-    final action = await showDialog<String>(
+    final action = await showFocusRecoveryDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('发现未结束的专注'),
-        content: Text(
-          '上次离开公会时，这次专注还在计时。'
-          '你可以继续计时、按上次离开时间（$cutoffText）结束，或作废这次记录。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop('discard'),
-            child: const Text('作废本次'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop('end'),
-            child: const Text('按离开时间结束'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop('continue'),
-            child: const Text('继续计时'),
-          ),
-        ],
-      ),
+      cutoff: cutoff,
     );
 
     final current = _focusStore.activeSession;
