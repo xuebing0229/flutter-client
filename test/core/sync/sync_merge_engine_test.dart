@@ -212,6 +212,76 @@ void main() {
     );
   });
 
+  test('older snapshot preserves fields introduced by a newer client', () {
+    final engine = SyncMergeEngine();
+    const oldValues = <String, dynamic>{
+      'id': 'order-forward-compatible',
+      'title': '旧客户端可见标题',
+    };
+    final record = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-forward-compatible',
+      values: <String, dynamic>{
+        ...oldValues,
+        'futureField': <String, dynamic>{'value': 42},
+      },
+      deviceId: 'newer-client',
+    );
+
+    final changed = engine.applyLocalSnapshot(
+      record: record,
+      previousValues: oldValues,
+      nextValues: <String, dynamic>{
+        ...oldValues,
+        'title': '旧客户端修改后的标题',
+      },
+      deviceId: 'older-client',
+    );
+
+    final materialized = engine.materialize(changed)!;
+    expect(materialized['title'], '旧客户端修改后的标题');
+    expect(materialized['futureField'], <String, dynamic>{'value': 42});
+  });
+
+  test('older client never compacts an unknown future operation kind', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'order-future-operation',
+      'title': '测试',
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-future-operation',
+      values: values,
+      deviceId: 'newer-client',
+    );
+    final futureOperation = SyncOperation(
+      id: 'future-op-1',
+      field: 'futureField',
+      kind: 'future-operation-v2',
+      deviceId: 'newer-client',
+      occurredAt: DateTime.utc(2026, 10, 12),
+      metadata: const <String, dynamic>{'payload': 'must-survive'},
+    );
+    final record = baseline.copyWith(
+      operations: <String, SyncOperation>{
+        futureOperation.id: futureOperation,
+      },
+    );
+
+    expect(engine.hasUnsupportedOperations(record), isTrue);
+
+    final compacted = engine.compactAcknowledgedOperations(
+      record,
+      deviceId: 'older-client',
+    );
+    expect(compacted.toJson(), record.toJson());
+    expect(
+      compacted.operations['future-op-1']!.metadata['payload'],
+      'must-survive',
+    );
+  });
+
   test('acknowledged operation compaction preserves materialized state', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
