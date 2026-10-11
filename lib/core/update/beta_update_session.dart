@@ -51,7 +51,7 @@ class BetaUpdateSession extends ChangeNotifier {
   int get currentBuild => _currentBuild;
   UpdateManifest? get latest => _latest;
   String get status => _status;
-  bool get hasUpdate => _latest != null && _latest!.build > _currentBuild;
+  bool get hasUpdate => _latest?.isNewerThan(_currentBuild) ?? false;
   bool get _managedDownload =>
       Platform.isWindows || Platform.isAndroid;
 
@@ -77,8 +77,9 @@ class BetaUpdateSession extends ChangeNotifier {
       final latest = await updater.fetchLatest();
       _latest = latest;
 
+      final available = latest.isNewerThan(_currentBuild);
       int? resumableBytes;
-      if (_managedDownload && latest.build > _currentBuild) {
+      if (_managedDownload && available) {
         resumableBytes = await updater.resumableBytes(latest);
       }
 
@@ -89,8 +90,7 @@ class BetaUpdateSession extends ChangeNotifier {
         _status = '发现未完成下载，可继续下载';
       } else {
         _paused = false;
-        _status =
-            latest.build > _currentBuild ? '发现新的测试版' : '已经是最新测试版';
+        _status = available ? '发现新的测试版' : '已经是最新测试版';
       }
     } on SocketException {
       _status = '网络连接失败，请检查当前网络后重试';
@@ -113,6 +113,12 @@ class BetaUpdateSession extends ChangeNotifier {
     final updater = _updater;
     final latest = _latest;
     if (updater == null || latest == null || _busy) return;
+    if (!latest.isNewerThan(_currentBuild)) {
+      _paused = false;
+      _status = '已经是最新测试版';
+      notifyListeners();
+      return;
+    }
 
     final resuming = _managedDownload && _paused;
     _busy = true;
