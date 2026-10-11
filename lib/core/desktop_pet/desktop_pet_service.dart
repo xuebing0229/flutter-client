@@ -415,7 +415,6 @@ class DesktopPetSettings extends ChangeNotifier {
 
   Future<DesktopPetPreset> createPreset(String rawName) async {
     await load();
-    await load();
     final name = rawName.trim().isEmpty ? '未命名桌宠' : rawName.trim();
     final preset = DesktopPetPreset(
       id: 'pet_${DateTime.now().microsecondsSinceEpoch}',
