@@ -350,10 +350,15 @@ class SyncMergeEngine {
     SyncRecord record, {
     required String deviceId,
   }) {
-    if (record.isDeleted ||
-        record.conflicts.isNotEmpty ||
+    if (record.conflicts.isNotEmpty ||
         !record.operations.values.any((operation) => !operation.compacted)) {
       return record;
+    }
+
+    if (record.isDeleted) {
+      return record.copyWith(
+        operations: _compactedOperationMarkers(record.operations),
+      );
     }
 
     final materialized = _materialize(record);
@@ -391,8 +396,20 @@ class SyncMergeEngine {
       );
     }
 
-    final operations = <String, SyncOperation>{
-      for (final entry in record.operations.entries)
+    final operations = _compactedOperationMarkers(record.operations);
+
+
+    return record.copyWith(
+      fields: fields,
+      operations: operations,
+    );
+  }
+
+  Map<String, SyncOperation> _compactedOperationMarkers(
+    Map<String, SyncOperation> operations,
+  ) {
+    return <String, SyncOperation>{
+      for (final entry in operations.entries)
         entry.key: entry.value.compacted
             ? entry.value
             : SyncOperation(
@@ -401,16 +418,16 @@ class SyncMergeEngine {
                 kind: entry.value.kind,
                 deviceId: entry.value.deviceId,
                 occurredAt: entry.value.occurredAt,
+                // Reference-image metadata remains until the second GC phase
+                // so every device can delete its local copy after seeing the
+                // first all-device acknowledgement marker.
+                metadata: entry.value.kind == 'reference-image-delta'
+                    ? entry.value.metadata
+                    : const <String, dynamic>{},
                 compacted: true,
               ),
     };
-
-    return record.copyWith(
-      fields: fields,
-      operations: operations,
-    );
   }
-
   SyncRecord resolveConflict({
     required SyncRecord record,
     required String conflictId,
