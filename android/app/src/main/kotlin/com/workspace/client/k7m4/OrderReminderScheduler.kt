@@ -107,14 +107,22 @@ object OrderReminderScheduler {
     }
 
     fun rescheduleAll(context: Context) {
-        val reminders = load(context)
-            .filter { reminder -> isForActiveAccount(context, reminder) }
         val now = System.currentTimeMillis()
-        for (reminder in reminders) {
+        val pending = load(context)
+            .filter { reminder ->
+                isForActiveAccount(context, reminder) &&
+                    reminder.deadlineAtMillis > now &&
+                    !wasDelivered(context, reminder)
+            }
+        for (reminder in pending) {
             scheduleIfNeeded(context, reminder, now)
         }
 
-        if (reminders.isEmpty()) {
+        // Do not keep waking the app forever just because SharedPreferences
+        // still contains already-delivered or expired reminders. Their saved
+        // delivery tokens remain intact so a later Flutter sync cannot
+        // accidentally show the same reminder twice.
+        if (pending.isEmpty()) {
             cancelWatchdog(context)
         } else {
             scheduleWatchdog(context)
@@ -125,10 +133,14 @@ object OrderReminderScheduler {
         schedule(context, reminder, reminder.triggerAtMillis)
     }
 
-    fun savedReminderCount(context: Context): Int =
-        load(context).count {
-            isForActiveAccount(context, it) && !wasDelivered(context, it)
+    fun savedReminderCount(context: Context): Int {
+        val now = System.currentTimeMillis()
+        return load(context).count {
+            isForActiveAccount(context, it) &&
+                it.deadlineAtMillis > now &&
+                !wasDelivered(context, it)
         }
+    }
 
     fun markDelivered(context: Context, reminder: OrderReminder) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
