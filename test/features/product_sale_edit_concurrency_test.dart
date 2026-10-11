@@ -61,7 +61,7 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.widgetWithText(FilledButton, '确认'));
+      await tester.tap(find.byTooltip('保存'));
       await tester.pump();
 
       final updated = store.byId('product-concurrent-sale');
