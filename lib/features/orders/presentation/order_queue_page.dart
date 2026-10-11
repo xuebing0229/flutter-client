@@ -635,7 +635,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         final parsed = double.tryParse(value.trim());
                         setDialogState(() {
                           errorText = null;
-                          previewRefund = parsed == null || parsed < 0
+                          previewRefund = parsed == null ||
+                                  !parsed.isFinite ||
+                                  parsed < 0
                               ? 0
                               : parsed;
                         });
