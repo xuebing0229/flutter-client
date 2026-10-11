@@ -69,6 +69,36 @@ void main() {
     expect(store.byId('focus-a').durationAt(), Duration.zero);
   });
 
+  test('stale stop confirmation cannot stop a newer active session', () {
+    final store = FocusStore();
+    final firstStart = DateTime.utc(2026, 10, 11, 10);
+    final secondStart = DateTime.utc(2026, 10, 11, 11);
+    final first = FocusSession(
+      id: 'focus-old',
+      startedAt: firstStart,
+      endedAt: secondStart,
+      orderId: null,
+      orderTitleSnapshot: null,
+    );
+    final second = FocusSession(
+      id: 'focus-new',
+      startedAt: secondStart,
+      endedAt: null,
+      orderId: null,
+      orderTitleSnapshot: null,
+    );
+    store.replaceAll([first, second]);
+
+    final stopped = store.stopSessionAt(
+      'focus-old',
+      secondStart.add(const Duration(minutes: 5)),
+    );
+
+    expect(stopped, isNull);
+    expect(store.activeSession?.id, 'focus-new');
+    expect(store.byId('focus-new').endedAt, isNull);
+  });
+
   test('cleanup requires a range and never removes active focus', () {
     final store = FocusStore();
     final active = store.start();
