@@ -462,9 +462,13 @@ class _SettingsPageState extends State<SettingsPage>
       if (!mounted) return;
 
       final referenceImageCount = backup.orders.fold<int>(
-        0,
-        (count, order) => count + order.referenceImages.length,
-      );
+            0,
+            (count, order) => count + order.referenceImages.length,
+          ) +
+          backup.products.fold<int>(
+            0,
+            (count, product) => count + product.referenceImages.length,
+          );
       final legacyAssetWarning =
           !importedBundle.includesBundledAssets && referenceImageCount > 0
           ? '\n\n注意：这是旧版 JSON 备份，里面只有参考图记录，没有图片原文件。'
