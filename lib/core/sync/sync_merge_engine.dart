@@ -38,6 +38,52 @@ class SyncMergeEngine {
         continue;
       }
 
+      if (left.kind == SyncEntityKind.product &&
+          fieldName == 'saleRecords' &&
+          left.fields['saleType']?.value == 'single' &&
+          right.fields['saleType']?.value == 'single' &&
+          (left.fields['soldCount']?.value as num?)?.toInt() == 1 &&
+          (right.fields['soldCount']?.value as num?)?.toInt() == 1 &&
+          !syncJsonEquals(a.value, b.value)) {
+        String? earliestSale(Object? raw) {
+          if (raw is! List) return null;
+          DateTime? earliestTime;
+          String? earliestRaw;
+          for (final item in raw) {
+            if (item is! String) continue;
+            final time = DateTime.tryParse(item);
+            if (time == null) continue;
+            if (earliestTime == null || time.isBefore(earliestTime)) {
+              earliestTime = time;
+              earliestRaw = item;
+            }
+          }
+          return earliestRaw;
+        }
+
+        final leftSale = earliestSale(a.value);
+        final rightSale = earliestSale(b.value);
+        String? selected;
+        if (leftSale == null) {
+          selected = rightSale;
+        } else if (rightSale == null) {
+          selected = leftSale;
+        } else {
+          final leftTime = DateTime.parse(leftSale);
+          final rightTime = DateTime.parse(rightSale);
+          selected = leftTime.isBefore(rightTime) ? leftSale : rightSale;
+        }
+
+        fields[fieldName] = SyncFieldValue(
+          value: selected == null
+              ? _deterministicField(a, b).value
+              : <String>[selected],
+          clock: a.clock.merge(b.clock),
+          updatedBy: _deterministicDevice(a.updatedBy, b.updatedBy),
+        );
+        continue;
+      }
+
       if (left.kind == SyncEntityKind.focusSession &&
           fieldName == 'endedAt' &&
           !syncJsonEquals(a.value, b.value)) {
