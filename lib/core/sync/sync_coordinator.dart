@@ -1400,7 +1400,13 @@ class SyncCoordinator extends ChangeNotifier {
 
       for (final entry in entries) {
         final record = entry.value;
-        if (record.conflicts.isNotEmpty) continue;
+        if (record.conflicts.isNotEmpty ||
+            _mergeEngine.hasUnsupportedOperations(record)) {
+          // Do not let an older app garbage-collect a newer operation kind it
+          // cannot materialize. Keeping the record is safe; a newer peer can
+          // compact it once every active device understands the operation.
+          continue;
+        }
 
         final hasFullOperations =
             record.operations.values.any((operation) => !operation.compacted);
