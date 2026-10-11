@@ -570,7 +570,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
     defaultOrder: json['defaultOrder'] == null
         ? 0
         : _asInt(json['defaultOrder'], 'product.defaultOrder'),
-    soldCount: _asInt(json['soldCount'], 'product.soldCount'),
+    soldCount: _asNonNegativeInt(json['soldCount'], 'product.soldCount'),
     saleRecords: [
       for (final item in _asList(json['saleRecords'], 'product.saleRecords'))
         _asDateTime(item, 'product.saleRecords'),
@@ -666,6 +666,11 @@ String? _asNullableString(Object? value, String field) {
 int _asInt(Object? value, String field) {
   if (value is int) return value;
   throw FormatException('$field 缺失或格式无效。');
+}
+
+int _asNonNegativeInt(Object? value, String field) {
+  final parsed = _asInt(value, field);
+  return parsed < 0 ? 0 : parsed;
 }
 
 double _asDouble(Object? value, String field) {
