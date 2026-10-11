@@ -280,4 +280,59 @@ void main() {
     final merged = engine.merge(phone, desktop);
     expect(engine.materialize(merged)!['supplementAmount'], 0.0);
   });
+  test('reference image cleanup metadata survives first compaction phase', () {
+    final engine = SyncMergeEngine();
+    final image = <String, dynamic>{
+      'id': 'ref-a',
+      'fileName': 'a.png',
+      'relativePath': 'assets/order-reference-images/order/ref-a.png',
+      'addedAt': '2026-10-11T00:00:00.000Z',
+      'sizeBytes': 10,
+    };
+    final values = <String, dynamic>{
+      'id': 'order-image',
+      'referenceImages': <dynamic>[image],
+    };
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-image',
+      values: values,
+      deviceId: 'phone',
+    );
+    final removed = engine.applyLocalSnapshot(
+      record: base,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'referenceImages': <dynamic>[]},
+      deviceId: 'phone',
+    );
+
+    final compacted = engine.compactAcknowledgedOperations(
+      removed,
+      deviceId: 'phone',
+    );
+    final marker = compacted.operations.values.single;
+    expect(marker.compacted, isTrue);
+    expect(marker.metadata['removed'], isNotEmpty);
+    expect(engine.materialize(compacted)!['referenceImages'], isEmpty);
+  });
+
+  test('deleted records enter compacted tombstone phase before disappearing', () {
+    final engine = SyncMergeEngine();
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-deleted',
+      values: const <String, dynamic>{'id': 'order-deleted'},
+      deviceId: 'phone',
+    );
+    final deleted = engine.markDeleted(base, deviceId: 'phone');
+
+    final compacted = engine.compactAcknowledgedOperations(
+      deleted,
+      deviceId: 'phone',
+    );
+
+    expect(compacted.isDeleted, isTrue);
+    expect(compacted.operations, isNotEmpty);
+    expect(compacted.operations.values.every((operation) => operation.compacted), isTrue);
+  });
 }
