@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../orders/data/node_presets.dart';
-import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_summary_card.dart';
@@ -37,9 +36,6 @@ class ArchivePage extends StatefulWidget {
 }
 
 class _ArchivePageState extends State<ArchivePage> {
-  final OrderReferenceImageStore _referenceImageStore =
-      OrderReferenceImageStore();
-
   bool _cleaning = false;
 
   void _openOrder(BuildContext context, String orderId) {
@@ -240,11 +236,6 @@ class _ArchivePageState extends State<ArchivePage> {
     setState(() => _cleaning = true);
     String? syncWarning;
     try {
-      await _referenceImageStore.deleteImages(
-        accountId: widget.accountId,
-        images: images,
-      );
-
       widget.orderStore.deleteOrders(orders.map((order) => order.id));
       widget.productStore.deleteProducts(
         products.map((product) => product.id),
@@ -262,7 +253,7 @@ class _ArchivePageState extends State<ArchivePage> {
           content: Text(
             syncWarning ??
                 '已永久删除 ${orders.length} 个排单、${products.length} 个成品'
-                    '${images.isEmpty ? '' : '和 ${images.length} 张参考图'}。',
+                    '${images.isEmpty ? '。' : '；${images.length} 张参考图会在所有绑定设备确认删除后自动清理。'}',
           ),
           behavior: SnackBarBehavior.floating,
         ),
