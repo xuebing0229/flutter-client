@@ -42,6 +42,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          key: ValueKey<Brightness>(brightness),
           theme: theme,
           darkTheme: theme,
           themeMode: brightness == Brightness.dark
