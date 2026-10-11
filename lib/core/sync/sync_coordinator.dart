@@ -30,6 +30,21 @@ import 'sync_reference_image_gc.dart';
 typedef SyncSettingsCapture = Map<String, dynamic> Function();
 typedef SyncSettingsApply = Future<void> Function(Map<String, dynamic> settings);
 
+@visibleForTesting
+Future<void> runWorkspaceRestoreTransaction({
+  required Future<void> Function() applyWorkspace,
+  required Future<void> Function() commitSyncHistory,
+  required Future<void> Function() rollbackWorkspace,
+}) async {
+  try {
+    await applyWorkspace();
+    await commitSyncHistory();
+  } catch (error, stackTrace) {
+    await rollbackWorkspace();
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+}
+
 class PortableWorkspaceSnapshot {
   const PortableWorkspaceSnapshot({
     required this.exportedAt,
@@ -472,33 +487,59 @@ class SyncCoordinator extends ChangeNotifier {
     );
     final records = backup.syncRecords!;
 
-    await _recordStore.replacePortableRecords(
-      accountId: accountId,
-      records: records,
-      assetSourceDirectory: assetSourceDirectory,
-      requiredIds: <SyncEntityKind, Set<String>>{
-        SyncEntityKind.order: <String>{
-          for (final order in backup.orders) order.id,
-        },
-        SyncEntityKind.product: <String>{
-          for (final product in backup.products) product.id,
-        },
-        SyncEntityKind.nodePreset: <String>{
-          for (final preset in backup.nodePresets) preset.id,
-        },
-        SyncEntityKind.focusSession: <String>{
-          for (final session in backup.focusSessions) session.id,
-        },
+    final requiredIds = <SyncEntityKind, Set<String>>{
+      SyncEntityKind.order: <String>{
+        for (final order in backup.orders) order.id,
       },
-    );
+      SyncEntityKind.product: <String>{
+        for (final product in backup.products) product.id,
+      },
+      SyncEntityKind.nodePreset: <String>{
+        for (final preset in backup.nodePresets) preset.id,
+      },
+      SyncEntityKind.focusSession: <String>{
+        for (final session in backup.focusSessions) session.id,
+      },
+    };
 
-    if (applyWorkspace != null) {
-      _applyingRemote = true;
-      try {
-        await applyWorkspace();
-      } finally {
-        _applyingRemote = false;
-      }
+    if (applyWorkspace == null) {
+      await _recordStore.replacePortableRecords(
+        accountId: accountId,
+        records: records,
+        assetSourceDirectory: assetSourceDirectory,
+        requiredIds: requiredIds,
+      );
+      return;
+    }
+
+    final previousOrders = <QueueOrder>[...orderStore.orders];
+    final previousProducts = <FinishedProduct>[...productStore.products];
+    final previousPresets = <NodePreset>[
+      for (final preset in nodePresetStore.presets) preset.snapshot(),
+    ];
+    final previousFocusSessions = <FocusSession>[...focusStore.sessions];
+    final previousSettings = Map<String, dynamic>.from(captureSettings());
+
+    _applyingRemote = true;
+    try {
+      await runWorkspaceRestoreTransaction(
+        applyWorkspace: applyWorkspace,
+        commitSyncHistory: () => _recordStore.replacePortableRecords(
+          accountId: accountId,
+          records: records,
+          assetSourceDirectory: assetSourceDirectory,
+          requiredIds: requiredIds,
+        ),
+        rollbackWorkspace: () async {
+          nodePresetStore.replaceAll(previousPresets);
+          orderStore.replaceAll(previousOrders);
+          productStore.replaceAll(previousProducts);
+          focusStore.replaceAll(previousFocusSessions);
+          await applySettings(previousSettings);
+        },
+      );
+    } finally {
+      _applyingRemote = false;
     }
   }
 
