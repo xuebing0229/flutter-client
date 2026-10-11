@@ -46,9 +46,10 @@ Future<void> _writeAtomicFile(File file, String content) async {
     }
   }
 
-  await temp.writeAsString(content, flush: true);
-
   try {
+    // A failed write (such as a full disk) must not leave a partially
+    // written temp file occupying space until the next save attempt.
+    await temp.writeAsString(content, flush: true);
     if (Platform.isWindows) {
       _replaceWindows(temp, file);
     } else {
