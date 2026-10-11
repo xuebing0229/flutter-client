@@ -103,6 +103,7 @@ class OrderStore extends ChangeNotifier {
     if (index == -1) return;
 
     final order = _orders[index];
+    if (order.isArchived) return;
     final nodes = order.nodePresetSnapshot.nodes;
     final finalNodeId =
         nodes.isEmpty ? order.currentNodeId : nodes.last.id;
@@ -193,6 +194,7 @@ class OrderStore extends ChangeNotifier {
     if (index == -1) return;
 
     final order = _orders[index];
+    if (order.isArchived) return;
     final validNodeIds = <String>{
       notStartedNodeId,
       for (final node in order.nodePresetSnapshot.nodes) node.id,
@@ -227,6 +229,7 @@ class OrderStore extends ChangeNotifier {
     if (index == -1) return;
 
     final order = _orders[index];
+    if (order.isArchived) return;
 
     _orders[index] = order.copyWith(
       currentNodeProgress: 0,
