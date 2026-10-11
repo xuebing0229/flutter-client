@@ -141,7 +141,6 @@ class AppDataPersistence {
 
   Future<AppBackupData?> _read(File file) async {
     final source = await file.readAsString();
-    if (source.trim().isEmpty) return null;
     return AppBackupData.decode(source);
   }
 
