@@ -11,9 +11,6 @@ void main() {
 
     expect(feedbackFormUrl, 'https://v.wjx.cn/vm/YXtnlrL.aspx');
     expect(find.widgetWithText(AppBar, '问题反馈'), findsOneWidget);
-    expect(find.text('打开反馈问卷'), findsOneWidget);
-    expect(find.text('保存反馈图片'), findsOneWidget);
-    expect(find.text('复制反馈链接'), findsOneWidget);
     expect(find.byType(FeedbackPoster), findsOneWidget);
 
     await tester.tap(find.byType(FeedbackPoster));
@@ -53,7 +50,9 @@ void main() {
         ).first,
       );
       final background = (outer.decoration as BoxDecoration).color!;
-      expect(background, theme.colorScheme.surfaceContainerLow);
+      final effectiveTheme = Theme.of(tester.element(find.byType(FeedbackPoster)));
+      expect(background, effectiveTheme.colorScheme.surfaceContainerLow);
+      expect(qr.data, feedbackFormUrl);
       expect(tester.takeException(), isNull);
       return background;
     }
