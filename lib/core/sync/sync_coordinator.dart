@@ -1820,8 +1820,8 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   void _applyPresetRecords(Map<String, SyncRecord> records) {
-    final current = <String, NodePreset>{
-      for (final preset in nodePresetStore.presets) preset.id: preset,
+    final existingIds = {
+      for (final preset in nodePresetStore.presets) preset.id,
     };
     final result = <NodePreset>[];
 
@@ -1841,14 +1841,10 @@ class SyncCoordinator extends ChangeNotifier {
       } catch (_) {
         result.add(existing);
       }
-      current.remove(existing.id);
     }
 
     for (final record in records.values) {
-      if (current.containsKey(record.id) ||
-          nodePresetStore.presets.any((preset) => preset.id == record.id)) {
-        continue;
-      }
+      if (existingIds.contains(record.id)) continue;
       final fields = _mergeEngine.materialize(record);
       if (fields == null) continue;
       try {
