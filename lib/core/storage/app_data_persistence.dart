@@ -54,6 +54,18 @@ class AppDataPersistence {
     await atomicWriteString(file, value.toUtc().toIso8601String());
   }
 
+  Future<void> clearFocusForegroundExit({
+    required String accountId,
+  }) async {
+    try {
+      final file = await _focusForegroundExitFile(accountId);
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // A stale marker is only recovery metadata; a later heartbeat backup
+      // still provides a safe fallback cutoff if cleanup fails.
+    }
+  }
+
   Future<AppBackupData?> load({required String accountId}) async {
     await (_writeTails[accountId] ?? Future<void>.value());
 
