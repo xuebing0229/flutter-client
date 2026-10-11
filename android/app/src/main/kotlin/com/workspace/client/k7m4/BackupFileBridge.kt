@@ -584,6 +584,9 @@ class BackupFileBridge(
                         cacheDir,
                         "ref-${UUID.randomUUID()}${extension ?: ".img"}",
                     )
+                    // Register the destination before copying so an I/O error
+                    // cannot strand a partially written large cache file.
+                    createdFiles.add(file)
 
                     val input = activity.contentResolver.openInputStream(uri)
                         ?: throw IllegalStateException(
@@ -594,7 +597,6 @@ class BackupFileBridge(
                             source.copyTo(destination)
                         }
                     }
-                    createdFiles.add(file)
                     payload.add(
                         linkedMapOf(
                             "path" to file.absolutePath,
