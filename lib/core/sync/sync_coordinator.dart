@@ -442,22 +442,158 @@ class SyncCoordinator extends ChangeNotifier {
 
     _changeDebounce?.cancel();
     return _enqueue(() async {
-      await _restorePortableBackup(
+      PortableSyncWorkspaceValidator.validateBackup(
         backup: backup,
-        applyWorkspace: applyWorkspace,
-        assetSourceDirectory: assetSourceDirectory,
+        accountId: accountId,
       );
 
-      _lastEntityValues = _captureEntities();
+      var pausedTransportForRestore = false;
+      try {
+        if (_transportPrepared && !_syncPaused) {
+          await _bridge.setAccountFolderPaused(
+            accountId: accountId,
+            paused: true,
+          );
+          pausedTransportForRestore = true;
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        }
 
-      // Older complete backups can legitimately predate the settings entity.
-      // Re-seed anything absent after applying the imported workspace so a
-      // restore cannot silently leave UI settings outside the sync graph.
-      await _reconcileFromSyncDirectory(seedMissing: true);
-      if (_transportPrepared) {
-        await _bridge.requestScan(accountId: accountId);
+        // First absorb every state this device already knows about. The
+        // imported snapshot is then rebased above that history, rather than
+        // replacing it with older clocks that another device could
+        // immediately overwrite or use to resurrect post-backup entities.
+        await _reconcileFromSyncDirectory(seedMissing: true);
+        final restoredRecords = await _buildRebasedRestoreRecords(backup);
+
+        await _recordStore.replacePortableRecords(
+          accountId: accountId,
+          records: restoredRecords,
+          assetSourceDirectory: assetSourceDirectory,
+          requiredIds: <SyncEntityKind, Set<String>>{
+            SyncEntityKind.order: <String>{
+              for (final order in backup.orders) order.id,
+            },
+            SyncEntityKind.product: <String>{
+              for (final product in backup.products) product.id,
+            },
+            SyncEntityKind.nodePreset: <String>{
+              for (final preset in backup.nodePresets) preset.id,
+            },
+            SyncEntityKind.focusSession: <String>{
+              for (final session in backup.focusSessions) session.id,
+            },
+            SyncEntityKind.settings: const <String>{settingsRecordId},
+          },
+        );
+
+        _applyingRemote = true;
+        try {
+          await applyWorkspace();
+        } finally {
+          _applyingRemote = false;
+        }
+
+        _lastEntityValues = _captureEntities();
+
+        // Reconcile the freshly rebased records while transport is still
+        // paused. This also migrates settings from older backups and rebuilds
+        // the local conflict/GC baseline before peers can write again.
+        await _reconcileFromSyncDirectory(seedMissing: true);
+      } finally {
+        if (pausedTransportForRestore) {
+          try {
+            await _bridge.setAccountFolderPaused(
+              accountId: accountId,
+              paused: false,
+            );
+            await _bridge.requestScan(accountId: accountId);
+          } catch (error) {
+            _lastError = '备份恢复后重新启动设备同步失败：$error';
+            if (!_disposed) notifyListeners();
+          }
+        } else if (_transportPrepared && !_syncPaused) {
+          try {
+            await _bridge.requestScan(accountId: accountId);
+          } catch (error) {
+            _lastError = '备份恢复后触发设备同步失败：$error';
+            if (!_disposed) notifyListeners();
+          }
+        }
       }
     });
+  }
+
+  Future<List<Map<String, dynamic>>> _buildRebasedRestoreRecords(
+    AppBackupData backup,
+  ) async {
+    final currentByKind = <SyncEntityKind, Map<String, SyncRecord>>{};
+    for (final kind in SyncEntityKind.values) {
+      currentByKind[kind] = await _recordStore.readAllMerged(
+        accountId: accountId,
+        kind: kind,
+      );
+    }
+
+    final backupByKind = <SyncEntityKind, Map<String, SyncRecord>>{
+      for (final kind in SyncEntityKind.values) kind: <String, SyncRecord>{},
+    };
+    for (final raw in backup.syncRecords!) {
+      final record = SyncRecord.decode(jsonEncode(raw));
+      backupByKind[record.kind]![record.id] = record;
+    }
+
+    final desired = <SyncEntityKind, Map<String, Map<String, dynamic>>>{
+      SyncEntityKind.order: <String, Map<String, dynamic>>{
+        for (final order in backup.orders)
+          order.id: SyncEntityCodec.orderToFields(order),
+      },
+      SyncEntityKind.product: <String, Map<String, dynamic>>{
+        for (final product in backup.products)
+          product.id: SyncEntityCodec.productToFields(product),
+      },
+      SyncEntityKind.nodePreset: <String, Map<String, dynamic>>{
+        for (final preset in backup.nodePresets)
+          preset.id: SyncEntityCodec.nodePresetToFields(preset),
+      },
+      SyncEntityKind.focusSession: <String, Map<String, dynamic>>{
+        for (final session in backup.focusSessions)
+          session.id: SyncEntityCodec.focusSessionToFields(session),
+      },
+      SyncEntityKind.settings: <String, Map<String, dynamic>>{
+        settingsRecordId: <String, dynamic>{
+          'id': settingsRecordId,
+          for (final entry in backup.settings.entries)
+            if (entry.key != 'syncBaselineRecords') entry.key: entry.value,
+        },
+      },
+    };
+
+    final result = <Map<String, dynamic>>[];
+    for (final kind in SyncEntityKind.values) {
+      final ids = <String>{
+        ...currentByKind[kind]!.keys,
+        ...backupByKind[kind]!.keys,
+        ...desired[kind]!.keys,
+      }.toList()
+        ..sort();
+
+      for (final id in ids) {
+        final histories = <SyncRecord>[
+          if (currentByKind[kind]![id] case final record?) record,
+          if (backupByKind[kind]![id] case final record?) record,
+        ];
+        final restored = _mergeEngine.restoreSnapshot(
+          kind: kind,
+          id: id,
+          accountId: accountId,
+          values: desired[kind]![id],
+          deviceId: deviceId,
+          histories: histories,
+        );
+        result.add(restored.toJson());
+      }
+    }
+    return result;
   }
 
   Future<void> _restorePortableBackup({
