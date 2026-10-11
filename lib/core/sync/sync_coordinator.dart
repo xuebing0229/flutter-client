@@ -1481,6 +1481,33 @@ class SyncCoordinator extends ChangeNotifier {
     };
     if (activeDeviceIds.isEmpty) return false;
 
+    // A revoked app-device is excluded from normal CRDT acknowledgements, but
+    // its Syncthing share deliberately stays alive until that device has read
+    // the revocation and returned an ACK. Do not erase tombstones/operation
+    // markers while such a stale transport peer can still upload old files.
+    // This is not a time-based retention window: GC resumes immediately once
+    // the outstanding revocation is acknowledged (or that transport identity
+    // has been explicitly re-authorized under an active device).
+    final activeTransportIds = <String>{
+      for (final device in state.activeDevices)
+        if (device.syncTransportId?.trim().isNotEmpty == true)
+          device.syncTransportId!.trim(),
+    };
+    for (final entry in state.revocations.entries) {
+      final transportId = state.devices[entry.key]?.syncTransportId?.trim();
+      if (transportId == null ||
+          transportId.isEmpty ||
+          activeTransportIds.contains(transportId)) {
+        continue;
+      }
+      final acknowledged = await _accountSyncStore.hasRevocationAck(
+        accountId: accountId,
+        deviceId: entry.key,
+        revokedAt: entry.value.revokedAt,
+      );
+      if (!acknowledged) return false;
+    }
+
     await _gcAckStore.pruneDevices(
       accountId: accountId,
       activeDeviceIds: activeDeviceIds,
