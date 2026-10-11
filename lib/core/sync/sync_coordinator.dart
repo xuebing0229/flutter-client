@@ -1292,10 +1292,10 @@ class SyncCoordinator extends ChangeNotifier {
       return false;
     }
 
-    final fields = <String, dynamic>{
-      for (final entry in record.fields.entries) entry.key: entry.value.value,
-    };
+    if (record.isDeleted) return false;
     try {
+      final fields = _mergeEngine.materialize(record);
+      if (fields == null) return false;
       final images = kind == SyncEntityKind.order
           ? SyncEntityCodec.orderFromFields(fields).referenceImages
           : SyncEntityCodec.productFromFields(fields).referenceImages;
@@ -1319,10 +1319,8 @@ class SyncCoordinator extends ChangeNotifier {
       return;
     }
 
-    final fields = <String, dynamic>{
-      for (final entry in record.fields.entries) entry.key: entry.value.value,
-    };
     try {
+      final fields = _mergeEngine.materializeIncludingDeleted(record);
       final images = kind == SyncEntityKind.order
           ? SyncEntityCodec.orderFromFields(fields).referenceImages
           : SyncEntityCodec.productFromFields(fields).referenceImages;
