@@ -332,10 +332,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     if (!mounted || result == null) return;
 
     final current = widget.store.byId(widget.orderId);
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: order.supplementAmount,
+      baselineFeeEnabled: order.supplementFeeEnabled,
+      draft: result,
+      currentAmount: current.supplementAmount,
+      currentFeeEnabled: current.supplementFeeEnabled,
+    );
     widget.store.updateOrder(
       current.copyWith(
-        supplementAmount: result.amount,
-        supplementFeeEnabled: result.feeEnabled,
+        supplementAmount: merged.amount,
+        supplementFeeEnabled: merged.feeEnabled,
       ),
     );
   }
@@ -350,10 +357,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     if (!mounted || result == null) return;
 
     final current = widget.store.byId(widget.orderId);
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: order.deductionAmount,
+      baselineFeeEnabled: order.deductionFeeEnabled,
+      draft: result,
+      currentAmount: current.deductionAmount,
+      currentFeeEnabled: current.deductionFeeEnabled,
+    );
     widget.store.updateOrder(
       current.copyWith(
-        deductionAmount: result.amount,
-        deductionFeeEnabled: result.feeEnabled,
+        deductionAmount: merged.amount,
+        deductionFeeEnabled: merged.feeEnabled,
       ),
     );
   }
