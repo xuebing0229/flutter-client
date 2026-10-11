@@ -34,6 +34,7 @@ void main() {
   ) async {
     Future<Color> mountPoster(Brightness brightness) async {
       final theme = ThemeData(
+        brightness: brightness,
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.teal,
           brightness: brightness,
