@@ -103,18 +103,29 @@ class OrderReferenceImageStore {
       '${directory.path}${Platform.pathSeparator}$storedName',
     );
 
-    await source.copy(destination.path);
-    final sizeBytes = await destination.length();
+    // Syncthing ignores *.tmp. Never publish an incomplete large image if
+    // copying fails (for example, when a device runs out of disk space).
+    final temporary = File('${destination.path}.tmp');
+    try {
+      await source.copy(temporary.path);
+      final sizeBytes = await temporary.length();
+      await temporary.rename(destination.path);
 
-    final relativePath = 'assets/order-reference-images/$orderKey/$storedName';
-    _draftPaths.add(relativePath);
-    return OrderReferenceImage(
-      id: id,
-      fileName: _displayName(picked.name, extension),
-      relativePath: relativePath,
-      addedAt: DateTime.now(),
-      sizeBytes: sizeBytes,
-    );
+      final relativePath = 'assets/order-reference-images/$orderKey/$storedName';
+      _draftPaths.add(relativePath);
+      return OrderReferenceImage(
+        id: id,
+        fileName: _displayName(picked.name, extension),
+        relativePath: relativePath,
+        addedAt: DateTime.now(),
+        sizeBytes: sizeBytes,
+      );
+    } catch (_) {
+      try {
+        if (await temporary.exists()) await temporary.delete();
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   Future<File> localFile({
