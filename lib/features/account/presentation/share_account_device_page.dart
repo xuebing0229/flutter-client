@@ -35,6 +35,8 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   SyncthingAccountTransferServer? _server;
   Timer? _pollTimer;
   String? _error;
+  String? _provisionalReceiverDeviceId;
+  bool _payloadTransferred = false;
   bool _transferred = false;
   bool _receiverConfirmed = false;
   bool _responseBusy = false;
@@ -63,7 +65,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
         payload: payload,
         onTransferred: () {
           if (!mounted) return;
-          setState(() => _transferred = true);
+          setState(() => _payloadTransferred = true);
         },
       );
       if (!mounted) {
@@ -75,8 +77,20 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
         if (!mounted) return;
         await server.poll();
-        if (mounted && server.transferred != _transferred) {
-          setState(() => _transferred = server.transferred);
+        if (!mounted) return;
+
+        final payloadTransferred = server.transferred;
+        final receiverId = _provisionalReceiverDeviceId;
+        final completed =
+            payloadTransferred &&
+            receiverId != null &&
+            widget.syncCoordinator.isTransportBoundToActiveDevice(receiverId);
+        if (payloadTransferred != _payloadTransferred ||
+            completed != _transferred) {
+          setState(() {
+            _payloadTransferred = payloadTransferred;
+            _transferred = completed;
+          });
         }
       });
     } catch (error) {
@@ -85,17 +99,34 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   }
 
   Future<void> _restart() async {
+    await _releaseProvisionalIfNeeded();
     await _server?.close();
     _pollTimer?.cancel();
     if (!mounted) return;
     setState(() {
       _server = null;
       _error = null;
+      _provisionalReceiverDeviceId = null;
+      _payloadTransferred = false;
       _transferred = false;
       _receiverConfirmed = false;
       _responseCodeController.clear();
     });
     await _start();
+  }
+
+  Future<void> _releaseProvisionalIfNeeded() async {
+    final receiverId = _provisionalReceiverDeviceId;
+    if (receiverId == null ||
+        widget.syncCoordinator.isTransportBoundToActiveDevice(receiverId)) {
+      return;
+    }
+    try {
+      await widget.syncCoordinator.releaseTransportIfUnbound(receiverId);
+    } catch (_) {
+      // Account-state validation still refuses an unbound app-device. A later
+      // manual sync/repair can retry transport cleanup.
+    }
   }
 
   Future<String?> _scanOrPickCode() async {
@@ -162,8 +193,16 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
         name: response.receiverName,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        unawaited(
+          widget.syncCoordinator.releaseTransportIfUnbound(
+            response.receiverDeviceId,
+          ),
+        );
+        return;
+      }
       setState(() {
+        _provisionalReceiverDeviceId = response.receiverDeviceId;
         _receiverConfirmed = true;
         _responseCodeController.clear();
       });
@@ -236,6 +275,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     _responseCodeController.dispose();
     _pollTimer?.cancel();
     _pollTimer = null;
+    unawaited(_releaseProvisionalIfNeeded());
     unawaited(_server?.close());
     super.dispose();
   }
@@ -300,7 +340,9 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                       const SizedBox(height: 12),
                       Text(
                         _transferred
-                            ? '账号信息已经传给新设备，首次绑定完成。以后正常同步不需要再打开这个页面。'
+                            ? '账号已经在新设备完成绑定。以后正常同步不需要再打开这个页面。'
+                            : _payloadTransferred
+                            ? '账号信息已经传到新设备，正在等待新设备确认加入并登录。请继续保持本页打开，直到这里显示完成。'
                             : _receiverConfirmed
                             ? '新设备已经确认，正在传输账号信息。请继续保持本页打开，直到这里显示完成。'
                             : '让未登录的新设备扫描此码后，新设备会显示一枚“回应二维码”。请保持本页打开，不要返回或关闭应用。',
