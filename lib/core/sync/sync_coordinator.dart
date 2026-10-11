@@ -12,6 +12,7 @@ import '../portability/app_backup_data.dart';
 import '../../features/focus/domain/focus_session.dart';
 import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/data/node_presets.dart';
+import '../../features/orders/data/order_reference_image_store.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
@@ -159,6 +160,9 @@ class SyncCoordinator extends ChangeNotifier {
   }) : focusStore = focusStore ?? FocusStore(),
        _mergeEngine = mergeEngine ?? SyncMergeEngine(),
        _recordStore = recordStore ?? SyncRecordStore(),
+       _referenceImageStore = OrderReferenceImageStore(
+         syncRecordStore: recordStore ?? SyncRecordStore(),
+       ),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
        _bridge = bridge;
@@ -175,6 +179,7 @@ class SyncCoordinator extends ChangeNotifier {
   final SyncSettingsApply applySettings;
   final SyncMergeEngine _mergeEngine;
   final SyncRecordStore _recordStore;
+  final OrderReferenceImageStore _referenceImageStore;
   final AccountSyncRecordStore _accountSyncStore;
   final SyncGcAckStore _gcAckStore;
   final EmbeddedSyncthingBridge _bridge;
@@ -1279,6 +1284,31 @@ class SyncCoordinator extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  Future<void> _deleteRecordReferenceImages(
+    SyncEntityKind kind,
+    SyncRecord record,
+  ) async {
+    if (kind != SyncEntityKind.order && kind != SyncEntityKind.product) {
+      return;
+    }
+
+    final fields = <String, dynamic>{
+      for (final entry in record.fields.entries) entry.key: entry.value.value,
+    };
+    try {
+      final images = kind == SyncEntityKind.order
+          ? SyncEntityCodec.orderFromFields(fields).referenceImages
+          : SyncEntityCodec.productFromFields(fields).referenceImages;
+      await _referenceImageStore.deleteImages(
+        accountId: accountId,
+        images: images,
+        requestScan: false,
+      );
+    } catch (_) {
+      // Keep the tombstone GC independent from a malformed legacy entity.
+    }
+  }
+
   Future<bool> _compactAcknowledgedHistory(
     Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
   ) async {
@@ -1336,6 +1366,7 @@ class SyncCoordinator extends ChangeNotifier {
             continue;
           }
 
+          await _deleteRecordReferenceImages(kind, record);
           await _recordStore.deleteRecord(
             accountId: accountId,
             kind: kind,
