@@ -285,6 +285,12 @@ void main() {
       histories: <SyncRecord>[current],
     );
 
+    expect(restoredDeletion.isDeleted, isTrue);
+    final hiddenPayload =
+        engine.materializeIncludingDeleted(restoredDeletion);
+    expect(hiddenPayload['saleType'], 'multiple');
+    expect(hiddenPayload['soldCount'], 0);
+
     final mergedWithStalePeer = engine.merge(restoredDeletion, current);
     expect(mergedWithStalePeer.isDeleted, isTrue);
     expect(engine.materialize(mergedWithStalePeer), isNull);
