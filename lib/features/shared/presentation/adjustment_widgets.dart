@@ -10,6 +10,28 @@ class AdjustmentDialogResult {
   final bool feeEnabled;
 }
 
+AdjustmentDialogResult mergeAdjustmentEdit({
+  required double baselineAmount,
+  required bool baselineFeeEnabled,
+  required AdjustmentDialogResult draft,
+  required double currentAmount,
+  required bool currentFeeEnabled,
+}) {
+  final amountChanged = draft.amount != baselineAmount;
+  final feeChanged = draft.feeEnabled != baselineFeeEnabled;
+
+  final mergedAmount = amountChanged
+      ? (currentAmount + (draft.amount - baselineAmount))
+          .clamp(0, double.infinity)
+          .toDouble()
+      : currentAmount;
+
+  return AdjustmentDialogResult(
+    amount: mergedAmount,
+    feeEnabled: feeChanged ? draft.feeEnabled : currentFeeEnabled,
+  );
+}
+
 class AdjustmentDetailRow extends StatelessWidget {
   const AdjustmentDetailRow({
     required this.label,
