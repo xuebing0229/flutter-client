@@ -86,6 +86,40 @@ void main() {
     expect(store.byId('order-finance-1').settlementIncome, 190);
   });
 
+  test('重复归档不能覆盖历史结算金额与结算方式', () {
+    final store = OrderStore();
+    addTearDown(store.dispose);
+    store.addOrder(order());
+
+    store.archiveAsSettled('order-finance-1');
+    final firstSettlement = store.byId('order-finance-1').settledAt;
+    store.updateOrder(store.byId('order-finance-1').copyWith(price: 500));
+    store.setArchived('order-finance-1', true);
+    store.archiveAsTerminated('order-finance-1', 'draft');
+    store.archiveAsTerminatedWithCustomRefund('order-finance-1', 20);
+
+    final archived = store.byId('order-finance-1');
+    expect(archived.settlementIncome, 190);
+    expect(archived.archiveOutcome, OrderArchiveOutcome.successful);
+    expect(archived.settledAt, firstSettlement);
+  });
+
+  test('重复结算不得重算原先的中止合作退款', () {
+    final store = OrderStore();
+    addTearDown(store.dispose);
+    store.addOrder(order());
+
+    store.archiveAsTerminatedWithCustomRefund('order-finance-1', 50);
+    store.updateOrder(store.byId('order-finance-1').copyWith(price: 500));
+    store.archiveAsSettled('order-finance-1');
+    store.archiveAsTerminatedWithCustomRefund('order-finance-1', 10);
+
+    final archived = store.byId('order-finance-1');
+    expect(archived.settlementIncome, 140);
+    expect(archived.customRefundAmount, 50);
+    expect(archived.archiveOutcome, OrderArchiveOutcome.terminated);
+  });
+
   test('中止合作退款金额只影响最终结算收入', () {
     final store = OrderStore();
     addTearDown(store.dispose);
