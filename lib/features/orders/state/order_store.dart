@@ -98,36 +98,14 @@ class OrderStore extends ChangeNotifier {
     }
   }
 
-  void archiveAsSettled(String id) {
-    final index = _orders.indexWhere((order) => order.id == id);
-    if (index == -1) return;
-
-    final order = _orders[index];
-    if (order.isArchived) return;
-    final nodes = order.nodePresetSnapshot.nodes;
-    final finalNodeId =
-        nodes.isEmpty ? order.currentNodeId : nodes.last.id;
-
-    _orders[index] = order.copyWith(
-      currentNodeId: finalNodeId,
-      currentNodeProgress: 0,
-      completedAt: order.completedAt ?? DateTime.now(),
-      settledAt: DateTime.now(),
-      settledIncome: order.realIncome,
-      archiveOutcome: OrderArchiveOutcome.successful,
-      clearSettlementNodeId: true,
-      clearCustomRefundAmount: true,
-      isArchived: true,
-      isPinned: false,
-    );
-    notifyListeners();
-  }
+  void archiveAsSettled(String id) => archiveManyAsSettled(<String>[id]);
 
   void archiveManyAsSettled(Iterable<String> ids) {
     final idSet = ids.toSet();
     if (idSet.isEmpty) return;
 
     final now = DateTime.now();
+    var changed = false;
     for (var i = 0; i < _orders.length; i++) {
       final order = _orders[i];
       if (!idSet.contains(order.id) || order.isArchived) continue;
@@ -148,8 +126,9 @@ class OrderStore extends ChangeNotifier {
         isArchived: true,
         isPinned: false,
       );
+      changed = true;
     }
-    notifyListeners();
+    if (changed) notifyListeners();
   }
 
   void archiveManyAsTerminatedAtCurrentNode(Iterable<String> ids) {
