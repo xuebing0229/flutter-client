@@ -126,7 +126,7 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
               FilledButton(
                 onPressed: () {
                   final raw = controller.text.trim();
-                  final parsed = raw.isEmpty ? 0 : double.tryParse(raw);
+                  final parsed = raw.isEmpty ? 0.0 : double.tryParse(raw);
                   if (parsed == null || !parsed.isFinite || parsed < 0) {
                     setDialogState(() {
                       errorText = '请输入有效的金额';
