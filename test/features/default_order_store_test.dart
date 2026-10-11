@@ -89,6 +89,25 @@ void main() {
     expect(after.customRefundAmount, isNull);
   });
 
+  test('legacy archived order without completedAt cannot advance', () {
+    final store = OrderStore();
+    addTearDown(store.dispose);
+
+    store.addOrder(
+      order('legacy-archived', 100).copyWith(
+        isArchived: true,
+        clearCompletedAt: true,
+      ),
+    );
+
+    store.advanceOrder('legacy-archived');
+
+    final archived = store.byId('legacy-archived');
+    expect(archived.isArchived, isTrue);
+    expect(archived.completedAt, isNull);
+    expect(archived.currentNodeId, 'draft');
+  });
+
   test('legacy timestamp ids give the same order on every device', () {
     final store = OrderStore();
     addTearDown(store.dispose);
