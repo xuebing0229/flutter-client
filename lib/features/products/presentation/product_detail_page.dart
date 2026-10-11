@@ -317,7 +317,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             ? _descriptionController.text.trim()
             : current.description,
         referenceImages: referenceImagesChanged
-            ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
+            ? mergeReferenceImageEdits(
+                baseline: _draftBaseline.referenceImages,
+                draft: _referenceImages,
+                current: current.referenceImages,
+              )
             : current.referenceImages,
         soldCount: soldCountChanged ? soldCount : current.soldCount,
         saleRecords: soldCountChanged ? saleRecords : current.saleRecords,
