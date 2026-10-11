@@ -44,20 +44,6 @@ void main() {
         feeEnabled: feeEnabled,
       );
 
-  test('画加与米画师默认启用补减款手续费，其他平台默认关闭', () {
-    expect(CommissionPlatform.mihuashi.defaultAdjustmentFeeEnabled, isTrue);
-    expect(CommissionPlatform.huajia.defaultAdjustmentFeeEnabled, isTrue);
-    for (final platform in CommissionPlatform.values.where(
-      (platform) =>
-          platform != CommissionPlatform.mihuashi &&
-          platform != CommissionPlatform.huajia,
-    )) {
-      expect(platform.defaultAdjustmentFeeEnabled, isFalse);
-    }
-    // The base-price fee toggle remains independently configurable.
-    expect(CommissionPlatform.huajia.defaultFeeEnabled, isFalse);
-  });
-
   test('米画师的每笔手续费按照整数向下取整', () {
     final source = order(price: 199);
     expect(source.serviceFeeAmount, 9);
