@@ -262,9 +262,33 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
     if (confirmed != true || !mounted) return;
 
+    if (!widget.store.contains(order.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('这笔排单已经不存在，未执行节点推进。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final current = widget.store.byId(order.id);
+    if (current.isArchived ||
+        current.isCompleted != order.isCompleted ||
+        current.currentNodeId != order.currentNodeId ||
+        current.nodePresetId != order.nodePresetId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('排单节点已在另一处更新，请按当前状态重新确认。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     widget.store.advanceOrder(order.id);
 
-    if (!mounted) return;
+    if (!mounted || !widget.store.contains(order.id)) return;
     final updated = widget.store.byId(order.id);
 
     if (updated.isCompleted) {
