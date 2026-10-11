@@ -7,6 +7,11 @@ void main() {
   testWidgets('feedback page opens the full-size themed QR card', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(const MaterialApp(home: FeedbackPage()));
 
     expect(feedbackFormUrl, 'https://v.wjx.cn/vm/YXtnlrL.aspx');
@@ -37,12 +42,17 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: theme,
+          darkTheme: theme,
+          themeMode: brightness == Brightness.dark
+              ? ThemeMode.dark
+              : ThemeMode.light,
           home: const Scaffold(
             body: Center(child: FeedbackPoster()),
           ),
         ),
       );
       final qr = tester.widget<QrImageView>(find.byType(QrImageView));
+      expect(qr.data, feedbackFormUrl);
       expect(qr.backgroundColor, Colors.white);
       expect(tester.getSize(find.byType(FeedbackPoster)),
           const Size(360, 488));
