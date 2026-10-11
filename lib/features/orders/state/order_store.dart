@@ -294,7 +294,7 @@ class OrderStore extends ChangeNotifier {
     if (index == -1) return;
 
     final order = _orders[index];
-    if (order.isCompleted) return;
+    if (order.isArchived || order.isCompleted) return;
 
     final nodes = order.nodePresetSnapshot.nodes;
     if (nodes.isEmpty) return;
