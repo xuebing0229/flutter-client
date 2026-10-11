@@ -458,20 +458,59 @@ class SyncCoordinator extends ChangeNotifier {
 
     _changeDebounce?.cancel();
     return _enqueue(() async {
-      await _restorePortableBackup(
-        backup: backup,
-        applyWorkspace: applyWorkspace,
-        assetSourceDirectory: assetSourceDirectory,
-      );
+      var pausedTransportForRestore = false;
+      try {
+        // Replacing the portable sync directory while Syncthing is scanning it
+        // can race with remote writes and is especially fragile on Windows,
+        // where an active watcher may keep directory handles open. Pause only
+        // the configured folder for the short restore transaction; this does
+        // not change the user's persisted sync-pause preference.
+        if (_transportPrepared && !_syncPaused) {
+          await _bridge.setAccountFolderPaused(
+            accountId: accountId,
+            paused: true,
+          );
+          pausedTransportForRestore = true;
+          // Let any scan/file operation already in flight leave the folder
+          // before the directory swap begins.
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        }
 
-      _lastEntityValues = _captureEntities();
+        await _restorePortableBackup(
+          backup: backup,
+          applyWorkspace: applyWorkspace,
+          assetSourceDirectory: assetSourceDirectory,
+        );
 
-      // Older complete backups can legitimately predate the settings entity.
-      // Re-seed anything absent after applying the imported workspace so a
-      // restore cannot silently leave UI settings outside the sync graph.
-      await _reconcileFromSyncDirectory(seedMissing: true);
-      if (_transportPrepared) {
-        await _bridge.requestScan(accountId: accountId);
+        _lastEntityValues = _captureEntities();
+
+        // Older complete backups can legitimately predate the settings entity.
+        // Re-seed anything absent after applying the imported workspace so a
+        // restore cannot silently leave UI settings outside the sync graph.
+        await _reconcileFromSyncDirectory(seedMissing: true);
+      } finally {
+        if (pausedTransportForRestore) {
+          try {
+            await _bridge.setAccountFolderPaused(
+              accountId: accountId,
+              paused: false,
+            );
+            await _bridge.requestScan(accountId: accountId);
+          } catch (error) {
+            // The workspace restore itself has already succeeded or rolled
+            // back. Keep that result authoritative and surface only the
+            // transport recovery problem through normal sync diagnostics.
+            _lastError = '备份恢复后恢复设备同步失败：$error';
+            if (!_disposed) notifyListeners();
+          }
+        } else if (_transportPrepared && !_syncPaused) {
+          try {
+            await _bridge.requestScan(accountId: accountId);
+          } catch (error) {
+            _lastError = '备份恢复后触发设备同步失败：$error';
+            if (!_disposed) notifyListeners();
+          }
+        }
       }
     });
   }
