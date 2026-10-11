@@ -88,9 +88,13 @@ class FocusStore extends ChangeNotifier {
     if (active.length > 1) {
       final keep = active.last;
       for (final session in active.take(active.length - 1)) {
-        final end = keep.startedAt.isAfter(session.startedAt)
-            ? keep.startedAt
-            : session.startedAt.add(const Duration(seconds: 1));
+        // Equal start times are possible when two offline devices start
+        // independently. Ending the losing session one second later would
+        // manufacture an overlap with the kept active session; a zero-length
+        // historical session is valid and keeps the timeline convergent.
+        final end = keep.startedAt.isBefore(session.startedAt)
+            ? session.startedAt
+            : keep.startedAt;
         byId[session.id] = session.copyWith(endedAt: end);
       }
     }
