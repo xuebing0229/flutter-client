@@ -52,6 +52,49 @@ void main() {
     expect(orphaned.map((item) => item.id), <String>['a']);
   });
 
+  test('compaction keeps removed image metadata for second-phase cleanup', () {
+    final engine = SyncMergeEngine();
+    final baseValues = <String, dynamic>{
+      'id': 'order-1',
+      'referenceImages': <dynamic>[image('a')],
+    };
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-1',
+      values: baseValues,
+      deviceId: 'phone',
+    );
+    final removed = engine.applyLocalSnapshot(
+      record: base,
+      previousValues: baseValues,
+      nextValues: <String, dynamic>{
+        ...baseValues,
+        'referenceImages': <dynamic>[],
+      },
+      deviceId: 'phone',
+    );
+
+    final compacted = engine.compactAcknowledgedOperations(
+      removed,
+      deviceId: 'phone',
+    );
+    final protected = syncGcProtectedReferencePaths(
+      recordsByKind: records(compacted),
+      mergeEngine: engine,
+    );
+    final orphaned = syncGcOrphanReferenceImages(
+      record: compacted,
+      protectedPaths: protected,
+    );
+
+    expect(
+      compacted.operations.values.every((operation) => operation.compacted),
+      isTrue,
+    );
+    expect(protected, isEmpty);
+    expect(orphaned.map((item) => item.id), <String>['a']);
+  });
+
   test('concurrent addition stays protected while removed image can be reclaimed', () {
     final engine = SyncMergeEngine();
     final baseValues = <String, dynamic>{
