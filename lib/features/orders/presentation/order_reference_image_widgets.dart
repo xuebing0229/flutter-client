@@ -6,6 +6,28 @@ import 'package:flutter/material.dart';
 import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
 
+List<OrderReferenceImage> mergeReferenceImageEdits({
+  required List<OrderReferenceImage> baseline,
+  required List<OrderReferenceImage> draft,
+  required List<OrderReferenceImage> current,
+}) {
+  final baselineIds = <String>{for (final image in baseline) image.id};
+  final draftIds = <String>{for (final image in draft) image.id};
+  final removedIds = baselineIds.difference(draftIds);
+  final currentIds = <String>{};
+  final merged = <OrderReferenceImage>[];
+
+  for (final image in current) {
+    if (removedIds.contains(image.id)) continue;
+    if (currentIds.add(image.id)) merged.add(image);
+  }
+  for (final image in draft) {
+    if (baselineIds.contains(image.id)) continue;
+    if (currentIds.add(image.id)) merged.add(image);
+  }
+  return List<OrderReferenceImage>.unmodifiable(merged);
+}
+
 class OrderReferenceImagesSection extends StatelessWidget {
   const OrderReferenceImagesSection({
     required this.accountId,
