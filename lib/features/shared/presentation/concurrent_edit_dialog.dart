@@ -10,7 +10,7 @@ Future<ConcurrentEditChoice> showConcurrentEditDialog({
   final choice = await showDialog<ConcurrentEditChoice>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: Text('$subject 已在另一处更新'),
+      title: Text('$subject已在另一处更新'),
       content: Text(
         '你编辑期间，同步设备也修改了${fields.join('、')}。'
         '未冲突的字段会自动合并；这些同字段修改需要你选择保留哪一边。',
