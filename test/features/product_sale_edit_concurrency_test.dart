@@ -69,4 +69,53 @@ void main() {
       expect(updated.saleRecords, <DateTime>[remoteSale]);
     },
   );
+  testWidgets(
+    'editing a legacy count keeps unattributed historical sales',
+    (tester) async {
+      final store = ProductStore();
+      final features = AppFeatureStore();
+      addTearDown(store.dispose);
+      addTearDown(features.dispose);
+
+      store.addProduct(
+        const FinishedProduct(
+          id: 'legacy-product-count',
+          title: '旧版多次售卖',
+          platform: CommissionPlatform.mihuashi,
+          saleType: ProductSaleType.multiple,
+          soldCount: 3,
+          saleRecords: <DateTime>[],
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProductDetailPage(
+            accountId: 'test-account',
+            store: store,
+            productId: 'legacy-product-count',
+            featureStore: features,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('编辑'));
+      await tester.pump();
+
+      final soldCountField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.keyboardType == TextInputType.number &&
+            widget.decoration?.hintText == '0',
+      );
+      await tester.enterText(soldCountField, '4');
+      await tester.tap(find.byTooltip('保存'));
+      await tester.pump();
+
+      final updated = store.byId('legacy-product-count');
+      expect(updated.soldCount, 4);
+      expect(updated.saleRecords, hasLength(1));
+    },
+  );
+
 }
