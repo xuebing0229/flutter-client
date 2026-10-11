@@ -199,6 +199,21 @@ class _FocusPanelState extends State<FocusPanel> {
       order = picked.order;
     }
 
+    if (order != null) {
+      final current = _orderById(order.id);
+      if (current == null || current.isArchived || current.isCompleted) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('这笔排单状态已经更新，请按当前列表重新选择。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      order = current;
+    }
+
     if (widget.focusStore.activeSession != null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
