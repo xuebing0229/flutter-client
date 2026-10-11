@@ -251,4 +251,33 @@ void main() {
     expect(merged.conflicts, isEmpty);
   });
 
+  test('concurrent amount reductions never materialize below zero', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'order-amount',
+      'supplementAmount': 10.0,
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-amount',
+      values: values,
+      deviceId: 'phone',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'supplementAmount': 0.0},
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'supplementAmount': 0.0},
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    expect(engine.materialize(merged)!['supplementAmount'], 0.0);
+  });
 }
