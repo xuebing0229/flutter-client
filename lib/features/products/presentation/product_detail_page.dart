@@ -456,7 +456,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           removeCount -= 1;
         }
       }
-      reconciledSoldCount = saleRecords.length;
+      reconciledSoldCount =
+          (currentForSave.soldCount + delta).clamp(0, 0x7fffffff);
+      if (reconciledSoldCount < saleRecords.length) {
+        reconciledSoldCount = saleRecords.length;
+      }
     } else if (soldCountChanged) {
       // Sale-type changes and single-sale toggles are explicit state changes,
       // so preserve the existing absolute behavior for those cases.
