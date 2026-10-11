@@ -356,6 +356,7 @@ class SyncMergeEngine {
   }) {
     var mergedClock = SyncClock.empty();
     final operations = <String, SyncOperation>{};
+    SyncRecord? mergedHistory;
 
     for (final record in histories) {
       if (record.kind != kind || record.id != id) {
@@ -380,24 +381,32 @@ class SyncMergeEngine {
           compacted: true,
         );
       }
+      mergedHistory =
+          mergedHistory == null ? record : merge(mergedHistory!, record);
     }
 
     final restoreClock = mergedClock.tick(deviceId);
     final fields = <String, SyncFieldValue>{};
 
-    if (values != null) {
-      final embeddedId = values['id'];
-      if (embeddedId != null && embeddedId != id) {
-        throw const FormatException('恢复快照 ID 与目标对象不一致。');
-      }
-      for (final entry in values.entries) {
-        if (entry.key == SyncRecord.deletedField) continue;
-        fields[entry.key] = SyncFieldValue(
-          value: entry.value,
-          clock: restoreClock,
-          updatedBy: deviceId,
-        );
-      }
+    // A restore-created tombstone still keeps the last known payload. It is
+    // invisible to the workspace, but reference-image GC and later
+    // delete-vs-edit conflict handling need those fields until every peer has
+    // acknowledged the deletion. Stripping them here would leak asset files.
+    final snapshotValues = values ??
+        (mergedHistory == null
+            ? <String, dynamic>{'id': id}
+            : materializeIncludingDeleted(mergedHistory!));
+    final embeddedId = snapshotValues['id'];
+    if (embeddedId != null && embeddedId != id) {
+      throw const FormatException('恢复快照 ID 与目标对象不一致。');
+    }
+    for (final entry in snapshotValues.entries) {
+      if (entry.key == SyncRecord.deletedField) continue;
+      fields[entry.key] = SyncFieldValue(
+        value: entry.value,
+        clock: restoreClock,
+        updatedBy: deviceId,
+      );
     }
 
     fields['id'] = SyncFieldValue(
