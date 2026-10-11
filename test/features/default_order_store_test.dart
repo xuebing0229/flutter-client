@@ -108,6 +108,41 @@ void main() {
     expect(archived.currentNodeId, 'draft');
   });
 
+  test('archived product cannot gain a sale from a stale action', () {
+    final store = ProductStore();
+    addTearDown(store.dispose);
+
+    store.addProduct(product('archived-product', 100));
+    store.setArchived('archived-product', true);
+    final archivedAt = store.byId('archived-product').archivedAt;
+
+    store.markSold('archived-product');
+    store.setArchived('archived-product', true);
+
+    final archived = store.byId('archived-product');
+    expect(archived.soldCount, 0);
+    expect(archived.saleRecords, isEmpty);
+    expect(archived.archivedAt, archivedAt);
+  });
+
+  test('bulk re-archive does not rewrite existing product archive time', () {
+    final store = ProductStore();
+    addTearDown(store.dispose);
+
+    store.addProduct(product('archived-a', 100));
+    store.addProduct(product('archived-b', 200));
+    store.setArchived('archived-a', true);
+    final firstArchivedAt = store.byId('archived-a').archivedAt;
+
+    store.setArchivedMany(
+      const <String>{'archived-a', 'archived-b'},
+      true,
+    );
+
+    expect(store.byId('archived-a').archivedAt, firstArchivedAt);
+    expect(store.byId('archived-b').isArchived, isTrue);
+  });
+
   test('legacy timestamp ids give the same order on every device', () {
     final store = OrderStore();
     addTearDown(store.dispose);
