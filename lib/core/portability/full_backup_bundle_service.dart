@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 
+import '../sync/sync_entity_codec.dart';
+import '../sync/sync_merge_engine.dart';
+import '../sync/sync_models.dart';
 import '../sync/sync_record_store.dart';
 import 'app_backup_data.dart';
 import 'data_portability_file_bridge.dart';
@@ -266,6 +270,53 @@ class FullBackupBundleService {
     }
     for (final product in backup.products) {
       await collect(owner: '成品', images: product.referenceImages);
+    }
+
+    // An unresolved delete-vs-edit conflict can hide the entity from the
+    // local workspace while still allowing the user to resolve it back to the
+    // live version later. Keep the referenced binaries in a "full" backup so
+    // that resolving such a conflict after restoring on a new device cannot
+    // resurrect metadata whose image files were silently omitted.
+    final syncRecords = backup.syncRecords;
+    if (syncRecords != null) {
+      final engine = SyncMergeEngine();
+      for (final raw in syncRecords) {
+        final record = SyncRecord.decode(jsonEncode(raw));
+        if (record.kind != SyncEntityKind.order &&
+            record.kind != SyncEntityKind.product) {
+          continue;
+        }
+        final protectsHiddenLiveCandidate = record.conflicts.values.any(
+          (conflict) =>
+              conflict.field == SyncRecord.deletedField ||
+              conflict.field == 'referenceImages',
+        );
+        if (!protectsHiddenLiveCandidate) continue;
+
+        final fields = engine.materializeIncludingDeleted(record);
+        final images = record.kind == SyncEntityKind.order
+            ? SyncEntityCodec.orderFromFields(fields).referenceImages
+            : SyncEntityCodec.productFromFields(fields).referenceImages;
+        await collect(owner: '同步冲突', images: images);
+
+        // Legacy records can still carry a field-level referenceImages
+        // conflict. Preserve every candidate list, not only the deterministic
+        // materialized winner.
+        for (final conflict in record.conflicts.values) {
+          if (conflict.field != 'referenceImages') continue;
+          for (final candidate in conflict.candidates) {
+            if (candidate.value is! List) continue;
+            final candidateFields = <String, dynamic>{
+              ...fields,
+              'referenceImages': candidate.value,
+            };
+            final candidateImages = record.kind == SyncEntityKind.order
+                ? SyncEntityCodec.orderFromFields(candidateFields).referenceImages
+                : SyncEntityCodec.productFromFields(candidateFields).referenceImages;
+            await collect(owner: '同步冲突', images: candidateImages);
+          }
+        }
+      }
     }
 
     if (missing.isNotEmpty) {
