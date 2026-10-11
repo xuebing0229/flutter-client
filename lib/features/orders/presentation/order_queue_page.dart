@@ -59,6 +59,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   String _query = '';
   String _searchField = 'all';
   final Set<String> _selectedTags = <String>{};
+  final Map<String, _TerminationDraft> _bulkTerminationDrafts =
+      <String, _TerminationDraft>{};
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -434,6 +436,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
     switch (mode) {
       case _BulkOrderArchiveMode.successful:
+        for (final id in ids) {
+          _bulkTerminationDrafts.remove(id);
+        }
         widget.store.archiveManyAsSettled(ids);
       case _BulkOrderArchiveMode.terminatedIndividually:
         await _bulkArchiveAsTerminated(ids);
@@ -445,31 +450,71 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         .where((order) => ids.contains(order.id))
         .toList();
 
+    // Configuration is transactional: no order is archived until every
+    // selected order has a settlement. Keep completed drafts if the user
+    // leaves midway so reopening the batch flow does not wipe earlier input.
+    _bulkTerminationDrafts.removeWhere((id, _) => !ids.contains(id));
+
     for (var index = 0; index < selectedOrders.length; index++) {
       if (!mounted) return;
 
       final order = selectedOrders[index];
       final stepLabel =
           '${index + 1}/${selectedOrders.length} · ${order.title}';
+      final existing = _bulkTerminationDrafts[order.id];
 
-      final mode = await _pickTerminationSettlementMode(title: stepLabel);
+      final mode = await _pickTerminationSettlementMode(
+        title: stepLabel,
+        savedMode: existing?.mode,
+      );
       if (!mounted || mode == null) return;
 
       if (mode == _TerminationSettlementMode.node) {
         final settlementNodeId = await _pickTerminationNode(
           order,
           title: stepLabel,
+          initialNodeId:
+              existing?.mode == _TerminationSettlementMode.node
+                  ? existing?.settlementNodeId
+                  : null,
         );
         if (!mounted || settlementNodeId == null) return;
-        widget.store.archiveAsTerminated(order.id, settlementNodeId);
+        _bulkTerminationDrafts[order.id] = _TerminationDraft.node(
+          settlementNodeId,
+        );
       } else {
-        final refundAmount = await _pickCustomRefund(order, title: stepLabel);
+        final refundAmount = await _pickCustomRefund(
+          order,
+          title: stepLabel,
+          initialRefund:
+              existing?.mode == _TerminationSettlementMode.customRefund
+                  ? existing?.refundAmount
+                  : null,
+        );
         if (!mounted || refundAmount == null) return;
-        widget.store.archiveAsTerminatedWithCustomRefund(
-          order.id,
+        _bulkTerminationDrafts[order.id] = _TerminationDraft.customRefund(
           refundAmount,
         );
       }
+    }
+
+    // All entries are configured. Only now mutate the actual order store.
+    for (final order in selectedOrders) {
+      final draft = _bulkTerminationDrafts[order.id];
+      if (draft == null) return;
+      if (draft.mode == _TerminationSettlementMode.node) {
+        final nodeId = draft.settlementNodeId;
+        if (nodeId == null) return;
+        widget.store.archiveAsTerminated(order.id, nodeId);
+      } else {
+        final refund = draft.refundAmount;
+        if (refund == null) return;
+        widget.store.archiveAsTerminatedWithCustomRefund(order.id, refund);
+      }
+    }
+
+    for (final order in selectedOrders) {
+      _bulkTerminationDrafts.remove(order.id);
     }
   }
 
@@ -544,6 +589,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
   Future<_TerminationSettlementMode?> _pickTerminationSettlementMode({
     String? title,
+    _TerminationSettlementMode? savedMode,
   }) {
     return showModalBottomSheet<_TerminationSettlementMode>(
       context: context,
@@ -560,7 +606,13 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                     title ?? '中止合作如何结算',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: title == null ? null : const Text('选择这笔排单的结算方式'),
+                  subtitle: title == null
+                      ? null
+                      : Text(
+                          savedMode == null
+                              ? '选择这笔排单的结算方式'
+                              : '已保存：${savedMode == _TerminationSettlementMode.node ? '按节点结算' : '自定义退款'}，可重新选择',
+                        ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.account_tree_outlined),
@@ -588,10 +640,16 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     );
   }
 
-  Future<double?> _pickCustomRefund(QueueOrder order, {String? title}) async {
-    final controller = TextEditingController();
+  Future<double?> _pickCustomRefund(
+    QueueOrder order, {
+    String? title,
+    double? initialRefund,
+  }) async {
+    final controller = TextEditingController(
+      text: initialRefund == null ? '' : _formatMoney(initialRefund),
+    );
     String? errorText;
-    var previewRefund = 0.0;
+    var previewRefund = initialRefund ?? 0.0;
 
     final result = await showDialog<double>(
       context: context,
@@ -684,14 +742,21 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     return result;
   }
 
-  Future<String?> _pickTerminationNode(QueueOrder order, {String? title}) {
+  Future<String?> _pickTerminationNode(
+    QueueOrder order, {
+    String? title,
+    String? initialNodeId,
+  }) {
     final nodes = order.nodePresetSnapshot.nodes;
     if (nodes.isEmpty) return Future<String?>.value(null);
 
     final validNodeIds = <String>{for (final node in nodes) node.id};
-    var selectedNodeId = validNodeIds.contains(order.currentNodeId)
-        ? order.currentNodeId
-        : nodes.first.id;
+    var selectedNodeId = initialNodeId != null &&
+            validNodeIds.contains(initialNodeId)
+        ? initialNodeId
+        : validNodeIds.contains(order.currentNodeId)
+            ? order.currentNodeId
+            : nodes.first.id;
 
     NodeDefinition selectedNode() {
       return order.nodePresetSnapshot.nodeById(selectedNodeId);
@@ -1041,3 +1106,28 @@ int _compareDeadline(DateTime? left, DateTime? right) {
   if (right == null) return -1;
   return left.compareTo(right);
 }
+
+class _TerminationDraft {
+  const _TerminationDraft._({
+    required this.mode,
+    this.settlementNodeId,
+    this.refundAmount,
+  });
+
+  const _TerminationDraft.node(String settlementNodeId)
+      : this._(
+          mode: _TerminationSettlementMode.node,
+          settlementNodeId: settlementNodeId,
+        );
+
+  const _TerminationDraft.customRefund(double refundAmount)
+      : this._(
+          mode: _TerminationSettlementMode.customRefund,
+          refundAmount: refundAmount,
+        );
+
+  final _TerminationSettlementMode mode;
+  final String? settlementNodeId;
+  final double? refundAmount;
+}
+
