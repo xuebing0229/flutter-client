@@ -48,7 +48,10 @@ class _SchedulePageState extends State<SchedulePage> {
   List<QueueOrder> _pendingOn(DateTime date) {
     return widget.store.orders.where((order) {
       final deadline = order.deadline;
-      return !order.isCompleted && deadline != null && _sameDay(deadline, date);
+      return !order.isArchived &&
+          !order.isCompleted &&
+          deadline != null &&
+          _sameDay(deadline, date);
     }).toList();
   }
 
