@@ -251,11 +251,12 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
           }
         }
       }
-      if (current != null) {
-        _nameController.text = current.name;
+      final synced = current;
+      if (synced != null) {
+        _nameController.text = synced.name;
         setState(() {
           _nodes = [
-            for (final node in current.nodes) node.snapshot(),
+            for (final node in synced.nodes) node.snapshot(),
           ];
         });
       }
