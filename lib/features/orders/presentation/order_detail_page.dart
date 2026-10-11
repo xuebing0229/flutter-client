@@ -232,6 +232,15 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     FocusManager.instance.primaryFocus?.unfocus();
     final current = _order;
     final price = double.tryParse(_priceController.text.trim()) ?? 0;
+    if (!price.isFinite || price < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final titleChanged = _titleController.text.trim() != _draftBaseline.title;
     final clientChanged =
         _clientController.text.trim() != _draftBaseline.clientName;
@@ -290,7 +299,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           : current.description,
       tags: tagsChanged ? normalizeOrderTags(_tags) : current.tags,
       referenceImages: referenceImagesChanged
-          ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
+          ? mergeReferenceImageEdits(
+              baseline: _draftBaseline.referenceImages,
+              draft: _referenceImages,
+              current: current.referenceImages,
+            )
           : current.referenceImages,
     );
 
