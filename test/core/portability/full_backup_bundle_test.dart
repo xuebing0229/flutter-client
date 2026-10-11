@@ -21,6 +21,15 @@ class _TemporaryRecordStore extends SyncRecordStore {
   }
 }
 
+class _PickingFileBridge extends DataPortabilityFileBridge {
+  _PickingFileBridge(this.picked);
+
+  final PickedBackupFile picked;
+
+  @override
+  Future<PickedBackupFile?> pickBackupFile() async => picked;
+}
+
 class _CapturingFileBridge extends DataPortabilityFileBridge {
   _CapturingFileBridge(this.destination);
 
@@ -316,6 +325,35 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('temporary Android-style backup picker copy is released after reading', () async {
+    final pickedFile = File('${temporary.path}/picked-backup.json');
+    final backup = AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 6, 2),
+      orders: const <QueueOrder>[],
+      products: const <FinishedProduct>[],
+      nodePresets: const <NodePreset>[preset],
+      syncRecords: const <Map<String, dynamic>>[],
+    );
+    await pickedFile.writeAsString(backup.encode(), flush: true);
+
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _PickingFileBridge(
+        PickedBackupFile(
+          path: pickedFile.path,
+          name: 'picked-backup.json',
+          temporary: true,
+        ),
+      ),
+    );
+
+    final imported = await service.pickAndReadBackup();
+    expect(imported, isNotNull);
+    expect(imported!.backup.nodePresets.single.id, preset.id);
+    expect(await pickedFile.exists(), isFalse);
+    await imported.dispose();
   });
 
   test('legacy json backup remains importable but is marked without assets', () async {
