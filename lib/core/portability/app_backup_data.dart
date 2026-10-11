@@ -398,7 +398,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
     ),
     currentNodeId: _asString(json['currentNodeId'], 'order.currentNodeId'),
     currentNodeProgress: currentNodeProgress,
-    price: _asDouble(json['price'], 'order.price'),
+    price: _asNonNegativeFiniteDouble(json['price'], 'order.price'),
     feeEnabled: _asBool(json['feeEnabled'], 'order.feeEnabled'),
     huajiaLoveLevel: _enumByName(
       HuajiaLoveLevel.values,
@@ -406,7 +406,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       'order.huajiaLoveLevel',
     ),
     onlinePercent: _asDouble(json['onlinePercent'], 'order.onlinePercent'),
-    supplementAmount: _asDouble(
+    supplementAmount: _asNonNegativeFiniteDouble(
       json['supplementAmount'],
       'order.supplementAmount',
     ),
@@ -414,7 +414,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'order.supplementFeeEnabled',
     ),
-    deductionAmount: _asDouble(
+    deductionAmount: _asNonNegativeFiniteDouble(
       json['deductionAmount'],
       'order.deductionAmount',
     ),
@@ -452,7 +452,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       json['settlementNodeId'],
       'order.settlementNodeId',
     ),
-    customRefundAmount: _asNullableDouble(
+    customRefundAmount: _asNullableNonNegativeFiniteDouble(
       json['customRefundAmount'],
       'order.customRefundAmount',
     ),
@@ -535,7 +535,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       _asString(json['saleType'], 'product.saleType'),
       'product.saleType',
     ),
-    price: _asDouble(json['price'], 'product.price'),
+    price: _asNonNegativeFiniteDouble(json['price'], 'product.price'),
     feeEnabled: _asBool(json['feeEnabled'], 'product.feeEnabled'),
     huajiaLoveLevel: _enumByName(
       HuajiaLoveLevel.values,
@@ -543,7 +543,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       'product.huajiaLoveLevel',
     ),
     onlinePercent: _asDouble(json['onlinePercent'], 'product.onlinePercent'),
-    supplementAmount: _asDouble(
+    supplementAmount: _asNonNegativeFiniteDouble(
       json['supplementAmount'],
       'product.supplementAmount',
     ),
@@ -551,7 +551,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'product.supplementFeeEnabled',
     ),
-    deductionAmount: _asDouble(
+    deductionAmount: _asNonNegativeFiniteDouble(
       json['deductionAmount'],
       'product.deductionAmount',
     ),
@@ -677,6 +677,17 @@ double? _asNullableDouble(Object? value, String field) {
   if (value == null) return null;
   if (value is num) return value.toDouble();
   throw FormatException('$field 格式无效。');
+}
+
+double _asNonNegativeFiniteDouble(Object? value, String field) {
+  final parsed = _asDouble(value, field);
+  return parsed.isFinite && parsed >= 0 ? parsed : 0.0;
+}
+
+double? _asNullableNonNegativeFiniteDouble(Object? value, String field) {
+  if (value == null) return null;
+  final parsed = _asDouble(value, field);
+  return parsed.isFinite && parsed >= 0 ? parsed : 0.0;
 }
 
 bool _asBool(Object? value, String field) {
