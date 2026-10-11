@@ -235,20 +235,20 @@ class FullBackupBundleService {
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '$owner“\${image.fileName}”包含无效参考图路径：$relativePath',
+            '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
         }
 
         final file = File(_joinRelative(syncRoot.path, relativePath));
         if (!await file.exists()) {
-          missing.add('$owner：\${image.fileName}');
+          missing.add('$owner：${image.fileName}');
           continue;
         }
 
         final actualSize = await file.length();
         if (actualSize != image.sizeBytes) {
           throw StateError(
-            '参考图“\${image.fileName}”文件大小与记录不一致，'
+            '参考图“${image.fileName}”文件大小与记录不一致，'
             '请等待设备同步稳定后再导出。',
           );
         }
@@ -271,8 +271,8 @@ class FullBackupBundleService {
     if (missing.isNotEmpty) {
       final preview = missing.take(3).join('、');
       throw StateError(
-        '还有 \${missing.length} 张参考图尚未同步到本机'
-        '（$preview\${missing.length > 3 ? ' 等' : ''}），'
+        '还有 ${missing.length} 张参考图尚未同步到本机'
+        '（$preview${missing.length > 3 ? ' 等' : ''}），'
         '完整备份已取消。请等图片同步完成后再试。',
       );
     }
@@ -294,7 +294,7 @@ class FullBackupBundleService {
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '$owner“\${image.fileName}”包含无效参考图路径：$relativePath',
+            '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
         }
         if (!paths.add(relativePath)) continue;
@@ -302,12 +302,12 @@ class FullBackupBundleService {
         final file = File(_joinRelative(extractedRoot.path, relativePath));
         if (!await file.exists()) {
           throw FormatException(
-            '完整备份缺少参考图原文件：\${image.fileName}',
+            '完整备份缺少参考图原文件：${image.fileName}',
           );
         }
         if (await file.length() != image.sizeBytes) {
           throw FormatException(
-            '完整备份中的参考图文件损坏：\${image.fileName}',
+            '完整备份中的参考图文件损坏：${image.fileName}',
           );
         }
       }
