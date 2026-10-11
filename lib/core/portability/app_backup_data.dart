@@ -398,7 +398,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
     ),
     currentNodeId: _asString(json['currentNodeId'], 'order.currentNodeId'),
     currentNodeProgress: currentNodeProgress,
-    price: _asDouble(json['price'], 'order.price'),
+    price: _asAmount(json['price'], 'order.price'),
     feeEnabled: _asBool(json['feeEnabled'], 'order.feeEnabled'),
     huajiaLoveLevel: _enumByName(
       HuajiaLoveLevel.values,
@@ -406,7 +406,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       'order.huajiaLoveLevel',
     ),
     onlinePercent: _asDouble(json['onlinePercent'], 'order.onlinePercent'),
-    supplementAmount: _asDouble(
+    supplementAmount: _asAmount(
       json['supplementAmount'],
       'order.supplementAmount',
     ),
@@ -414,7 +414,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'order.supplementFeeEnabled',
     ),
-    deductionAmount: _asDouble(
+    deductionAmount: _asAmount(
       json['deductionAmount'],
       'order.deductionAmount',
     ),
@@ -452,7 +452,7 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       json['settlementNodeId'],
       'order.settlementNodeId',
     ),
-    customRefundAmount: _asNullableDouble(
+    customRefundAmount: _asNullableAmount(
       json['customRefundAmount'],
       'order.customRefundAmount',
     ),
@@ -535,7 +535,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       _asString(json['saleType'], 'product.saleType'),
       'product.saleType',
     ),
-    price: _asDouble(json['price'], 'product.price'),
+    price: _asAmount(json['price'], 'product.price'),
     feeEnabled: _asBool(json['feeEnabled'], 'product.feeEnabled'),
     huajiaLoveLevel: _enumByName(
       HuajiaLoveLevel.values,
@@ -543,7 +543,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       'product.huajiaLoveLevel',
     ),
     onlinePercent: _asDouble(json['onlinePercent'], 'product.onlinePercent'),
-    supplementAmount: _asDouble(
+    supplementAmount: _asAmount(
       json['supplementAmount'],
       'product.supplementAmount',
     ),
@@ -551,7 +551,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'product.supplementFeeEnabled',
     ),
-    deductionAmount: _asDouble(
+    deductionAmount: _asAmount(
       json['deductionAmount'],
       'product.deductionAmount',
     ),
@@ -570,7 +570,7 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
     defaultOrder: json['defaultOrder'] == null
         ? 0
         : _asInt(json['defaultOrder'], 'product.defaultOrder'),
-    soldCount: _asInt(json['soldCount'], 'product.soldCount'),
+    soldCount: _asNonNegativeInt(json['soldCount'], 'product.soldCount'),
     saleRecords: [
       for (final item in _asList(json['saleRecords'], 'product.saleRecords'))
         _asDateTime(item, 'product.saleRecords'),
@@ -665,6 +665,24 @@ String? _asNullableString(Object? value, String field) {
 
 int _asInt(Object? value, String field) {
   if (value is int) return value;
+  throw FormatException('$field 缺失或格式无效。');
+}
+
+double _asAmount(Object? value, String field) {
+  if (value is! num) {
+    throw FormatException('$field 缺失或格式无效。');
+  }
+  final amount = value.toDouble();
+  return amount.isFinite && amount >= 0 ? amount : 0.0;
+}
+
+double? _asNullableAmount(Object? value, String field) {
+  if (value == null) return null;
+  return _asAmount(value, field);
+}
+
+int _asNonNegativeInt(Object? value, String field) {
+  if (value is int) return value < 0 ? 0 : value;
   throw FormatException('$field 缺失或格式无效。');
 }
 
