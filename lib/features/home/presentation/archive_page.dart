@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../orders/data/node_presets.dart';
-import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_summary_card.dart';
@@ -37,9 +36,6 @@ class ArchivePage extends StatefulWidget {
 }
 
 class _ArchivePageState extends State<ArchivePage> {
-  final OrderReferenceImageStore _referenceImageStore =
-      OrderReferenceImageStore();
-
   bool _cleaning = false;
 
   void _openOrder(BuildContext context, String orderId) {
@@ -214,8 +210,9 @@ class _ArchivePageState extends State<ArchivePage> {
             '${imageBytes > 0 ? '（约 ${_formatBytes(imageBytes)}）' : ''}'
             '${undatedLegacyProducts > 0 ? '\n\n有 $undatedLegacyProducts 个旧版成品没有归档日期，'
                 '本次不会删除。' : ''}'
-            '\n\n删除后无法从归档恢复，对应的历史收入、日程记录和参考图也会一起移除，'
-            '并同步删除到其他设备。'
+            '\n\n删除后无法从归档恢复，相关历史收入、日程记录和参考图关联会一起移除，'
+            '并同步到其他设备。参考图原文件会等全部绑定设备确认删除、'
+            '且没有其他记录继续引用后自动清理；离线或旧版设备未确认时会继续占用空间。'
             '如需长期留存，建议先导出完整备份。',
           ),
           actions: [
@@ -240,11 +237,9 @@ class _ArchivePageState extends State<ArchivePage> {
     setState(() => _cleaning = true);
     String? syncWarning;
     try {
-      await _referenceImageStore.deleteImages(
-        accountId: widget.accountId,
-        images: images,
-      );
-
+      // The order/product references are removed from the shared metadata.
+      // Do not remove their files yet: an offline Syncthing peer can still
+      // have a live reference and might reintroduce it on reconnection.
       widget.orderStore.deleteOrders(orders.map((order) => order.id));
       widget.productStore.deleteProducts(
         products.map((product) => product.id),
@@ -262,7 +257,7 @@ class _ArchivePageState extends State<ArchivePage> {
           content: Text(
             syncWarning ??
                 '已永久删除 ${orders.length} 个排单、${products.length} 个成品'
-                    '${images.isEmpty ? '' : '和 ${images.length} 张参考图'}。',
+                    '${images.isEmpty ? '' : '及 ${images.length} 条参考图关联'}。',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -415,7 +410,7 @@ class _CleanupCard extends StatelessWidget {
           '清理旧归档',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        subtitle: const Text('自选归档时间范围，永久删除对应记录及参考图。'),
+        subtitle: const Text('自选归档时间范围，永久删除记录并解除参考图关联。'),
         trailing: busy
             ? const SizedBox.square(
                 dimension: 20,

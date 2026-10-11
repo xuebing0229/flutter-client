@@ -26,8 +26,14 @@ class ScreenshotImportHistory {
   }
 
   Future<String> hashImage(String path) async {
-    final bytes = await File(path).readAsBytes();
-    final hash = await Sha256().hash(bytes);
+    // Screenshots can be very large. Hash while streaming from disk instead
+    // of allocating a second in-memory copy of the entire image.
+    final sink = Sha256().newHashSink();
+    await for (final chunk in File(path).openRead()) {
+      sink.add(chunk);
+    }
+    sink.close();
+    final hash = await sink.hash();
     return hash.bytes
         .map((value) => value.toRadixString(16).padLeft(2, '0'))
         .join();

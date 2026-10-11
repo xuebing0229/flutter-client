@@ -20,6 +20,7 @@ import 'account_sync_record_store.dart';
 import 'embedded_syncthing_bridge.dart';
 import 'portable_sync_workspace_validator.dart';
 import 'sync_entity_codec.dart';
+import 'sync_asset_gc_store.dart';
 import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
@@ -155,12 +156,19 @@ class SyncCoordinator extends ChangeNotifier {
     SyncRecordStore? recordStore,
     AccountSyncRecordStore? accountSyncStore,
     SyncGcAckStore? gcAckStore,
+    SyncAssetGcStore? assetGcStore,
     EmbeddedSyncthingBridge bridge = const EmbeddedSyncthingBridge(),
   }) : focusStore = focusStore ?? FocusStore(),
        _mergeEngine = mergeEngine ?? SyncMergeEngine(),
        _recordStore = recordStore ?? SyncRecordStore(),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
+       _assetGcStore = assetGcStore ??
+           SyncAssetGcStore(
+             recordStore: recordStore,
+             gcAckStore: gcAckStore,
+             mergeEngine: mergeEngine,
+           ),
        _bridge = bridge;
 
   final String accountId;
@@ -177,6 +185,7 @@ class SyncCoordinator extends ChangeNotifier {
   final SyncRecordStore _recordStore;
   final AccountSyncRecordStore _accountSyncStore;
   final SyncGcAckStore _gcAckStore;
+  final SyncAssetGcStore _assetGcStore;
   final EmbeddedSyncthingBridge _bridge;
   final Lock _pauseLock = Lock();
 
@@ -193,6 +202,7 @@ class SyncCoordinator extends ChangeNotifier {
   bool _awaitingInitialRemoteWorkspace = false;
   Timer? _changeDebounce;
   Timer? _pollTimer;
+  DateTime? _nextAssetGcCheckAt;
   Future<void> _tail = Future<void>.value();
 
   // Every workspace entity, including UI settings, goes through the same
@@ -430,6 +440,7 @@ class SyncCoordinator extends ChangeNotifier {
     required AppBackupData backup,
     required Future<void> Function() applyWorkspace,
     Directory? assetSourceDirectory,
+    bool transferImportedAssets = false,
   }) {
     if (_disposed || !_initialized) {
       throw StateError('同步协调器尚未准备好，不能恢复同步历史。');
@@ -441,6 +452,7 @@ class SyncCoordinator extends ChangeNotifier {
         backup: backup,
         applyWorkspace: applyWorkspace,
         assetSourceDirectory: assetSourceDirectory,
+        transferImportedAssets: transferImportedAssets,
       );
 
       _lastEntityValues = _captureEntities();
@@ -459,6 +471,7 @@ class SyncCoordinator extends ChangeNotifier {
     required AppBackupData backup,
     required Future<void> Function()? applyWorkspace,
     Directory? assetSourceDirectory,
+    bool transferImportedAssets = false,
   }) async {
     PortableSyncWorkspaceValidator.validateBackup(
       backup: backup,
@@ -470,6 +483,7 @@ class SyncCoordinator extends ChangeNotifier {
       accountId: accountId,
       records: records,
       assetSourceDirectory: assetSourceDirectory,
+      transferImportedAssets: transferImportedAssets,
       requiredIds: <SyncEntityKind, Set<String>>{
         SyncEntityKind.order: <String>{
           for (final order in backup.orders) order.id,
@@ -1155,6 +1169,33 @@ class SyncCoordinator extends ChangeNotifier {
       await _recordStore.write(accountId: accountId, record: record);
       _lastFlushedRecords[kind]![id] = record;
       wrote = true;
+
+      // A removed link alone is NOT permission to delete a shared image.
+      // Only register binaries from an existing saved entity; safe physical
+      // cleanup is gated on current new-protocol ACKs from every still-bound
+      // device. No age-based waiting or duplicate recovery mechanism.
+      if (kind == SyncEntityKind.order || kind == SyncEntityKind.product) {
+        final beforeRefs = before == null
+            ? <String>{}
+            : SyncAssetGcStore.referencePaths(before);
+        final afterRefs = after == null
+            ? <String>{}
+            : SyncAssetGcStore.referencePaths(after);
+        if (beforeRefs != null && afterRefs != null) {
+          final unlinked = beforeRefs.difference(afterRefs);
+          if (unlinked.isNotEmpty) {
+            try {
+              await _assetGcStore.registerUnlinked(
+                accountId: accountId,
+                relativePaths: unlinked,
+              );
+            } catch (_) {
+              // Failed GC bookkeeping may leak disk space, but must never
+              // roll back a successfully committed user edit or lose data.
+            }
+          }
+        }
+      }
     }
 
     return wrote;
@@ -1241,6 +1282,11 @@ class SyncCoordinator extends ChangeNotifier {
         accountId: accountId,
         deviceId: deviceId,
         recordsByKind: recordsByKind,
+        assetGcPeers: {
+          for (final device in accountStore.syncSnapshot?.activeDevices ??
+              const <AccountDevice>[])
+            device.id,
+        },
       );
       gcChanged = await _compactAcknowledgedHistory(recordsByKind);
       if (gcChanged) {
@@ -1249,7 +1295,43 @@ class SyncCoordinator extends ChangeNotifier {
           accountId: accountId,
           deviceId: deviceId,
           recordsByKind: recordsByKind,
+          assetGcPeers: {
+            for (final device in accountStore.syncSnapshot?.activeDevices ??
+                const <AccountDevice>[])
+              device.id,
+          },
         );
+      }
+    }
+
+    if (!_awaitingInitialRemoteWorkspace) {
+      final state = accountStore.syncSnapshot;
+      final now = DateTime.now().toUtc();
+      if (state != null &&
+          state.accountId == accountId &&
+          !state.isRevoked(deviceId) &&
+          (_nextAssetGcCheckAt == null ||
+              !now.isBefore(_nextAssetGcCheckAt!))) {
+        // No arbitrary retention timer after confirmed unlink. Check for
+        // peer consensus frequently enough to release bytes promptly while
+        // keeping expensive full-record hashing off the four-second poll.
+        // The GC store skips that hashing entirely if nothing is pending.
+        _nextAssetGcCheckAt = now.add(const Duration(seconds: 30));
+        try {
+          final cleaned = await _assetGcStore.collectAcknowledged(
+            accountId: accountId,
+            activeDeviceIds: {
+              for (final device in state.activeDevices) device.id,
+            },
+            recordsByKind: recordsByKind,
+          );
+          if (cleaned > 0 && _transportPrepared) {
+            await _bridge.requestScan(accountId: accountId);
+          }
+        } catch (_) {
+          // Physical asset GC is optional maintenance. Failure to assess
+          // consensus must never interrupt regular P2P sync.
+        }
       }
     }
 
@@ -1303,7 +1385,6 @@ class SyncCoordinator extends ChangeNotifier {
     }
 
     var changed = false;
-    final now = DateTime.now().toUtc();
 
     for (final kind in SyncEntityKind.values) {
       final records = recordsByKind[kind]!;
@@ -1321,21 +1402,9 @@ class SyncCoordinator extends ChangeNotifier {
         if (!seenByAll) continue;
 
         if (record.isDeleted) {
-          DateTime? deletedAt;
-          for (final operation in record.operations.values) {
-            if (operation.kind != 'delete') continue;
-            if (deletedAt == null || operation.occurredAt.isAfter(deletedAt)) {
-              deletedAt = operation.occurredAt;
-            }
-          }
-          // Keep a short safety window even after every active device has seen
-          // the tombstone. Revoked devices no longer participate.
-          if (deletedAt == null ||
-              now.difference(deletedAt.toUtc()) <
-                  const Duration(hours: 24)) {
-            continue;
-          }
-
+          // Every still-bound device already ACKed this exact tombstone.
+          // A 24h timeout cannot add safety to a complete peer consensus;
+          // it only retains dead sync files longer than necessary.
           await _recordStore.deleteRecord(
             accountId: accountId,
             kind: kind,

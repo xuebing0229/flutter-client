@@ -74,7 +74,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   void dispose() {
     if (_sessionAddedReferenceImages.isNotEmpty) {
       unawaited(
-        _referenceImageStore.deleteImages(
+        _referenceImageStore.discardUnsavedImages(
           accountId: widget.accountId,
           images: List<OrderReferenceImage>.from(_sessionAddedReferenceImages),
         ),
@@ -129,7 +129,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final added = List<OrderReferenceImage>.from(_sessionAddedReferenceImages);
     _sessionAddedReferenceImages.clear();
     if (added.isNotEmpty) {
-      await _referenceImageStore.deleteImages(
+      await _referenceImageStore.discardUnsavedImages(
         accountId: widget.accountId,
         images: added,
       );
@@ -149,7 +149,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       );
       if (!mounted) {
         if (imported.isNotEmpty) {
-          await _referenceImageStore.deleteImages(
+          await _referenceImageStore.discardUnsavedImages(
             accountId: widget.accountId,
             images: imported,
           );
@@ -180,7 +180,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     if (_sessionAddedReferenceImages.any((item) => item.id == image.id)) {
       _sessionAddedReferenceImages.removeWhere((item) => item.id == image.id);
       unawaited(
-        _referenceImageStore.deleteImages(
+        _referenceImageStore.discardUnsavedImages(
           accountId: widget.accountId,
           images: <OrderReferenceImage>[image],
         ),
@@ -269,30 +269,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final soldCountChanged = soldCount != _draftBaseline.soldCount;
     final referenceImagesChanged = widget.featureStore.referenceImages &&
         !_sameReferenceImages(_referenceImages, _draftBaseline.referenceImages);
-    final removedReferenceImages = referenceImagesChanged
-        ? <OrderReferenceImage>[
-            for (final image in _draftBaseline.referenceImages)
-              if (!_referenceImages.any((item) => item.id == image.id)) image,
-          ]
-        : const <OrderReferenceImage>[];
-    final saleRecords = [...current.saleRecords];
-
-    if (soldCountChanged && soldCount > current.soldCount) {
-      final added = soldCount - current.soldCount;
-      final now = DateTime.now();
-      for (var index = 0; index < added; index++) {
-        saleRecords.add(now.add(Duration(microseconds: index)));
-      }
-    } else if (soldCountChanged && soldCount < current.soldCount) {
-      var removeCount = current.soldCount - soldCount;
-      while (removeCount > 0 && saleRecords.isNotEmpty) {
-        saleRecords.removeLast();
-        removeCount -= 1;
-      }
-    }
-
-    widget.store.updateProduct(
-      current.copyWith(
+    // Remove committed images from this entity's metadata only.
+    // Binary deletion must wait until every bound device has acknowledged
+    // the removal. An offline peer may still have a live reference, and
+    // Syncthing would propagate an immediate file deletion to that peer.
+    final updated = current.copyWith(
         title: titleChanged ? _titleController.text.trim() : current.title,
         platform: platformChanged ? _platform : current.platform,
         saleType: saleTypeChanged ? _saleType : current.saleType,
@@ -310,20 +291,18 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         referenceImages: referenceImagesChanged
             ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
             : current.referenceImages,
-        soldCount: soldCountChanged ? soldCount : current.soldCount,
-        saleRecords: soldCountChanged ? saleRecords : current.saleRecords,
-      ),
+      );
+    // Freeze the *edited* price/fee for new sales, while existing receipt
+    // snapshots remain unchanged when the product details are edited.
+    widget.store.updateProduct(
+      soldCountChanged || saleTypeChanged
+          ? updated.withSaleCount(soldCount)
+          : updated,
     );
 
+    _referenceImageStore.markCommitted(_sessionAddedReferenceImages);
     _sessionAddedReferenceImages.clear();
-    if (removedReferenceImages.isNotEmpty) {
-      unawaited(
-        _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: removedReferenceImages,
-        ),
-      );
-    }
+
     setState(() => _editing = false);
   }
 

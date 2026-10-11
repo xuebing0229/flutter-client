@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,13 +15,25 @@ class SyncRecordStore {
 
   final SyncMergeEngine _engine;
 
+  // Shared across store instances on this isolate: an import may spend time
+  // copying gigabytes into its staging folder. A concurrent rootDirectory()
+  // must not mistake it for an abandoned crash remnant and delete it.
+  static final Map<String, Completer<void>> _activeRestores = {};
+
   Future<Directory> rootDirectory(String accountId) async {
-    final support = await getApplicationSupportDirectory();
     final safeAccountId = requireValidAccountId(accountId);
+    while (_activeRestores.containsKey(safeAccountId)) {
+      await _activeRestores[safeAccountId]!.future;
+    }
+    final support = await getApplicationSupportDirectory();
     final accountDirectory = Directory(
       '${support.path}/accounts/$safeAccountId',
     );
     await accountDirectory.create(recursive: true);
+    // Another restore may have started while awaiting support-directory IO.
+    while (_activeRestores.containsKey(safeAccountId)) {
+      await _activeRestores[safeAccountId]!.future;
+    }
     await _recoverDirectorySwap(accountDirectory);
     final directory = Directory('${accountDirectory.path}/sync-v1');
     await directory.create(recursive: true);
@@ -44,6 +57,14 @@ class SyncRecordStore {
       if (name.startsWith('sync-v1.previous-')) previous.add(entity);
     }
     previous.sort((a, b) => a.path.compareTo(b.path));
+    final safeAccountId =
+        accountDirectory.uri.pathSegments.where((part) => part.isNotEmpty).last;
+    final replacement = _activeRestores[safeAccountId];
+    if (replacement != null) {
+      await replacement.future;
+      // The listing above may have been taken during the atomic swap.
+      return _recoverDirectorySwap(accountDirectory);
+    }
     if (!await target.exists() && previous.isNotEmpty) {
       // A staging import may still be incomplete. Roll back to the last
       // complete directory if the app stopped between the two renames.
@@ -52,6 +73,13 @@ class SyncRecordStore {
 
     if (await target.exists()) {
       for (final directory in [...staging, ...previous]) {
+        // Avoid deleting an in-progress staging folder after an async
+        // directory listing. Wait for its owner to finish first.
+        final replacement = _activeRestores[safeAccountId];
+        if (replacement != null) {
+          await replacement.future;
+          return _recoverDirectorySwap(accountDirectory);
+        }
         try {
           if (await directory.exists()) await directory.delete(recursive: true);
         } catch (_) {
@@ -80,7 +108,11 @@ class SyncRecordStore {
     required SyncEntityKind kind,
     required String recordId,
   }) async {
-    final groups = await _readGroups(accountId, kind);
+    final groups = await _readGroups(
+      accountId,
+      kind,
+      onlyId: recordId,
+    );
     final variants = groups[recordId];
     if (variants == null || variants.isEmpty) return null;
     return _mergeAndCanonicalize(
@@ -134,7 +166,11 @@ class SyncRecordStore {
     required String recordId,
   }) async {
     requireValidAccountId(accountId);
-    final groups = await _readGroups(accountId, kind);
+    final groups = await _readGroups(
+      accountId,
+      kind,
+      onlyId: recordId,
+    );
     final variants = groups[recordId];
     if (variants == null) return;
 
@@ -186,6 +222,7 @@ class SyncRecordStore {
     Map<SyncEntityKind, Set<String>> requiredIds =
         const <SyncEntityKind, Set<String>>{},
     Directory? assetSourceDirectory,
+    bool transferImportedAssets = false,
   }) async {
     final safeAccountId = requireValidAccountId(accountId);
     final decoded = _decodePortableRecords(
@@ -196,7 +233,15 @@ class SyncRecordStore {
 
     // Resolve through rootDirectory so test stores and alternate local
     // roots use the same atomic replacement path as production.
-    final target = await rootDirectory(safeAccountId);
+    var target = await rootDirectory(safeAccountId);
+    // Atomic in the Dart isolate between the last check and assignment.
+    while (_activeRestores.containsKey(safeAccountId)) {
+      await _activeRestores[safeAccountId]!.future;
+      target = await rootDirectory(safeAccountId);
+    }
+    final restoreGuard = Completer<void>();
+    _activeRestores[safeAccountId] = restoreGuard;
+    try {
     final accountDirectory = target.parent;
     final suffix = DateTime.now().microsecondsSinceEpoch.toString();
     final staging = Directory(
@@ -206,15 +251,18 @@ class SyncRecordStore {
       '${accountDirectory.path}/sync-v1.previous-$suffix',
     );
 
-    await staging.create(recursive: true);
-    await File(
-      '${staging.path}/.stignore',
-    ).writeAsString('(?d)**/*.tmp\n', flush: true);
-    // Preserve Syncthing's folder marker when an already-running transport is
-    // watching this account path.
-    await Directory('${staging.path}/.stfolder').create(recursive: true);
+    var transferredAssets = false;
+    final stageAssets = Directory('${staging.path}/assets');
 
     try {
+      await staging.create(recursive: true);
+      await File(
+        '${staging.path}/.stignore',
+      ).writeAsString('(?d)**/*.tmp\n', flush: true);
+      // Preserve Syncthing's folder marker when an already-running transport
+      // is watching this account path.
+      await Directory('${staging.path}/.stfolder').create(recursive: true);
+
       for (final record in decoded) {
         final directory = Directory(
           '${staging.path}/${record.kind.directoryName}',
@@ -225,6 +273,29 @@ class SyncRecordStore {
             .replaceAll('=', '');
         final file = File('${directory.path}/$encoded.json');
         await file.writeAsString(record.encode(), flush: true);
+      }
+
+      // Stage imported assets *before* making the active Syncthing root
+      // unavailable. A large ZIP may contain gigabytes of artwork; the old
+      // implementation kept the folder renamed away while copying the ZIP.
+      // The imported copy takes precedence when old/new paths overlap.
+      if (assetSourceDirectory != null &&
+          await assetSourceDirectory.exists()) {
+        if (transferImportedAssets) {
+          // A ZIP was extracted into a disposable temporary directory. On
+          // the same filesystem, moving its assets into staging avoids a
+          // second multi-gigabyte copy. Other callers retain copy semantics.
+          // Across volumes (or when Windows holds an open handle), use the
+          // original streamed copy as a safe fallback.
+          try {
+            await assetSourceDirectory.rename(stageAssets.path);
+            transferredAssets = true;
+          } on FileSystemException {
+            await _copyDirectory(assetSourceDirectory, stageAssets);
+          }
+        } else {
+          await _copyDirectory(assetSourceDirectory, stageAssets);
+        }
       }
 
       var movedPrevious = false;
@@ -257,23 +328,33 @@ class SyncRecordStore {
               Directory('${staging.path}/revocation-acks'),
             );
           }
+          // These long-lived, consensus-gated unlink candidates must survive
+          // full backup restoration. Dropping them would make already
+          // unlinked 1 GiB+ assets permanent leaks; retaining them cannot
+          // delete a restored reference because asset GC rechecks the new
+          // entity inventory and ALL bound-device acknowledgements.
+          final previousAssetGc = Directory(
+            '${previous.path}/gc-asset-candidates',
+          );
+          if (await previousAssetGc.exists()) {
+            await _copyDirectory(
+              previousAssetGc,
+              Directory('${staging.path}/gc-asset-candidates'),
+            );
+          }
           // Reference-image binaries share this Syncthing root but are
           // intentionally kept outside JSON sync history.
           final previousAssets = Directory('${previous.path}/assets');
           if (await previousAssets.exists()) {
+            // Preserve binaries still referenced by offline peers, but do not
+            // copy them a second time when the imported ZIP already contains
+            // the same relative path. Source ZIP assets win, as before.
             await _copyDirectory(
               previousAssets,
               Directory('${staging.path}/assets'),
+              skipExisting: true,
             );
           }
-        }
-
-        if (assetSourceDirectory != null &&
-            await assetSourceDirectory.exists()) {
-          await _copyDirectory(
-            assetSourceDirectory,
-            Directory('${staging.path}/assets'),
-          );
         }
 
         await staging.rename(target.path);
@@ -295,12 +376,33 @@ class SyncRecordStore {
         }
       }
     } catch (_) {
+      // On failure restore the caller's imported temp directory if we
+      // transferred ownership. It remains valid for retry/cleanup, and the
+      // previous live sync root has already been restored by the inner catch.
+      if (transferredAssets &&
+          assetSourceDirectory != null &&
+          await stageAssets.exists()) {
+        try {
+          await stageAssets.rename(assetSourceDirectory.path);
+        } catch (_) {
+          // The ZIP is still the authoritative original if the OS prevents
+          // returning the staged temp directory. Keep the stage intact and
+          // report the original restore error rather than deleting the art.
+          rethrow;
+        }
+      }
       if (await staging.exists()) {
         try {
           await staging.delete(recursive: true);
         } catch (_) {}
       }
       rethrow;
+    }
+    } finally {
+      if (identical(_activeRestores[safeAccountId], restoreGuard)) {
+        _activeRestores.remove(safeAccountId);
+      }
+      restoreGuard.complete();
     }
   }
 
@@ -351,19 +453,33 @@ class SyncRecordStore {
 
   Future<Map<String, List<_RecordVariant>>> _readGroups(
     String accountId,
-    SyncEntityKind kind,
-  ) async {
+    SyncEntityKind kind, {
+    String? onlyId,
+  }) async {
     final directory = await _entityDirectory(accountId, kind);
     final groups = <String, List<_RecordVariant>>{};
-
+    // A targeted edit needs only this record and its Syncthing conflicts;
+    // decoding arbitrary old JSON files on every edit was unnecessary work.
+    // Full reconciliation still reads all variants when needed.
+    final stem = onlyId == null
+        ? null
+        : base64Url.encode(utf8.encode(onlyId)).replaceAll('=', '');
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
+      if (stem != null) {
+        final name = entity.uri.pathSegments.last;
+        if (name != '$stem.json' &&
+            !name.startsWith('$stem.sync-conflict-')) {
+          continue;
+        }
+      }
 
       try {
         final source = await entity.readAsString();
         if (source.trim().isEmpty) continue;
         var record = SyncRecord.decode(source);
         if (record.kind != kind) continue;
+        if (onlyId != null && record.id != onlyId) continue;
         if (record.accountId != null && record.accountId != accountId) {
           continue;
         }
@@ -461,16 +577,26 @@ class SyncRecordStore {
     await atomicWriteString(file, content);
   }
 
-  Future<void> _copyDirectory(Directory source, Directory destination) async {
+  Future<void> _copyDirectory(
+    Directory source,
+    Directory destination, {
+    bool skipExisting = false,
+  }) async {
     await destination.create(recursive: true);
     await for (final entity in source.list(followLinks: false)) {
       final name = entity.uri.pathSegments
           .where((segment) => segment.isNotEmpty)
           .last;
       if (entity is File) {
-        await entity.copy('${destination.path}/$name');
+        final destinationFile = File('${destination.path}/$name');
+        if (skipExisting && await destinationFile.exists()) continue;
+        await entity.copy(destinationFile.path);
       } else if (entity is Directory) {
-        await _copyDirectory(entity, Directory('${destination.path}/$name'));
+        await _copyDirectory(
+          entity,
+          Directory('${destination.path}/$name'),
+          skipExisting: skipExisting,
+        );
       }
     }
   }

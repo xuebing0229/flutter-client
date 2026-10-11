@@ -81,7 +81,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   void dispose() {
     if (_sessionAddedReferenceImages.isNotEmpty) {
       unawaited(
-        _referenceImageStore.deleteImages(
+        _referenceImageStore.discardUnsavedImages(
           accountId: widget.accountId,
           images: List<OrderReferenceImage>.from(
             _sessionAddedReferenceImages,
@@ -141,7 +141,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
     _sessionAddedReferenceImages.clear();
     if (added.isNotEmpty) {
-      await _referenceImageStore.deleteImages(
+      await _referenceImageStore.discardUnsavedImages(
         accountId: widget.accountId,
         images: added,
       );
@@ -163,7 +163,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
       if (!mounted || !_editing) {
         if (imported.isNotEmpty) {
-          await _referenceImageStore.deleteImages(
+          await _referenceImageStore.discardUnsavedImages(
             accountId: accountId,
             images: imported,
           );
@@ -201,7 +201,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     if (addedIndex != -1) {
       final added = _sessionAddedReferenceImages.removeAt(addedIndex);
       unawaited(
-        _referenceImageStore.deleteImages(
+        _referenceImageStore.discardUnsavedImages(
           accountId: widget.accountId,
           images: <OrderReferenceImage>[added],
         ),
@@ -253,12 +253,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       _referenceImages,
       _draftBaseline.referenceImages,
     );
-    final removedReferenceImages = referenceImagesChanged
-        ? <OrderReferenceImage>[
-            for (final image in _draftBaseline.referenceImages)
-              if (!_referenceImages.any((item) => item.id == image.id)) image,
-          ]
-        : const <OrderReferenceImage>[];
+    // Remove committed images from this entity's metadata only.
+    // Binary deletion must wait until every bound device has acknowledged
+    // the removal. An offline peer may still have a live reference, and
+    // Syncthing would propagate an immediate file deletion to that peer.
     final reopenDeliveredOrder =
         current.isCompleted && !current.isArchived && nodeChanged;
 
@@ -295,15 +293,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
 
     widget.store.updateOrder(updated);
+    _referenceImageStore.markCommitted(_sessionAddedReferenceImages);
     _sessionAddedReferenceImages.clear();
-    if (removedReferenceImages.isNotEmpty) {
-      unawaited(
-        _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: removedReferenceImages,
-        ),
-      );
-    }
+
     setState(() => _editing = false);
   }
 

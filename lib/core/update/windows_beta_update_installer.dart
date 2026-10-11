@@ -349,7 +349,7 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
           if (await target.exists()) await target.delete();
           await partial.rename(target.path);
           onProgress?.call(existingBytes, expectedSizeBytes ?? totalBytes);
-          return const WindowsSelfUpdateLauncher().launch(archive: target);
+          return await const WindowsSelfUpdateLauncher().launch(archive: target);
         }
 
         if (await partial.exists()) await partial.delete();

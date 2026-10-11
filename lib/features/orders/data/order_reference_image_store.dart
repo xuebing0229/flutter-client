@@ -32,6 +32,9 @@ class OrderReferenceImageStore {
   final DataPortabilityFileBridge _fileBridge;
   final EmbeddedSyncthingBridge _syncBridge;
   final Random _random = Random.secure();
+  // This store instance may physically discard only images it imported into
+  // its own unsaved editing session. Existing synced assets are never owned.
+  final Set<String> _draftPaths = <String>{};
 
   Future<List<OrderReferenceImage>> pickAndImport({
     required String accountId,
@@ -52,7 +55,7 @@ class OrderReferenceImageStore {
         );
       }
     } catch (_) {
-      await deleteImages(
+      await discardUnsavedImages(
         accountId: accountId,
         images: imported,
         requestScan: false,
@@ -103,11 +106,12 @@ class OrderReferenceImageStore {
     await source.copy(destination.path);
     final sizeBytes = await destination.length();
 
+    final relativePath = 'assets/order-reference-images/$orderKey/$storedName';
+    _draftPaths.add(relativePath);
     return OrderReferenceImage(
       id: id,
       fileName: _displayName(picked.name, extension),
-      relativePath:
-          'assets/order-reference-images/$orderKey/$storedName',
+      relativePath: relativePath,
       addedAt: DateTime.now(),
       sizeBytes: sizeBytes,
     );
@@ -147,12 +151,31 @@ class OrderReferenceImageStore {
     }
   }
 
-  Future<void> deleteImages({
+  /// Permanently delete **only files imported in an unsaved draft**.
+  ///
+  /// Never call this for images that were already committed to an order or
+  /// finished product. An offline bound device can still reference that asset
+  /// and Syncthing would propagate the deletion before the reference merge.
+  /// Committed images are unlinked in metadata and retained until the
+  /// separate SyncAssetGcStore requires unanimous current-protocol device
+  /// acknowledgements, matching sync history, and no live references.
+  /// After storing the corresponding order/product, these assets become
+  /// durable shared data. Discarding them from this store is then forbidden.
+  void markCommitted(Iterable<OrderReferenceImage> images) {
+    for (final image in images) {
+      _draftPaths.remove(image.relativePath);
+    }
+  }
+
+  Future<void> discardUnsavedImages({
     required String accountId,
     required Iterable<OrderReferenceImage> images,
     bool requestScan = true,
   }) async {
     for (final image in images) {
+      // No physical deletion of committed/synced references, even if a
+      // caller mistakenly passes one to the discard-only API.
+      if (!_draftPaths.remove(image.relativePath)) continue;
       try {
         final file = await localFile(accountId: accountId, image: image);
         if (await file.exists()) {

@@ -1,3 +1,4 @@
+# Pair with nginx.rate-limits.conf.example installed in nginx http context.
 server {
     listen 80;
     listen [::]:80;
@@ -5,14 +6,27 @@ server {
 
     client_max_body_size 1m;
 
+    # Requires nginx.rate-limits.conf.example in /etc/nginx/conf.d/.
+    limit_req_status 429;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 15s;
+
+    location = /v1/admin/register {
+        limit_req zone=guild_admin_enroll burst=3 nodelay;
+        proxy_pass http://127.0.0.1:8765;
+    }
+
+    location = /v1/activate {
+        limit_req zone=guild_activation burst=15 nodelay;
+        proxy_pass http://127.0.0.1:8765;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8765;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 5s;
-        proxy_read_timeout 15s;
     }
 }

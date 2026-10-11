@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -7,7 +8,32 @@ import 'package:ffi/ffi.dart';
 ///
 /// POSIX rename replaces the destination atomically. Windows needs the native
 /// replace flag because Dart's File.rename cannot replace an existing file.
-Future<void> atomicWriteString(File file, String content) async {
+// All writers of the same target must share one queue. Without it two
+// overlapping saves would delete or overwrite each other's fixed .tmp file,
+// potentially corrupting the final sync record or throwing during rename.
+// Independent files still write concurrently; the entry is removed on settle.
+final Map<String, Future<void>> _atomicWriteTails = <String, Future<void>>{};
+
+Future<void> atomicWriteString(File file, String content) {
+  final key = file.absolute.path;
+  final previous = _atomicWriteTails[key] ?? Future<void>.value();
+  final operation = previous.then<void>((_) => _writeAtomicFile(file, content));
+  // A failed write must report its error to its caller, but must not prevent
+  // the next queued write from repairing the same destination.
+  final tail = operation.then<void>(
+    (_) {},
+    onError: (Object _, StackTrace __) {},
+  );
+  _atomicWriteTails[key] = tail;
+  unawaited(tail.whenComplete(() {
+    if (identical(_atomicWriteTails[key], tail)) {
+      _atomicWriteTails.remove(key);
+    }
+  }));
+  return operation;
+}
+
+Future<void> _writeAtomicFile(File file, String content) async {
   await file.parent.create(recursive: true);
   final temp = File('${file.path}.tmp');
 

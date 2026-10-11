@@ -178,7 +178,7 @@ class SyncMergeEngine {
       final next = nextValues[field];
       if (syncJsonEquals(previous, next)) continue;
 
-      if (field == 'referenceImages' &&
+      if ((field == 'referenceImages' || field == 'saleReceipts') &&
           previous is List &&
           next is List) {
         if (!fields.containsKey(field)) {
@@ -189,11 +189,15 @@ class SyncMergeEngine {
           );
         }
 
-        final metadata = _referenceImageDelta(previous, next);
+        final metadata = field == 'referenceImages'
+            ? _referenceImageDelta(previous, next)
+            : _saleReceiptDelta(previous, next);
         if (metadata.isNotEmpty) {
           final operation = _operation(
             field: field,
-            kind: 'reference-image-delta',
+            kind: field == 'referenceImages'
+                ? 'reference-image-delta'
+                : 'sale-receipt-delta',
             deviceId: deviceId,
             metadata: metadata,
           );
@@ -375,6 +379,8 @@ class SyncMergeEngine {
         foldFields.add('currentNodeProgress');
       } else if (operation.kind == 'reference-image-delta') {
         foldFields.add('referenceImages');
+      } else if (operation.kind == 'sale-receipt-delta') {
+        foldFields.add('saleReceipts');
       }
     }
 
@@ -535,6 +541,11 @@ class SyncMergeEngine {
         }
       }
 
+      // An image ID is never reused. Once the owning order removes that ID,
+      // an old offline peer's earlier add must not resurrect it just because
+      // its device clock is ahead. Fold additions first and removals last,
+      // independent of wall-clock order or the sequence of merged records.
+      final removedImageIds = <String>{};
       for (final operation in imageOperations) {
         final added = operation.metadata['added'];
         if (added is List) {
@@ -552,13 +563,67 @@ class SyncMergeEngine {
 
         final removed = operation.metadata['removed'];
         if (removed is List) {
-          for (final item in removed) {
-            if (item is String) images.remove(item);
-          }
+          removedImageIds.addAll(removed.whereType<String>());
         }
+      }
+      for (final id in removedImageIds) {
+        images.remove(id);
       }
 
       values['referenceImages'] = images.values.toList(growable: false);
+    }
+
+    final rawReceipts = values['saleReceipts'];
+    final receiptOperations = record.operations.values
+        .where(
+          (operation) =>
+              !operation.compacted &&
+              operation.kind == 'sale-receipt-delta',
+        )
+        .toList()
+      ..sort((a, b) {
+        final byTime = a.occurredAt.compareTo(b.occurredAt);
+        return byTime != 0 ? byTime : a.id.compareTo(b.id);
+      });
+    if (rawReceipts is List || receiptOperations.isNotEmpty) {
+      final receipts = <String, Map<String, dynamic>>{};
+      for (final value in rawReceipts is List
+          ? rawReceipts
+          : const <dynamic>[]) {
+        if (value is! Map) continue;
+        final entry = value.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final id = entry['id'];
+        if (id is String && id.isNotEmpty) receipts[id] = entry;
+      }
+      // Sale IDs are immutable and never reused. A reversal must win over
+      // every older add operation regardless of skewed device clocks or
+      // merge order; applying removals only after all additions ensures it.
+      final removedSaleIds = <String>{};
+      for (final operation in receiptOperations) {
+        final added = operation.metadata['added'];
+        if (added is List) {
+          for (final item in added) {
+            if (item is! Map) continue;
+            final entry = item.map(
+              (key, value) => MapEntry(key.toString(), value),
+            );
+            final id = entry['id'];
+            if (id is String && id.isNotEmpty) {
+              receipts.putIfAbsent(id, () => entry);
+            }
+          }
+        }
+        final removed = operation.metadata['removed'];
+        if (removed is List) {
+          removedSaleIds.addAll(removed.whereType<String>());
+        }
+      }
+      for (final id in removedSaleIds) {
+        receipts.remove(id);
+      }
+      values['saleReceipts'] = receipts.values.toList(growable: false);
     }
 
     final rawSaleRecords = values['saleRecords'];
@@ -612,6 +677,37 @@ class SyncMergeEngine {
         values['soldCount'] = records.length;
         values['saleRecords'] = records;
       }
+    }
+
+    // After upgrading, immutable receipts are the source of truth. The
+    // older soldCount/saleRecords fields stay serialized for compatibility,
+    // but a stale sale-delta cannot resurrect a receipt that was voided.
+    // An *absent* receipt field denotes a legacy peer and keeps its original
+    // date-only semantics until it is migrated by the product store.
+    final ledger = values['saleReceipts'];
+    if (ledger is List) {
+      final entries = <Map<String, dynamic>>[
+        for (final value in ledger)
+          if (value is Map)
+            value.map((key, value) => MapEntry(key.toString(), value)),
+      ];
+      entries.sort((a, b) {
+        final aTime = a['soldAt']?.toString() ?? '';
+        final bTime = b['soldAt']?.toString() ?? '';
+        final byDate = aTime.compareTo(bTime);
+        return byDate != 0
+            ? byDate
+            : (a['id']?.toString() ?? '').compareTo(b['id']?.toString() ?? '');
+      });
+      if (values['saleType'] == 'single' && entries.length > 1) {
+        entries.removeRange(1, entries.length);
+      }
+      values['saleReceipts'] = entries;
+      values['saleRecords'] = <String>[
+        for (final entry in entries)
+          if (entry['soldAt'] is String) entry['soldAt'] as String,
+      ];
+      values['soldCount'] = entries.length;
     }
 
     return values;
@@ -699,6 +795,39 @@ class SyncMergeEngine {
         if (!next.containsKey(id)) id,
     ];
 
+    return <String, dynamic>{
+      if (added.isNotEmpty) 'added': added,
+      if (removed.isNotEmpty) 'removed': removed,
+    };
+  }
+
+  Map<String, dynamic> _saleReceiptDelta(
+    List<dynamic> previous,
+    List<dynamic> next,
+  ) {
+    Map<String, Map<String, dynamic>> indexed(List<dynamic> values) {
+      final result = <String, Map<String, dynamic>>{};
+      for (final value in values) {
+        if (value is! Map) continue;
+        final entry = value.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final id = entry['id'];
+        if (id is String && id.isNotEmpty) result[id] = entry;
+      }
+      return result;
+    }
+
+    final before = indexed(previous);
+    final after = indexed(next);
+    final added = <Map<String, dynamic>>[
+      for (final entry in after.entries)
+        if (!before.containsKey(entry.key)) entry.value,
+    ];
+    final removed = <String>[
+      for (final id in before.keys)
+        if (!after.containsKey(id)) id,
+    ];
     return <String, dynamic>{
       if (added.isNotEmpty) 'added': added,
       if (removed.isNotEmpty) 'removed': removed,
@@ -881,6 +1010,9 @@ class SyncMergeEngine {
     }
     if (operation.kind == 'reference-image-delta') {
       return field == 'referenceImages';
+    }
+    if (operation.kind == 'sale-receipt-delta') {
+      return field == 'saleReceipts';
     }
     return false;
   }

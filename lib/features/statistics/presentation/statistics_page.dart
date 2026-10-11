@@ -6,7 +6,7 @@ import '../../shared/presentation/layout_spacing.dart';
 
 import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
-import '../../products/domain/finished_product.dart';
+import '../../products/domain/sale_receipt.dart';
 import '../../products/state/product_store.dart';
 
 class StatisticsPage extends StatefulWidget {
@@ -43,39 +43,45 @@ class _StatisticsPageState extends State<StatisticsPage> {
     }).toList();
   }
 
-  List<FinishedProduct> _productSalesFor(DateTime month) {
-    final sales = <FinishedProduct>[];
+  List<SaleReceipt> _productSalesFor(DateTime month) {
+    final sales = <SaleReceipt>[];
     for (final product in widget.productStore.products) {
-      for (final soldAt in product.saleRecords) {
-        if (_sameMonth(soldAt, month)) sales.add(product);
+      for (final receipt in product.accountedSales) {
+        if (_sameMonth(receipt.soldAt, month)) sales.add(receipt);
       }
     }
     return sales;
   }
 
-  double _totalFor(DateTime month) {
-    final orderIncome = _incomeOrdersFor(month).fold<double>(
+  double _totalFor(
+    Iterable<QueueOrder> orders,
+    Iterable<SaleReceipt> sales,
+  ) {
+    final orderIncome = orders.fold<double>(
       0,
       (sum, order) => sum + order.settlementIncome,
     );
-    final productIncome = _productSalesFor(month).fold<double>(
+    final productIncome = sales.fold<double>(
       0,
-      (sum, product) => sum + product.realIncome,
+      (sum, receipt) => sum + receipt.netIncome,
     );
     return orderIncome + productIncome;
   }
 
-  Map<CommissionPlatform, double> _platformTotals(DateTime month) {
+  Map<CommissionPlatform, double> _platformTotals(
+    Iterable<QueueOrder> orders,
+    Iterable<SaleReceipt> sales,
+  ) {
     final result = <CommissionPlatform, double>{};
 
-    for (final order in _incomeOrdersFor(month)) {
+    for (final order in orders) {
       final platform = _statisticsPlatform(order.platform);
       result[platform] = (result[platform] ?? 0) + order.settlementIncome;
     }
 
-    for (final product in _productSalesFor(month)) {
-      final platform = _statisticsPlatform(product.platform);
-      result[platform] = (result[platform] ?? 0) + product.realIncome;
+    for (final receipt in sales) {
+      final platform = _statisticsPlatform(receipt.platform);
+      result[platform] = (result[platform] ?? 0) + receipt.netIncome;
     }
 
     return result;
@@ -181,8 +187,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
       builder: (context, _) {
         final monthOrders = _incomeOrdersFor(_selectedMonth);
         final monthSales = _productSalesFor(_selectedMonth);
-        final total = _totalFor(_selectedMonth);
-        final platformTotals = _platformTotals(_selectedMonth);
+        // Reuse the filtered lists instead of traversing all history again.
+        final total = _totalFor(monthOrders, monthSales);
+        final platformTotals = _platformTotals(monthOrders, monthSales);
 
         return ListView(
           padding: AppLayoutSpacing.tabScrollPadding(
@@ -514,24 +521,27 @@ class _MonthlyChangeCard extends StatelessWidget {
       ),
     );
 
-    final values = months.map((month) {
-      final orderIncome = store.orders.where((order) {
-        final incomeAt = _incomeDate(order);
-        return order.isArchived &&
-            incomeAt != null &&
-            _sameMonth(incomeAt, month);
-      }).fold<double>(0, (sum, order) => sum + order.settlementIncome);
-
-      var productIncome = 0.0;
-      for (final product in productStore.products) {
-        final saleCount = product.saleRecords
-            .where((soldAt) => _sameMonth(soldAt, month))
-            .length;
-        productIncome += product.realIncome * saleCount;
+    // Bucket each event once rather than rescanning the entire order and
+    // sale history separately for every bar in the five-month chart.
+    final monthIndexes = <int, int>{
+      for (var index = 0; index < months.length; index++)
+        months[index].year * 12 + months[index].month: index,
+    };
+    final values = List<double>.filled(months.length, 0);
+    for (final order in store.orders) {
+      if (!order.isArchived) continue;
+      final at = _incomeDate(order);
+      if (at == null) continue;
+      final index = monthIndexes[at.year * 12 + at.month];
+      if (index != null) values[index] += order.settlementIncome;
+    }
+    for (final product in productStore.products) {
+      for (final receipt in product.accountedSales) {
+        final soldAt = receipt.soldAt;
+        final index = monthIndexes[soldAt.year * 12 + soldAt.month];
+        if (index != null) values[index] += receipt.netIncome;
       }
-
-      return orderIncome + productIncome;
-    }).toList();
+    }
 
     final maxValue = values.fold<double>(
       0,

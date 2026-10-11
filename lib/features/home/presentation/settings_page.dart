@@ -506,6 +506,10 @@ class _SettingsPageState extends State<SettingsPage>
       await widget.syncCoordinator.restorePortableBackupForCurrentWorkspace(
         backup: backup,
         assetSourceDirectory: importedBundle.assetDirectory,
+        // This directory was extracted solely for this restore and will be
+        // disposed immediately afterwards. Transfer on the same filesystem
+        // instead of duplicating potentially gigabytes of reference art.
+        transferImportedAssets: importedBundle.includesBundledAssets,
         applyWorkspace: () async {
           backup.restoreInto(
             orderStore: widget.orderStore,

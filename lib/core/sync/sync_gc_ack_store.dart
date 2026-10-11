@@ -77,11 +77,20 @@ class SyncGcAckStore {
     required String accountId,
     required String deviceId,
     required Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
+    Set<String>? assetGcPeers,
   }) async {
     final records = await signatures(recordsByKind);
+    final peers = assetGcPeers?.toList()?..sort();
     final payload = <String, dynamic>{
       'schemaVersion': 1,
       'deviceId': deviceId,
+      // Old clients omit this capability. A file GC must never infer support
+      // from a normal record-history acknowledgement.
+      if (peers != null) 'assetGcVersion': 1,
+      // Every peer must agree on the complete bound-device membership, not
+      // just the entity records. A peer freshly paired elsewhere could still
+      // have a valid reference that hasn't reached this device's account.
+      if (peers != null) 'assetGcPeers': peers,
       'records': records,
     };
 
@@ -89,6 +98,8 @@ class SyncGcAckStore {
     final encoded = stableJsonSignature(payload);
     if (await file.exists()) {
       try {
+        // No heartbeat and no redundant Syncthing writes: unchanged data
+        // already proves that this device has observed the same state.
         if (await file.readAsString() == encoded) return;
       } catch (_) {}
     }
@@ -114,12 +125,26 @@ class SyncGcAckStore {
     }
   }
 
-  Future<Map<String, Map<String, String>>> readAll(String accountId) async {
+  Future<Map<String, Map<String, String>>> readAll(
+    String accountId, {
+    bool requireAssetGcSupport = false,
+    Set<String>? expectedAssetGcPeers,
+  }) async {
+    if (requireAssetGcSupport && expectedAssetGcPeers == null) {
+      // Never authorize physical deletion without a device-membership list.
+      return const <String, Map<String, String>>{};
+    }
+    final requiredPeers = expectedAssetGcPeers?.toList()?..sort();
     final directory = await _directory(accountId);
     final result = <String, Map<String, String>>{};
+    final seenPeerIds = <String>{};
 
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
+      if (requireAssetGcSupport && entity.path.contains('.sync-conflict-')) {
+        // Conflicted confirmations are not unanimous approval.
+        return const <String, Map<String, String>>{};
+      }
       try {
         final decoded = jsonDecode(await entity.readAsString());
         if (decoded is! Map || decoded['schemaVersion'] != 1) continue;
@@ -128,21 +153,36 @@ class SyncGcAckStore {
         if (deviceId is! String || deviceId.isEmpty || rawRecords is! Map) {
           continue;
         }
+        if (requireAssetGcSupport &&
+            expectedAssetGcPeers!.contains(deviceId)) {
+          // In strict mode a duplicate, old-protocol, or mismatched
+          // acknowledgement is enough to block physical deletion.
+          if (!seenPeerIds.add(deviceId) ||
+              decoded['assetGcVersion'] != 1 ||
+              !syncJsonEquals(decoded['assetGcPeers'], requiredPeers)) {
+            return const <String, Map<String, String>>{};
+          }
+        }
 
         final records = <String, String>{};
-        var valid = true;
         for (final entry in rawRecords.entries) {
-          final key = entry.key;
-          final value = entry.value;
-          if (key is! String || value is! String) {
-            valid = false;
+          if (entry.key is! String || entry.value is! String) {
+            records.clear();
             break;
           }
-          records[key] = value;
+          records[entry.key as String] = entry.value as String;
         }
-        if (valid) result[deviceId] = records;
+        if (records.isEmpty && rawRecords.isNotEmpty) {
+          if (requireAssetGcSupport &&
+              expectedAssetGcPeers!.contains(deviceId)) {
+            return const <String, Map<String, String>>{};
+          }
+          continue;
+        }
+        result[deviceId] = records;
       } catch (_) {
-        // Syncthing can expose a replacement between rename steps.
+        // In-progress Syncthing file changes may be retried at next scan.
+        // Missing a bound-device confirmation always prevents deletion.
       }
     }
 

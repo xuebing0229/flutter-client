@@ -7,9 +7,10 @@ import '../../features/focus/domain/focus_session.dart';
 import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
+import '../../features/products/domain/sale_receipt.dart';
 import '../../features/products/state/product_store.dart';
 
-const int currentBackupSchemaVersion = 7;
+const int currentBackupSchemaVersion = 8;
 const String appBackupKind = 'artist_queue_full_backup';
 
 class AppBackupData {
@@ -142,7 +143,7 @@ class AppBackupData {
       }
       accountSyncState = AccountSyncState.fromCompatibleJson(
         rawAccountSync.map((key, value) => MapEntry(key.toString(), value)),
-        allowMissingPassword: schema < currentBackupSchemaVersion,
+        allowMissingPassword: schema < 7,
       );
     }
 
@@ -301,6 +302,7 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
+  json['saleReceipts'] ??= <dynamic>[];
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
   return json;
@@ -512,6 +514,9 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
       for (final soldAt in product.saleRecords)
         soldAt.toUtc().toIso8601String(),
     ],
+    'saleReceipts': [
+      for (final receipt in product.accountedSales) receipt.toJson(),
+    ],
     'archivedAt': product.archivedAt?.toUtc().toIso8601String(),
     'isArchived': product.isArchived,
     'isPinned': product.isPinned,
@@ -574,6 +579,13 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
     saleRecords: [
       for (final item in _asList(json['saleRecords'], 'product.saleRecords'))
         _asDateTime(item, 'product.saleRecords'),
+    ],
+    saleReceipts: [
+      for (final item in _asList(
+        json['saleReceipts'] ?? <dynamic>[],
+        'product.saleReceipts',
+      ))
+        SaleReceipt.fromJson(_asMap(item, 'product.saleReceipt')),
     ],
     archivedAt: _asNullableDateTime(json['archivedAt'], 'product.archivedAt'),
     isArchived: _asBool(json['isArchived'], 'product.isArchived'),

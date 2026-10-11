@@ -31,13 +31,13 @@ class ProductStore extends ChangeNotifier {
   void replaceAll(Iterable<FinishedProduct> products) {
     _products
       ..clear()
-      ..addAll(products);
+      ..addAll(products.map((product) => product.copyWith()));
     _sortDefaultOrder();
     notifyListeners();
   }
 
   void addProduct(FinishedProduct product) {
-    _products.add(product);
+    _products.add(product.copyWith());
     _sortDefaultOrder();
     notifyListeners();
   }
@@ -46,7 +46,7 @@ class ProductStore extends ChangeNotifier {
     final index = _products.indexWhere((product) => product.id == updated.id);
     if (index == -1) return;
 
-    _products[index] = updated;
+    _products[index] = updated.copyWith();
     notifyListeners();
   }
 
@@ -63,12 +63,9 @@ class ProductStore extends ChangeNotifier {
         ? 1
         : product.soldCount + 1;
 
-    _products[index] = product.copyWith(
-      soldCount: nextSoldCount,
-      saleRecords: [
-        ...product.saleRecords,
-        soldAt ?? DateTime.now(),
-      ],
+    _products[index] = product.withSaleCount(
+      nextSoldCount,
+      soldAt: soldAt,
     );
     notifyListeners();
   }

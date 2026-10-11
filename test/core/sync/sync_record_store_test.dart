@@ -104,6 +104,111 @@ void main() {
     expect(reread!.toJson(), merged.toJson());
   });
 
+  test('targeted local edit merges conflict variants without reading unrelated records', () async {
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'chosen-order',
+      values: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 120,
+      },
+      deviceId: 'phone',
+    );
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 120,
+      },
+      nextValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '手机编辑',
+        'price': 120,
+      },
+      deviceId: 'phone',
+    );
+    final pc = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 120,
+      },
+      nextValues: const <String, dynamic>{
+        'id': 'chosen-order',
+        'title': '原始',
+        'price': 245,
+      },
+      deviceId: 'desktop',
+    );
+    await store.write(accountId: accountId, record: phone);
+    final canonical = _recordFile(temporary, SyncEntityKind.order, 'chosen-order');
+    final conflict = File('${canonical.path.substring(0, canonical.path.length - 5)}'
+        '.sync-conflict-20261010-desktop.json');
+    await conflict.writeAsString(pc.copyWith(accountId: accountId).encode());
+    for (var i = 0; i < 250; i++) {
+      final unrelated = SyncRecord.bootstrap(
+        kind: SyncEntityKind.order,
+        id: 'unrelated-$i',
+        values: <String, dynamic>{
+          'id': 'unrelated-$i',
+          'title': '无关历史订单',
+        },
+        deviceId: 'phone',
+      );
+      await store.write(accountId: accountId, record: unrelated);
+    }
+
+    final targeted = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+      recordId: 'chosen-order',
+    );
+    expect(targeted, isNotNull);
+    expect(engine.materialize(targeted!)!['title'], '手机编辑');
+    expect(engine.materialize(targeted)!['price'], 245);
+    expect(await conflict.exists(), isFalse);
+    expect(await canonical.exists(), isTrue);
+    final all = await store.readAllMerged(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+    );
+    expect(all.length, 251);
+  });
+
+  test('full reconciliation recovers oddly named JSON without slowing edits', () async {
+    final value = SyncRecord.bootstrap(
+      kind: SyncEntityKind.settings,
+      id: 'app',
+      values: const <String, dynamic>{'id': 'app', 'themeMode': 'system'},
+      deviceId: 'phone',
+    );
+    final unusual = File('${temporary.path}/${SyncEntityKind.settings.directoryName}/'
+        'manual-backup.copy.json');
+    await unusual.parent.create(recursive: true);
+    await unusual.writeAsString(value.copyWith(accountId: accountId).encode());
+
+    // Targeted reads avoid arbitrary unrelated filenames. A full sync still
+    // discovers this unusual file and normalizes it without discarding data.
+    final narrow = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.settings,
+      recordId: 'app',
+    );
+    expect(narrow, isNull);
+    final merged = (await store.readAllMerged(
+      accountId: accountId,
+      kind: SyncEntityKind.settings,
+    ))['app'];
+    expect(merged, isNotNull);
+    expect(engine.materialize(merged!)!['themeMode'], 'system');
+    expect(await unusual.exists(), isFalse);
+    expect(await _recordFile(temporary, SyncEntityKind.settings, 'app').exists(),
+        isTrue);
+  });
+
   test('settings survive successive phone and desktop edits in both directions', () async {
     final phoneRoot = await Directory('${temporary.path}/phone').create();
     final desktopRoot = await Directory('${temporary.path}/desktop').create();
@@ -201,6 +306,159 @@ void main() {
       ).readAsBytes(),
       <int>[9, 8, 7],
     );
+  });
+
+  test('portable restore retains consensus-gated old art cleanup markers', () async {
+    final marker = File('${temporary.path}/gc-asset-candidates/marked.json');
+    await marker.parent.create(recursive: true);
+    await marker.writeAsString(
+      '{"schemaVersion":1,"relativePath":"assets/order-reference-images/a/b.png"}',
+      flush: true,
+    );
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+    );
+    expect(await marker.exists(), isTrue);
+    expect(await marker.readAsString(), contains('relativePath'));
+  });
+
+  test('restore ZIP assets override matching paths while preserving offline-only files', () async {
+    final oldShared = File('${temporary.path}/assets/refs/same.png');
+    final oldOnly = File('${temporary.path}/assets/refs/offline.png');
+    await oldShared.parent.create(recursive: true);
+    await oldShared.writeAsBytes(<int>[1, 1, 1]);
+    await oldOnly.writeAsBytes(<int>[9, 9, 9]);
+
+    final importDir = await Directory.systemTemp.createTemp('guild-overlay-');
+    addTearDown(() async {
+      if (await importDir.exists()) await importDir.delete(recursive: true);
+    });
+    final backupImage = File('${importDir.path}/refs/same.png');
+    final newOnly = File('${importDir.path}/refs/new.png');
+    await backupImage.parent.create(recursive: true);
+    await backupImage.writeAsBytes(<int>[2, 2, 2]);
+    await newOnly.writeAsBytes(<int>[3, 3, 3]);
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+      assetSourceDirectory: importDir,
+    );
+    expect(await oldShared.readAsBytes(), <int>[2, 2, 2]);
+    expect(await oldOnly.readAsBytes(), <int>[9, 9, 9]);
+    expect(
+      await File('${temporary.path}/assets/refs/new.png').readAsBytes(),
+      <int>[3, 3, 3],
+    );
+    // Pre-staging copies from the imported bundle without consuming it.
+    expect(await backupImage.readAsBytes(), <int>[2, 2, 2]);
+  });
+
+  test('temporary ZIP asset ownership transfers by directory rename when possible', () async {
+    final imported = await Directory('${temporary.path}/bundle/assets')
+        .create(recursive: true);
+    final art = File('${imported.path}/refs/big-picture.png');
+    await art.parent.create(recursive: true);
+    await art.writeAsBytes(List<int>.filled(1024 * 1024, 7));
+
+    await store.replacePortableRecords(
+      accountId: accountId,
+      records: const <Map<String, dynamic>>[],
+      assetSourceDirectory: imported,
+      transferImportedAssets: true,
+    );
+
+    final recovered = File('${temporary.path}/assets/refs/big-picture.png');
+    expect(await recovered.length(), 1024 * 1024);
+    expect(await recovered.readAsBytes(), List<int>.filled(1024 * 1024, 7));
+    // The disposable import folder was moved rather than copied, reducing
+    // the simultaneous on-disk footprint when the filesystem supports it.
+    expect(await imported.exists(), isFalse);
+  });
+
+  test('failed restore returns transferred ZIP asset source to caller', () async {
+    final original = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'survivor',
+      values: const <String, dynamic>{'id': 'survivor', 'title': '原来的订单'},
+      deviceId: 'phone',
+    );
+    await store.write(accountId: accountId, record: original);
+    final oldAsset = File('${temporary.path}/assets/refs/file');
+    await oldAsset.parent.create(recursive: true);
+    await oldAsset.writeAsBytes([8, 9, 10]);
+
+    final source = await Directory('${temporary.path}/bundle/assets')
+        .create(recursive: true);
+    final newArt = File('${source.path}/refs/file/image.png');
+    await newArt.parent.create(recursive: true);
+    await newArt.writeAsBytes([4, 5, 6]);
+
+    await expectLater(
+      store.replacePortableRecords(
+        accountId: accountId,
+        records: const <Map<String, dynamic>>[],
+        assetSourceDirectory: source,
+        transferImportedAssets: true,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await oldAsset.readAsBytes(), [8, 9, 10]);
+    expect(await newArt.readAsBytes(), [4, 5, 6]);
+    final restored = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+      recordId: 'survivor',
+    );
+    expect(engine.materialize(restored!)!['title'], '原来的订单');
+  });
+
+  test('restore rolls back the entire old root on asset merge failure', () async {
+    final original = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'untouched-order',
+      values: const <String, dynamic>{
+        'id': 'untouched-order',
+        'title': 'must survive rollback',
+      },
+      deviceId: 'phone',
+    );
+    await store.write(accountId: accountId, record: original);
+    final oldFile = File('${temporary.path}/assets/refs/shape');
+    await oldFile.parent.create(recursive: true);
+    await oldFile.writeAsBytes(<int>[8, 7, 6]);
+
+    // Import claims that a *file* already in the live root is a directory.
+    // This must fail after staging and after renaming the old root aside,
+    // and then restore the exact old root and all of its assets.
+    final imported = await Directory.systemTemp.createTemp('guild-bad-merge-');
+    addTearDown(() async {
+      if (await imported.exists()) await imported.delete(recursive: true);
+    });
+    final colliding = File('${imported.path}/refs/shape/new.png');
+    await colliding.parent.create(recursive: true);
+    await colliding.writeAsBytes(<int>[1, 2, 3]);
+
+    await expectLater(
+      store.replacePortableRecords(
+        accountId: accountId,
+        records: const <Map<String, dynamic>>[],
+        assetSourceDirectory: imported,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await oldFile.readAsBytes(), <int>[8, 7, 6]);
+    final restored = await store.readMergedRecord(
+      accountId: accountId,
+      kind: SyncEntityKind.order,
+      recordId: 'untouched-order',
+    );
+    expect(restored, isNotNull);
+    expect(engine.materialize(restored!)!['title'], 'must survive rollback');
+    expect(await Directory('${temporary.path}/assets/refs/shape').exists(),
+        isFalse);
   });
 
 }

@@ -83,6 +83,13 @@ class ActivationApiClient {
       );
 
       final response = await request.close().timeout(const Duration(seconds: 12));
+      if (response.statusCode == 429) {
+        throw const ActivationApiException(
+          '注册请求过于频繁，请稍后重试。',
+          code: 'rate_limited',
+          statusCode: 429,
+        );
+      }
       final body = await utf8.decoder.bind(response).join();
       Map<String, dynamic>? json;
       if (body.isNotEmpty) {

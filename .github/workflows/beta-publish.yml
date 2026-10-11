@@ -31,8 +31,20 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Run screenshot parser regression tests
-        run: flutter test test/features/screenshot_layout_parser_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_ocr_real_world_regression_test.dart
+      - name: Run complete Flutter regression suite
+        run: flutter test
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: server/activation_service/requirements.txt
+
+      - name: Install activation service test dependencies
+        run: python -m pip install -r server/activation_service/requirements.txt
+
+      - name: Run activation API regression tests
+        run: python -m unittest server.activation_service.test_app -v
 
       - name: Analyze
         run: flutter analyze

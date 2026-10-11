@@ -77,7 +77,7 @@ API 默认只监听 127.0.0.1:8765，由 Nginx 对外提供 HTTPS。
 - POST /v1/admin/register
 - GET /v1/admin/me
 - PATCH /v1/admin/me
-- GET /v1/licenses
+- GET /v1/licenses?limit=500&beforeId=12345（管理员鉴权；稳定按全局编号倒序分页，返回 nextBeforeId；不再只显示最近 500 条）
 - POST /v1/licenses/import
 - POST /v1/licenses/reserve
 - POST /v1/licenses/{accountId}/commit
@@ -89,3 +89,33 @@ API 默认只监听 127.0.0.1:8765，由 Nginx 对外提供 HTTPS。
 ## 给部署 Agent
 
 仓库内已经提供 `DEPLOY_AGENT.md`，包含稀疏拉取、部署、安全边界、验收命令和最终报告要求。
+
+
+## 发码器完整历史分页上线顺序
+
+需要先更新 **license.apixb.top** 运行的本项目激活服务代码，再发布包含分页客户端的新版发码器。
+
+`GET /v1/licenses?limit=500` 最多返回 500 条，响应示例为：
+
+```json
+{"ok":true,"licenses":[{"serial":"001205","accountId":"..."}],"nextBeforeId":706}
+```
+
+其中 `licenses` 中的每一项在真实接口里包含完整授权记录字段；示例只展示识别分页必需的字段。`nextBeforeId` 等于本页最后一项的全局整数 ID，仅当还有较老的记录时才返回整数；没有下一页则为 `null`。下次发送 `beforeId=<nextBeforeId>`，这样在拉取过程中即使产生新激活码，也不会导致 OFFSET 错位或重复。删除/作废的记录按旧规则不出现在查询结果中，数据库序号始终不重用。
+
+新发码器会连续请求所有页面，收到完整结果后才替换本机历史缓存；网络中断、游标异常或重复记录均不会把旧缓存替换成部分结果。**如果旧服务器返回整整 500 条却不包含分页字段，客户端将拒绝当作完整历史保存，并要求先升级服务器。** 少于 500 条的旧服务响应仍兼容。
+
+注意：此仓库代码、单元测试及 GitHub Actions 通过不代表服务器已经完成线上部署。需要在服务实际更新后使用已授权管理员测试超过 500 条记录的完整查询。
+
+
+## 激活与管理员注册限流
+
+`deploy.sh` 会把限流区域写入 Nginx 的 `/etc/nginx/conf.d/adventure-license-rates.conf`（HTTP 上下文），并且仅在两条敏感路径启用按客户端真实连接 IP 的防滥用限制：
+
+- `POST /v1/admin/register`：基础速率每分钟 3 次，每个 IP 容许瞬时突发 3 次。
+- `POST /v1/activate`：基础速率每分钟 30 次，容许瞬时突发 15 次，兼顾移动运营商共享 IP 与用户断线重试。
+- 超额返回 HTTP 429。新版发码器与冒险者公会注册页会把普通 Nginx HTML 429 正确识别为「请求过于频繁，请稍后重试」，不会显示 JSON 解析异常。
+
+其它 HTTPS API 路径不受这两项专用频率限制（仍受正常认证、输入校验、SQLite 原子事务保护）。如有多级反代，只允许信任自己管理的最前置反代的真实 IP 头；默认直接使用 `$binary_remote_addr`，不直接信任用户提交的 X-Forwarded-For。
+
+手工部署请一并安装 `nginx.rate-limits.conf.example` 与 `nginx.conf.example`，否则 `limit_req` 会因缺少 `zone` 而导致 Nginx 检查失败。升级前备份现有配置并运行 `nginx -t`，再 reload。**代码在独立审计分支通过测试不意味着线上 Nginx 已经应用这些限制。** 需要在 `license.apixb.top` 的真实部署中确认 429、合法注册、管理员接入与共享 IP 误限情况。

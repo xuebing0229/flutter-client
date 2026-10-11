@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 
 import '../sync/sync_record_store.dart';
+import '../../features/orders/domain/queue_order.dart';
 import 'app_backup_data.dart';
 import 'data_portability_file_bridge.dart';
+import 'bounded_archive_file_output.dart';
 
 class ImportedBackupBundle {
   ImportedBackupBundle({
@@ -47,6 +50,9 @@ class FullBackupBundleService {
        _fileBridge = fileBridge;
 
   static const String manifestFileName = 'backup.json';
+  // The small JSON index may grow with order count, but large image bytes
+  // must never be materialized in memory just to validate an archive.
+  static const int _maxManifestBytes = 32 * 1024 * 1024;
 
   final SyncRecordStore _syncRecordStore;
   final DataPortabilityFileBridge _fileBridge;
@@ -178,16 +184,50 @@ class FullBackupBundleService {
         throw const FormatException('完整备份缺少 backup.json 数据清单。');
       }
 
-      await extractArchiveToDisk(archive, temporary.path);
-
+      // Read the small manifest *before* unpacking any large user assets.
+      // ZIP metadata alone must not be trusted to authorize unbounded
+      // extraction. The user's actual image sizes are declared in the
+      // validated manifest; there is deliberately no arbitrary image cap.
+      final manifestEntry = archive.findFile(manifestFileName)!;
+      if (manifestEntry.size < 0 ||
+          manifestEntry.size > _maxManifestBytes) {
+        throw const FormatException('备份数据清单体积异常，已拒绝解压。');
+      }
+      // Never call manifestEntry.readBytes() on an untrusted ZIP. Even its
+      // declared size might lie; stream into a strict 32 MiB bounded file.
       final manifest = File(
         '${temporary.path}${Platform.pathSeparator}$manifestFileName',
       );
-      if (!await manifest.exists()) {
-        throw const FormatException('完整备份的数据清单无法读取。');
+      final manifestSink = BoundedArchiveFileOutput(
+        manifest.path,
+        manifestEntry.size,
+      );
+      try {
+        manifestEntry.writeContent(manifestSink);
+        if (manifestSink.length != manifestEntry.size) {
+          throw const FormatException('备份数据清单解压长度无效。');
+        }
+        if (manifestEntry.crc32 != null &&
+            manifestSink.crc32 != manifestEntry.crc32) {
+          throw const FormatException('备份数据清单 CRC 校验失败。');
+        }
+      } finally {
+        await manifestSink.close();
       }
+      final backup = AppBackupData.decode(
+        await manifest.readAsString(encoding: utf8),
+      );
+      _validateArchiveAssetInventory(archive, backup);
 
-      final backup = AppBackupData.decode(await manifest.readAsString());
+      // archive's generic disk extraction may swallow individual entry
+      // decoder errors; we need *actual* byte-count enforcement and failures
+      // to abort the entire import before touching live account data.
+      await _extractVerifiedAssets(
+        archive: archive,
+        temporary: temporary,
+        backup: backup,
+      );
+
       await _validateExtractedAssets(
         backup: backup,
         extractedRoot: temporary,
@@ -219,6 +259,86 @@ class FullBackupBundleService {
     }
   }
 
+  Future<void> _extractVerifiedAssets({
+    required Archive archive,
+    required Directory temporary,
+    required AppBackupData backup,
+  }) async {
+    // The inventory was validated before entering this function. All entries
+    // are allowlisted relative paths from the manifest, never arbitrary ZIP
+    // names. Each binary is streamed to a bounded OutputStream and checked
+    // again after the decoder finishes. An exception propagates; the caller
+    // removes the entire temporary folder and leaves live data untouched.
+    final declaredSizes = <String, int>{
+      for (final reference in _referencedImages(backup))
+        reference.image.relativePath: reference.image.sizeBytes,
+    };
+    for (final entry in archive) {
+      if (!entry.isFile || entry.name == manifestFileName) continue;
+      final expected = declaredSizes[entry.name]!;
+      final destination = File(_joinRelative(temporary.path, entry.name));
+      await destination.parent.create(recursive: true);
+      final sink = BoundedArchiveFileOutput(destination.path, expected);
+      try {
+        entry.writeContent(sink);
+        if (sink.length != expected) {
+          throw FormatException(
+            '备份参考图实际解压大小与记录不一致：${entry.name}',
+          );
+        }
+        if (entry.crc32 != null && sink.crc32 != entry.crc32) {
+          throw FormatException('备份参考图 CRC 校验失败：${entry.name}');
+        }
+      } finally {
+        await sink.close();
+      }
+    }
+  }
+
+  void _validateArchiveAssetInventory(Archive archive, AppBackupData backup) {
+    final expectedSizes = <String, int>{};
+    for (final referenced in _referencedImages(backup)) {
+      final image = referenced.image;
+      final path = image.relativePath;
+      if (!_isReferenceAssetPath(path) || image.sizeBytes < 0) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图记录：${image.fileName}',
+        );
+      }
+      final prior = expectedSizes[path];
+      if (prior != null && prior != image.sizeBytes) {
+        throw FormatException('参考图路径重复且声明尺寸不一致：$path');
+      }
+      expectedSizes[path] = image.sizeBytes;
+    }
+
+    final found = <String>{};
+    for (final entry in archive) {
+      if (!entry.isFile || entry.name == manifestFileName) continue;
+      final declared = expectedSizes[entry.name];
+      if (declared == null) {
+        throw FormatException(
+          '备份包含未被任何排单或成品引用的资源：${entry.name}',
+        );
+      }
+      // Check the declared uncompressed size against the manifest before
+      // writing any asset to disk. Do not restrict a compatible ZIP
+      // compression mode: some archive encoders report/store it differently.
+      if (entry.size != declared) {
+        throw FormatException(
+          '备份参考图声明的文件大小与记录不一致：${entry.name}',
+        );
+      }
+      found.add(entry.name);
+    }
+    final missing = expectedSizes.keys.toSet().difference(found);
+    if (missing.isNotEmpty) {
+      throw FormatException(
+        '完整备份缺少参考图原文件：${missing.first}',
+      );
+    }
+  }
+
   Future<Map<String, File>> _validatedReferencedAssets({
     required AppBackupData backup,
     required Directory syncRoot,
@@ -226,35 +346,34 @@ class FullBackupBundleService {
     final result = <String, File>{};
     final missing = <String>[];
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
-        final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
-          throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
-          );
-        }
-
-        final file = File(_joinRelative(syncRoot.path, relativePath));
-        if (!await file.exists()) {
-          missing.add(image.fileName);
-          continue;
-        }
-
-        final actualSize = await file.length();
-        if (actualSize != image.sizeBytes) {
-          throw StateError(
-            '参考图“${image.fileName}”文件大小与记录不一致，'
-            '请等待设备同步稳定后再导出。',
-          );
-        }
-
-        final previous = result[relativePath];
-        if (previous != null && previous.path != file.path) {
-          throw FormatException('参考图路径重复：$relativePath');
-        }
-        result[relativePath] = file;
+    for (final referenced in _referencedImages(backup)) {
+      final image = referenced.image;
+      final relativePath = image.relativePath;
+      if (!_isReferenceAssetPath(relativePath)) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图路径：$relativePath',
+        );
       }
+
+      final file = File(_joinRelative(syncRoot.path, relativePath));
+      if (!await file.exists()) {
+        missing.add(image.fileName);
+        continue;
+      }
+
+      final actualSize = await file.length();
+      if (actualSize != image.sizeBytes) {
+        throw StateError(
+          '参考图“${image.fileName}”文件大小与记录不一致，'
+          '请等待设备同步稳定后再导出。',
+        );
+      }
+
+      final previous = result[relativePath];
+      if (previous != null && previous.path != file.path) {
+        throw FormatException('参考图路径重复：$relativePath');
+      }
+      result[relativePath] = file;
     }
 
     if (missing.isNotEmpty) {
@@ -275,29 +394,46 @@ class FullBackupBundleService {
   }) async {
     final paths = <String>{};
 
+    for (final referenced in _referencedImages(backup)) {
+      final image = referenced.image;
+      final relativePath = image.relativePath;
+      if (!_isReferenceAssetPath(relativePath)) {
+        throw FormatException(
+          '${referenced.owner}包含无效参考图路径：$relativePath',
+        );
+      }
+      if (!paths.add(relativePath)) {
+        continue;
+      }
+
+      final file = File(_joinRelative(extractedRoot.path, relativePath));
+      if (!await file.exists()) {
+        throw FormatException(
+          '完整备份缺少参考图原文件：${image.fileName}',
+        );
+      }
+      if (await file.length() != image.sizeBytes) {
+        throw FormatException(
+          '完整备份中的参考图文件损坏：${image.fileName}',
+        );
+      }
+    }
+  }
+
+  // Both order and finished-product reference images live in the same
+  // asset directory. All owners must participate in export and import
+  // validation or a seemingly successful "full" backup can lose art.
+  Iterable<({String owner, OrderReferenceImage image})> _referencedImages(
+    AppBackupData backup,
+  ) sync* {
     for (final order in backup.orders) {
       for (final image in order.referenceImages) {
-        final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
-          throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
-          );
-        }
-        if (!paths.add(relativePath)) {
-          continue;
-        }
-
-        final file = File(_joinRelative(extractedRoot.path, relativePath));
-        if (!await file.exists()) {
-          throw FormatException(
-            '完整备份缺少参考图原文件：${image.fileName}',
-          );
-        }
-        if (await file.length() != image.sizeBytes) {
-          throw FormatException(
-            '完整备份中的参考图文件损坏：${image.fileName}',
-          );
-        }
+        yield (owner: '排单“${order.title}”', image: image);
+      }
+    }
+    for (final product in backup.products) {
+      for (final image in product.referenceImages) {
+        yield (owner: '成品“${product.title}”', image: image);
       }
     }
   }

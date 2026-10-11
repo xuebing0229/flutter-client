@@ -101,21 +101,56 @@ class LicenseIssuerApi {
   }
 
   Future<List<IssuedLicenseRecord>> listLicenses(String token) async {
-    final json = await _request(
-      'GET',
-      '/v1/licenses?limit=500',
-      token: token,
-    );
-    final raw = json['licenses'];
-    if (raw is! List) {
-      throw const IssuerApiException(
-        '服务器返回的发码记录格式无效。',
-        code: 'invalid_response',
-      );
-    }
-    return <IssuedLicenseRecord>[
-      for (final item in raw) _licenseFrom(item),
-    ];
+    final records = <IssuedLicenseRecord>[];
+    final seen = <String>{};
+    int? beforeId;
+    do {
+      final path = beforeId == null
+          ? '/v1/licenses?limit=500'
+          : '/v1/licenses?limit=500&beforeId=$beforeId';
+      final json = await _request('GET', path, token: token);
+      final raw = json['licenses'];
+      if (raw is! List) {
+        throw const IssuerApiException(
+          '服务器返回的发码记录格式无效。',
+          code: 'invalid_response',
+        );
+      }
+      for (final item in raw) {
+        final record = _licenseFrom(item);
+        if (!seen.add(record.serial)) {
+          throw const IssuerApiException(
+            '发码历史出现重复编号，已停止刷新以保护本地完整记录。',
+            code: 'invalid_response',
+          );
+        }
+        records.add(record);
+      }
+
+      final next = json['nextBeforeId'];
+      if (!json.containsKey('nextBeforeId') && raw.length == 500) {
+        // Old servers return only the last 500 records without any paging
+        // metadata. Treat that as an incomplete refresh, not an empty tail:
+        // LicenseIssuerStore preserves its previous cache on this failure.
+        throw const IssuerApiException(
+          '激活服务器尚未支持完整历史分页，无法安全刷新超过 500 条的记录。请先升级服务器。',
+          code: 'server_upgrade_required',
+        );
+      }
+      if (next == null) break; // Compatible with short legacy responses.
+      if (next is! int ||
+          next <= 0 ||
+          (beforeId != null && next >= beforeId) ||
+          raw.isEmpty ||
+          int.tryParse(records.last.serial) != next) {
+        throw const IssuerApiException(
+          '发码历史分页游标异常，已停止刷新以保护本地完整记录。',
+          code: 'invalid_response',
+        );
+      }
+      beforeId = next;
+    } while (true);
+    return records;
   }
 
   Future<ReservedLicenseIdentity> reserve({
@@ -328,6 +363,13 @@ class LicenseIssuerApi {
       }
 
       final response = await request.close().timeout(const Duration(seconds: 12));
+      if (response.statusCode == 429) {
+        throw const IssuerApiException(
+          '操作过于频繁，请稍后重试。',
+          code: 'rate_limited',
+          statusCode: 429,
+        );
+      }
       final responseBody = await utf8.decoder.bind(response).join();
       Map<String, dynamic> json = <String, dynamic>{};
       if (responseBody.isNotEmpty) {
