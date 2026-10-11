@@ -1322,6 +1322,29 @@ class SyncCoordinator extends ChangeNotifier {
         final record = entry.value;
         if (record.conflicts.isNotEmpty) continue;
 
+        final hasFullOperations =
+            record.operations.values.any((operation) => !operation.compacted);
+        final hasOnlyCompactedOperations =
+            record.operations.isNotEmpty && !hasFullOperations;
+
+        // A compacted marker proves that every active device acknowledged the
+        // full operation in the previous GC phase. Each device may therefore
+        // remove its own orphaned image immediately when it sees that marker,
+        // before a different peer strips the final cleanup metadata.
+        if (hasOnlyCompactedOperations) {
+          final orphanedImages = syncGcOrphanReferenceImages(
+            record: record,
+            protectedPaths: protectedReferencePaths,
+          );
+          if (orphanedImages.isNotEmpty) {
+            await _referenceImageStore.deleteImages(
+              accountId: accountId,
+              images: orphanedImages,
+              requestScan: false,
+            );
+          }
+        }
+
         final key = _gcAckStore.recordKey(record);
         final signature = await _gcAckStore.signature(record);
         final seenByAll = activeDeviceIds.every(
@@ -1329,44 +1352,10 @@ class SyncCoordinator extends ChangeNotifier {
         );
         if (!seenByAll) continue;
 
-        if (record.isDeleted) {
-          final orphanedImages = syncGcOrphanReferenceImages(
-            record: record,
-            protectedPaths: protectedReferencePaths,
-          );
-          if (orphanedImages.isNotEmpty) {
-            await _referenceImageStore.deleteImages(
-              accountId: accountId,
-              images: orphanedImages,
-              requestScan: false,
-            );
-          }
-
-          await _recordStore.deleteRecord(
-            accountId: accountId,
-            kind: kind,
-            recordId: record.id,
-          );
-          records.remove(record.id);
-          changed = true;
-          continue;
-        }
-
-        final hasFullOperations =
-            record.operations.values.any((operation) => !operation.compacted);
         if (hasFullOperations) {
-          final orphanedImages = syncGcOrphanReferenceImages(
-            record: record,
-            protectedPaths: protectedReferencePaths,
-          );
-          if (orphanedImages.isNotEmpty) {
-            await _referenceImageStore.deleteImages(
-              accountId: accountId,
-              images: orphanedImages,
-              requestScan: false,
-            );
-          }
-
+          // First phase: fold live operations, or mark a deletion as globally
+          // acknowledged. Reference-image metadata deliberately survives in
+          // the compacted marker for per-device physical cleanup.
           final compacted = _mergeEngine.compactAcknowledgedOperations(
             record,
             deviceId: deviceId,
@@ -1379,9 +1368,23 @@ class SyncCoordinator extends ChangeNotifier {
           continue;
         }
 
+        if (record.isDeleted) {
+          // Second phase for deletions: every device has acknowledged the
+          // compacted tombstone, and each had an opportunity to remove local
+          // image files from the preserved metadata.
+          await _recordStore.deleteRecord(
+            accountId: accountId,
+            kind: kind,
+            recordId: record.id,
+          );
+          records.remove(record.id);
+          changed = true;
+          continue;
+        }
+
         if (record.operations.isNotEmpty) {
-          // Second phase: every device has now acknowledged the folded record,
-          // so the tiny operation markers themselves can disappear too.
+          // Second phase for live records: every device has acknowledged the
+          // folded state, so the tiny operation markers can disappear.
           final stripped = record.copyWith(
             operations: const <String, SyncOperation>{},
           );
