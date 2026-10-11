@@ -110,10 +110,23 @@ class FullBackupBundleService {
   Future<ImportedBackupBundle?> pickAndReadBackup() async {
     final picked = await _fileBridge.pickBackupFile();
     if (picked == null) return null;
-    return readBackupFile(
-      File(picked.path),
-      displayName: picked.name,
-    );
+
+    final source = File(picked.path);
+    try {
+      return await readBackupFile(
+        source,
+        displayName: picked.name,
+      );
+    } finally {
+      if (picked.temporary) {
+        try {
+          if (await source.exists()) await source.delete();
+        } catch (_) {
+          // Android picker copies live in app cache and can be reclaimed by the
+          // OS if a provider/file handle briefly prevents immediate cleanup.
+        }
+      }
+    }
   }
 
   Future<ImportedBackupBundle> readBackupFile(
