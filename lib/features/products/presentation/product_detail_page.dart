@@ -456,8 +456,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           removeCount -= 1;
         }
       }
-      reconciledSoldCount =
-          (currentForSave.soldCount + delta).clamp(0, 0x7fffffff);
+      reconciledSoldCount = (currentForSave.soldCount + delta)
+          .clamp(0, 0x7fffffff)
+          .toInt();
       if (reconciledSoldCount < saleRecords.length) {
         reconciledSoldCount = saleRecords.length;
       }
