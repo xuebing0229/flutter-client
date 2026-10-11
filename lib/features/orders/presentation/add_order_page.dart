@@ -156,6 +156,17 @@ class _AddOrderPageState extends State<AddOrderPage> {
       return;
     }
 
+    final price = double.tryParse(_priceController.text.trim()) ?? 0;
+    if (!price.isFinite || price < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final preset = widget.nodePresetStore.byId(_presetId).snapshot();
     final currentNodeId = preset.nodes.any((node) => node.id == _currentNodeId)
         ? _currentNodeId
@@ -170,7 +181,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
       nodePresetId: _presetId,
       nodePresetSnapshot: preset,
       currentNodeId: currentNodeId,
-      price: double.tryParse(_priceController.text.trim()) ?? 0,
+      price: price,
       feeEnabled: _feeEnabled,
       huajiaLoveLevel: _huajiaLoveLevel,
       onlinePercent: _onlinePercent,
