@@ -147,6 +147,7 @@ class FullBackupBundleService {
       archive = ZipDecoder().decodeStream(input);
 
       var hasManifest = false;
+      final assetEntryPaths = <String>{};
       for (final entry in archive) {
         if (entry.isSymbolicLink) {
           throw const FormatException('备份中包含不允许的符号链接。');
@@ -167,6 +168,9 @@ class FullBackupBundleService {
           }
           if (!_isReferenceAssetPath(name)) {
             throw FormatException('备份中包含未知文件：$name');
+          }
+          if (!assetEntryPaths.add(name)) {
+            throw FormatException('备份中存在重复的参考图文件：$name');
           }
         } else if (name != 'assets' &&
             name != 'assets/' &&
@@ -192,6 +196,7 @@ class FullBackupBundleService {
       await _validateExtractedAssets(
         backup: backup,
         extractedRoot: temporary,
+        archivedAssetPaths: assetEntryPaths,
       );
 
       await input.close();
@@ -283,6 +288,7 @@ class FullBackupBundleService {
   Future<void> _validateExtractedAssets({
     required AppBackupData backup,
     required Directory extractedRoot,
+    required Set<String> archivedAssetPaths,
   }) async {
     final paths = <String>{};
 
@@ -318,6 +324,15 @@ class FullBackupBundleService {
     }
     for (final product in backup.products) {
       await collect(owner: '成品', images: product.referenceImages);
+    }
+
+    final extraPaths = archivedAssetPaths.difference(paths);
+    if (extraPaths.isNotEmpty) {
+      final preview = (extraPaths.toList()..sort()).take(3).join('、');
+      throw FormatException(
+        '完整备份包含未被数据清单引用的参考图文件：$preview'
+        '${extraPaths.length > 3 ? ' 等 ${extraPaths.length} 个' : ''}',
+      );
     }
   }
 
