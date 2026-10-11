@@ -1,6 +1,7 @@
 import 'package:flutter_app/features/orders/data/node_presets.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
 import 'package:flutter_app/features/orders/state/order_store.dart';
+import 'package:flutter_app/features/shared/presentation/adjustment_widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -11,6 +12,40 @@ void main() {
     expect(CommissionPlatform.linjie.defaultAdjustmentFeeEnabled, isFalse);
     expect(CommissionPlatform.offline.defaultAdjustmentFeeEnabled, isFalse);
     expect(CommissionPlatform.archivedOffline.defaultAdjustmentFeeEnabled, isFalse);
+  });
+
+  test('adjustment edit applies the user delta on top of a remote amount', () {
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: 10,
+      baselineFeeEnabled: false,
+      draft: const AdjustmentDialogResult(
+        amount: 0,
+        feeEnabled: false,
+      ),
+      currentAmount: 15,
+      currentFeeEnabled: true,
+    );
+
+    expect(merged.amount, 5);
+    // The checkbox was untouched locally, so the remote fee switch survives.
+    expect(merged.feeEnabled, isTrue);
+  });
+
+  test('adjustment edit clamps only the final merged amount at zero', () {
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: 10,
+      baselineFeeEnabled: true,
+      draft: const AdjustmentDialogResult(
+        amount: 0,
+        feeEnabled: false,
+      ),
+      currentAmount: 4,
+      currentFeeEnabled: true,
+    );
+
+    expect(merged.amount, 0);
+    // This checkbox was explicitly changed by the local dialog.
+    expect(merged.feeEnabled, isFalse);
   });
 
   test('invalid custom refunds cannot archive or poison settled income', () {
