@@ -259,12 +259,14 @@ class SyncRecordStore {
           }
           // Reference-image binaries share this Syncthing root but are
           // intentionally kept outside JSON sync history.
-          final previousAssets = Directory('${previous.path}/assets');
-          if (await previousAssets.exists()) {
-            await _copyDirectory(
-              previousAssets,
-              Directory('${staging.path}/assets'),
-            );
+          if (assetSourceDirectory == null) {
+            final previousAssets = Directory('${previous.path}/assets');
+            if (await previousAssets.exists()) {
+              await _copyDirectory(
+                previousAssets,
+                Directory('${staging.path}/assets'),
+              );
+            }
           }
         }
 
