@@ -98,7 +98,7 @@ void main() {
         accountId: 'account',
         orderId: 'order-1',
       ),
-      throwsFormatException,
+      throwsA(isA<FormatException>()),
     );
     expect(await source.exists(), isFalse);
   });
