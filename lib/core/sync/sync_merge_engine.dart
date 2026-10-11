@@ -346,6 +346,84 @@ class SyncMergeEngine {
     );
   }
 
+  SyncRecord restoreSnapshot({
+    required SyncEntityKind kind,
+    required String id,
+    required String accountId,
+    required Map<String, dynamic>? values,
+    required String deviceId,
+    Iterable<SyncRecord> histories = const <SyncRecord>[],
+  }) {
+    var mergedClock = SyncClock.empty();
+    final operations = <String, SyncOperation>{};
+
+    for (final record in histories) {
+      if (record.kind != kind || record.id != id) {
+        throw const FormatException('恢复历史与目标对象不一致。');
+      }
+      if (record.accountId != null && record.accountId != accountId) {
+        throw const FormatException('恢复历史属于另一个账号。');
+      }
+      for (final field in record.fields.values) {
+        mergedClock = mergedClock.merge(field.clock);
+      }
+      for (final conflict in record.conflicts.values) {
+        mergedClock = mergedClock.merge(conflict.mergedClock);
+      }
+      for (final operation in record.operations.values) {
+        operations[operation.id] = SyncOperation(
+          id: operation.id,
+          field: operation.field,
+          kind: operation.kind,
+          deviceId: operation.deviceId,
+          occurredAt: operation.occurredAt,
+          compacted: true,
+        );
+      }
+    }
+
+    final restoreClock = mergedClock.tick(deviceId);
+    final fields = <String, SyncFieldValue>{};
+
+    if (values != null) {
+      final embeddedId = values['id'];
+      if (embeddedId != null && embeddedId != id) {
+        throw const FormatException('恢复快照 ID 与目标对象不一致。');
+      }
+      for (final entry in values.entries) {
+        if (entry.key == SyncRecord.deletedField) continue;
+        fields[entry.key] = SyncFieldValue(
+          value: entry.value,
+          clock: restoreClock,
+          updatedBy: deviceId,
+        );
+      }
+    }
+
+    fields['id'] = SyncFieldValue(
+      value: id,
+      clock: restoreClock,
+      updatedBy: deviceId,
+    );
+    fields[SyncRecord.deletedField] = SyncFieldValue(
+      value: values == null,
+      clock: restoreClock,
+      updatedBy: deviceId,
+    );
+
+    // A deliberate full-backup restore is a new user decision. Every known
+    // operation is already represented by the chosen snapshot, so retain only
+    // compact markers to stop stale peers from applying those deltas again.
+    return SyncRecord(
+      accountId: accountId,
+      kind: kind,
+      id: id,
+      fields: Map<String, SyncFieldValue>.unmodifiable(fields),
+      operations: Map<String, SyncOperation>.unmodifiable(operations),
+      conflicts: const <String, SyncConflict>{},
+    );
+  }
+
   SyncRecord compactAcknowledgedOperations(
     SyncRecord record, {
     required String deviceId,
