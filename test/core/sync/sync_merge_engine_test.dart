@@ -216,6 +216,81 @@ void main() {
     expect(merged.conflicts, isEmpty);
   });
 
+  test('restored snapshot overrides known newer fields and operations', () {
+    final engine = SyncMergeEngine();
+    const oldValues = <String, dynamic>{
+      'id': 'order-restore',
+      'title': '旧备份标题',
+      'supplementAmount': 0.0,
+    };
+    final oldRecord = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-restore',
+      values: oldValues,
+      deviceId: 'phone',
+    ).copyWith(accountId: 'account-1');
+
+    final newer = engine.applyLocalSnapshot(
+      record: oldRecord,
+      previousValues: oldValues,
+      nextValues: const <String, dynamic>{
+        'id': 'order-restore',
+        'title': '后来修改的标题',
+        'supplementAmount': 80.0,
+      },
+      deviceId: 'desktop',
+    );
+
+    final restored = engine.restoreSnapshot(
+      kind: SyncEntityKind.order,
+      id: 'order-restore',
+      accountId: 'account-1',
+      values: oldValues,
+      deviceId: 'phone',
+      histories: <SyncRecord>[oldRecord, newer],
+    );
+
+    final mergedWithStalePeer = engine.merge(restored, newer);
+    final materialized = engine.materialize(mergedWithStalePeer)!;
+    expect(materialized['title'], '旧备份标题');
+    expect(materialized['supplementAmount'], 0.0);
+    expect(mergedWithStalePeer.conflicts, isEmpty);
+    expect(
+      mergedWithStalePeer.operations.values.every((item) => item.compacted),
+      isTrue,
+    );
+  });
+
+  test('restored snapshot tombstones entities absent from the backup', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'product-after-backup',
+      'saleType': 'multiple',
+      'soldCount': 0,
+      'saleRecords': <String>[],
+    };
+    final current = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'product-after-backup',
+      values: values,
+      deviceId: 'desktop',
+    ).copyWith(accountId: 'account-1');
+
+    final restoredDeletion = engine.restoreSnapshot(
+      kind: SyncEntityKind.product,
+      id: 'product-after-backup',
+      accountId: 'account-1',
+      values: null,
+      deviceId: 'phone',
+      histories: <SyncRecord>[current],
+    );
+
+    final mergedWithStalePeer = engine.merge(restoredDeletion, current);
+    expect(mergedWithStalePeer.isDeleted, isTrue);
+    expect(engine.materialize(mergedWithStalePeer), isNull);
+    expect(mergedWithStalePeer.conflicts, isEmpty);
+  });
+
   test('independent feature settings merge without a conflict', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
