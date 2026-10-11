@@ -284,9 +284,29 @@ class _ProductPageState extends State<ProductPage> {
 
     if (confirmed != true || !mounted) return;
 
+    if (!widget.store.contains(product.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('这个成品已经不存在，未记录售出。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final current = widget.store.byId(product.id);
+    if (current.isArchived || current.saleType != product.saleType) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('成品状态已在另一处更新，请按当前状态重新确认售出。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     widget.store.markSold(product.id);
 
-    if (!mounted) return;
+    if (!mounted || !widget.store.contains(product.id)) return;
     final updated = widget.store.byId(product.id);
     final message = updated.saleType == ProductSaleType.multiple
         ? '已记录第 ${updated.soldCount} 次售出'
