@@ -58,6 +58,52 @@ void main() {
     );
   });
 
+  test('legacy multi-sale count survives sync without sale timestamps', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'legacy-product',
+      'saleType': 'multiple',
+      'soldCount': 3,
+      'saleRecords': <String>[],
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'legacy-product',
+      values: values,
+      deviceId: 'phone',
+    );
+
+    expect(engine.materialize(baseline)!['soldCount'], 3);
+    expect(engine.materialize(baseline)!['saleRecords'], isEmpty);
+
+    final changed = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'soldCount': 4,
+        'saleRecords': <String>['2026-10-11T12:00:00.000Z'],
+      },
+      deviceId: 'desktop',
+    );
+    final materialized = engine.materialize(changed)!;
+    expect(materialized['soldCount'], 4);
+    expect(
+      materialized['saleRecords'],
+      <String>['2026-10-11T12:00:00.000Z'],
+    );
+
+    final compacted = engine.compactAcknowledgedOperations(
+      changed,
+      deviceId: 'phone',
+    );
+    expect(engine.materialize(compacted)!['soldCount'], 4);
+    expect(
+      engine.materialize(compacted)!['saleRecords'],
+      <String>['2026-10-11T12:00:00.000Z'],
+    );
+  });
+
   test('concurrent single-sale marks converge without sale-record conflict', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
