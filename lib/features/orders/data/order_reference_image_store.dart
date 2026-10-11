@@ -157,8 +157,8 @@ class OrderReferenceImageStore {
   /// finished product. An offline bound device can still reference that asset
   /// and Syncthing would propagate the deletion before the reference merge.
   /// Committed images are unlinked in metadata and retained until the
-  /// separate SyncAssetGcStore verifies a 30-day grace period, unanimous
-  /// recent new-protocol device acknowledgements, and no live references.
+  /// separate SyncAssetGcStore requires unanimous current-protocol device
+  /// acknowledgements, matching sync history, and no live references.
   /// After storing the corresponding order/product, these assets become
   /// durable shared data. Discarding them from this store is then forbidden.
   void markCommitted(Iterable<OrderReferenceImage> images) {
