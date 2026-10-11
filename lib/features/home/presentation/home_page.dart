@@ -194,7 +194,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           final foregroundExit = await _persistence.loadFocusForegroundExit(
             accountId: widget.accountId,
           );
-          _focusRecoveryCutoff = foregroundExit ?? backup.exportedAt;
+          // A previous foreground-exit marker can be older than this active
+          // session if the app later resumed and was killed without another
+          // lifecycle callback. The persisted workspace heartbeat is then the
+          // newer safe cutoff; never offer an "end at exit" time older than
+          // the active session itself.
+          var recoveryCutoff = backup.exportedAt;
+          if (foregroundExit != null &&
+              foregroundExit.isAfter(recoveryCutoff)) {
+            recoveryCutoff = foregroundExit;
+          }
+          if (recoveryCutoff.isBefore(restoredActiveFocus.startedAt)) {
+            recoveryCutoff = restoredActiveFocus.startedAt;
+          }
+          _focusRecoveryCutoff = recoveryCutoff;
         }
 
         // A bootstrap-only package deliberately contains account identity but no
@@ -932,6 +945,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_ready || !_localDataHealthy) return;
     if (state == AppLifecycleState.resumed) {
+      unawaited(
+        _persistence.clearFocusForegroundExit(
+          accountId: widget.accountId,
+        ),
+      );
       unawaited(_syncCoordinator.activateTransport());
       return;
     }
