@@ -1284,6 +1284,33 @@ class SyncCoordinator extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  Future<bool> _deleteUnreferencedRecordReferenceImages(
+    SyncEntityKind kind,
+    SyncRecord record,
+  ) async {
+    if (kind != SyncEntityKind.order && kind != SyncEntityKind.product) {
+      return false;
+    }
+
+    final fields = <String, dynamic>{
+      for (final entry in record.fields.entries) entry.key: entry.value.value,
+    };
+    try {
+      final images = kind == SyncEntityKind.order
+          ? SyncEntityCodec.orderFromFields(fields).referenceImages
+          : SyncEntityCodec.productFromFields(fields).referenceImages;
+      return await _referenceImageStore.deleteUnreferencedImages(
+        accountId: accountId,
+        ownerId: record.id,
+        referencedImages: images,
+        requestScan: false,
+      );
+    } catch (_) {
+      // Invalid legacy metadata must not make sync reconciliation fail.
+      return false;
+    }
+  }
+
   Future<void> _deleteRecordReferenceImages(
     SyncEntityKind kind,
     SyncRecord record,
@@ -1348,6 +1375,13 @@ class SyncCoordinator extends ChangeNotifier {
           (id) => acknowledgements[id]?[key] == signature,
         );
         if (!seenByAll) continue;
+
+        // Existing reference-image files are shared independently from the
+        // JSON record. Only reclaim files that disappeared from metadata after
+        // every active device has acknowledged this exact conflict-free state.
+        if (await _deleteUnreferencedRecordReferenceImages(kind, record)) {
+          changed = true;
+        }
 
         if (record.isDeleted) {
           // Once every currently active device has acknowledged this exact
