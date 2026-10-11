@@ -48,9 +48,16 @@ List<OrderReferenceImage> syncGcHistoricalReferenceImages(SyncRecord record) {
   for (final operation in record.operations.values) {
     if (operation.kind != 'reference-image-delta') continue;
     final added = operation.metadata['added'];
-    if (added is! List) continue;
-    for (final item in added) {
-      collect(item);
+    if (added is List) {
+      for (final item in added) {
+        collect(item);
+      }
+    }
+    final removedImages = operation.metadata['removedImages'];
+    if (removedImages is List) {
+      for (final item in removedImages) {
+        collect(item);
+      }
     }
   }
 
