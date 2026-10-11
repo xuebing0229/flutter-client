@@ -32,12 +32,14 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: SchedulePage(
-          accountId: 'test-account',
-          store: orders,
-          productStore: products,
-          nodePresetStore: presets,
-          featureStore: features,
+        home: Scaffold(
+          body: SchedulePage(
+            accountId: 'test-account',
+            store: orders,
+            productStore: products,
+            nodePresetStore: presets,
+            featureStore: features,
+          ),
         ),
       ),
     );
