@@ -280,19 +280,55 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         !_sameReferenceImages(_referenceImages, _draftBaseline.referenceImages);
 
     final saleRecords = [...current.saleRecords];
+    var reconciledSoldCount = current.soldCount;
 
-    if (soldCountChanged && soldCount > current.soldCount) {
-      final added = soldCount - current.soldCount;
-      final now = DateTime.now();
-      for (var index = 0; index < added; index++) {
-        saleRecords.add(now.add(Duration(microseconds: index)));
+    if (soldCountChanged &&
+        _draftBaseline.saleType == ProductSaleType.multiple &&
+        _saleType == ProductSaleType.multiple &&
+        current.saleType == ProductSaleType.multiple) {
+      // The editor may stay open while another device adds a sale. Apply the
+      // user's count change as a delta from the draft baseline instead of
+      // forcing the stale absolute count onto the newer current product.
+      final delta = soldCount - _draftBaseline.soldCount;
+      if (delta > 0) {
+        final now = DateTime.now();
+        for (var index = 0; index < delta; index++) {
+          saleRecords.add(now.add(Duration(microseconds: index)));
+        }
+      } else if (delta < 0) {
+        var removeCount = -delta;
+        // Remove records that existed in the draft the user actually edited.
+        // Concurrently added records must survive the local rollback.
+        for (var index = _draftBaseline.saleRecords.length - 1;
+            index >= 0 && removeCount > 0;
+            index--) {
+          final baselineRecord = _draftBaseline.saleRecords[index];
+          final currentIndex = saleRecords.lastIndexWhere(
+            (item) => item.isAtSameMomentAs(baselineRecord),
+          );
+          if (currentIndex == -1) continue;
+          saleRecords.removeAt(currentIndex);
+          removeCount -= 1;
+        }
       }
-    } else if (soldCountChanged && soldCount < current.soldCount) {
-      var removeCount = current.soldCount - soldCount;
-      while (removeCount > 0 && saleRecords.isNotEmpty) {
-        saleRecords.removeLast();
-        removeCount -= 1;
+      reconciledSoldCount = saleRecords.length;
+    } else if (soldCountChanged) {
+      // Sale-type changes and single-sale toggles are explicit state changes,
+      // so preserve the existing absolute behavior for those cases.
+      if (soldCount > current.soldCount) {
+        final added = soldCount - current.soldCount;
+        final now = DateTime.now();
+        for (var index = 0; index < added; index++) {
+          saleRecords.add(now.add(Duration(microseconds: index)));
+        }
+      } else if (soldCount < current.soldCount) {
+        var removeCount = current.soldCount - soldCount;
+        while (removeCount > 0 && saleRecords.isNotEmpty) {
+          saleRecords.removeLast();
+          removeCount -= 1;
+        }
       }
+      reconciledSoldCount = soldCount;
     }
 
     widget.store.updateProduct(
@@ -318,7 +354,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 current: current.referenceImages,
               )
             : current.referenceImages,
-        soldCount: soldCountChanged ? soldCount : current.soldCount,
+        soldCount: soldCountChanged
+            ? reconciledSoldCount
+            : current.soldCount,
         saleRecords: soldCountChanged ? saleRecords : current.saleRecords,
       ),
     );
