@@ -6,6 +6,7 @@ import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/adjustment_widgets.dart';
+import '../../shared/presentation/concurrent_edit_dialog.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
 import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
@@ -257,7 +258,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
     FocusManager.instance.primaryFocus?.unfocus();
     final title = _titleController.text.trim();
     if (title.isEmpty) {
@@ -304,13 +305,132 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final referenceImagesChanged = widget.featureStore.referenceImages &&
         !_sameReferenceImages(_referenceImages, _draftBaseline.referenceImages);
 
-    final saleRecords = [...current.saleRecords];
-    var reconciledSoldCount = current.soldCount;
+    bool sameSaleRecords(List<DateTime> left, List<DateTime> right) {
+      if (left.length != right.length) return false;
+      for (var index = 0; index < left.length; index++) {
+        if (!left[index].isAtSameMomentAs(right[index])) return false;
+      }
+      return true;
+    }
+
+    List<String> concurrentFields(FinishedProduct latest) {
+      final fields = <String>[];
+      if (titleChanged &&
+          latest.title != _draftBaseline.title &&
+          title != latest.title) {
+        fields.add('图名');
+      }
+      if (priceChanged &&
+          latest.price != _draftBaseline.price &&
+          price != latest.price) {
+        fields.add('价格');
+      }
+      if (descriptionChanged &&
+          latest.description != _draftBaseline.description &&
+          _descriptionController.text.trim() != latest.description) {
+        fields.add('描述');
+      }
+
+      final localCommissionChanged =
+          platformChanged ||
+          feeChanged ||
+          loveLevelChanged ||
+          onlinePercentChanged;
+      final remoteCommissionChanged =
+          latest.platform != _draftBaseline.platform ||
+          latest.feeEnabled != _draftBaseline.feeEnabled ||
+          latest.huajiaLoveLevel != _draftBaseline.huajiaLoveLevel ||
+          latest.normalizedOnlinePercent !=
+              _draftBaseline.normalizedOnlinePercent;
+      final localCommissionMatchesCurrent =
+          _platform == latest.platform &&
+          _feeEnabled == latest.feeEnabled &&
+          _huajiaLoveLevel == latest.huajiaLoveLevel &&
+          _onlinePercent == latest.normalizedOnlinePercent;
+      if (localCommissionChanged &&
+          remoteCommissionChanged &&
+          !localCommissionMatchesCurrent) {
+        fields.add('平台与手续费设置');
+      }
+
+      final remoteSaleChanged =
+          latest.saleType != _draftBaseline.saleType ||
+          latest.soldCount != _draftBaseline.soldCount ||
+          !sameSaleRecords(latest.saleRecords, _draftBaseline.saleRecords);
+      final safeMultipleDelta =
+          soldCountChanged &&
+          !saleTypeChanged &&
+          _draftBaseline.saleType == ProductSaleType.multiple &&
+          _saleType == ProductSaleType.multiple &&
+          latest.saleType == ProductSaleType.multiple;
+      if (saleTypeChanged && remoteSaleChanged) {
+        final sameTypeWithoutRemoteCountChange =
+            _saleType == latest.saleType &&
+            latest.soldCount == _draftBaseline.soldCount &&
+            sameSaleRecords(
+              latest.saleRecords,
+              _draftBaseline.saleRecords,
+            );
+        if (!sameTypeWithoutRemoteCountChange) {
+          fields.add('售卖方式或售出记录');
+        }
+      } else if (soldCountChanged &&
+          remoteSaleChanged &&
+          !safeMultipleDelta &&
+          soldCount != latest.soldCount) {
+        fields.add('售出数量');
+      }
+
+      final anyLocalChanged =
+          titleChanged ||
+          platformChanged ||
+          saleTypeChanged ||
+          priceChanged ||
+          feeChanged ||
+          loveLevelChanged ||
+          onlinePercentChanged ||
+          descriptionChanged ||
+          soldCountChanged ||
+          referenceImagesChanged;
+      if (anyLocalChanged &&
+          latest.isArchived != _draftBaseline.isArchived) {
+        fields.add('归档状态');
+      }
+      return fields;
+    }
+
+    var latest = current;
+    final acceptedConflictFields = <String>{};
+    while (true) {
+      if (!widget.store.contains(widget.productId)) return;
+      latest = _product;
+      final unresolved = concurrentFields(latest)
+          .where((field) => !acceptedConflictFields.contains(field))
+          .toList(growable: false);
+      if (unresolved.isEmpty) break;
+
+      final choice = await showConcurrentEditDialog(
+        context: context,
+        subject: '这个成品',
+        fields: unresolved,
+      );
+      if (!mounted) return;
+      if (choice == ConcurrentEditChoice.useSynced) {
+        await _cancelEditing();
+        return;
+      }
+      if (choice != ConcurrentEditChoice.keepLocal) return;
+      acceptedConflictFields.addAll(unresolved);
+    }
+
+    final currentForSave = latest;
+    final saleRecords = [...currentForSave.saleRecords];
+    var reconciledSoldCount = currentForSave.soldCount;
 
     if (soldCountChanged &&
         _draftBaseline.saleType == ProductSaleType.multiple &&
         _saleType == ProductSaleType.multiple &&
-        current.saleType == ProductSaleType.multiple) {
+        currentForSave.saleType == ProductSaleType.multiple) {
       // The editor may stay open while another device adds a sale. Apply the
       // user's count change as a delta from the draft baseline instead of
       // forcing the stale absolute count onto the newer current product.
@@ -340,14 +460,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     } else if (soldCountChanged) {
       // Sale-type changes and single-sale toggles are explicit state changes,
       // so preserve the existing absolute behavior for those cases.
-      if (soldCount > current.soldCount) {
-        final added = soldCount - current.soldCount;
+      if (soldCount > currentForSave.soldCount) {
+        final added = soldCount - currentForSave.soldCount;
         final now = DateTime.now();
         for (var index = 0; index < added; index++) {
           saleRecords.add(now.add(Duration(microseconds: index)));
         }
-      } else if (soldCount < current.soldCount) {
-        var removeCount = current.soldCount - soldCount;
+      } else if (soldCount < currentForSave.soldCount) {
+        var removeCount = currentForSave.soldCount - soldCount;
         while (removeCount > 0 && saleRecords.isNotEmpty) {
           saleRecords.removeLast();
           removeCount -= 1;
@@ -357,32 +477,34 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     }
 
     widget.store.updateProduct(
-      current.copyWith(
-        title: titleChanged ? title : current.title,
-        platform: platformChanged ? _platform : current.platform,
-        saleType: saleTypeChanged ? _saleType : current.saleType,
-        price: priceChanged ? price : current.price,
-        feeEnabled: feeChanged ? _feeEnabled : current.feeEnabled,
+      currentForSave.copyWith(
+        title: titleChanged ? title : currentForSave.title,
+        platform: platformChanged ? _platform : currentForSave.platform,
+        saleType: saleTypeChanged ? _saleType : currentForSave.saleType,
+        price: priceChanged ? price : currentForSave.price,
+        feeEnabled: feeChanged ? _feeEnabled : currentForSave.feeEnabled,
         huajiaLoveLevel: loveLevelChanged
             ? _huajiaLoveLevel
-            : current.huajiaLoveLevel,
+            : currentForSave.huajiaLoveLevel,
         onlinePercent: onlinePercentChanged
             ? _onlinePercent
-            : current.onlinePercent,
+            : currentForSave.onlinePercent,
         description: descriptionChanged
             ? _descriptionController.text.trim()
-            : current.description,
+            : currentForSave.description,
         referenceImages: referenceImagesChanged
             ? mergeReferenceImageEdits(
                 baseline: _draftBaseline.referenceImages,
                 draft: _referenceImages,
-                current: current.referenceImages,
+                current: currentForSave.referenceImages,
               )
-            : current.referenceImages,
+            : currentForSave.referenceImages,
         soldCount: soldCountChanged
             ? reconciledSoldCount
-            : current.soldCount,
-        saleRecords: soldCountChanged ? saleRecords : current.saleRecords,
+            : currentForSave.soldCount,
+        saleRecords: soldCountChanged
+            ? saleRecords
+            : currentForSave.saleRecords,
       ),
     );
 
@@ -425,7 +547,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 ),
                 IconButton(
                   tooltip: '保存',
-                  onPressed: _pickingReferenceImages ? null : _save,
+                  onPressed: _pickingReferenceImages
+                      ? null
+                      : () => unawaited(_save()),
                   icon: const Icon(Icons.check_rounded),
                 ),
               ],
