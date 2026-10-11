@@ -11,6 +11,26 @@ class SyncMergeEngine {
     'soldCount',
   };
 
+  static const Set<String> _supportedOperationKinds = <String>{
+    'amount-delta',
+    'sale-delta',
+    'single-sale-state',
+    'progress-delta',
+    'node-transition',
+    'reference-image-delta',
+    'delete',
+    'conflict-resolution',
+  };
+
+  /// A newer app may introduce an operation this version cannot materialize.
+  /// Preserve such history verbatim instead of compacting or stripping it;
+  /// the newer peer can perform GC once every active device understands it.
+  bool hasUnsupportedOperations(SyncRecord record) {
+    return record.operations.values.any(
+      (operation) => !_supportedOperationKinds.contains(operation.kind),
+    );
+  }
+
   SyncRecord merge(SyncRecord left, SyncRecord right) {
     if (left.kind != right.kind || left.id != right.id) {
       throw const FormatException('不能合并不同对象的同步记录。');
@@ -397,6 +417,7 @@ class SyncMergeEngine {
     required String deviceId,
   }) {
     if (record.conflicts.isNotEmpty ||
+        hasUnsupportedOperations(record) ||
         !record.operations.values.any((operation) => !operation.compacted)) {
       return record;
     }
