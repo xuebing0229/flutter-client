@@ -20,8 +20,8 @@ class BetaUpdateCoordinator {
     if (manifest.channel != 'beta') {
       throw const FormatException('返回的更新信息不是 Beta 渠道。');
     }
-    if (manifest.downloadUri == null) {
-      throw const FormatException('最新测试版没有找到可下载的安装包。');
+    if (manifest.published && manifest.downloadUri == null) {
+      throw const FormatException('已发布的最新测试版没有找到可下载的安装包。');
     }
 
     return manifest;
