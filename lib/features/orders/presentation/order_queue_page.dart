@@ -325,6 +325,25 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     );
   }
 
+  bool _archiveSnapshotIsCurrent(QueueOrder snapshot) {
+    if (!widget.store.contains(snapshot.id)) return false;
+    final current = widget.store.byId(snapshot.id);
+    return !current.isArchived &&
+        current.isCompleted == snapshot.isCompleted &&
+        current.currentNodeId == snapshot.currentNodeId &&
+        current.nodePresetId == snapshot.nodePresetId &&
+        current.realIncome == snapshot.realIncome;
+  }
+
+  void _showStaleArchiveMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('排单已在另一处更新，请按当前状态重新归档。'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _showQuickActions(QueueOrder order) {
     return showCollectionQuickActions(
       context: context,
@@ -523,6 +542,13 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     }
 
     // All entries are configured. Only now mutate the actual order store.
+    // If sync changed any settlement-relevant field while the dialogs were
+    // open, keep the drafts and ask the user to review the new current state.
+    if (selectedOrders.any((order) => !_archiveSnapshotIsCurrent(order))) {
+      _showStaleArchiveMessage();
+      return;
+    }
+
     for (final order in selectedOrders) {
       final draft = _bulkTerminationDrafts[order.id];
       if (draft == null) return;
@@ -592,6 +618,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     if (!mounted || outcome == null) return;
 
     if (outcome == OrderArchiveOutcome.successful) {
+      if (!_archiveSnapshotIsCurrent(order)) {
+        _showStaleArchiveMessage();
+        return;
+      }
       widget.store.archiveAsSettled(order.id);
       return;
     }
@@ -602,12 +632,20 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     if (mode == _TerminationSettlementMode.node) {
       final settlementNodeId = await _pickTerminationNode(order);
       if (!mounted || settlementNodeId == null) return;
+      if (!_archiveSnapshotIsCurrent(order)) {
+        _showStaleArchiveMessage();
+        return;
+      }
       widget.store.archiveAsTerminated(order.id, settlementNodeId);
       return;
     }
 
     final refundAmount = await _pickCustomRefund(order);
     if (!mounted || refundAmount == null) return;
+    if (!_archiveSnapshotIsCurrent(order)) {
+      _showStaleArchiveMessage();
+      return;
+    }
     widget.store.archiveAsTerminatedWithCustomRefund(order.id, refundAmount);
   }
 
