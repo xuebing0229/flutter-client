@@ -488,7 +488,10 @@ class SyncMergeEngine {
           value += operation.delta!;
         }
       }
-      values[field] = value.toDouble();
+      final normalized = value.toDouble();
+      values[field] = normalized.isFinite && normalized >= 0
+          ? normalized
+          : 0.0;
     }
 
     final baseProgress = values['currentNodeProgress'];
