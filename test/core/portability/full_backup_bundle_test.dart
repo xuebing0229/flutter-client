@@ -5,6 +5,7 @@ import 'package:flutter_app/core/portability/data_portability_file_bridge.dart';
 import 'package:flutter_app/core/portability/full_backup_bundle_service.dart';
 import 'package:flutter_app/core/sync/sync_record_store.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
+import 'package:flutter_app/features/products/domain/finished_product.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _TemporaryRecordStore extends SyncRecordStore {
@@ -157,6 +158,67 @@ void main() {
     );
   });
 
+  test('full backup also contains finished-product reference images', () async {
+    final bytes = <int>[9, 8, 7, 6];
+    final image = OrderReferenceImage(
+      id: 'product-ref-1',
+      fileName: '成品参考.png',
+      relativePath:
+          'assets/order-reference-images/cHJvZHVjdC0x/product-ref-1.png',
+      addedAt: DateTime.utc(2026, 10, 6, 1),
+      sizeBytes: bytes.length,
+    );
+    final asset = File(
+      '${syncRoot.path}/assets/order-reference-images/'
+      'cHJvZHVjdC0x/product-ref-1.png',
+    );
+    await asset.parent.create(recursive: true);
+    await asset.writeAsBytes(bytes, flush: true);
+
+    final backup = AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 6, 2),
+      orders: const <QueueOrder>[],
+      products: <FinishedProduct>[
+        FinishedProduct(
+          id: 'product-1',
+          title: '测试成品',
+          platform: CommissionPlatform.huajia,
+          saleType: ProductSaleType.multiple,
+          referenceImages: <OrderReferenceImage>[image],
+        ),
+      ],
+      nodePresets: const <NodePreset>[preset],
+      syncRecords: const <Map<String, dynamic>>[],
+    );
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+
+    expect(
+      await service.exportFullBackup(
+        accountId: 'account',
+        backup: backup,
+        fileName: 'backup.zip',
+      ),
+      isTrue,
+    );
+
+    final imported = await service.readBackupFile(
+      exportedFile,
+      displayName: 'backup.zip',
+    );
+    try {
+      expect(imported.backup.products.single.title, '测试成品');
+      final restoredAsset = File(
+        '${imported.extractedDirectory!.path}/assets/order-reference-images/'
+        'cHJvZHVjdC0x/product-ref-1.png',
+      );
+      expect(await restoredAsset.readAsBytes(), bytes);
+    } finally {
+      await imported.dispose();
+    }
+  });
   test('legacy json backup remains importable but is marked without assets', () async {
     final jsonFile = File('${temporary.path}/legacy.json');
     final backup = AppBackupData(
