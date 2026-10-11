@@ -830,6 +830,35 @@ class SyncCoordinator extends ChangeNotifier {
     });
   }
 
+  bool isTransportBoundToActiveDevice(String transportId) {
+    final normalized = transportId.trim();
+    if (normalized.isEmpty) return false;
+    final state = accountStore.syncSnapshot;
+    if (state == null || state.accountId != accountId) return false;
+    return state.activeDevices.any(
+      (device) => device.syncTransportId?.trim() == normalized,
+    );
+  }
+
+  Future<void> releaseTransportIfUnbound(String transportId) {
+    final normalized = transportId.trim();
+    if (normalized.isEmpty) return Future<void>.value();
+
+    return _enqueue(() async {
+      if (isTransportBoundToActiveDevice(normalized)) return;
+      if (!_transportPrepared) {
+        await _prepareTransport(force: true);
+      }
+      if (!_transportPrepared) return;
+
+      await _bridge.unshareDevice(
+        accountId: accountId,
+        deviceId: normalized,
+      );
+      await _refreshTransportStatus();
+    }, showBusy: false);
+  }
+
   Future<void> bootstrapPeerTransport({
     required String deviceId,
     required String name,
