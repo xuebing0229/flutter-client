@@ -657,7 +657,14 @@ class SyncMergeEngine {
             return byTime != 0 ? byTime : a.id.compareTo(b.id);
           });
 
+        num soldCount = values['soldCount'] is num
+            ? values['soldCount'] as num
+            : records.length;
         for (final operation in saleOperations) {
+          if (operation.delta != null) {
+            soldCount += operation.delta!;
+          }
+
           final added = operation.metadata['added'];
           if (added is List) {
             for (final item in added) {
@@ -675,7 +682,12 @@ class SyncMergeEngine {
           }
         }
 
-        values['soldCount'] = records.length;
+        // Older versions tracked only the count and had no per-sale
+        // timestamps. Keep that unattributed historical count instead of
+        // silently replacing it with saleRecords.length during first sync.
+        final normalizedCount = soldCount.round().clamp(0, 0x7fffffff);
+        values['soldCount'] =
+            normalizedCount < records.length ? records.length : normalizedCount;
         values['saleRecords'] = records;
       }
     }
