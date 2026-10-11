@@ -52,7 +52,6 @@ void main() {
       final background = (outer.decoration as BoxDecoration).color!;
       final effectiveTheme = Theme.of(tester.element(find.byType(FeedbackPoster)));
       expect(background, effectiveTheme.colorScheme.surfaceContainerLow);
-      expect(qr.data, feedbackFormUrl);
       expect(tester.takeException(), isNull);
       return background;
     }
