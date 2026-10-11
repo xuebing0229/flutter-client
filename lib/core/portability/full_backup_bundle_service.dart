@@ -5,6 +5,7 @@ import 'package:archive/archive_io.dart';
 import '../sync/sync_record_store.dart';
 import 'app_backup_data.dart';
 import 'data_portability_file_bridge.dart';
+import '../../features/orders/domain/queue_order.dart';
 
 class ImportedBackupBundle {
   ImportedBackupBundle({
@@ -226,18 +227,21 @@ class FullBackupBundleService {
     final result = <String, File>{};
     final missing = <String>[];
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
+    Future<void> collect({
+      required String owner,
+      required Iterable<OrderReferenceImage> images,
+    }) async {
+      for (final image in images) {
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
+            '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
         }
 
         final file = File(_joinRelative(syncRoot.path, relativePath));
         if (!await file.exists()) {
-          missing.add(image.fileName);
+          missing.add('$owner：${image.fileName}');
           continue;
         }
 
@@ -255,6 +259,13 @@ class FullBackupBundleService {
         }
         result[relativePath] = file;
       }
+    }
+
+    for (final order in backup.orders) {
+      await collect(owner: '排单', images: order.referenceImages);
+    }
+    for (final product in backup.products) {
+      await collect(owner: '成品', images: product.referenceImages);
     }
 
     if (missing.isNotEmpty) {
@@ -275,17 +286,18 @@ class FullBackupBundleService {
   }) async {
     final paths = <String>{};
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
+    Future<void> collect({
+      required String owner,
+      required Iterable<OrderReferenceImage> images,
+    }) async {
+      for (final image in images) {
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
+            '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
         }
-        if (!paths.add(relativePath)) {
-          continue;
-        }
+        if (!paths.add(relativePath)) continue;
 
         final file = File(_joinRelative(extractedRoot.path, relativePath));
         if (!await file.exists()) {
@@ -299,6 +311,13 @@ class FullBackupBundleService {
           );
         }
       }
+    }
+
+    for (final order in backup.orders) {
+      await collect(owner: '排单', images: order.referenceImages);
+    }
+    for (final product in backup.products) {
+      await collect(owner: '成品', images: product.referenceImages);
     }
   }
 
