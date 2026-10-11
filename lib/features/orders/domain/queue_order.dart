@@ -29,7 +29,8 @@ enum CommissionPlatform {
       this == CommissionPlatform.archivedOffline;
 
   bool get defaultAdjustmentFeeEnabled {
-    return this == CommissionPlatform.mihuashi;
+    return this == CommissionPlatform.mihuashi ||
+        this == CommissionPlatform.huajia;
   }
 }
 
