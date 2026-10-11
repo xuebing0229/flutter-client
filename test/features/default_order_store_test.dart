@@ -71,6 +71,24 @@ void main() {
     );
   });
 
+  test('stale archive actions cannot rewrite an existing settlement', () {
+    final store = OrderStore();
+    addTearDown(store.dispose);
+
+    store.addOrder(order('settled-order', 100).copyWith(price: 100));
+    store.archiveAsSettled('settled-order');
+    final settled = store.byId('settled-order');
+
+    store.archiveAsTerminated('settled-order', 'draft');
+    store.archiveAsTerminatedWithCustomRefund('settled-order', 25);
+
+    final after = store.byId('settled-order');
+    expect(after.archiveOutcome, OrderArchiveOutcome.successful);
+    expect(after.settledAt, settled.settledAt);
+    expect(after.settledIncome, settled.settledIncome);
+    expect(after.customRefundAmount, isNull);
+  });
+
   test('legacy timestamp ids give the same order on every device', () {
     final store = OrderStore();
     addTearDown(store.dispose);
