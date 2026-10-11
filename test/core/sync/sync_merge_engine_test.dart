@@ -58,6 +58,58 @@ void main() {
     );
   });
 
+  test('concurrent single-sale marks converge without sale-record conflict', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'product-single',
+      'saleType': 'single',
+      'soldCount': 0,
+      'saleRecords': <String>[],
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'product-single',
+      values: values,
+      deviceId: 'seed',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'soldCount': 1,
+        'saleRecords': <String>['2026-10-11T10:00:00.000Z'],
+      },
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'soldCount': 1,
+        'saleRecords': <String>['2026-10-11T10:00:02.000Z'],
+      },
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    final materialized = engine.materialize(merged)!;
+
+    expect(materialized['soldCount'], 1);
+    expect(
+      materialized['saleRecords'],
+      <String>['2026-10-11T10:00:00.000Z'],
+    );
+    expect(
+      merged.conflicts.values.where(
+        (conflict) => conflict.field == 'saleRecords',
+      ),
+      isEmpty,
+    );
+  });
+
   test('operation metadata survives transport decoding', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
