@@ -672,7 +672,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   onPressed: () {
                     final raw = controller.text.trim();
                     final parsed = double.tryParse(raw);
-                    if (parsed == null || parsed < 0) {
+                    if (parsed == null || !parsed.isFinite || parsed < 0) {
                       setDialogState(() {
                         errorText = '请输入有效的退款金额';
                       });
