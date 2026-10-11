@@ -217,10 +217,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     if (!mounted || result == null) return;
 
     final current = widget.store.byId(widget.productId);
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: product.supplementAmount,
+      baselineFeeEnabled: product.supplementFeeEnabled,
+      draft: result,
+      currentAmount: current.supplementAmount,
+      currentFeeEnabled: current.supplementFeeEnabled,
+    );
     widget.store.updateProduct(
       current.copyWith(
-        supplementAmount: result.amount,
-        supplementFeeEnabled: result.feeEnabled,
+        supplementAmount: merged.amount,
+        supplementFeeEnabled: merged.feeEnabled,
       ),
     );
   }
@@ -235,10 +242,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     if (!mounted || result == null) return;
 
     final current = widget.store.byId(widget.productId);
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: product.deductionAmount,
+      baselineFeeEnabled: product.deductionFeeEnabled,
+      draft: result,
+      currentAmount: current.deductionAmount,
+      currentFeeEnabled: current.deductionFeeEnabled,
+    );
     widget.store.updateProduct(
       current.copyWith(
-        deductionAmount: result.amount,
-        deductionFeeEnabled: result.feeEnabled,
+        deductionAmount: merged.amount,
+        deductionFeeEnabled: merged.feeEnabled,
       ),
     );
   }
