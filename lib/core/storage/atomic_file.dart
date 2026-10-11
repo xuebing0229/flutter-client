@@ -1,13 +1,40 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
+final Map<String, Future<void>> _atomicWriteTails = <String, Future<void>>{};
+
 /// Writes a file without exposing a delete-before-replace window.
 ///
-/// POSIX rename replaces the destination atomically. Windows needs the native
-/// replace flag because Dart's File.rename cannot replace an existing file.
-Future<void> atomicWriteString(File file, String content) async {
+/// Writes to the same target are serialized in call order. This keeps two
+/// callers from deleting or renaming the same `.tmp` file concurrently.
+/// Different target files can still be written in parallel.
+Future<void> atomicWriteString(File file, String content) {
+  final key = file.absolute.path;
+  final previous = _atomicWriteTails[key] ?? Future<void>.value();
+  final operation = previous.then<void>(
+    (_) => _atomicWriteStringUnlocked(file, content),
+    onError: (Object _, StackTrace __) =>
+        _atomicWriteStringUnlocked(file, content),
+  );
+  final tail = operation.then<void>(
+    (_) {},
+    onError: (Object _, StackTrace __) {},
+  );
+  _atomicWriteTails[key] = tail;
+  unawaited(
+    tail.whenComplete(() {
+      if (identical(_atomicWriteTails[key], tail)) {
+        _atomicWriteTails.remove(key);
+      }
+    }),
+  );
+  return operation;
+}
+
+Future<void> _atomicWriteStringUnlocked(File file, String content) async {
   await file.parent.create(recursive: true);
   final temp = File('${file.path}.tmp');
 
