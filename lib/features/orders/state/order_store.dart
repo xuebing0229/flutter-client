@@ -222,20 +222,20 @@ class OrderStore extends ChangeNotifier {
     String id,
     double refundAmount,
   ) {
+    if (!refundAmount.isFinite || refundAmount < 0) return;
     final index = _orders.indexWhere((order) => order.id == id);
     if (index == -1) return;
 
     final order = _orders[index];
-    final normalizedRefund = refundAmount < 0 ? 0.0 : refundAmount;
 
     _orders[index] = order.copyWith(
       currentNodeProgress: 0,
       completedAt: DateTime.now(),
       settledAt: DateTime.now(),
-      settledIncome: order.realIncome - normalizedRefund,
+      settledIncome: order.realIncome - refundAmount,
       archiveOutcome: OrderArchiveOutcome.terminated,
       clearSettlementNodeId: true,
-      customRefundAmount: normalizedRefund,
+      customRefundAmount: refundAmount,
       isArchived: true,
       isPinned: false,
     );
