@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:flutter_app/core/portability/app_backup_data.dart';
 import 'package:flutter_app/core/portability/data_portability_file_bridge.dart';
 import 'package:flutter_app/core/portability/full_backup_bundle_service.dart';
@@ -219,6 +220,104 @@ void main() {
       await imported.dispose();
     }
   });
+  test('full backup rejects an unreferenced bundled asset', () async {
+    final backup = AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 6, 2),
+      orders: const <QueueOrder>[],
+      products: const <FinishedProduct>[],
+      nodePresets: const <NodePreset>[preset],
+      syncRecords: const <Map<String, dynamic>>[],
+    );
+    final buildRoot = await Directory.systemTemp.createTemp(
+      'guild-extra-backup-',
+    );
+    addTearDown(() async {
+      if (await buildRoot.exists()) {
+        await buildRoot.delete(recursive: true);
+      }
+    });
+    final manifest = File('${buildRoot.path}/backup.json');
+    await manifest.writeAsString(backup.encode(), flush: true);
+    final orphan = File('${buildRoot.path}/orphan.png');
+    await orphan.writeAsBytes(<int>[1, 2, 3], flush: true);
+    final crafted = File('${buildRoot.path}/crafted.zip');
+
+    final encoder = ZipFileEncoder();
+    encoder.create(crafted.path);
+    try {
+      await encoder.addFile(manifest, 'backup.json');
+      await encoder.addFile(
+        orphan,
+        'assets/order-reference-images/orphan/orphan.png',
+        ZipFileEncoder.store,
+      );
+    } finally {
+      await encoder.close();
+    }
+
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+    expect(
+      () => service.readBackupFile(crafted, displayName: 'crafted.zip'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('未被数据清单引用'),
+        ),
+      ),
+    );
+  });
+
+  test('full backup rejects duplicate bundled asset paths', () async {
+    final bytes = <int>[1, 2, 3];
+    final backup = backupWithImage(sizeBytes: bytes.length);
+    final buildRoot = await Directory.systemTemp.createTemp(
+      'guild-duplicate-backup-',
+    );
+    addTearDown(() async {
+      if (await buildRoot.exists()) {
+        await buildRoot.delete(recursive: true);
+      }
+    });
+    final manifest = File('${buildRoot.path}/backup.json');
+    await manifest.writeAsString(backup.encode(), flush: true);
+    final first = File('${buildRoot.path}/first.png');
+    final second = File('${buildRoot.path}/second.png');
+    await first.writeAsBytes(bytes, flush: true);
+    await second.writeAsBytes(bytes, flush: true);
+    final crafted = File('${buildRoot.path}/duplicate.zip');
+    const assetPath =
+        'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
+
+    final encoder = ZipFileEncoder();
+    encoder.create(crafted.path);
+    try {
+      await encoder.addFile(manifest, 'backup.json');
+      await encoder.addFile(first, assetPath, ZipFileEncoder.store);
+      await encoder.addFile(second, assetPath, ZipFileEncoder.store);
+    } finally {
+      await encoder.close();
+    }
+
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+    expect(
+      () => service.readBackupFile(crafted, displayName: 'duplicate.zip'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('重复的参考图文件'),
+        ),
+      ),
+    );
+  });
+
   test('legacy json backup remains importable but is marked without assets', () async {
     final jsonFile = File('${temporary.path}/legacy.json');
     final backup = AppBackupData(
