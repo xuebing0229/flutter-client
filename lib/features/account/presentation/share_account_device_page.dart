@@ -369,7 +369,11 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      _receiverConfirmed
+                      _transferred
+                          ? '这台新设备已经完成账号绑定。'
+                          : _payloadTransferred
+                          ? '账号信息已传送完成，正在等待新设备确认加入并登录。'
+                          : _receiverConfirmed
                           ? '已收到并确认这台新设备的回应。现在只需等待账号信息传输完成。'
                           : '新设备扫完上面的二维码后，会生成回应二维码/回应码。请在这里扫回来或粘贴回来。',
                       style: TextStyle(color: colors.onSurfaceVariant),
