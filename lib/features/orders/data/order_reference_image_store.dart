@@ -175,6 +175,56 @@ class OrderReferenceImageStore {
     }
   }
 
+  Future<bool> deleteUnreferencedImages({
+    required String accountId,
+    required String ownerId,
+    required Iterable<OrderReferenceImage> referencedImages,
+    bool requestScan = true,
+  }) async {
+    final root = await _syncRecordStore.rootDirectory(accountId);
+    final ownerKey = base64Url
+        .encode(utf8.encode(ownerId))
+        .replaceAll('=', '');
+    final directory = Directory(
+      '${root.path}${Platform.pathSeparator}assets'
+      '${Platform.pathSeparator}order-reference-images'
+      '${Platform.pathSeparator}$ownerKey',
+    );
+    if (!await directory.exists()) return false;
+
+    final referencedPaths = <String>{
+      for (final image in referencedImages) image.relativePath,
+    };
+    var changed = false;
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments
+          .where((segment) => segment.isNotEmpty)
+          .last;
+      final relativePath =
+          'assets/order-reference-images/$ownerKey/$name';
+      if (referencedPaths.contains(relativePath)) continue;
+      try {
+        await entity.delete();
+        changed = true;
+      } catch (_) {
+        // A peer or antivirus can briefly retain the file. Retry later.
+      }
+    }
+
+    if (await directory.exists()) {
+      try {
+        final empty = await directory.list(followLinks: false).isEmpty;
+        if (empty) await directory.delete();
+      } catch (_) {}
+    }
+
+    if (changed && requestScan) {
+      await _requestScan(accountId);
+    }
+    return changed;
+  }
+
   Future<bool> exportImage({
     required String accountId,
     required OrderReferenceImage image,
