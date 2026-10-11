@@ -482,17 +482,22 @@ class DesktopPetSettings extends ChangeNotifier {
     final index = _presets.indexWhere((preset) => preset.id == id);
     if (index < 0) return;
 
-    final root = await _rootDirectory();
-    final folder = Directory('${root.path}/presets/$id');
-    try {
-      if (await folder.exists()) await folder.delete(recursive: true);
-    } catch (_) {}
-
+    final folder = await _presetDirectory(id);
     _presets.removeAt(index);
     if (_selectedPresetId == id) {
       _selectedPresetId = _presets.isEmpty ? null : _presets.first.id;
     }
+
+    // Commit metadata first. If persistence fails, the old on-disk config and
+    // its asset folder remain a consistent pair instead of pointing at files
+    // that were already deleted.
     await _persist();
+    try {
+      if (await folder.exists()) await folder.delete(recursive: true);
+    } catch (_) {
+      // A locked file can leave harmless orphan bytes; no live preset refers
+      // to this folder anymore, and a later explicit cleanup can remove it.
+    }
     notifyListeners();
   }
 
