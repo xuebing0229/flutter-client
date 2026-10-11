@@ -13,6 +13,7 @@ import '../../../core/update/update_manifest.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/portability/full_backup_bundle_service.dart';
+import '../../focus/presentation/focus_recovery_dialog.dart';
 import '../../focus/state/focus_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/node_presets.dart';
@@ -526,6 +527,28 @@ class _SettingsPageState extends State<SettingsPage>
 
       if (backup.accountSyncState != null) {
         await widget.accountStore.mergeSyncedState(backup.accountSyncState!);
+      }
+
+      final focusStore =
+          widget.focusStore ?? widget.syncCoordinator.focusStore;
+      final importedActive = focusStore.activeSession;
+      if (importedActive != null && mounted) {
+        final cutoff = backup.exportedAt.isBefore(importedActive.startedAt)
+            ? importedActive.startedAt
+            : backup.exportedAt;
+        final action = await showFocusRecoveryDialog(
+          context: context,
+          cutoff: cutoff,
+          fromBackup: true,
+        );
+        final current = focusStore.activeSession;
+        if (current != null && current.id == importedActive.id) {
+          if (action == 'end') {
+            focusStore.stopActiveAt(cutoff);
+          } else if (action == 'discard') {
+            focusStore.discardActive();
+          }
+        }
       }
 
       _showMessage(
