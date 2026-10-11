@@ -8,6 +8,7 @@ import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../data/node_presets.dart';
+import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
 import '../state/order_store.dart';
 import 'order_detail_page.dart';
@@ -59,6 +60,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   String _query = '';
   String _searchField = 'all';
   final Set<String> _selectedTags = <String>{};
+  final _referenceImageStore = OrderReferenceImageStore();
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -378,6 +380,15 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     );
 
     if (confirmed == true) {
+      final images = <OrderReferenceImage>[
+        for (final id in ids)
+          if (widget.store.contains(id))
+            ...widget.store.byId(id).referenceImages,
+      ];
+      await _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: images,
+      );
       widget.store.deleteOrders(ids);
     }
   }
@@ -779,6 +790,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       title: order.title,
     );
     if (confirmed) {
+      await _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: order.referenceImages,
+      );
       widget.store.deleteOrder(order.id);
     }
   }
