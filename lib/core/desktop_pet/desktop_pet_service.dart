@@ -297,6 +297,36 @@ class DesktopPetSettings extends ChangeNotifier {
     return File('${root.path}/config.json');
   }
 
+  Future<void> _prunePresetSlotFiles(
+    String presetId,
+    String baseName, {
+    String? keepPath,
+  }) async {
+    final root = await _rootDirectory();
+    final folder = Directory('${root.path}/presets/$presetId');
+    if (!await folder.exists()) return;
+
+    final keepAbsolute = keepPath == null ? null : File(keepPath).absolute.path;
+    try {
+      await for (final entity in folder.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = entity.path.split(Platform.pathSeparator).last;
+        if (name != baseName && !name.startsWith('$baseName.')) continue;
+        if (keepAbsolute != null && entity.absolute.path == keepAbsolute) {
+          continue;
+        }
+        try {
+          await entity.delete();
+        } catch (_) {
+          // The config no longer references this file. A locked stale asset
+          // can be retried by a later import/clear without breaking the preset.
+        }
+      }
+    } catch (_) {
+      // Asset cleanup is best-effort after the new config is safely persisted.
+    }
+  }
+
   Future<void> load() async {
     if (_loaded) return;
     final existing = _loadInFlight;
@@ -514,6 +544,11 @@ class DesktopPetSettings extends ChangeNotifier {
         ),
     };
     await _persist();
+    await _prunePresetSlotFiles(
+      presetId,
+      baseName,
+      keepPath: destination.path,
+    );
     notifyListeners();
     return destination.path;
   }
@@ -532,6 +567,10 @@ class DesktopPetSettings extends ChangeNotifier {
         _presets[index].copyWith(clearImageB: true),
     };
     await _persist();
+    await _prunePresetSlotFiles(
+      presetId,
+      slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB',
+    );
     notifyListeners();
   }
 
@@ -606,6 +645,11 @@ class DesktopPetSettings extends ChangeNotifier {
       bubbleImage: destination.path,
     );
     await _persist();
+    await _prunePresetSlotFiles(
+      presetId,
+      'bubble-image',
+      keepPath: destination.path,
+    );
     notifyListeners();
   }
 
@@ -615,6 +659,7 @@ class DesktopPetSettings extends ChangeNotifier {
     if (index < 0 || _presets[index].bubbleImage == null) return;
     _presets[index] = _presets[index].copyWith(clearBubbleImage: true);
     await _persist();
+    await _prunePresetSlotFiles(presetId, 'bubble-image');
     notifyListeners();
   }
 
