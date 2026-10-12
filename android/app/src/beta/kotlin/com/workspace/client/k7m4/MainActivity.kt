@@ -28,9 +28,15 @@ class MainActivity : FlutterActivity() {
     private lateinit var orderReminderBridge: OrderReminderBridge
     private lateinit var syncthingBridge: SyncthingBridge
     private lateinit var screenshotOcrBridge: ScreenshotOcrBridge
+    private lateinit var licenseDirectHttpsBridge: LicenseDirectHttpsBridge
+    private var pendingInstallApk: File? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        licenseDirectHttpsBridge = LicenseDirectHttpsBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
 
         backupFileBridge = BackupFileBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
@@ -272,6 +278,7 @@ class MainActivity : FlutterActivity() {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
         ) {
+            pendingInstallApk = apk
             val intent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:$packageName"),
@@ -284,6 +291,7 @@ class MainActivity : FlutterActivity() {
         }
 
         try {
+            pendingInstallApk = null
             openInstaller(apk)
             result.success("installing")
         } catch (error: Exception) {
@@ -307,6 +315,31 @@ class MainActivity : FlutterActivity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        val apk = pendingInstallApk ?: return
+        if (!apk.isFile) {
+            pendingInstallApk = null
+            return
+        }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            return
+        }
+
+        pendingInstallApk = null
+        runCatching {
+            openInstaller(apk)
+        }.onFailure {
+            // Keep the verified package so the user can retry installation
+            // without downloading the full APK again.
+            pendingInstallApk = apk
+        }
     }
 
     override fun onRequestPermissionsResult(

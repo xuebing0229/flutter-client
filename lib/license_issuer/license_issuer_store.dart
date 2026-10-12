@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../core/storage/atomic_file.dart';
 import 'license_issuer_api.dart';
@@ -20,6 +21,7 @@ class LicenseIssuerStore extends ChangeNotifier {
 
   final LicenseIssuerEngine _engine;
   final LicenseIssuerApi _api;
+  final Lock _serverLock = Lock();
   Future<void> _saveTail = Future<void>.value();
 
   final List<IssuedLicenseRecord> _records = <IssuedLicenseRecord>[];
@@ -36,6 +38,13 @@ class LicenseIssuerStore extends ChangeNotifier {
   bool get hasAdminName => _adminName.isNotEmpty;
   List<IssuedLicenseRecord> get records =>
       List<IssuedLicenseRecord>.unmodifiable(_records);
+
+  IssuedLicenseRecord? recordByAccountId(String accountId) {
+    for (final record in _records) {
+      if (record.accountId == accountId) return record;
+    }
+    return null;
+  }
 
   Future<File> _file() async {
     final dir = await getApplicationSupportDirectory();
@@ -111,36 +120,38 @@ class LicenseIssuerStore extends ChangeNotifier {
     return _api.registerAdmin(setupKey: setupKey, name: trimmed);
   }
 
-  Future<void> connectAdmin(String token) async {
-    final normalized = token.trim();
-    if (normalized.isEmpty) {
-      throw const FormatException('管理员凭据为空。');
-    }
-
-    final session = await _api.me(normalized);
-    _adminToken = normalized;
-    _adminName = session.name;
-
-    try {
-      if (!_serverBackedCache && _records.isNotEmpty) {
-        await _migrateLegacyRecords(normalized);
+  Future<void> connectAdmin(String token) {
+    return _serverLock.synchronized(() async {
+      final normalized = token.trim();
+      if (normalized.isEmpty) {
+        throw const FormatException('管理员凭据为空。');
       }
-      await _refreshWithToken(normalized);
-      _serverBackedCache = true;
-      await _save();
 
-      // Do not expose a connected issuer while migration/refresh is still in
-      // flight. Otherwise the UI can start generating codes against a ledger
-      // that has not finished synchronizing yet.
-      _connected = true;
-      notifyListeners();
-    } catch (_) {
-      // Never allow generation against a ledger that failed to synchronize.
-      // Keep the token in secure storage so the user can simply reconnect.
-      _connected = false;
-      notifyListeners();
-      rethrow;
-    }
+      final session = await _api.me(normalized);
+      _adminToken = normalized;
+      _adminName = session.name;
+
+      try {
+        if (!_serverBackedCache && _records.isNotEmpty) {
+          await _migrateLegacyRecords(normalized);
+        }
+        await _refreshWithToken(normalized);
+        _serverBackedCache = true;
+        await _save();
+
+        // Do not expose a connected issuer while migration/refresh is still in
+        // flight. Otherwise the UI can start generating codes against a ledger
+        // that has not finished synchronizing yet.
+        _connected = true;
+        notifyListeners();
+      } catch (_) {
+        // Never allow generation against a ledger that failed to synchronize.
+        // Keep the token in secure storage so the user can simply reconnect.
+        _connected = false;
+        notifyListeners();
+        rethrow;
+      }
+    });
   }
 
   Future<void> disconnectAdmin() async {
@@ -149,26 +160,29 @@ class LicenseIssuerStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> renameAdmin(String name) async {
-    final token = _requireToken();
-    final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed.length > 24) {
-      throw const FormatException('管理昵称需要在 1–24 个字符之间。');
-    }
-    final session = await _api.renameAdmin(
-      token: token,
-      name: trimmed,
-    );
-    _adminName = session.name;
-    await _save();
-    notifyListeners();
+  Future<void> renameAdmin(String name) {
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+      final trimmed = name.trim();
+      if (trimmed.isEmpty || trimmed.length > 24) {
+        throw const FormatException('管理昵称需要在 1–24 个字符之间。');
+      }
+      final session = await _api.renameAdmin(
+        token: token,
+        name: trimmed,
+      );
+      _adminName = session.name;
+      await _refreshAfterMutation(token);
+    });
   }
 
-  Future<void> refresh() async {
-    final token = _requireToken();
-    await _refreshWithToken(token);
-    await _save();
-    notifyListeners();
+  Future<void> refresh() {
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+      await _refreshWithToken(token);
+      await _save();
+      notifyListeners();
+    });
   }
 
   Future<void> _refreshWithToken(String token) async {
@@ -194,90 +208,204 @@ class LicenseIssuerStore extends ChangeNotifier {
     _serverBackedCache = true;
   }
 
+  Future<void> _refreshAfterMutation(String token) async {
+    try {
+      await _refreshWithToken(token);
+    } catch (_) {
+      // The mutation itself already succeeded. Keep its returned state locally
+      // and let the next foreground/action refresh reconcile the whole ledger.
+    }
+    await _save();
+    notifyListeners();
+  }
+
+  Future<Never> _refreshAfterStale(
+    String token,
+    IssuerApiException error,
+  ) async {
+    try {
+      await _refreshWithToken(token);
+      await _save();
+      notifyListeners();
+    } catch (_) {
+      // Preserve the concurrency error; a later automatic refresh can retry.
+    }
+    throw error;
+  }
+
   Future<IssuedLicenseRecord> issueOne({
     required String privateKeySource,
     String note = '',
-  }) async {
-    final token = _requireToken();
-    final reserved = await _api.reserve(token: token, note: note);
-    final signed = await _engine.issue(
-      privateKeySource: privateKeySource,
-      serial: reserved.serial,
-      accountId: reserved.accountId,
-      note: note,
-    );
-    final record = await _api.commit(
-      token: token,
-      accountId: reserved.accountId,
-      activationCode: signed.activationCode,
-    );
-    _upsert(record);
-    await _save();
-    notifyListeners();
-    return record;
+  }) {
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+      final reserved = await _api.reserve(token: token, note: note);
+      final signed = await _engine.issue(
+        privateKeySource: privateKeySource,
+        serial: reserved.serial,
+        accountId: reserved.accountId,
+        note: note,
+      );
+      final record = await _api.commit(
+        token: token,
+        accountId: reserved.accountId,
+        activationCode: signed.activationCode,
+      );
+      _upsert(record);
+      await _refreshAfterMutation(token);
+      return record;
+    });
   }
 
   Future<List<IssuedLicenseRecord>> issueBatch({
     required String privateKeySource,
     required int count,
-  }) async {
+  }) {
     if (count < 1 || count > 100) {
       throw const FormatException('单次批量生成数量需要在 1–100 之间。');
     }
 
-    final created = <IssuedLicenseRecord>[];
-    for (var i = 0; i < count; i++) {
-      created.add(
-        await issueOne(
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+      final created = <IssuedLicenseRecord>[];
+      for (var i = 0; i < count; i++) {
+        final reserved = await _api.reserve(token: token);
+        final signed = await _engine.issue(
           privateKeySource: privateKeySource,
-        ),
-      );
-    }
-    return created;
+          serial: reserved.serial,
+          accountId: reserved.accountId,
+        );
+        final record = await _api.commit(
+          token: token,
+          accountId: reserved.accountId,
+          activationCode: signed.activationCode,
+        );
+        created.add(record);
+        _upsert(record);
+        // Persist each successful item so a later network interruption cannot
+        // make an already-issued code disappear from the local history.
+        await _save();
+      }
+      await _refreshAfterMutation(token);
+      return created;
+    });
   }
 
-  Future<void> updateNote(String accountId, String note) async {
-    final token = _requireToken();
-    final record = await _api.updateNote(
-      token: token,
-      accountId: accountId,
-      note: note,
-    );
-    _upsert(record);
-    await _save();
-    notifyListeners();
+  Future<void> updateNote(
+    String accountId,
+    String note, {
+    int? expectedRevision,
+  }) {
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+      try {
+        final record = await _api.updateNote(
+          token: token,
+          accountId: accountId,
+          note: note,
+          expectedRevision: expectedRevision,
+        );
+        _upsert(record);
+        await _refreshAfterMutation(token);
+      } on IssuerApiException catch (error) {
+        if (error.isStaleRecord) {
+          await _refreshAfterStale(token, error);
+        }
+        rethrow;
+      }
+    });
   }
 
-  Future<void> setSold(String accountId, bool sold) async {
-    final token = _requireToken();
-    final record = await _api.setSold(
-      token: token,
-      accountId: accountId,
-      sold: sold,
-    );
-    _upsert(record);
-    await _save();
-    notifyListeners();
+  Future<void> toggleSold(String accountId) {
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+
+      // A one-tap toggle should use the server's current state, not a stale
+      // screen snapshot. A revision precondition still catches the tiny race
+      // between this refresh and the write.
+      await _refreshWithToken(token);
+      final current = recordByAccountId(accountId);
+      if (current == null) {
+        await _save();
+        notifyListeners();
+        throw const IssuerApiException('这条发码记录已经不存在。');
+      }
+
+      try {
+        final record = await _api.setSold(
+          token: token,
+          accountId: accountId,
+          sold: !current.isSold,
+          expectedRevision: current.revision,
+        );
+        _upsert(record);
+        await _refreshAfterMutation(token);
+      } on IssuerApiException catch (error) {
+        if (error.isStaleRecord) {
+          await _refreshAfterStale(token, error);
+        }
+        rethrow;
+      }
+    });
   }
 
-  Future<void> delete(String accountId) async {
-    final token = _requireToken();
-    await _api.deleteLicense(token: token, accountId: accountId);
-    _records.removeWhere((item) => item.accountId == accountId);
-    await _save();
-    notifyListeners();
+  Future<void> delete(
+    String accountId, {
+    int? expectedRevision,
+  }) {
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+      try {
+        await _api.deleteLicense(
+          token: token,
+          accountId: accountId,
+          expectedRevision: expectedRevision,
+        );
+        _records.removeWhere((item) => item.accountId == accountId);
+        await _refreshAfterMutation(token);
+      } on IssuerApiException catch (error) {
+        if (error.isStaleRecord) {
+          await _refreshAfterStale(token, error);
+        }
+        rethrow;
+      }
+    });
   }
 
-  Future<int> deleteMany(Iterable<String> accountIds) async {
+  Future<int> deleteMany(
+    Iterable<String> accountIds, {
+    Map<String, int> expectedRevisions = const <String, int>{},
+  }) {
     final ids = accountIds.toSet();
-    if (ids.isEmpty) return 0;
+    if (ids.isEmpty) return Future<int>.value(0);
 
-    var deleted = 0;
-    for (final accountId in ids) {
-      await delete(accountId);
-      deleted += 1;
-    }
-    return deleted;
+    return _serverLock.synchronized(() async {
+      final token = _requireToken();
+
+      var deleted = 0;
+      try {
+        for (final accountId in ids) {
+          final current = recordByAccountId(accountId);
+          if (current == null) continue;
+          await _api.deleteLicense(
+            token: token,
+            accountId: accountId,
+            expectedRevision:
+                expectedRevisions[accountId] ?? current.revision,
+          );
+          _records.removeWhere((item) => item.accountId == accountId);
+          deleted += 1;
+        }
+        await _refreshAfterMutation(token);
+        return deleted;
+      } on IssuerApiException catch (error) {
+        if (error.isStaleRecord) {
+          await _refreshAfterStale(token, error);
+        }
+        await _refreshAfterMutation(token);
+        rethrow;
+      }
+    });
   }
 
   String exportCsv() {

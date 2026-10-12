@@ -8,6 +8,7 @@ import 'license_issuer_api.dart';
 import 'license_issuer_engine.dart';
 import 'license_issuer_models.dart';
 import 'license_issuer_store.dart';
+import 'issuer_update_service.dart';
 
 class LicenseIssuerApp extends StatefulWidget {
   const LicenseIssuerApp({super.key});
@@ -171,10 +172,18 @@ class _IssuerHomePage extends StatefulWidget {
   State<_IssuerHomePage> createState() => _IssuerHomePageState();
 }
 
-class _IssuerHomePageState extends State<_IssuerHomePage> {
+class _IssuerHomePageState extends State<_IssuerHomePage>
+    with WidgetsBindingObserver {
   final _noteController = TextEditingController();
+  final IssuerUpdateService _issuerUpdateService = const IssuerUpdateService();
   bool _busy = false;
   bool _adminBusy = true;
+  bool _silentRefreshInFlight = false;
+  bool _issuerUpdateBusy = false;
+  int _issuerUpdateReceived = 0;
+  int? _issuerUpdateTotal;
+  IssuerReleaseInfo? _issuerUpdateInfo;
+  String? _issuerUpdateStatus;
   String? _adminError;
   _IssuerFilter _filter = _IssuerFilter.all;
   bool _selectingForDelete = false;
@@ -183,7 +192,135 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_restoreAdminSession(promptIfMissing: true));
+    unawaited(_checkIssuerUpdate(silent: true));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_silentRefreshRecords());
+    }
+  }
+
+  Future<bool> _silentRefreshRecords() async {
+    if (_silentRefreshInFlight ||
+        _adminBusy ||
+        _busy ||
+        !widget.store.isConnected) {
+      return false;
+    }
+
+    _silentRefreshInFlight = true;
+    try {
+      await widget.store.refresh();
+      if (mounted && _adminError != null) {
+        setState(() => _adminError = null);
+      }
+      return true;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _adminError = error.toString());
+      }
+      return false;
+    } finally {
+      _silentRefreshInFlight = false;
+    }
+  }
+
+
+  Future<void> _checkIssuerUpdate({bool silent = false}) async {
+    if (_issuerUpdateBusy) return;
+    if (mounted) {
+      setState(() {
+        _issuerUpdateBusy = true;
+        if (!silent) _issuerUpdateStatus = '正在检查发码器更新…';
+      });
+    }
+
+    try {
+      final currentBuild = await _issuerUpdateService.currentBuild();
+      final latest = await _issuerUpdateService.fetchLatest();
+      final hasUpdate = latest != null && latest.build > currentBuild;
+
+      if (!mounted) return;
+      setState(() {
+        _issuerUpdateInfo = hasUpdate ? latest : null;
+        _issuerUpdateStatus = hasUpdate
+            ? '发现新版本 ${latest.version} (${latest.build})'
+            : null;
+      });
+
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              hasUpdate
+                  ? '发现发码器新版本 ${latest.version} (${latest.build})'
+                  : '发码器已经是最新版本',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (!silent) {
+        setState(() => _issuerUpdateStatus = '检查更新失败：$error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('检查发码器更新失败：$error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _issuerUpdateBusy = false);
+    }
+  }
+
+  Future<void> _installIssuerUpdate() async {
+    final release = _issuerUpdateInfo;
+    if (release == null || _issuerUpdateBusy) return;
+
+    setState(() {
+      _issuerUpdateBusy = true;
+      _issuerUpdateReceived = 0;
+      _issuerUpdateTotal = release.sizeBytes;
+      _issuerUpdateStatus = '正在下载发码器更新…';
+    });
+
+    var lastUiBytes = 0;
+    try {
+      final result = await _issuerUpdateService.downloadAndInstall(
+        release,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          final shouldUpdate =
+              received >= (total ?? 1) ||
+              received - lastUiBytes >= 512 * 1024;
+          if (!shouldUpdate) return;
+          lastUiBytes = received;
+          setState(() {
+            _issuerUpdateReceived = received;
+            _issuerUpdateTotal = total;
+            _issuerUpdateStatus = '正在下载发码器更新…';
+          });
+        },
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _issuerUpdateStatus = result == 'permission_required'
+            ? '请允许“安装未知应用”；返回后会自动继续安装'
+            : '更新包已下载，已打开系统安装页面';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _issuerUpdateStatus = '更新失败：$error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发码器更新失败：$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _issuerUpdateBusy = false);
+    }
   }
 
   Future<void> _restoreAdminSession({bool promptIfMissing = false}) async {
@@ -453,6 +590,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _noteController.dispose();
     super.dispose();
   }
@@ -529,6 +667,8 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   }
 
   Future<void> _exportCsv() async {
+    await _silentRefreshRecords();
+    if (!mounted) return;
     if (widget.store.records.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('还没有可导出的记录')),
@@ -555,11 +695,15 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   }
 
   Future<void> _editNote(IssuedLicenseRecord record) async {
-    final controller = TextEditingController(text: record.note);
+    await _silentRefreshRecords();
+    if (!mounted) return;
+    final current =
+        widget.store.recordByAccountId(record.accountId) ?? record;
+    final controller = TextEditingController(text: current.note);
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('备注 · 编号 ${_displaySerial(record.serial)}'),
+        title: Text('备注 · 编号 ${_displaySerial(current.serial)}'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -581,18 +725,40 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
       ),
     );
     controller.dispose();
-    if (result != null) {
-      await widget.store.updateNote(record.accountId, result);
+    if (result == null) return;
+
+    try {
+      await widget.store.updateNote(
+        current.accountId,
+        result,
+        expectedRevision: current.revision,
+      );
+    } on IssuerApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isStaleRecord
+                ? '这条记录刚刚在别处发生变化，已经自动刷新，请重新修改。'
+                : '保存备注失败：$error',
+          ),
+        ),
+      );
     }
   }
 
   Future<void> _deleteRecord(IssuedLicenseRecord record) async {
+    await _silentRefreshRecords();
+    if (!mounted) return;
+    final current =
+        widget.store.recordByAccountId(record.accountId) ?? record;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除这条记录？'),
         content: Text(
-          '编号 ${_displaySerial(record.serial)} 会从服务器账本中作废并隐藏。'
+          '编号 ${_displaySerial(current.serial)} 会从服务器账本中作废并隐藏。'
           '已核销的激活码不能直接删除。',
         ),
         actions: [
@@ -607,8 +773,24 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
         ],
       ),
     );
-    if (confirmed == true) {
-      await widget.store.delete(record.accountId);
+    if (confirmed != true) return;
+
+    try {
+      await widget.store.delete(
+        current.accountId,
+        expectedRevision: current.revision,
+      );
+    } on IssuerApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isStaleRecord
+                ? '这条记录刚刚在别处发生变化，已经自动刷新，请重新确认。'
+                : '删除失败：$error',
+          ),
+        ),
+      );
     }
   }
 
@@ -641,8 +823,17 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   }
 
   Future<void> _deleteSelectedRecords() async {
+    await _silentRefreshRecords();
+    if (!mounted) return;
     final count = _selectedForDelete.length;
     if (count == 0) return;
+    final expectedRevisions = <String, int>{};
+    for (final accountId in _selectedForDelete) {
+      final record = widget.store.recordByAccountId(accountId);
+      if (record != null) {
+        expectedRevisions[accountId] = record.revision;
+      }
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -665,15 +856,31 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
     );
     if (confirmed != true) return;
 
-    final deleted = await widget.store.deleteMany(_selectedForDelete);
-    if (!mounted) return;
-    setState(() {
-      _selectingForDelete = false;
-      _selectedForDelete.clear();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已删除 $deleted 条发码记录')),
-    );
+    try {
+      final deleted = await widget.store.deleteMany(
+        _selectedForDelete,
+        expectedRevisions: expectedRevisions,
+      );
+      if (!mounted) return;
+      setState(() {
+        _selectingForDelete = false;
+        _selectedForDelete.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已删除 $deleted 条发码记录')),
+      );
+    } on IssuerApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isStaleRecord
+                ? '有记录刚刚在别处发生变化，已经自动刷新，请重新选择。'
+                : '批量删除失败：$error',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _confirmClearPrivateKey() async {
@@ -769,6 +976,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
                         if (value == 'batch') _issueBatch();
                         if (value == 'admin') _editAdminName();
                         if (value == 'refresh') _refreshRecords();
+                        if (value == 'update') _checkIssuerUpdate();
                         if (value == 'delete_batch') _startBatchDelete();
                         if (value == 'export') _exportCsv();
                         if (value == 'key') widget.onImportPrivateKey();
@@ -789,6 +997,10 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
                             value: 'batch',
                             child: Text('批量生成'),
                           ),
+                        const PopupMenuItem(
+                          value: 'update',
+                          child: Text('检查发码器更新'),
+                        ),
                         if (all.isNotEmpty)
                           const PopupMenuItem(
                             value: 'delete_batch',
@@ -832,6 +1044,18 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
                     ? _refreshRecords
                     : _reconnectAdmin,
               ),
+              if (_issuerUpdateInfo != null ||
+                  (_issuerUpdateStatus != null && _issuerUpdateBusy)) ...[
+                const SizedBox(height: 10),
+                _IssuerUpdateCard(
+                  release: _issuerUpdateInfo,
+                  busy: _issuerUpdateBusy,
+                  status: _issuerUpdateStatus,
+                  receivedBytes: _issuerUpdateReceived,
+                  totalBytes: _issuerUpdateTotal,
+                  onInstall: _installIssuerUpdate,
+                ),
+              ],
               const SizedBox(height: 14),
               _GenerateCard(
                 enabled: hasKey && hasAdmin && !_busy,
@@ -875,6 +1099,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
                 selected: <_IssuerFilter>{_filter},
                 onSelectionChanged: (value) {
                   setState(() => _filter = value.first);
+                  unawaited(_silentRefreshRecords());
                 },
               ),
               const SizedBox(height: 10),
@@ -902,24 +1127,26 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
                   _HistoryCard(
                     record: record,
                     onCopy: () async {
+                      await _silentRefreshRecords();
+                      if (!context.mounted) return;
+                      final current =
+                          widget.store.recordByAccountId(record.accountId) ??
+                          record;
                       await Clipboard.setData(
-                        ClipboardData(text: record.activationCode),
+                        ClipboardData(text: current.activationCode),
                       );
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            '编号 ${_displaySerial(record.serial)} 的完整激活码已复制',
+                            '编号 ${_displaySerial(current.serial)} 的完整激活码已复制',
                           ),
                         ),
                       );
                     },
                     onToggleSold: () async {
                       try {
-                        await widget.store.setSold(
-                          record.accountId,
-                          !record.isSold,
-                        );
+                        await widget.store.toggleSold(record.accountId);
                       } catch (error) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1109,6 +1336,81 @@ class _AdminIdentityCard extends StatelessWidget {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _IssuerUpdateCard extends StatelessWidget {
+  const _IssuerUpdateCard({
+    required this.release,
+    required this.busy,
+    required this.status,
+    required this.receivedBytes,
+    required this.totalBytes,
+    required this.onInstall,
+  });
+
+  final IssuerReleaseInfo? release;
+  final bool busy;
+  final String? status;
+  final int receivedBytes;
+  final int? totalBytes;
+  final Future<void> Function() onInstall;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final total = totalBytes;
+    final progress =
+        total != null && total > 0 ? (receivedBytes / total).clamp(0.0, 1.0) : null;
+
+    return Material(
+      color: colors.secondaryContainer.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(22),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.system_update_alt_rounded),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    release == null
+                        ? '发码器更新'
+                        : '发现发码器更新 ${release!.version} (${release!.build})',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            if (status != null) ...[
+              const SizedBox(height: 8),
+              Text(status!),
+            ],
+            if (busy && receivedBytes > 0) ...[
+              const SizedBox(height: 10),
+              LinearProgressIndicator(value: progress),
+            ],
+            if (release != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: busy ? null : onInstall,
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_rounded),
+                label: Text(busy ? '正在处理…' : '下载并覆盖更新'),
+              ),
+            ],
           ],
         ),
       ),

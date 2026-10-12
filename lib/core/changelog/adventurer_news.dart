@@ -103,6 +103,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '内测前稳定性完善',
     description: '全面修复双端同步、完整备份恢复、截图批量导入、订单与成品并发操作、专注计时、Windows 桌宠和自动更新中的边界问题；同时关闭 Android 系统云备份，并加强激活与发码数据、安装包签名和更新文件完整性校验，减少异常中断、重复写入和跨设备状态互相覆盖。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 136,
+    title: '更新与激活管理完善',
+    description: '修复 Android 测试版 APK 下载到 100% 后安装动作丢失的问题；发码器新增拉取覆盖更新。激活与发码请求在 VPN 路由无法访问授权服务器时会仅针对授权域名尝试本地网络直连；发码器在打开、回到前台及服务端操作后自动刷新共享账本，并用记录版本冲突保护避免多管理员同时操作时静默覆盖。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
