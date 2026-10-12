@@ -53,6 +53,15 @@ internal static class Program
             {
                 ShutdownMode = ShutdownMode.OnMainWindowClose,
             };
+            app.DispatcherUnhandledException += (_, e) =>
+            {
+                if (DesktopPetWindow.IsRecoverableHostException(e.Exception))
+                {
+                    // Last-resort boundary for WPF layout/render callbacks that
+                    // are raised outside our own timer/file-watcher handlers.
+                    e.Handled = true;
+                }
+            };
             var window = new DesktopPetWindow(fullConfigPath, parentPid);
             app.Run(window);
             return 0;
@@ -366,7 +375,7 @@ internal sealed class DesktopPetWindow : Window
         }
     }
 
-    private static bool IsRecoverableHostException(Exception ex) =>
+    internal static bool IsRecoverableHostException(Exception ex) =>
         ex is IOException or
         UnauthorizedAccessException or
         ArgumentException or
@@ -376,6 +385,7 @@ internal sealed class DesktopPetWindow : Window
         FormatException or
         JsonException or
         Win32Exception or
+        COMException or
         OperationCanceledException;
 
     private void StartConfigWatcher()
