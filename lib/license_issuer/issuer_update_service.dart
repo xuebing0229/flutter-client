@@ -350,6 +350,44 @@ class IssuerUpdateService {
   }
 
   Future<List<dynamic>> _fetchJsonList(Uri uri) async {
+    // Match the Android Beta updater: prefer the platform HTTPS stack for
+    // update metadata. Some VPN/proxy routes break Dart TLS handshakes while
+    // Android's native connection still succeeds.
+    if (Platform.isAndroid) {
+      try {
+        final body =
+            await _installChannel.invokeMethod<String>('fetchIssuerReleases');
+        if (body == null || body.isEmpty) {
+          throw const FormatException('发码器更新信息为空。');
+        }
+        final decoded = jsonDecode(body);
+        if (decoded is! List) {
+          throw const FormatException('发码器更新信息格式无效。');
+        }
+        return decoded;
+      } on MissingPluginException {
+        // Development/test fallback below.
+      } on PlatformException catch (error) {
+        // Try the Dart route once as a secondary path before reporting the
+        // native failure. This keeps update checks tolerant of stack-specific
+        // network quirks without retry loops.
+        try {
+          return await _fetchJsonListWithDart(uri);
+        } catch (_) {
+          final message = error.message?.trim();
+          throw StateError(
+            message == null || message.isEmpty
+                ? '无法连接 GitHub 更新服务，请切换网络或检查代理后重试。'
+                : '无法连接 GitHub 更新服务：$message',
+          );
+        }
+      }
+    }
+
+    return _fetchJsonListWithDart(uri);
+  }
+
+  Future<List<dynamic>> _fetchJsonListWithDart(Uri uri) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 10)
       ..idleTimeout = const Duration(seconds: 10);
@@ -372,8 +410,13 @@ class IssuerUpdateService {
         throw const FormatException('发码器更新信息格式无效。');
       }
       return decoded;
+    } on HandshakeException {
+      throw StateError(
+        '与 GitHub 更新服务建立安全连接失败，请切换网络或检查代理后重试。',
+      );
     } finally {
       client.close(force: true);
     }
   }
+
 }
