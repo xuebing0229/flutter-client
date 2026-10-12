@@ -241,7 +241,8 @@ internal sealed class DesktopPetWindow : Window
             RenderTransformOrigin = new Point(0.5, 0.5),
         };
         _imageViewport.Children.Add(_petImage);
-        _imageViewport.SizeChanged += (_, _) => ApplyCurrentImagePlacement();
+        _imageViewport.SizeChanged += (_, _) =>
+            RunUiSafely(ApplyCurrentImagePlacement);
 
         _layoutPanel.Children.Add(_bubbleHost);
         _layoutPanel.Children.Add(_imageViewport);
@@ -279,7 +280,7 @@ internal sealed class DesktopPetWindow : Window
         {
             Interval = TimeSpan.FromMilliseconds(350),
         };
-        _parentTimer.Tick += (_, _) => CheckParentProcess();
+        _parentTimer.Tick += (_, _) => RunUiSafely(CheckParentProcess);
 
         _deadlineTimer = new DispatcherTimer
         {
