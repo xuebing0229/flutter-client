@@ -93,4 +93,9 @@ void main() {
     final picked = newsBetweenBuilds(134, 135);
     expect(picked.map((e) => e.title).toList(), ['内测前稳定性完善']);
   });
+
+  test('142 包含本轮内测回归清理见闻', () {
+    final picked = newsBetweenBuilds(141, 142);
+    expect(picked.map((e) => e.title).toList(), ['内测回归继续清理']);
+  });
 }
