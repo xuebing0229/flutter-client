@@ -20,6 +20,11 @@ tmp="$BACKUP_DIR/.license-$timestamp.sqlite.tmp"
 dest="$BACKUP_DIR/license-$timestamp.sqlite"
 
 sqlite3 "$DB_PATH" ".timeout 15000" ".backup '$tmp'"
+if [[ "$(sqlite3 "$tmp" "PRAGMA quick_check;")" != "ok" ]]; then
+  rm -f "$tmp"
+  echo "Backup integrity check failed." >&2
+  exit 1
+fi
 chown root:root "$tmp"
 chmod 0600 "$tmp"
 mv "$tmp" "$dest"
