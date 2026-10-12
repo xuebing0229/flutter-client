@@ -699,7 +699,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                             icon:
                                 const Icon(Icons.add_photo_alternate_outlined),
                             label: Text(selected.bubbleImage == null
-                                ? '导入透明 PNG'
+                                ? '导入 PNG / GIF'
                                 : '更换图片'),
                           ),
                           if (selected.bubbleImage != null)
@@ -1740,7 +1740,7 @@ class _DesktopPetOverlayPreviewState
         ],
       ),
       child: Text(
-        '⏱ 00:45:12',
+        '00:45:12',
         style: TextStyle(
           fontSize: 13 * scale,
           fontWeight: FontWeight.w700,
