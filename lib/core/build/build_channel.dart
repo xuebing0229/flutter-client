@@ -1,5 +1,6 @@
 enum BuildChannel {
   beta,
+  internal,
   release,
 }
 
@@ -8,7 +9,11 @@ const String _channelName = String.fromEnvironment(
   defaultValue: 'release',
 );
 
-const BuildChannel buildChannel =
-    _channelName == 'beta' ? BuildChannel.beta : BuildChannel.release;
+const BuildChannel buildChannel = switch (_channelName) {
+  'beta' => BuildChannel.beta,
+  'internal' => BuildChannel.internal,
+  _ => BuildChannel.release,
+};
 
 const bool isBetaBuild = buildChannel == BuildChannel.beta;
+const bool isInternalBuild = buildChannel == BuildChannel.internal;
