@@ -74,6 +74,7 @@ def init_db():
                 redeemed_at TEXT,
                 redemption_claim_id TEXT,
                 voided_at TEXT,
+                revision INTEGER NOT NULL DEFAULT 1,
                 FOREIGN KEY(generated_by_admin_id) REFERENCES admins(id),
                 FOREIGN KEY(sold_by_admin_id) REFERENCES admins(id)
             );
@@ -96,6 +97,15 @@ def init_db():
             );
             """
         )
+
+        columns = {
+            row["name"]
+            for row in db.execute("PRAGMA table_info(licenses)").fetchall()
+        }
+        if "revision" not in columns:
+            db.execute(
+                "ALTER TABLE licenses ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"
+            )
 
 
 def audit(db, action, *, admin=None, account_id=None, details=None):
@@ -163,7 +173,38 @@ def license_json(row):
         "soldAt": row["sold_at"],
         "redeemedAt": row["redeemed_at"],
         "status": license_status(row),
+        "revision": row["revision"],
     }
+
+
+def expected_revision(headers):
+    raw = headers.get("X-License-Revision")
+    if raw is None or not raw.strip():
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ApiError(
+            HTTPStatus.BAD_REQUEST,
+            "发码记录版本格式无效。",
+            "invalid_revision",
+        )
+    if value < 1:
+        raise ApiError(
+            HTTPStatus.BAD_REQUEST,
+            "发码记录版本格式无效。",
+            "invalid_revision",
+        )
+    return value
+
+
+def require_revision(row, expected):
+    if expected is not None and row["revision"] != expected:
+        raise ApiError(
+            HTTPStatus.CONFLICT,
+            "这条发码记录已经被其他管理员或核销流程修改，已拒绝覆盖旧状态。",
+            "stale_record",
+        )
 
 
 class ApiError(Exception):
@@ -404,7 +445,8 @@ class Handler(BaseHTTPRequestHandler):
                             db.execute(
                                 """
                                 UPDATE licenses
-                                SET activation_code = ?, committed_at = ?
+                                SET activation_code = ?, committed_at = ?,
+                                    revision = revision + 1
                                 WHERE account_id = ?
                                 """,
                                 (code, utc_now(), account_id),
@@ -423,6 +465,7 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path.startswith("/v1/licenses/") and parsed.path.endswith("/sold"):
                 account_id = parsed.path.split("/")[3]
                 sold = body.get("sold")
+                expected = expected_revision(self.headers)
                 if not isinstance(sold, bool):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "sold 必须是布尔值。")
                 with _db_lock, connect_db() as db:
@@ -435,6 +478,7 @@ class Handler(BaseHTTPRequestHandler):
                         ).fetchone()
                         if row is None or row["voided_at"]:
                             raise ApiError(HTTPStatus.NOT_FOUND, "激活码记录不存在。")
+                        require_revision(row, expected)
                         if not row["activation_code"]:
                             raise ApiError(HTTPStatus.CONFLICT, "激活码尚未生成完成。")
                         if sold:
@@ -447,7 +491,8 @@ class Handler(BaseHTTPRequestHandler):
                             db.execute(
                                 """
                                 UPDATE licenses
-                                SET sold_by_admin_id = ?, sold_by_name = ?, sold_at = ?
+                                SET sold_by_admin_id = ?, sold_by_name = ?, sold_at = ?,
+                                    revision = revision + 1
                                 WHERE account_id = ?
                                 """,
                                 (admin["id"], admin["name"], utc_now(), account_id),
@@ -458,7 +503,7 @@ class Handler(BaseHTTPRequestHandler):
                                 """
                                 UPDATE licenses
                                 SET sold_by_admin_id = NULL, sold_by_name = NULL,
-                                    sold_at = NULL
+                                    sold_at = NULL, revision = revision + 1
                                 WHERE account_id = ?
                                 """,
                                 (account_id,),
@@ -513,6 +558,7 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path.startswith("/v1/licenses/") and parsed.path.endswith("/note"):
                 account_id = parsed.path.split("/")[3]
                 note = str(body.get("note", "")).strip()[:500]
+                expected = expected_revision(self.headers)
                 with _db_lock, connect_db() as db:
                     admin = self._admin(db)
                     db.execute("BEGIN IMMEDIATE")
@@ -523,8 +569,13 @@ class Handler(BaseHTTPRequestHandler):
                         ).fetchone()
                         if row is None or row["voided_at"]:
                             raise ApiError(HTTPStatus.NOT_FOUND, "激活码记录不存在。")
+                        require_revision(row, expected)
                         db.execute(
-                            "UPDATE licenses SET note = ? WHERE account_id = ?",
+                            """
+                            UPDATE licenses
+                            SET note = ?, revision = revision + 1
+                            WHERE account_id = ?
+                            """,
                             (note, account_id),
                         )
                         audit(db, "update_note", admin=admin, account_id=account_id)
@@ -549,6 +600,7 @@ class Handler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             if parsed.path.startswith("/v1/licenses/"):
                 account_id = parsed.path.split("/")[3]
+                expected = expected_revision(self.headers)
                 with _db_lock, connect_db() as db:
                     admin = self._admin(db)
                     db.execute("BEGIN IMMEDIATE")
@@ -559,13 +611,18 @@ class Handler(BaseHTTPRequestHandler):
                         ).fetchone()
                         if row is None or row["voided_at"]:
                             raise ApiError(HTTPStatus.NOT_FOUND, "激活码记录不存在。")
+                        require_revision(row, expected)
                         if row["redeemed_at"]:
                             raise ApiError(
                                 HTTPStatus.CONFLICT,
                                 "已核销的激活码不能删除。",
                             )
                         db.execute(
-                            "UPDATE licenses SET voided_at = ? WHERE account_id = ?",
+                            """
+                            UPDATE licenses
+                            SET voided_at = ?, revision = revision + 1
+                            WHERE account_id = ?
+                            """,
                             (utc_now(), account_id),
                         )
                         audit(db, "void_license", admin=admin, account_id=account_id)
@@ -782,7 +839,8 @@ class Handler(BaseHTTPRequestHandler):
                 db.execute(
                     """
                     UPDATE licenses
-                    SET redeemed_at = ?, redemption_claim_id = ?
+                    SET redeemed_at = ?, redemption_claim_id = ?,
+                        revision = revision + 1
                     WHERE account_id = ?
                     """,
                     (now, claim_id, account_id),
