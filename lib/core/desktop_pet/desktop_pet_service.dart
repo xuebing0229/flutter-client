@@ -108,6 +108,16 @@ enum DesktopPetBubbleStyle {
       };
 }
 
+enum DesktopPetBubbleContentMode {
+  text,
+  image;
+
+  String get label => switch (this) {
+        DesktopPetBubbleContentMode.text => '文字',
+        DesktopPetBubbleContentMode.image => '图片',
+      };
+}
+
 enum DesktopPetTextMode {
   currentOrder,
   custom;
@@ -235,8 +245,12 @@ class DesktopPetSettings extends ChangeNotifier {
   bool _loaded = false;
   Future<void>? _loadInFlight;
   Future<void>? _runtimePersistInFlight;
+  Future<void> _persistTail = Future<void>.value();
   bool _enabled = false;
+  bool _configLoadedFromDisk = false;
   String? _selectedPresetId;
+  DesktopPetBubbleContentMode _bubbleContentMode =
+      DesktopPetBubbleContentMode.text;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
   DesktopPetBubblePosition _bubblePosition = DesktopPetBubblePosition.above;
   DesktopPetBubbleStyle _bubbleStyle = DesktopPetBubbleStyle.speech;
@@ -260,6 +274,7 @@ class DesktopPetSettings extends ChangeNotifier {
   bool get enabled => _enabled;
   List<DesktopPetPreset> get presets => List<DesktopPetPreset>.unmodifiable(_presets);
   String? get selectedPresetId => _selectedPresetId;
+  DesktopPetBubbleContentMode get bubbleContentMode => _bubbleContentMode;
   DesktopPetTextMode get textMode => _textMode;
   DesktopPetBubblePosition get bubblePosition => _bubblePosition;
   DesktopPetBubbleStyle get bubbleStyle => _bubbleStyle;
@@ -298,33 +313,47 @@ class DesktopPetSettings extends ChangeNotifier {
     return File('${root.path}/config.json');
   }
 
-  Future<void> _prunePresetSlotFiles(
-    String presetId,
-    String baseName, {
-    String? keepPath,
-  }) async {
-    final root = await _rootDirectory();
-    final folder = Directory('${root.path}/presets/$presetId');
-    if (!await folder.exists()) return;
+  Future<void> _cleanupStaleAssetsAtStartup() async {
+    if (!_configLoadedFromDisk) return;
 
-    final keepAbsolute = keepPath == null ? null : File(keepPath).absolute.path;
+    final root = await _rootDirectory();
+    final presetsRoot = Directory('${root.path}/presets');
+    if (!await presetsRoot.exists()) return;
+
+    final liveByPreset = <String, Set<String>>{
+      for (final preset in _presets)
+        preset.id: <String>{
+          if (preset.imageA != null) File(preset.imageA!).absolute.path,
+          if (preset.imageB != null) File(preset.imageB!).absolute.path,
+          if (preset.bubbleImage != null) File(preset.bubbleImage!).absolute.path,
+        },
+    };
+
     try {
-      await for (final entity in folder.list(followLinks: false)) {
-        if (entity is! File) continue;
-        final name = entity.path.split(Platform.pathSeparator).last;
-        if (name != baseName && !name.startsWith('$baseName.')) continue;
-        if (keepAbsolute != null && entity.absolute.path == keepAbsolute) {
+      await for (final entity in presetsRoot.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final presetId = entity.path.split(Platform.pathSeparator).last;
+        final live = liveByPreset[presetId];
+        if (live == null) {
+          try {
+            await entity.delete(recursive: true);
+          } catch (_) {}
           continue;
         }
-        try {
-          await entity.delete();
-        } catch (_) {
-          // The config no longer references this file. A locked stale asset
-          // can be retried by a later import/clear without breaking the preset.
+
+        await for (final child in entity.list(followLinks: false)) {
+          if (child is! File) continue;
+          if (live.contains(child.absolute.path)) continue;
+          try {
+            await child.delete();
+          } catch (_) {
+            // Startup cleanup is best-effort. Never delete assets while the
+            // current UI/native host may still be rendering them.
+          }
         }
       }
     } catch (_) {
-      // Asset cleanup is best-effort after the new config is safely persisted.
+      // Stale local assets are harmless; cleanup must never affect the app.
     }
   }
 
@@ -349,6 +378,7 @@ class DesktopPetSettings extends ChangeNotifier {
 
   Future<void> _loadOnce() async {
     await _readFromDisk();
+    await _cleanupStaleAssetsAtStartup();
     _loaded = true;
     notifyListeners();
   }
@@ -368,6 +398,7 @@ class DesktopPetSettings extends ChangeNotifier {
     try {
       final raw = jsonDecode(await file.readAsString());
       if (raw is! Map) return;
+      _configLoadedFromDisk = true;
 
       _enabled = raw['enabled'] == true;
       _selectedPresetId =
@@ -439,6 +470,20 @@ class DesktopPetSettings extends ChangeNotifier {
           !_presets.any((preset) => preset.id == _selectedPresetId)) {
         _selectedPresetId = _presets.isEmpty ? null : _presets.first.id;
       }
+
+      final bubbleContentMode = raw['bubbleContentMode'];
+      if (bubbleContentMode == DesktopPetBubbleContentMode.image.name) {
+        _bubbleContentMode = DesktopPetBubbleContentMode.image;
+      } else if (bubbleContentMode == DesktopPetBubbleContentMode.text.name) {
+        _bubbleContentMode = DesktopPetBubbleContentMode.text;
+      } else {
+        // Migration from the old mixed content model: if the selected preset
+        // already has an inserted image, preserve the user's intent as image
+        // mode instead of silently hiding it behind text.
+        _bubbleContentMode = selectedPreset?.bubbleImage != null
+            ? DesktopPetBubbleContentMode.image
+            : DesktopPetBubbleContentMode.text;
+      }
     } catch (_) {
       // The desktop pet is optional. A bad config must not affect work data.
     }
@@ -483,15 +528,16 @@ class DesktopPetSettings extends ChangeNotifier {
     final index = _presets.indexWhere((preset) => preset.id == id);
     if (index < 0) return;
 
-    final root = await _rootDirectory();
-    final folder = Directory('${root.path}/presets/$id');
-    try {
-      if (await folder.exists()) await folder.delete(recursive: true);
-    } catch (_) {}
-
+    // Detach from state first. Deleting image files while Flutter/WPF is still
+    // rendering them is a common Windows native-crash path. Physical cleanup
+    // is deferred until the next app start, before any preview is mounted.
     _presets.removeAt(index);
     if (_selectedPresetId == id) {
       _selectedPresetId = _presets.isEmpty ? null : _presets.first.id;
+    }
+    if (_bubbleContentMode == DesktopPetBubbleContentMode.image &&
+        selectedPreset?.bubbleImage == null) {
+      _bubbleContentMode = DesktopPetBubbleContentMode.text;
     }
     await _persist();
     notifyListeners();
@@ -551,11 +597,6 @@ class DesktopPetSettings extends ChangeNotifier {
         ),
     };
     await _persist();
-    await _prunePresetSlotFiles(
-      presetId,
-      baseName,
-      keepPath: destination.path,
-    );
     notifyListeners();
     return destination.path;
   }
@@ -574,10 +615,6 @@ class DesktopPetSettings extends ChangeNotifier {
         _presets[index].copyWith(clearImageB: true),
     };
     await _persist();
-    await _prunePresetSlotFiles(
-      presetId,
-      slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB',
-    );
     notifyListeners();
   }
 
@@ -596,6 +633,16 @@ class DesktopPetSettings extends ChangeNotifier {
       DesktopPetAssetSlot.keyB =>
         _presets[index].copyWith(placementB: placement),
     };
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> setBubbleContentMode(
+    DesktopPetBubbleContentMode mode,
+  ) async {
+    await load();
+    if (_bubbleContentMode == mode) return;
+    _bubbleContentMode = mode;
     await _persist();
     notifyListeners();
   }
@@ -655,12 +702,8 @@ class DesktopPetSettings extends ChangeNotifier {
     _presets[index] = _presets[index].copyWith(
       bubbleImage: destination.path,
     );
+    _bubbleContentMode = DesktopPetBubbleContentMode.image;
     await _persist();
-    await _prunePresetSlotFiles(
-      presetId,
-      'bubble-image',
-      keepPath: destination.path,
-    );
     notifyListeners();
   }
 
@@ -669,8 +712,8 @@ class DesktopPetSettings extends ChangeNotifier {
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0 || _presets[index].bubbleImage == null) return;
     _presets[index] = _presets[index].copyWith(clearBubbleImage: true);
+    _bubbleContentMode = DesktopPetBubbleContentMode.text;
     await _persist();
-    await _prunePresetSlotFiles(presetId, 'bubble-image');
     notifyListeners();
   }
 
@@ -832,12 +875,13 @@ class DesktopPetSettings extends ChangeNotifier {
     final file = await _configFile();
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 9,
+      'schema': 10,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
       'imageB': active?.imageB,
       'bubbleImage': active?.bubbleImage,
+      'bubbleContentMode': _bubbleContentMode.name,
       'placementA': active?.placementA.toJson(),
       'placementB': active?.placementB.toJson(),
       'textMode': _textMode.name,
@@ -866,6 +910,19 @@ class DesktopPetSettings extends ChangeNotifier {
     };
     final encoded = const JsonEncoder.withIndent('  ').convert(payload);
 
+    // Serialize every settings write. Slider/text/order callbacks can overlap,
+    // and concurrent atomic renames on Windows were still able to race each
+    // other and the native file watcher.
+    final previous = _persistTail;
+    final operation = previous.then<void>(
+      (_) => _writeEncodedConfig(file, encoded),
+      onError: (Object _, StackTrace __) => _writeEncodedConfig(file, encoded),
+    );
+    _persistTail = operation.catchError((Object _, StackTrace __) {});
+    await operation;
+  }
+
+  Future<void> _writeEncodedConfig(File file, String encoded) async {
     // Antivirus/indexers can briefly hold the config file on Windows. Retry
     // one transient filesystem failure before surfacing it to the caller.
     for (var attempt = 0; attempt < 2; attempt++) {
