@@ -883,7 +883,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     // both local records and all other screenshot rows just before writing.
     final previouslySelected = _rows.where((row) => row.selected).length;
     setState(_refreshDuplicateWarnings);
-    final selected = _rows.where((row) => row.selected).toList();
+    var selected = _rows.where((row) => row.selected).toList();
     if (selected.length < previouslySelected) {
       _message('发现新的疑似重复项，已标注并默认取消勾选，请检查后再次确认。');
       return;
@@ -892,8 +892,18 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       _message('没有选中要导入的记录');
       return;
     }
-    for (final row in selected) {
+    String? validationIssue(ScreenshotImportDraft row) {
       final issue = row.validate(importingProducts: _products);
+      if (issue != null) return issue;
+      if (_products) return null;
+      return validateScreenshotPresetSelection(
+        row: row,
+        presets: widget.presetStore.presets,
+      );
+    }
+
+    for (final row in selected) {
+      final issue = validationIssue(row);
       if (issue != null) {
         _message('「' + row.title + '」：' + issue);
         return;
@@ -919,6 +929,25 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       ),
     );
     if (!mounted || ok != true) return;
+
+    // A peer can sync new records or change a node preset while this modal is
+    // open. Recheck the exact rows the user approved before writing anything.
+    final approvedIds = <String>{for (final row in selected) row.id};
+    setState(_refreshDuplicateWarnings);
+    selected = _rows
+        .where((row) => approvedIds.contains(row.id) && row.selected)
+        .toList();
+    if (selected.length != approvedIds.length) {
+      _message('确认期间同步数据发生了变化，已重新标出疑似重复项，请再检查一次。');
+      return;
+    }
+    for (final row in selected) {
+      final issue = validationIssue(row);
+      if (issue != null) {
+        _message('「' + row.title + '」：' + issue);
+        return;
+      }
+    }
 
     setState(() => _committing = true);
     try {
