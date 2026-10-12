@@ -639,7 +639,11 @@ class DesktopPetSettings extends ChangeNotifier {
     final root = await _rootDirectory();
     final folder = Directory('${root.path}/presets/$presetId');
     await folder.create(recursive: true);
-    final destination = File('${folder.path}/bubble-image.png');
+    // Use a fresh filename for every import. This guarantees the desktop host
+    // sees a new path and never races a replacement of an image it is decoding.
+    final destination = File(
+      '${folder.path}/bubble-image.${DateTime.now().microsecondsSinceEpoch}.png',
+    );
     if (source.absolute.path != destination.absolute.path) {
       await source.copy(destination.path);
     }
@@ -775,6 +779,22 @@ class DesktopPetSettings extends ChangeNotifier {
   }) async {
     await load();
     _loaded = true;
+
+    // Home/focus state can call sync repeatedly even when nothing visible has
+    // changed. Rewriting config.json every time wakes the native pet host and
+    // used to make typing/sliders needlessly rebuild its image resources.
+    final unchanged = _enabled == enabled &&
+        _currentOrderTitle == currentOrderTitle &&
+        _currentOrderNode == currentOrderNode &&
+        _currentOrderDeadline == currentOrderDeadline &&
+        _bubbleBackgroundArgb == bubbleBackgroundArgb &&
+        _bubbleForegroundArgb == bubbleForegroundArgb &&
+        _bubbleBorderArgb == bubbleBorderArgb &&
+        _bubbleAccentArgb == bubbleAccentArgb &&
+        _focusEnabled == focusEnabled &&
+        _focusStartedAt == focusStartedAt;
+    if (unchanged) return;
+
     _enabled = enabled;
     _currentOrderTitle = currentOrderTitle;
     _currentOrderNode = currentOrderNode;

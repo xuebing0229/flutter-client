@@ -14,7 +14,6 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Path = System.IO.Path;
 using System.Windows.Threading;
-using VPet_Simulator.Core;
 
 namespace AdventurersGuild.DesktopPet;
 
@@ -103,17 +102,21 @@ internal sealed class DesktopPetWindow : Window
     private readonly DispatcherTimer _deadlineTimer;
     private readonly DispatcherTimer _focusTimer;
     private readonly GlobalInputActivityMonitor _inputHook;
-    private readonly GraphCore _graphCore;
+    private readonly Dictionary<string, CachedImageSource> _petImageCache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private FileSystemWatcher? _watcher;
     private PetConfig _config = new();
-    private Picture? _activePicture;
     private string? _activeImagePath;
     private string? _bubbleArtPath;
     private DateTime _bubbleArtChangedAt;
+    private long _bubbleArtLength = -1;
     private ImageSource? _bubbleArtCache;
     private bool _inputActive;
     private bool _closed;
+    private bool _reloadInProgress;
+    private bool _reloadPending;
+    private bool _overlayPaddingInitialized;
 
     public DesktopPetWindow(string configPath, int parentPid)
     {
@@ -244,7 +247,10 @@ internal sealed class DesktopPetWindow : Window
 
         Content = _root;
 
-        _root.MouseLeftButtonDown += (_, e) =>
+        // Only dragging the character canvas moves the desktop pet. Bubble and
+        // timer clicks must never drag the whole window while their positions
+        // are being adjusted from the settings preview.
+        _imageViewport.MouseLeftButtonDown += (_, e) =>
         {
             if (e.LeftButton != MouseButtonState.Pressed) return;
             try
@@ -257,8 +263,6 @@ internal sealed class DesktopPetWindow : Window
                 // Ignore a drag that lost capture while the window was moving.
             }
         };
-
-        _graphCore = new GraphCore(1000, Dispatcher);
 
         _reloadDebounce = new DispatcherTimer
         {
@@ -335,14 +339,40 @@ internal sealed class DesktopPetWindow : Window
 
     private void OnConfigChanged(object? sender, FileSystemEventArgs e)
     {
+        if (_closed) return;
         Dispatcher.BeginInvoke(() =>
         {
+            if (_closed) return;
             _reloadDebounce.Stop();
             _reloadDebounce.Start();
         });
     }
 
     private async Task ReloadConfigAsync()
+    {
+        if (_reloadInProgress)
+        {
+            _reloadPending = true;
+            return;
+        }
+
+        _reloadInProgress = true;
+        try
+        {
+            do
+            {
+                _reloadPending = false;
+                await ReloadConfigCoreAsync();
+            }
+            while (_reloadPending && !_closed);
+        }
+        finally
+        {
+            _reloadInProgress = false;
+        }
+    }
+
+    private async Task ReloadConfigCoreAsync()
     {
         PetConfig? next = null;
         for (var attempt = 0; attempt < 4 && next is null; attempt++)
@@ -426,7 +456,10 @@ internal sealed class DesktopPetWindow : Window
         _bubble.Background = background;
         _bubble.BorderBrush = border;
         _bubble.BorderThickness = new Thickness(1);
-        _bubble.CornerRadius = new CornerRadius(thought ? 40 : 15);
+        // Thought bubbles differ by their dot tail, not by turning the whole
+        // text body into a pill/ellipse. Keep the same rounded rectangle body
+        // as the speech bubble so preview and desktop rendering match.
+        _bubble.CornerRadius = new CornerRadius(15);
         _bubble.Padding = new Thickness(13, 9, 13, 9);
         _bubble.Margin = new Thickness(0);
         _bubble.MinWidth = 0;
@@ -656,12 +689,34 @@ internal sealed class DesktopPetWindow : Window
         var topPad = Math.Max(0, Math.Max(-bubbleY, -clockY));
         var rightPad = Math.Max(0, Math.Max(bubbleX, clockX));
         var bottomPad = Math.Max(0, Math.Max(bubbleY, clockY));
-        _root.Margin = new Thickness(
+        var nextMargin = new Thickness(
             4 + leftPad,
             4 + topPad,
             4 + rightPad,
             4 + bottomPad
         );
+        var previousMargin = _root.Margin;
+        _root.Margin = nextMargin;
+
+        // Extra transparent padding is needed so moved overlays are not clipped,
+        // but changing that padding used to move the character on screen. After
+        // the first layout, compensate the window origin so the character stays
+        // visually fixed while only the selected component moves.
+        if (_overlayPaddingInitialized && IsLoaded)
+        {
+            var deltaLeft = nextMargin.Left - previousMargin.Left;
+            var deltaTop = nextMargin.Top - previousMargin.Top;
+            if (Math.Abs(deltaLeft) > 0.01 || Math.Abs(deltaTop) > 0.01)
+            {
+                Left -= deltaLeft;
+                Top -= deltaTop;
+                SavePetWindowState();
+            }
+        }
+        else
+        {
+            _overlayPaddingInitialized = true;
+        }
     }
 
     private void RefreshFocusClock()
@@ -707,8 +762,6 @@ internal sealed class DesktopPetWindow : Window
         if (!IsUsableImage(_config.ImageA))
         {
             _activeImagePath = null;
-            _activePicture?.Dispose();
-            _activePicture = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
             _bubbleHost.Visibility = Visibility.Collapsed;
@@ -728,8 +781,6 @@ internal sealed class DesktopPetWindow : Window
         if (!IsUsableImage(path))
         {
             _activeImagePath = null;
-            _activePicture?.Dispose();
-            _activePicture = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
             _bubbleHost.Visibility = Visibility.Collapsed;
@@ -741,38 +792,23 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
-        path = Path.GetFullPath(path!);
-        if (!force && string.Equals(
-                _activeImagePath,
-                path,
-                StringComparison.OrdinalIgnoreCase))
+        var fullPath = Path.GetFullPath(path!);
+        if (!force &&
+            string.Equals(_activeImagePath, fullPath, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        Picture? nextPicture = null;
         try
         {
-            _activePicture?.Dispose();
-            _activePicture = null;
+            var source = LoadPetImage(fullPath);
+            if (source is null)
+            {
+                throw new InvalidDataException("Desktop pet image could not be decoded.");
+            }
 
-            nextPicture = new Picture(
-                _graphCore,
-                path,
-                new GraphInfo(
-                    _inputActive ? "guild-input-active" : "guild-idle",
-                    GraphInfo.GraphType.Common,
-                    GraphInfo.AnimatType.Single,
-                    IGameSave.ModeType.Nomal
-                ),
-                length: int.MaxValue,
-                isloop: true
-            );
-
-            _ = nextPicture.Run(_petImage);
-            _activePicture = nextPicture;
-            nextPicture = null;
-            _activeImagePath = path;
+            _petImage.Source = source;
+            _activeImagePath = fullPath;
             _petImage.Visibility = Visibility.Visible;
             Opacity = 1;
             if (!IsVisible)
@@ -782,10 +818,6 @@ internal sealed class DesktopPetWindow : Window
         }
         catch
         {
-            // A malformed/replaced image can fail after Picture has allocated
-            // VPet resources but before it becomes the active instance.
-            nextPicture?.Dispose();
-            _activePicture = null;
             _activeImagePath = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;
@@ -798,6 +830,49 @@ internal sealed class DesktopPetWindow : Window
         }
 
         RefreshBubble();
+    }
+
+    private ImageSource? LoadPetImage(string fullPath)
+    {
+        try
+        {
+            var info = new FileInfo(fullPath);
+            if (!info.Exists) return null;
+            var changedAt = info.LastWriteTimeUtc;
+            var length = info.Length;
+            if (_petImageCache.TryGetValue(fullPath, out var cached) &&
+                cached.ChangedAt == changedAt &&
+                cached.Length == length)
+            {
+                return cached.Source;
+            }
+
+            using var stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete
+            );
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
+            bitmap.DecodePixelWidth = 2048;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            _petImageCache[fullPath] = new CachedImageSource(
+                changedAt,
+                length,
+                bitmap
+            );
+            return bitmap;
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
+        catch (ArgumentException) { return null; }
+        catch (NotSupportedException) { return null; }
     }
 
     private void ApplyCurrentImagePlacement()
@@ -904,31 +979,50 @@ internal sealed class DesktopPetWindow : Window
         if (!IsUsableImage(path))
         {
             _bubbleArtPath = null;
+            _bubbleArtChangedAt = default;
+            _bubbleArtLength = -1;
             _bubbleArtCache = null;
             return null;
         }
         try
         {
             var fullPath = Path.GetFullPath(path!);
-            var changedAt = File.GetLastWriteTimeUtc(fullPath);
-            if (string.Equals(_bubbleArtPath, fullPath, StringComparison.OrdinalIgnoreCase)
-                && _bubbleArtChangedAt == changedAt) return _bubbleArtCache;
+            var info = new FileInfo(fullPath);
+            if (!info.Exists) return null;
+            var changedAt = info.LastWriteTimeUtc;
+            var length = info.Length;
+            if (string.Equals(_bubbleArtPath, fullPath, StringComparison.OrdinalIgnoreCase) &&
+                _bubbleArtChangedAt == changedAt &&
+                _bubbleArtLength == length)
+            {
+                return _bubbleArtCache;
+            }
 
-            // Keep transparency; decode once without locking the source PNG.
-            using var stream = File.OpenRead(fullPath);
+            // Decode into memory and release the file immediately. FileShare.Delete
+            // also lets a newly imported bubble image replace the previous one
+            // without the host holding a stale lock.
+            using var stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete
+            );
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = 192;
+            bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
+            bitmap.DecodePixelWidth = 256;
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
             _bubbleArtCache = bitmap;
             _bubbleArtPath = fullPath;
             _bubbleArtChangedAt = changedAt;
+            _bubbleArtLength = length;
             return bitmap;
         }
         catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
         catch (ArgumentException) { return null; }
         catch (NotSupportedException) { return null; }
     }
@@ -1155,10 +1249,16 @@ internal sealed class DesktopPetWindow : Window
         }
 
         _inputHook.Dispose();
-        _activePicture?.Dispose();
-        _activePicture = null;
-        _graphCore.Dispose();
+        _petImage.Source = null;
+        _bubbleArt.Source = null;
+        _petImageCache.Clear();
     }
+
+    private sealed record CachedImageSource(
+        DateTime ChangedAt,
+        long Length,
+        ImageSource Source
+    );
 
     private sealed record PetWindowState(double Left, double Top);
 
@@ -1212,12 +1312,13 @@ internal sealed class DesktopPetWindow : Window
 internal sealed class GlobalInputActivityMonitor : IDisposable
 {
     private readonly DispatcherTimer _timer;
-    private DateTime _holdUntil = DateTime.MinValue;
     private bool _active;
 
     public GlobalInputActivityMonitor()
     {
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        // Keep A/B switching visually immediate without reinstalling global
+        // keyboard hooks. One poll per display frame is enough for press/release.
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _timer.Tick += (_, _) => Poll();
     }
 
@@ -1228,34 +1329,35 @@ internal sealed class GlobalInputActivityMonitor : IDisposable
     private void Poll()
     {
         var pressed = false;
-        for (var key = 0x08; key <= 0xFE; key++)
+
+        // Mouse buttons are the hottest path, so check them first.
+        for (var button = 0x01; button <= 0x06; button++)
         {
-            if ((GetAsyncKeyState(key) & 0x8000) == 0) continue;
+            if ((GetAsyncKeyState(button) & 0x8000) == 0) continue;
             pressed = true;
             break;
         }
+
         if (!pressed)
         {
-            for (var button = 0x01; button <= 0x06; button++)
+            for (var key = 0x08; key <= 0xFE; key++)
             {
-                if ((GetAsyncKeyState(button) & 0x8000) == 0) continue;
+                if ((GetAsyncKeyState(key) & 0x8000) == 0) continue;
                 pressed = true;
                 break;
             }
         }
 
-        // Brief hold catches taps; absent an input, always fall back to A.
-        if (pressed) _holdUntil = DateTime.UtcNow.AddMilliseconds(120);
-        var active = DateTime.UtcNow < _holdUntil;
-        if (_active == active) return;
-        _active = active;
-        ActivityChanged?.Invoke(active);
+        // No artificial hold: B exists only while a key/button is physically
+        // down, and returns to A on the first poll after release.
+        if (_active == pressed) return;
+        _active = pressed;
+        ActivityChanged?.Invoke(pressed);
     }
 
     public void Dispose()
     {
         _timer.Stop();
-        _holdUntil = DateTime.MinValue;
         _active = false;
     }
 
