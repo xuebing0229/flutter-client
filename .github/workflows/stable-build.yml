@@ -54,6 +54,8 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      - name: Run full Flutter test suite
+        run: flutter test
 
       - name: Bundle verified PP-OCRv6 Small models
         run: python3 tool/fetch_official_ppocrv6_models.py
