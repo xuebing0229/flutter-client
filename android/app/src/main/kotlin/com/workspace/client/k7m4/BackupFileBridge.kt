@@ -505,6 +505,7 @@ class BackupFileBridge(
             return
         }
 
+        var temporaryFile: File? = null
         try {
             val input = activity.contentResolver.openInputStream(uri)
                 ?: throw IllegalStateException("Unable to open selected image.")
@@ -515,6 +516,9 @@ class BackupFileBridge(
                 cacheDir,
                 "qr-${UUID.randomUUID()}.img",
             )
+            // Register the destination before copying so a provider/read error
+            // cannot leave a partial QR image in cache until the next launch.
+            temporaryFile = file
 
             input.use { source ->
                 file.outputStream().use { destination ->
@@ -524,6 +528,7 @@ class BackupFileBridge(
 
             result.success(file.absolutePath)
         } catch (error: Exception) {
+            temporaryFile?.let { file -> runCatching { file.delete() } }
             result.error(
                 "QR_IMAGE_IMPORT_FAILED",
                 error.message ?: "QR image import failed.",
