@@ -1,4 +1,4 @@
-name: Build Internal Test
+name: Build Internal
 
 on:
   workflow_dispatch:
@@ -13,11 +13,13 @@ permissions:
 
 concurrency:
   group: internal-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
   ACTIVATION_API_BASE_URL: https://license.apixb.top
+  INTERNAL_ANDROID_VERSION_CODE: '1'
+  INTERNAL_SOURCE_BUILD: '144'
 
 jobs:
   check:
@@ -94,7 +96,9 @@ jobs:
           flutter build apk \
             --release \
             --flavor internal \
+            --build-number="$INTERNAL_ANDROID_VERSION_CODE" \
             --dart-define=APP_CHANNEL=internal \
+            --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-internal-release.apk app-internal.apk
 
@@ -137,7 +141,7 @@ jobs:
 
       - name: Build Windows Internal
         shell: pwsh
-        run: flutter build windows --release --dart-define=APP_CHANNEL=internal --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
+        run: flutter build windows --release --dart-define=APP_CHANNEL=internal --dart-define="INTERNAL_SOURCE_BUILD=$env:INTERNAL_SOURCE_BUILD" --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
 
       - name: Build VPet desktop companion
         shell: pwsh
