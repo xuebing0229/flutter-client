@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -52,7 +53,7 @@ class WindowsOfficialPaddleOcr {
       String slash(String value) =>
           value.replaceAll(String.fromCharCode(92), '/');
 
-      final run = await Process.run(
+      final process = await Process.start(
         engine.path,
         [
           'ocr',
@@ -84,14 +85,32 @@ class WindowsOfficialPaddleOcr {
           'true',
         ],
         workingDirectory: runtime.path,
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      ).timeout(const Duration(seconds: 120));
+      );
+      final stdoutFuture = utf8.decoder.bind(process.stdout).join();
+      final stderrFuture = utf8.decoder.bind(process.stderr).join();
 
-      if (run.exitCode != 0) {
+      int exitCode;
+      try {
+        exitCode = await process.exitCode.timeout(
+          const Duration(seconds: 120),
+        );
+      } on TimeoutException {
+        // Future.timeout does not terminate an external process. Explicitly
+        // kill the hung OCR host so it cannot keep CPU/files alive after the
+        // import page has already reported a timeout.
+        process.kill();
+        try {
+          await process.exitCode.timeout(const Duration(seconds: 5));
+        } catch (_) {}
+        throw TimeoutException('PaddleOCR 识别超时');
+      }
+
+      final stdoutText = await stdoutFuture;
+      final stderrText = await stderrFuture;
+      if (exitCode != 0) {
         throw StateError(
           'PaddleOCR 识别未完成：'
-          '${(run.stderr as String).trim().isEmpty ? run.stdout : run.stderr}',
+          '${stderrText.trim().isEmpty ? stdoutText : stderrText}',
         );
       }
 
