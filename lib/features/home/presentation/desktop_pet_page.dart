@@ -548,40 +548,13 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  if (selected != null) ...[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => unawaited(_pickBubbleImage(selected)),
-                          icon: const Icon(Icons.add_photo_alternate_outlined),
-                          label: Text(selected.bubbleImage == null
-                              ? '气泡内添加透明 PNG'
-                              : '更换气泡内图片'),
-                        ),
-                        if (selected.bubbleImage != null)
-                          TextButton(
-                            onPressed: () => _queuePetWrite(
-                              () => _settings.clearBubbleImage(selected.id),
-                            ),
-                            child: const Text('移除图片'),
-                          ),
-                      ],
-                    ),
-                    Text(
-                      '可选装饰图会和文字一起显示在气泡内，仅保存在本机当前桌宠预设中。',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   if (selected != null && selected.imageA != null) ...[
                     _DesktopPetOverlayPreview(
                       imagePath: selected.imageA!,
                       placement: selected.placementA,
                       bubblePosition: _settings.bubblePosition,
                       bubbleStyle: _settings.bubbleStyle,
+                      bubbleContentMode: _settings.bubbleContentMode,
                       bubbleImagePath: selected.bubbleImage,
                       bubbleTextScale: _settings.bubbleTextScale,
                       focusClockScale: _settings.focusClockScale,
@@ -651,49 +624,115 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                 title: '文字泡内容',
                 children: [
                   const SizedBox(height: 4),
-                  SegmentedButton<DesktopPetTextMode>(
+                  SegmentedButton<DesktopPetBubbleContentMode>(
                     segments: const [
                       ButtonSegment(
-                        value: DesktopPetTextMode.currentOrder,
-                        icon: Icon(Icons.draw_outlined),
-                        label: Text('当前在画订单'),
+                        value: DesktopPetBubbleContentMode.text,
+                        icon: Icon(Icons.text_fields_rounded),
+                        label: Text('文字'),
                       ),
                       ButtonSegment(
-                        value: DesktopPetTextMode.custom,
-                        icon: Icon(Icons.edit_note_rounded),
-                        label: Text('自定义文字'),
+                        value: DesktopPetBubbleContentMode.image,
+                        icon: Icon(Icons.image_outlined),
+                        label: Text('图片'),
                       ),
                     ],
-                    selected: <DesktopPetTextMode>{_settings.textMode},
+                    selected: <DesktopPetBubbleContentMode>{
+                      _settings.bubbleContentMode,
+                    },
                     onSelectionChanged: (selection) {
                       if (selection.isEmpty) return;
                       _queuePetWrite(
-                        () => _settings.setTextMode(selection.first),
+                        () => _settings.setBubbleContentMode(selection.first),
                       );
                     },
                   ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '图片和文字二选一显示，避免两套内容同时刷新、抢布局。',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 14),
-                  if (_settings.textMode ==
-                      DesktopPetTextMode.currentOrder)
-                    _CurrentOrderPicker(
-                      orders: activeOrders,
-                      selectedOrderId: _settings.currentOrderId,
-                      formatDeadline: _formatDeadline,
-                      onSelected: _selectCurrentOrder,
-                    )
-                  else
-                    TextField(
-                      controller: _customTextController,
-                      minLines: 2,
-                      maxLines: 4,
-                      maxLength: 120,
-                      decoration: const InputDecoration(
-                        labelText: '自定义文字内容',
-                        hintText: '例如：今天也在努力画画……',
-                        border: OutlineInputBorder(),
+                  if (_settings.bubbleContentMode ==
+                      DesktopPetBubbleContentMode.image) ...[
+                    if (selected == null)
+                      const Text('请先创建并选择一个桌宠预设。')
+                    else ...[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                unawaited(_pickBubbleImage(selected)),
+                            icon:
+                                const Icon(Icons.add_photo_alternate_outlined),
+                            label: Text(selected.bubbleImage == null
+                                ? '导入透明 PNG'
+                                : '更换图片'),
+                          ),
+                          if (selected.bubbleImage != null)
+                            TextButton(
+                              onPressed: () => _queuePetWrite(
+                                () =>
+                                    _settings.clearBubbleImage(selected.id),
+                              ),
+                              child: const Text('移除图片'),
+                            ),
+                        ],
                       ),
-                      onChanged: _scheduleCustomTextSave,
+                      if (selected.bubbleImage == null)
+                        Text(
+                          '当前还没有气泡图片；导入后桌面会只显示这张图片，不再叠加文字。',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ] else ...[
+                    SegmentedButton<DesktopPetTextMode>(
+                      segments: const [
+                        ButtonSegment(
+                          value: DesktopPetTextMode.currentOrder,
+                          icon: Icon(Icons.draw_outlined),
+                          label: Text('当前在画订单'),
+                        ),
+                        ButtonSegment(
+                          value: DesktopPetTextMode.custom,
+                          icon: Icon(Icons.edit_note_rounded),
+                          label: Text('自定义文字'),
+                        ),
+                      ],
+                      selected: <DesktopPetTextMode>{_settings.textMode},
+                      onSelectionChanged: (selection) {
+                        if (selection.isEmpty) return;
+                        _queuePetWrite(
+                          () => _settings.setTextMode(selection.first),
+                        );
+                      },
                     ),
+                    const SizedBox(height: 14),
+                    if (_settings.textMode ==
+                        DesktopPetTextMode.currentOrder)
+                      _CurrentOrderPicker(
+                        orders: activeOrders,
+                        selectedOrderId: _settings.currentOrderId,
+                        formatDeadline: _formatDeadline,
+                        onSelected: _selectCurrentOrder,
+                      )
+                    else
+                      TextField(
+                        controller: _customTextController,
+                        minLines: 2,
+                        maxLines: 4,
+                        maxLength: 120,
+                        decoration: const InputDecoration(
+                          labelText: '自定义文字内容',
+                          hintText: '例如：今天也在努力画画……',
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: _scheduleCustomTextSave,
+                      ),
+                  ],
                 ],
               ),
               const SizedBox(height: 14),
@@ -1397,6 +1436,7 @@ class _DesktopPetOverlayPreview extends StatefulWidget {
     required this.placement,
     required this.bubblePosition,
     required this.bubbleStyle,
+    required this.bubbleContentMode,
     required this.bubbleImagePath,
     required this.bubbleTextScale,
     required this.focusClockScale,
@@ -1411,6 +1451,7 @@ class _DesktopPetOverlayPreview extends StatefulWidget {
   final DesktopPetPlacement placement;
   final DesktopPetBubblePosition bubblePosition;
   final DesktopPetBubbleStyle bubbleStyle;
+  final DesktopPetBubbleContentMode bubbleContentMode;
   final String? bubbleImagePath;
   final double bubbleTextScale;
   final double focusClockScale;
@@ -1562,6 +1603,8 @@ class _DesktopPetOverlayPreviewState
 
     final side = widget.bubblePosition == DesktopPetBubblePosition.side;
     final image = widget.bubbleImagePath;
+    final imageMode =
+        widget.bubbleContentMode == DesktopPetBubbleContentMode.image;
     final text = side
         ? Column(
             mainAxisSize: MainAxisSize.min,
@@ -1585,30 +1628,29 @@ class _DesktopPetOverlayPreviewState
               fontWeight: FontWeight.w600,
             ),
           );
+    final content = imageMode
+        ? (image == null
+            ? const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(Icons.image_not_supported_outlined, size: 28),
+              )
+            : Image.file(
+                File(image),
+                width: 88,
+                height: 88,
+                cacheWidth: _desktopPetThumbnailCacheWidth,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.broken_image_outlined),
+              ))
+        : text;
     final body = Container(
       padding: EdgeInsets.symmetric(
         horizontal: side ? 9 : 12,
         vertical: 8,
       ),
       decoration: decoration,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (image != null) ...[
-            Image.file(
-              File(image),
-              width: 54,
-              height: 54,
-              cacheWidth: _desktopPetThumbnailCacheWidth,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.broken_image_outlined),
-            ),
-            const SizedBox(height: 4),
-          ],
-          text,
-        ],
-      ),
+      child: content,
     );
 
     if (!thought) return body;
