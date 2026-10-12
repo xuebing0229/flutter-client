@@ -103,6 +103,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '内测前稳定性完善',
     description: '全面修复双端同步、完整备份恢复、截图批量导入、订单与成品并发操作、专注计时、Windows 桌宠和自动更新中的边界问题；同时关闭 Android 系统云备份，并加强激活与发码数据、安装包签名和更新文件完整性校验，减少异常中断、重复写入和跨设备状态互相覆盖。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 136,
+    title: 'Android 更新安装衔接修复',
+    description: '修复测试版 APK 下载到 100% 后在“安装未知应用”权限流程中丢失安装动作的问题；授权后返回公会会自动继续打开安装页面，已完整下载的更新包也会明确显示为可安装，不再误判成未完成下载。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
