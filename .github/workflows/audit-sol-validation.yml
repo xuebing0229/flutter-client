@@ -33,6 +33,14 @@ jobs:
         run: flutter analyze
       - name: Run full Flutter test suite
         run: flutter test
+      - name: Validate server and shell tooling syntax
+        run: |
+          python3 -m py_compile server/activation_service/app.py tool/fetch_official_ppocrv6_models.py
+          bash -n server/activation_service/install.sh
+          bash -n server/activation_service/deploy.sh
+          bash -n server/activation_service/backup.sh
+          bash -n server/activation_service/smoke_test.sh
+          bash -n tool/build_syncthing_android.sh
 
   android-beta-debug:
     if: github.event_name != 'pull_request' || github.head_ref == 'audit/sol-recheck-20261011'
