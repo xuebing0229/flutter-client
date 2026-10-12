@@ -173,18 +173,13 @@ class FullBackupBundleService {
 
         if (entry.isFile) {
           if (name == manifestFileName) {
-            if (hasManifest) {
-              throw const FormatException('备份中存在重复的数据清单。');
-            }
             hasManifest = true;
             continue;
           }
           if (!_isReferenceAssetPath(name)) {
             throw FormatException('备份中包含未知文件：$name');
           }
-          if (!assetEntryPaths.add(name)) {
-            throw FormatException('备份中存在重复的参考图文件：$name');
-          }
+          assetEntryPaths.add(name);
         } else if (name != 'assets' &&
             name != 'assets/' &&
             !name.startsWith('assets/order-reference-images')) {
