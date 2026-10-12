@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Path = System.IO.Path;
 using System.Windows.Threading;
+using WpfAnimatedGif;
 
 namespace AdventurersGuild.DesktopPet;
 
@@ -214,7 +215,7 @@ internal sealed class DesktopPetWindow : Window
 
         _focusClockText = new TextBlock
         {
-            Text = "⏱ 00:00",
+            Text = "00:00:00",
             FontSize = 13,
             FontWeight = FontWeights.SemiBold,
             TextAlignment = TextAlignment.Center,
@@ -845,7 +846,7 @@ internal sealed class DesktopPetWindow : Window
         _focusClock.Visibility = Visibility.Visible;
         if (!DateTime.TryParse(_config.FocusStartedAt, out var startedAt))
         {
-            _focusClockText.Text = "⏱ 00:00:00";
+            _focusClockText.Text = "00:00:00";
             return;
         }
 
@@ -854,7 +855,7 @@ internal sealed class DesktopPetWindow : Window
         if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
         var totalHours = (int)Math.Floor(elapsed.TotalHours);
         _focusClockText.Text =
-            $"⏱ {totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+            $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
     }
 
     private static SolidColorBrush BrushFromArgb(long value, long fallback)
@@ -1001,6 +1002,49 @@ internal sealed class DesktopPetWindow : Window
         catch (OutOfMemoryException) { return null; }
     }
 
+    private bool TryShowBubbleImage(string fullPath)
+    {
+        try
+        {
+            if (string.Equals(
+                    Path.GetExtension(fullPath),
+                    ".gif",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                ClearBubbleImageSource();
+                var animated = new BitmapImage();
+                animated.BeginInit();
+                animated.CacheOption = BitmapCacheOption.OnLoad;
+                animated.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
+                animated.UriSource = new Uri(fullPath, UriKind.Absolute);
+                animated.EndInit();
+
+                // WpfAnimatedGif owns GIF frame timing, disposal/compositing and
+                // repeat metadata. Do not duplicate an animation engine here.
+                ImageBehavior.SetAnimatedSource(_bubbleArt, animated);
+                return true;
+            }
+
+            ClearBubbleImageSource();
+            var art = LoadDesktopImage(fullPath);
+            _bubbleArt.Source = art;
+            return art is not null;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (ArgumentException) { return false; }
+        catch (NotSupportedException) { return false; }
+        catch (FormatException) { return false; }
+        catch (COMException) { return false; }
+        catch (OutOfMemoryException) { return false; }
+    }
+
+    private void ClearBubbleImageSource()
+    {
+        ImageBehavior.SetAnimatedSource(_bubbleArt, null);
+        _bubbleArt.Source = null;
+    }
+
     private static bool ShouldDecodeByWidth(string fullPath)
     {
         using var header = new FileStream(
@@ -1021,7 +1065,7 @@ internal sealed class DesktopPetWindow : Window
 
     private void TrimDesktopImageCache(string nextPath)
     {
-        // A, B and the optional bubble PNG are the only images that need to
+        // A, B and the optional static bubble image are the only images that need to
         // stay hot. Keeping many superseded 1600px decodes around can consume
         // tens of megabytes after repeated replacements.
         if (_desktopImageCache.Count < 4) return;
@@ -1069,6 +1113,7 @@ internal sealed class DesktopPetWindow : Window
     {
         if (!IsUsableImage(_config.ImageA))
         {
+            ClearBubbleImageSource();
             _bubbleHost.Visibility = Visibility.Collapsed;
             return;
         }
@@ -1083,32 +1128,26 @@ internal sealed class DesktopPetWindow : Window
         {
             if (!IsUsableImage(_config.BubbleImage))
             {
-                _bubbleArt.Source = null;
+                ClearBubbleImageSource();
                 _bubbleHost.Visibility = Visibility.Collapsed;
                 return;
             }
             var bubblePath = Path.GetFullPath(_config.BubbleImage!);
-            var art = LoadDesktopImage(bubblePath);
-            if (art is null)
+            if (!TryShowBubbleImage(bubblePath))
             {
-                _bubbleArt.Source = null;
                 _bubbleHost.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            // Deliberately use the exact same decoded ImageSource pipeline as
-            // the A/B desktop-pet image. The only difference is that this Image
-            // control is constrained by the bubble container.
             var imageScale = Math.Clamp(_config.BubbleImageScale, 0.5, 2.0);
             _bubbleArt.Width = 120 * imageScale;
             _bubbleArt.MaxHeight = 140 * imageScale;
-            _bubbleArt.Source = art;
             _bubbleContent.Children.Add(_bubbleArt);
             _bubbleHost.Visibility = Visibility.Visible;
             return;
         }
 
-        _bubbleArt.Source = null;
+        ClearBubbleImageSource();
         string text;
         if (string.Equals(_config.TextMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
@@ -1392,7 +1431,7 @@ internal sealed class DesktopPetWindow : Window
 
         _inputHook.Dispose();
         _petImage.Source = null;
-        _bubbleArt.Source = null;
+        ClearBubbleImageSource();
         _desktopImageCache.Clear();
     }
 

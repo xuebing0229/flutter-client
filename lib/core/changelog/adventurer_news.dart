@@ -138,6 +138,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '桌宠素材保护修复',
     description: '修复电脑端更新或重启后可能误删桌宠预设图片的问题。桌宠不再根据配置自动猜测并清理“旧图片”；只有你明确执行删除预设或移除图片时，才会记录并清理对应的本机素材文件。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 144,
+    title: '桌宠气泡动图与计时板简化',
+    description: '电脑桌宠的气泡图片新增 GIF 动图支持，PNG 仍可照常使用；桌面计时板去掉时间前的小秒表标识，只保留更干净的时分秒显示。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
