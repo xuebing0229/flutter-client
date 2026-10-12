@@ -17,6 +17,7 @@ class IssuerApiException implements Exception {
   final int? statusCode;
 
   bool get isUnauthorized => statusCode == 401 || code == 'unauthorized';
+  bool get isStaleRecord => code == 'stale_record';
 
   @override
   String toString() => message;
@@ -188,12 +189,14 @@ class LicenseIssuerApi {
     required String token,
     required String accountId,
     required bool sold,
+    int? expectedRevision,
   }) async {
     final json = await _request(
       'POST',
       '/v1/licenses/$accountId/sold',
       token: token,
       body: <String, dynamic>{'sold': sold},
+      extraHeaders: _revisionHeader(expectedRevision),
     );
     return _licenseFrom(json['license']);
   }
@@ -202,12 +205,14 @@ class LicenseIssuerApi {
     required String token,
     required String accountId,
     required String note,
+    int? expectedRevision,
   }) async {
     final json = await _request(
       'PATCH',
       '/v1/licenses/$accountId/note',
       token: token,
       body: <String, dynamic>{'note': note.trim()},
+      extraHeaders: _revisionHeader(expectedRevision),
     );
     return _licenseFrom(json['license']);
   }
@@ -215,11 +220,13 @@ class LicenseIssuerApi {
   Future<void> deleteLicense({
     required String token,
     required String accountId,
+    int? expectedRevision,
   }) async {
     await _request(
       'DELETE',
       '/v1/licenses/$accountId',
       token: token,
+      extraHeaders: _revisionHeader(expectedRevision),
     );
   }
 
@@ -275,6 +282,7 @@ class LicenseIssuerApi {
       'serial': map['serial'],
       'activationCode': map['activationCode'],
       'createdAt': map['createdAt'],
+      'revision': map['revision'] ?? 0,
       'note': map['note'] ?? '',
       'generatedBy': map['generatedBy'] ?? '',
       'soldAt': map['soldAt'],
@@ -291,11 +299,17 @@ class LicenseIssuerApi {
     }
   }
 
+  Map<String, String> _revisionHeader(int? revision) {
+    if (revision == null || revision < 1) return const <String, String>{};
+    return <String, String>{'X-License-Revision': revision.toString()};
+  }
+
   Future<Map<String, dynamic>> _request(
     String method,
     String path, {
     String? token,
     Map<String, dynamic>? body,
+    Map<String, String> extraHeaders = const <String, String>{},
   }) async {
     final root = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     if (root.isEmpty) {
@@ -326,6 +340,7 @@ class LicenseIssuerApi {
         if (token != null && token.trim().isNotEmpty)
           HttpHeaders.authorizationHeader: 'Bearer ${token.trim()}',
         if (body != null) HttpHeaders.contentTypeHeader: 'application/json',
+        ...extraHeaders,
       };
       final response = await const LicenseHttpTransport().send(
         method: method,
