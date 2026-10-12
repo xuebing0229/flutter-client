@@ -266,10 +266,6 @@ class FullBackupBundleService {
           );
         }
 
-        final previous = result[relativePath];
-        if (previous != null && previous.path != file.path) {
-          throw FormatException('参考图路径重复：$relativePath');
-        }
         result[relativePath] = file;
       }
     }
