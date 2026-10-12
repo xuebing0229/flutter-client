@@ -537,10 +537,12 @@ class DesktopPetSettings extends ChangeNotifier {
       DesktopPetAssetSlot.idleA => _presets[index].copyWith(
           imageA: destination.path,
           placementA: placement,
+          importPlacementA: placement,
         ),
       DesktopPetAssetSlot.keyB => _presets[index].copyWith(
           imageB: destination.path,
           placementB: placement,
+          importPlacementB: placement,
         ),
     };
     await _persist();
