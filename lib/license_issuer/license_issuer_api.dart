@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../core/network/resilient_license_http.dart';
 import 'license_issuer_models.dart';
 
 class IssuerApiException implements Exception {
@@ -319,45 +320,23 @@ class LicenseIssuerApi {
       );
     }
 
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 8)
-      ..idleTimeout = const Duration(seconds: 8);
-
     try {
-      final HttpClientRequest request;
-      if (method == 'GET') {
-        request =
-            await client.getUrl(uri).timeout(const Duration(seconds: 10));
-      } else if (method == 'POST') {
-        request =
-            await client.postUrl(uri).timeout(const Duration(seconds: 10));
-      } else if (method == 'PATCH') {
-        request =
-            await client.patchUrl(uri).timeout(const Duration(seconds: 10));
-      } else if (method == 'DELETE') {
-        request =
-            await client.deleteUrl(uri).timeout(const Duration(seconds: 10));
-      } else {
-        throw ArgumentError.value(method, 'method');
-      }
+      final headers = <String, String>{
+        HttpHeaders.acceptHeader: 'application/json',
+        if (token != null && token.trim().isNotEmpty)
+          HttpHeaders.authorizationHeader: 'Bearer ${token.trim()}',
+        if (body != null) HttpHeaders.contentTypeHeader: 'application/json',
+      };
+      final response = await const LicenseHttpTransport().send(
+        method: method,
+        uri: uri,
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      );
 
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      if (token != null && token.trim().isNotEmpty) {
-        request.headers.set(
-          HttpHeaders.authorizationHeader,
-          'Bearer ${token.trim()}',
-        );
-      }
-      if (body != null) {
-        request.headers.contentType = ContentType.json;
-        request.write(jsonEncode(body));
-      }
-
-      final response = await request.close().timeout(const Duration(seconds: 12));
-      final responseBody = await utf8.decoder.bind(response).join();
       Map<String, dynamic> json = <String, dynamic>{};
-      if (responseBody.isNotEmpty) {
-        final decoded = jsonDecode(responseBody);
+      if (response.body.isNotEmpty) {
+        final decoded = jsonDecode(response.body);
         if (decoded is Map) {
           json = decoded.map(
             (key, value) => MapEntry(key.toString(), value),
@@ -404,8 +383,6 @@ class LicenseIssuerApi {
         '激活服务器返回了无法识别的数据。',
         code: 'invalid_response',
       );
-    } finally {
-      client.close(force: true);
     }
   }
 }
