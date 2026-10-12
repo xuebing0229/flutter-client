@@ -557,6 +557,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       bubbleContentMode: _settings.bubbleContentMode,
                       bubbleImagePath: selected.bubbleImage,
                       bubbleTextScale: _settings.bubbleTextScale,
+                      bubbleImageScale: _settings.bubbleImageScale,
                       focusClockScale: _settings.focusClockScale,
                       bubbleOffset: _settings.activeBubbleOffset,
                       focusClockOffset: _settings.focusClockOffset,
@@ -591,15 +592,27 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  _ScaleSetting(
-                    label: '文字大小',
-                    value: _settings.bubbleTextScale,
-                    min: 0.65,
-                    max: 1.8,
-                    onChanged: (value) => _queuePetWrite(
-                      () => _settings.setBubbleTextScale(value),
+                  if (_settings.bubbleContentMode ==
+                      DesktopPetBubbleContentMode.text)
+                    _ScaleSetting(
+                      label: '文字大小',
+                      value: _settings.bubbleTextScale,
+                      min: 0.65,
+                      max: 1.8,
+                      onChanged: (value) => _queuePetWrite(
+                        () => _settings.setBubbleTextScale(value),
+                      ),
+                    )
+                  else
+                    _ScaleSetting(
+                      label: '图片大小',
+                      value: _settings.bubbleImageScale,
+                      min: 0.5,
+                      max: 2.0,
+                      onChanged: (value) => _queuePetWrite(
+                        () => _settings.setBubbleImageScale(value),
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 10),
                   _ScaleSetting(
                     label: '计时板大小',
@@ -612,7 +625,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '头顶与旁边模式共用同一文字大小；文字泡会按内容自动撑开，短句不会再占一大块。横向和竖向的文字泡位置分别记忆，计时板位置独立记忆；这些位置只在上面的桌宠预览里调整，桌面正常使用时不会误拖乱。',
+                    '文字模式按文字大小自动撑开；图片模式按图片大小保持原比例缩放，气泡会跟着图片自动撑开。横向和竖向的文字泡位置分别记忆，计时板位置独立记忆；这些位置只在上面的桌宠预览里调整，桌面正常使用时不会误拖乱。',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -1439,6 +1452,7 @@ class _DesktopPetOverlayPreview extends StatefulWidget {
     required this.bubbleContentMode,
     required this.bubbleImagePath,
     required this.bubbleTextScale,
+    required this.bubbleImageScale,
     required this.focusClockScale,
     required this.bubbleOffset,
     required this.focusClockOffset,
@@ -1454,6 +1468,7 @@ class _DesktopPetOverlayPreview extends StatefulWidget {
   final DesktopPetBubbleContentMode bubbleContentMode;
   final String? bubbleImagePath;
   final double bubbleTextScale;
+  final double bubbleImageScale;
   final double focusClockScale;
   final DesktopPetOverlayOffset bubbleOffset;
   final DesktopPetOverlayOffset focusClockOffset;
@@ -1636,8 +1651,8 @@ class _DesktopPetOverlayPreviewState
               )
             : Image.file(
                 File(image),
-                width: 88,
-                height: 88,
+                width: 88 * widget.bubbleImageScale,
+                height: 88 * widget.bubbleImageScale,
                 cacheWidth: _desktopPetThumbnailCacheWidth,
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) =>
