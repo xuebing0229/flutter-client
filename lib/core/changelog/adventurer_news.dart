@@ -128,6 +128,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '同步与截图导入回归修复',
     description: '修复快速切换前后台时旧任务可能再次关闭设备同步核心、单次售卖时间与节点预设并发编辑的回归问题；画加截图识别不再把“已实名/未实名”这类账号状态当作单主姓名，也会从与姓名粘连的 OCR 结果中剔除状态文字。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 142,
+    title: '内测回归继续清理',
+    description: '继续对照审计前功能修复回归：排单和成品在处理同步同字段冲突时，选择同步版本只替换真正冲突的字段，不再误丢本机其它编辑；应用更新会重新获取最新测试版，并加强 Android 下载完成后的系统安装页面唤起。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
