@@ -104,8 +104,8 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['桌宠素材保护修复']);
   });
 
-  test('144 包含新设备加入状态修复见闻', () {
-    final picked = newsBetweenBuilds(143, 144);
+  test('145 包含新设备加入状态修复见闻', () {
+    final picked = newsBetweenBuilds(144, 145);
     expect(picked.map((e) => e.title).toList(), ['新设备加入状态修复']);
   });
 }
