@@ -92,6 +92,27 @@ class ScreenshotImportDraft {
 }
 
 
+String? validateScreenshotPresetSelection({
+  required ScreenshotImportDraft row,
+  required Iterable<NodePreset> presets,
+}) {
+  NodePreset? selectedPreset;
+  for (final preset in presets) {
+    if (preset.id == row.presetId) {
+      selectedPreset = preset;
+      break;
+    }
+  }
+  if (selectedPreset == null) {
+    return '节点预设已在其他位置被删除，请重新选择节点预设';
+  }
+  if (!selectedPreset.nodes.any((node) => node.id == row.nodeId)) {
+    return '节点预设内容已经变化，请重新确认当前节点';
+  }
+  return null;
+}
+
+
 int screenshotImportInformationScore(ScreenshotImportDraft row) {
   var score = 0;
   if (row.title.trim().isNotEmpty) score += 2;
