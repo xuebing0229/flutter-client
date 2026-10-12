@@ -234,6 +234,7 @@ class DesktopPetSettings extends ChangeNotifier {
 
   bool _loaded = false;
   Future<void>? _loadInFlight;
+  Future<void>? _runtimePersistInFlight;
   bool _enabled = false;
   String? _selectedPresetId;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
@@ -797,7 +798,13 @@ class DesktopPetSettings extends ChangeNotifier {
         _bubbleAccentArgb == bubbleAccentArgb &&
         _focusEnabled == focusEnabled &&
         _focusStartedAt == focusStartedAt;
-    if (unchanged) return;
+    if (unchanged) {
+      final pending = _runtimePersistInFlight;
+      if (pending != null) {
+        await pending;
+      }
+      return;
+    }
 
     _enabled = enabled;
     _currentOrderTitle = currentOrderTitle;
@@ -809,7 +816,16 @@ class DesktopPetSettings extends ChangeNotifier {
     _bubbleAccentArgb = bubbleAccentArgb;
     _focusEnabled = focusEnabled;
     _focusStartedAt = focusStartedAt;
-    await _persist();
+
+    final operation = _persist();
+    _runtimePersistInFlight = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_runtimePersistInFlight, operation)) {
+        _runtimePersistInFlight = null;
+      }
+    }
   }
 
   Future<void> _persist() async {
