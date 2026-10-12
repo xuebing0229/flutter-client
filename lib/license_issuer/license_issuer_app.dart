@@ -827,6 +827,11 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     if (!mounted) return;
     final count = _selectedForDelete.length;
     if (count == 0) return;
+    final expectedRevisions = <String, int>{
+      for (final accountId in _selectedForDelete)
+        if (widget.store.recordByAccountId(accountId) case final record?)
+          accountId: record.revision,
+    };
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -850,7 +855,10 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     if (confirmed != true) return;
 
     try {
-      final deleted = await widget.store.deleteMany(_selectedForDelete);
+      final deleted = await widget.store.deleteMany(
+        _selectedForDelete,
+        expectedRevisions: expectedRevisions,
+      );
       if (!mounted) return;
       setState(() {
         _selectingForDelete = false;
