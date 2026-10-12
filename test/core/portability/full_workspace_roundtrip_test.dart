@@ -317,6 +317,27 @@ void main() {
     expect(restoredAccount.toJson(), account.toJson());
   });
 
+  test('backup rejects non-finite numeric values instead of normalizing them', () {
+    final source = AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 6, 1, 2, 3),
+      orders: <QueueOrder>[order],
+      products: <FinishedProduct>[product],
+      nodePresets: const <NodePreset>[preset],
+      accountSyncState: account,
+    );
+    final encoded = source.encode(pretty: false);
+    final corrupted = encoded.replaceFirst(
+      '"price":1234.5',
+      '"price":1e400',
+    );
+
+    expect(corrupted, isNot(encoded));
+    expect(
+      () => AppBackupData.decode(corrupted),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test('sync entity round trip keeps all order and product fields', () {
     final orderFields = SyncEntityCodec.orderToFields(order);
     final productFields = SyncEntityCodec.productToFields(product);
