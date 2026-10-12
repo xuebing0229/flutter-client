@@ -964,6 +964,7 @@ class DesktopPetService {
   Future<void>? _startInFlight;
   Future<void>? _stopInFlight;
   bool _enabledRequested = false;
+  int _requestGeneration = 0;
 
   Future<void> sync({
     required bool enabled,
@@ -978,6 +979,7 @@ class DesktopPetService {
     required DateTime? focusStartedAt,
   }) async {
     if (!Platform.isWindows) return;
+    final requestGeneration = ++_requestGeneration;
     _enabledRequested = enabled;
 
     await settings.setRuntimeState(
@@ -993,15 +995,22 @@ class DesktopPetService {
       focusStartedAt: focusStartedAt,
     );
 
+    // A newer feature/order/theme sync may have arrived while config.json was
+    // being persisted. Never let an older "off" request stop a newer "on"
+    // request (or vice versa).
+    if (requestGeneration != _requestGeneration) return;
+
     if (!enabled) {
-      await stop();
+      await _stopCurrentHost();
       return;
     }
 
     final existingStop = _stopInFlight;
     if (existingStop != null) {
       await existingStop;
-      if (!_enabledRequested) return;
+      if (requestGeneration != _requestGeneration || !_enabledRequested) {
+        return;
+      }
     }
     if (_process != null) return;
 
@@ -1071,7 +1080,12 @@ class DesktopPetService {
   }
 
   Future<void> stop() async {
+    _requestGeneration++;
     _enabledRequested = false;
+    await _stopCurrentHost();
+  }
+
+  Future<void> _stopCurrentHost() async {
     final existing = _stopInFlight;
     if (existing != null) {
       await existing;
