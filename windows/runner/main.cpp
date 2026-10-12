@@ -8,11 +8,11 @@
 namespace {
 
 constexpr const wchar_t kSingleInstanceMutexName[] =
-    L"Local\\AdventurersGuildFlutterClient";
+    L"Local\\AdventurersGuildInternalFlutterClient";
 constexpr const wchar_t kWindowClassName[] =
     L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr const wchar_t kWindowTitle[] =
-    L"\u5192\u9669\u8005\u516c\u4f1a";
+    L"\u5192\u9669\u8005\u516c\u4f1a \u5185\u6d4b\u7248";
 
 HWND FindExistingInstanceWindow() {
   // Current builds use the Flutter runner class and a stable title. Keeping
