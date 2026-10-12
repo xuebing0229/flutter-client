@@ -1,13 +1,16 @@
 name: Screenshot Import Validation
 on:
-  push:
-    branches:
-      - feat/screenshot-order-import-20261008
-      - 'feat/ppocrv6-small-session-scope-20261009'
-      - 'fix/ocr-native-crash-diagnostics-20261009'
-      - 'fix/ppocrv6-official-baseline-20261009'
-      - 'fix/ocr-clean-symbol-fragments-20261009'
-      - 'feat/windows-official-paddleocr-20261010'
+  pull_request:
+    paths:
+      - 'android/app/src/androidTest/**'
+      - 'android/app/build.gradle.kts'
+      - 'android/ppocr-sdk/**'
+      - 'lib/features/imports/**'
+      - 'test/features/screenshot_*'
+      - 'test/features/import_batch_preset_state_test.dart'
+      - 'tool/bundle_windows_official_paddleocr.ps1'
+      - 'tool/fetch_official_ppocrv6_models.py'
+      - '.github/workflows/screenshot-import-validation.yml'
   workflow_dispatch:
 
 concurrency:
