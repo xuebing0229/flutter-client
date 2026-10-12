@@ -652,10 +652,23 @@ class ScreenshotLayoutParser {
     return true;
   }
 
+  static bool _isBuyerStatus(String source) {
+    final text = source.trim();
+    return text == '已实名' || text == '未实名';
+  }
+
   static String _cleanBuyerName(String source) {
-    // Huajia renders a chevron after the customer name; its glyph is not
-    // part of the person's username.
-    return source.trim().replaceFirst(RegExp(r'\s*[›＞>》»]\s*$'), '').trim();
+    // Huajia renders identity state next to the buyer name. It is account
+    // metadata, never part of the user's actual name. OCR may return it as a
+    // standalone box or glue it directly onto the name.
+    var text = source.trim().replaceFirst(RegExp(r'\s*[›＞>》»]\s*$'), '').trim();
+    for (final status in const <String>['已实名', '未实名']) {
+      if (text == status) return '';
+      if (text.endsWith(status)) {
+        text = text.substring(0, text.length - status.length).trim();
+      }
+    }
+    return text;
   }
 
   static bool _plausibleBuyer(String source) {
@@ -666,11 +679,12 @@ class ScreenshotLayoutParser {
         RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {
       return false;
     }
-    if (<String>{
-      '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
-      '全部', '默认', '返回', '全额支付', '定向企划', '订单',
-      '稿件夹', '进程动态', '参考信息', '联系企划方', '上传稿件',
-    }.contains(text)) {
+    if (_isBuyerStatus(text) ||
+        <String>{
+          '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+          '全部', '默认', '返回', '全额支付', '定向企划', '订单',
+          '稿件夹', '进程动态', '参考信息', '联系企划方', '上传稿件',
+        }.contains(text)) {
       return false;
     }
     if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
