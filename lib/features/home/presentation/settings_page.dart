@@ -772,12 +772,16 @@ class _SettingsPageState extends State<SettingsPage>
                             : FilledButton.icon(
                                 onPressed: _checking ? null : _downloadLatest,
                                 icon: Icon(
-                                  _managedUpdateDownload && _pausedUpdate
+                                  _betaUpdater.installReady
+                                      ? Icons.install_mobile_rounded
+                                      : _managedUpdateDownload && _pausedUpdate
                                       ? Icons.play_arrow_rounded
                                       : Icons.download_rounded,
                                 ),
                                 label: Text(
-                                  _managedUpdateDownload && _pausedUpdate
+                                  _betaUpdater.installReady
+                                      ? '安装已下载版本'
+                                      : _managedUpdateDownload && _pausedUpdate
                                       ? '继续下载'
                                       : Platform.isWindows
                                       ? '下载并自动更新'
