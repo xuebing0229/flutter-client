@@ -95,29 +95,25 @@ internal class OcrCrashDiagnostics(context: Context) {
             } else {
                 appendLine("上次 OCR 调用阶段：未知（当时版本未保存原生阶段）")
             }
-            if (chosen == null) {
-                appendLine("对应 Android 进程退出记录：未找到（可能已被系统覆盖）")
-            } else {
-                val reason = when (chosen.reason) {
-                    ApplicationExitInfo.REASON_CRASH_NATIVE -> "REASON_CRASH_NATIVE"
-                    ApplicationExitInfo.REASON_CRASH -> "REASON_CRASH"
-                    ApplicationExitInfo.REASON_LOW_MEMORY -> "REASON_LOW_MEMORY"
-                    ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE ->
-                        "REASON_EXCESSIVE_RESOURCE_USAGE"
-                    else -> "其他"
-                }
-                appendLine("Android 进程退出时间：${date.format(Date(chosen.timestamp))}")
-                appendLine("进程退出原因：$reason（${chosen.reason}）")
-                appendLine("退出状态/信号：${chosen.status}")
-                appendLine("退出时系统记录 PSS/RSS：${chosen.pss}/${chosen.rss} KiB")
-                appendLine("进程：${chosen.processName}")
-                // Android 12+ native tombstones are a binary protobuf, not
-                // UTF-8 text. Never misinterpret them as a human stack trace.
-                val tombstoneAvailable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    runCatching { chosen.traceInputStream?.use { true } == true }.getOrDefault(false)
-                } else false
-                appendLine("原生 tombstone 可提取：$tombstoneAvailable")
+            val reason = when (chosen.reason) {
+                ApplicationExitInfo.REASON_CRASH_NATIVE -> "REASON_CRASH_NATIVE"
+                ApplicationExitInfo.REASON_CRASH -> "REASON_CRASH"
+                ApplicationExitInfo.REASON_LOW_MEMORY -> "REASON_LOW_MEMORY"
+                ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE ->
+                    "REASON_EXCESSIVE_RESOURCE_USAGE"
+                else -> "其他"
             }
+            appendLine("Android 进程退出时间：${date.format(Date(chosen.timestamp))}")
+            appendLine("进程退出原因：$reason（${chosen.reason}）")
+            appendLine("退出状态/信号：${chosen.status}")
+            appendLine("退出时系统记录 PSS/RSS：${chosen.pss}/${chosen.rss} KiB")
+            appendLine("进程：${chosen.processName}")
+            // Android 12+ native tombstones are a binary protobuf, not
+            // UTF-8 text. Never misinterpret them as a human stack trace.
+            val tombstoneAvailable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                runCatching { chosen.traceInputStream?.use { true } == true }.getOrDefault(false)
+            } else false
+            appendLine("原生 tombstone 可提取：$tombstoneAvailable")
         }
         preferences.edit()
             .putInt("reportedExitPid", chosen.pid)
