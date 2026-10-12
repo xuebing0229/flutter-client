@@ -112,16 +112,12 @@ internal sealed class DesktopPetWindow : Window
     private readonly DispatcherTimer _deadlineTimer;
     private readonly DispatcherTimer _focusTimer;
     private readonly GlobalInputActivityMonitor _inputHook;
-    private readonly Dictionary<string, CachedImageSource> _petImageCache =
+    private readonly Dictionary<string, CachedImageSource> _desktopImageCache =
         new(StringComparer.OrdinalIgnoreCase);
 
     private FileSystemWatcher? _watcher;
     private PetConfig _config = new();
     private string? _activeImagePath;
-    private string? _bubbleArtPath;
-    private DateTime _bubbleArtChangedAt;
-    private long _bubbleArtLength = -1;
-    private ImageSource? _bubbleArtCache;
     private bool _inputActive;
     private bool _closed;
     private bool _reloadInProgress;
@@ -920,7 +916,7 @@ internal sealed class DesktopPetWindow : Window
 
         try
         {
-            var source = LoadPetImage(fullPath);
+            var source = LoadDesktopImage(fullPath);
             if (source is null)
             {
                 throw new InvalidDataException("Desktop pet image could not be decoded.");
@@ -950,7 +946,7 @@ internal sealed class DesktopPetWindow : Window
 
     }
 
-    private ImageSource? LoadPetImage(string fullPath)
+    private ImageSource? LoadDesktopImage(string fullPath)
     {
         try
         {
@@ -958,7 +954,7 @@ internal sealed class DesktopPetWindow : Window
             if (!info.Exists) return null;
             var changedAt = info.LastWriteTimeUtc;
             var length = info.Length;
-            if (_petImageCache.TryGetValue(fullPath, out var cached) &&
+            if (_desktopImageCache.TryGetValue(fullPath, out var cached) &&
                 cached.ChangedAt == changedAt &&
                 cached.Length == length)
             {
@@ -987,8 +983,8 @@ internal sealed class DesktopPetWindow : Window
             bitmap.EndInit();
             bitmap.Freeze();
 
-            TrimPetImageCache(fullPath);
-            _petImageCache[fullPath] = new CachedImageSource(
+            TrimDesktopImageCache(fullPath);
+            _desktopImageCache[fullPath] = new CachedImageSource(
                 changedAt,
                 length,
                 bitmap
@@ -1019,11 +1015,11 @@ internal sealed class DesktopPetWindow : Window
         return frame.PixelWidth >= frame.PixelHeight;
     }
 
-    private void TrimPetImageCache(string nextPath)
+    private void TrimDesktopImageCache(string nextPath)
     {
-        if (_petImageCache.Count < 8) return;
+        if (_desktopImageCache.Count < 8) return;
 
-        foreach (var key in _petImageCache.Keys.ToArray())
+        foreach (var key in _desktopImageCache.Keys.ToArray())
         {
             if (string.Equals(key, nextPath, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(key, _activeImagePath, StringComparison.OrdinalIgnoreCase))
@@ -1031,8 +1027,8 @@ internal sealed class DesktopPetWindow : Window
                 continue;
             }
 
-            _petImageCache.Remove(key);
-            if (_petImageCache.Count <= 4) break;
+            _desktopImageCache.Remove(key);
+            if (_desktopImageCache.Count <= 4) break;
         }
     }
 
@@ -1078,7 +1074,14 @@ internal sealed class DesktopPetWindow : Window
         );
         if (imageMode)
         {
-            var art = LoadBubbleArt(_config.BubbleImage);
+            if (!IsUsableImage(_config.BubbleImage))
+            {
+                _bubbleArt.Source = null;
+                _bubbleHost.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var bubblePath = Path.GetFullPath(_config.BubbleImage!);
+            var art = LoadDesktopImage(bubblePath);
             if (art is null)
             {
                 _bubbleArt.Source = null;
@@ -1086,6 +1089,9 @@ internal sealed class DesktopPetWindow : Window
                 return;
             }
 
+            // Deliberately use the exact same decoded ImageSource pipeline as
+            // the A/B desktop-pet image. The only difference is that this Image
+            // control is constrained by the bubble container.
             _bubbleArt.Source = art;
             _bubbleContent.Children.Add(_bubbleArt);
             _bubbleHost.Visibility = Visibility.Visible;
@@ -1145,66 +1151,6 @@ internal sealed class DesktopPetWindow : Window
             _bubbleContent.Children.Add(_bubbleText);
         }
         _bubbleHost.Visibility = Visibility.Visible;
-    }
-
-    private ImageSource? LoadBubbleArt(string? path)
-    {
-        if (!IsUsableImage(path))
-        {
-            _bubbleArtPath = null;
-            _bubbleArtChangedAt = default;
-            _bubbleArtLength = -1;
-            _bubbleArtCache = null;
-            return null;
-        }
-        try
-        {
-            var fullPath = Path.GetFullPath(path!);
-            var info = new FileInfo(fullPath);
-            if (!info.Exists) return null;
-            var changedAt = info.LastWriteTimeUtc;
-            var length = info.Length;
-            if (string.Equals(_bubbleArtPath, fullPath, StringComparison.OrdinalIgnoreCase) &&
-                _bubbleArtChangedAt == changedAt &&
-                _bubbleArtLength == length)
-            {
-                return _bubbleArtCache;
-            }
-
-            // Decode into memory and release the file immediately. FileShare.Delete
-            // also lets a newly imported bubble image replace the previous one
-            // without the host holding a stale lock.
-            using var stream = new FileStream(
-                fullPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete
-            );
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
-            if (ShouldDecodeByWidth(fullPath))
-            {
-                bitmap.DecodePixelWidth = 256;
-            }
-            else
-            {
-                bitmap.DecodePixelHeight = 256;
-            }
-            bitmap.StreamSource = stream;
-            bitmap.EndInit();
-            bitmap.Freeze();
-            _bubbleArtCache = bitmap;
-            _bubbleArtPath = fullPath;
-            _bubbleArtChangedAt = changedAt;
-            _bubbleArtLength = length;
-            return bitmap;
-        }
-        catch (IOException) { return null; }
-        catch (UnauthorizedAccessException) { return null; }
-        catch (ArgumentException) { return null; }
-        catch (NotSupportedException) { return null; }
     }
 
     private UIElement BuildVerticalBubbleContent(string value)
@@ -1437,7 +1383,7 @@ internal sealed class DesktopPetWindow : Window
         _inputHook.Dispose();
         _petImage.Source = null;
         _bubbleArt.Source = null;
-        _petImageCache.Clear();
+        _desktopImageCache.Clear();
     }
 
     private sealed record CachedImageSource(
