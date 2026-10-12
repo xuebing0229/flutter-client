@@ -1127,14 +1127,19 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
                   _HistoryCard(
                     record: record,
                     onCopy: () async {
+                      await _silentRefreshRecords();
+                      if (!context.mounted) return;
+                      final current =
+                          widget.store.recordByAccountId(record.accountId) ??
+                          record;
                       await Clipboard.setData(
-                        ClipboardData(text: record.activationCode),
+                        ClipboardData(text: current.activationCode),
                       );
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            '编号 ${_displaySerial(record.serial)} 的完整激活码已复制',
+                            '编号 ${_displaySerial(current.serial)} 的完整激活码已复制',
                           ),
                         ),
                       );
