@@ -105,8 +105,8 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
   ),
   AdventurerNewsEntry(
     introducedBuild: 136,
-    title: 'Android 更新安装衔接修复',
-    description: '修复测试版 APK 下载到 100% 后在“安装未知应用”权限流程中丢失安装动作的问题；授权后返回公会会自动继续打开安装页面，已完整下载的更新包也会明确显示为可安装，不再误判成未完成下载。',
+    title: '更新与激活管理完善',
+    description: '修复 Android 测试版 APK 下载到 100% 后安装动作丢失的问题；发码器新增拉取覆盖更新。激活与发码请求在 VPN 路由无法访问授权服务器时会仅针对授权域名尝试本地网络直连；发码器在打开、回到前台及服务端操作后自动刷新共享账本，并用记录版本冲突保护避免多管理员同时操作时静默覆盖。',
   ),
 ];
 
