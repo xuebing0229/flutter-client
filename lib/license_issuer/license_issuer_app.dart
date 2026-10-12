@@ -8,6 +8,7 @@ import 'license_issuer_api.dart';
 import 'license_issuer_engine.dart';
 import 'license_issuer_models.dart';
 import 'license_issuer_store.dart';
+import 'issuer_update_service.dart';
 
 class LicenseIssuerApp extends StatefulWidget {
   const LicenseIssuerApp({super.key});
@@ -174,9 +175,15 @@ class _IssuerHomePage extends StatefulWidget {
 class _IssuerHomePageState extends State<_IssuerHomePage>
     with WidgetsBindingObserver {
   final _noteController = TextEditingController();
+  final IssuerUpdateService _issuerUpdateService = const IssuerUpdateService();
   bool _busy = false;
   bool _adminBusy = true;
   bool _silentRefreshInFlight = false;
+  bool _issuerUpdateBusy = false;
+  int _issuerUpdateReceived = 0;
+  int? _issuerUpdateTotal;
+  IssuerReleaseInfo? _issuerUpdateInfo;
+  String? _issuerUpdateStatus;
   String? _adminError;
   _IssuerFilter _filter = _IssuerFilter.all;
   bool _selectingForDelete = false;
@@ -187,6 +194,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(_restoreAdminSession(promptIfMissing: true));
+    unawaited(_checkIssuerUpdate(silent: true));
   }
 
   @override
@@ -218,6 +226,100 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
       return false;
     } finally {
       _silentRefreshInFlight = false;
+    }
+  }
+
+
+  Future<void> _checkIssuerUpdate({bool silent = false}) async {
+    if (_issuerUpdateBusy) return;
+    if (mounted) {
+      setState(() {
+        _issuerUpdateBusy = true;
+        if (!silent) _issuerUpdateStatus = '正在检查发码器更新…';
+      });
+    }
+
+    try {
+      final currentBuild = await _issuerUpdateService.currentBuild();
+      final latest = await _issuerUpdateService.fetchLatest();
+      final hasUpdate = latest != null && latest.build > currentBuild;
+
+      if (!mounted) return;
+      setState(() {
+        _issuerUpdateInfo = hasUpdate ? latest : null;
+        _issuerUpdateStatus = hasUpdate
+            ? '发现新版本 ${latest.version} (${latest.build})'
+            : null;
+      });
+
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              hasUpdate
+                  ? '发现发码器新版本 ${latest.version} (${latest.build})'
+                  : '发码器已经是最新版本',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (!silent) {
+        setState(() => _issuerUpdateStatus = '检查更新失败：$error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('检查发码器更新失败：$error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _issuerUpdateBusy = false);
+    }
+  }
+
+  Future<void> _installIssuerUpdate() async {
+    final release = _issuerUpdateInfo;
+    if (release == null || _issuerUpdateBusy) return;
+
+    setState(() {
+      _issuerUpdateBusy = true;
+      _issuerUpdateReceived = 0;
+      _issuerUpdateTotal = release.sizeBytes;
+      _issuerUpdateStatus = '正在下载发码器更新…';
+    });
+
+    var lastUiBytes = 0;
+    try {
+      final result = await _issuerUpdateService.downloadAndInstall(
+        release,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          final shouldUpdate =
+              received >= (total ?? 1) ||
+              received - lastUiBytes >= 512 * 1024;
+          if (!shouldUpdate) return;
+          lastUiBytes = received;
+          setState(() {
+            _issuerUpdateReceived = received;
+            _issuerUpdateTotal = total;
+            _issuerUpdateStatus = '正在下载发码器更新…';
+          });
+        },
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _issuerUpdateStatus = result == 'permission_required'
+            ? '请允许“安装未知应用”；返回后会自动继续安装'
+            : '更新包已下载，已打开系统安装页面';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _issuerUpdateStatus = '更新失败：$error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发码器更新失败：$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _issuerUpdateBusy = false);
     }
   }
 
@@ -860,6 +962,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
                         if (value == 'batch') _issueBatch();
                         if (value == 'admin') _editAdminName();
                         if (value == 'refresh') _refreshRecords();
+                        if (value == 'update') _checkIssuerUpdate();
                         if (value == 'delete_batch') _startBatchDelete();
                         if (value == 'export') _exportCsv();
                         if (value == 'key') widget.onImportPrivateKey();
@@ -880,6 +983,10 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
                             value: 'batch',
                             child: Text('批量生成'),
                           ),
+                        const PopupMenuItem(
+                          value: 'update',
+                          child: Text('检查发码器更新'),
+                        ),
                         if (all.isNotEmpty)
                           const PopupMenuItem(
                             value: 'delete_batch',
@@ -923,6 +1030,18 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
                     ? _refreshRecords
                     : _reconnectAdmin,
               ),
+              if (_issuerUpdateInfo != null ||
+                  (_issuerUpdateStatus != null && _issuerUpdateBusy)) ...[
+                const SizedBox(height: 10),
+                _IssuerUpdateCard(
+                  release: _issuerUpdateInfo,
+                  busy: _issuerUpdateBusy,
+                  status: _issuerUpdateStatus,
+                  receivedBytes: _issuerUpdateReceived,
+                  totalBytes: _issuerUpdateTotal,
+                  onInstall: _installIssuerUpdate,
+                ),
+              ],
               const SizedBox(height: 14),
               _GenerateCard(
                 enabled: hasKey && hasAdmin && !_busy,
@@ -1198,6 +1317,81 @@ class _AdminIdentityCard extends StatelessWidget {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _IssuerUpdateCard extends StatelessWidget {
+  const _IssuerUpdateCard({
+    required this.release,
+    required this.busy,
+    required this.status,
+    required this.receivedBytes,
+    required this.totalBytes,
+    required this.onInstall,
+  });
+
+  final IssuerReleaseInfo? release;
+  final bool busy;
+  final String? status;
+  final int receivedBytes;
+  final int? totalBytes;
+  final Future<void> Function() onInstall;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final total = totalBytes;
+    final progress =
+        total != null && total > 0 ? (receivedBytes / total).clamp(0.0, 1.0) : null;
+
+    return Material(
+      color: colors.secondaryContainer.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(22),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.system_update_alt_rounded),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    release == null
+                        ? '发码器更新'
+                        : '发现发码器更新 ${release!.version} (${release!.build})',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            if (status != null) ...[
+              const SizedBox(height: 8),
+              Text(status!),
+            ],
+            if (busy && receivedBytes > 0) ...[
+              const SizedBox(height: 10),
+              LinearProgressIndicator(value: progress),
+            ],
+            if (release != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: busy ? null : onInstall,
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_rounded),
+                label: Text(busy ? '正在处理…' : '下载并覆盖更新'),
+              ),
+            ],
           ],
         ),
       ),
