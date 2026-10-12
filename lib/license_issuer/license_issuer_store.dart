@@ -372,13 +372,15 @@ class LicenseIssuerStore extends ChangeNotifier {
     });
   }
 
-  Future<int> deleteMany(Iterable<String> accountIds) {
+  Future<int> deleteMany(
+    Iterable<String> accountIds, {
+    Map<String, int> expectedRevisions = const <String, int>{},
+  }) {
     final ids = accountIds.toSet();
     if (ids.isEmpty) return Future<int>.value(0);
 
     return _serverLock.synchronized(() async {
       final token = _requireToken();
-      await _refreshWithToken(token);
 
       var deleted = 0;
       try {
@@ -388,7 +390,8 @@ class LicenseIssuerStore extends ChangeNotifier {
           await _api.deleteLicense(
             token: token,
             accountId: accountId,
-            expectedRevision: current.revision,
+            expectedRevision:
+                expectedRevisions[accountId] ?? current.revision,
           );
           _records.removeWhere((item) => item.accountId == accountId);
           deleted += 1;
