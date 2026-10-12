@@ -5,8 +5,12 @@ on:
     paths:
       - 'lib/core/desktop_pet/**'
       - 'lib/features/home/presentation/desktop_pet_page.dart'
+      - 'lib/features/focus/**'
       - 'windows/desktop_pet/**'
+      - 'test/features/focus/**'
+      - 'test/core/portability/focus_backup_test.dart'
       - 'test/core/desktop_pet_bubble_test.dart'
+      - '.github/workflows/pet-focus-validation.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,8 +34,8 @@ jobs:
         run: flutter pub get
       - name: Analyze
         run: flutter analyze --no-fatal-warnings
-      - name: Focus and changelog tests
-        run: flutter test test/features/focus/focus_store_test.dart test/core/portability/focus_backup_test.dart test/core/adventurer_news_test.dart test/core/desktop_pet_bubble_test.dart
+      - name: Focus and desktop-pet tests
+        run: flutter test test/features/focus test/core/portability/focus_backup_test.dart test/core/desktop_pet_bubble_test.dart
 
   desktop-pet:
     runs-on: windows-latest
