@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: beta-publish
+  cancel-in-progress: false
+
 env:
   RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
   BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
