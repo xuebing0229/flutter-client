@@ -106,54 +106,138 @@ class IssuerUpdateService {
     return best;
   }
 
-  Future<String> downloadAndInstall(
-    IssuerReleaseInfo release, {
-    IssuerUpdateProgress? onProgress,
-  }) async {
+  Future<Directory> _updateDirectory() async {
     final support = await getApplicationSupportDirectory();
     final directory = Directory(
       '${support.path}${Platform.pathSeparator}issuer-updates',
     );
     await directory.create(recursive: true);
+    return directory;
+  }
+
+  Future<File> _targetFile(IssuerReleaseInfo release) async {
+    final directory = await _updateDirectory();
+    return File(
+      '${directory.path}${Platform.pathSeparator}'
+      'issuer-${release.build}.apk',
+    );
+  }
+
+  Future<File> _partialFile(IssuerReleaseInfo release) async {
+    final target = await _targetFile(release);
+    return File('${target.path}.part');
+  }
+
+  Future<void> _cleanupStaleFiles({
+    required IssuerReleaseInfo keep,
+  }) async {
+    final directory = await _updateDirectory();
+    final keepApk = 'issuer-${keep.build}.apk'.toLowerCase();
+    final keepPart = '$keepApk.part';
 
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File) continue;
-      final name = entity.path.split(Platform.pathSeparator).last;
-      if (name != 'issuer-${release.build}.apk' &&
-          name != 'issuer-${release.build}.apk.part') {
-        try {
-          await entity.delete();
-        } catch (_) {
-          // Best-effort cleanup only.
-        }
+      final name = entity.path.split(Platform.pathSeparator).last.toLowerCase();
+      if (!name.startsWith('issuer-')) continue;
+      if (!(name.endsWith('.apk') || name.endsWith('.apk.part'))) continue;
+      if (name == keepApk || name == keepPart) continue;
+      try {
+        await entity.delete();
+      } catch (_) {
+        // Best-effort cleanup only.
       }
     }
+  }
 
-    final target = File(
-      '${directory.path}${Platform.pathSeparator}issuer-${release.build}.apk',
-    );
-    final partial = File('${target.path}.part');
+  int? _contentRangeTotal(HttpHeaders headers) {
+    final value = headers.value(HttpHeaders.contentRangeHeader);
+    if (value == null) return null;
+    final match = RegExp(r'/([0-9]+)$').firstMatch(value.trim());
+    return match == null ? null : int.tryParse(match.group(1)!);
+  }
 
-    if (await _matchesExpected(target, release)) {
-      final length = await target.length();
-      onProgress?.call(length, release.sizeBytes ?? length);
-      return _install(target);
+  Future<int?> resumableBytes(IssuerReleaseInfo release) async {
+    final partial = await _partialFile(release);
+    if (await partial.exists()) {
+      final length = await partial.length();
+      if (length > 0) return length;
     }
-    if (await target.exists()) await target.delete();
-    if (await partial.exists()) await partial.delete();
 
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 12)
-      ..idleTimeout = const Duration(seconds: 20);
+    final target = await _targetFile(release);
+    if (await target.exists()) {
+      final length = await target.length();
+      if (length > 0) return length;
+    }
+
+    return null;
+  }
+
+  Future<String> downloadAndInstall(
+    IssuerReleaseInfo release, {
+    IssuerUpdateProgress? onProgress,
+  }) async {
+    if (release.downloadUri.scheme != 'https' ||
+        release.downloadUri.host.toLowerCase() != 'github.com') {
+      throw const FormatException('发码器只能从 GitHub Releases 下载更新。');
+    }
+
+    final target = await _targetFile(release);
+    final partial = File('${target.path}.part');
+    await _cleanupStaleFiles(keep: release);
+
+    if (await target.exists()) {
+      if (await _matchesExpected(target, release)) {
+        final length = await target.length();
+        onProgress?.call(length, release.sizeBytes ?? length);
+        return _install(target);
+      }
+      await target.delete();
+    }
+
+    // Keep the same resumable-download behavior as the Android Beta updater:
+    // preserve .part files across network failures and resume with HTTP Range.
+    var existingBytes = await partial.exists() ? await partial.length() : 0;
+    final client = HttpClient();
+
     try {
       final request = await client.getUrl(release.downloadUri);
       request.followRedirects = true;
       request.headers
         ..set(HttpHeaders.userAgentHeader, _userAgent)
         ..set(HttpHeaders.acceptHeader, 'application/octet-stream');
+      if (existingBytes > 0) {
+        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existingBytes-');
+      }
 
       final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
+
+      if (response.statusCode == HttpStatus.requestedRangeNotSatisfiable &&
+          existingBytes > 0) {
+        final totalBytes = _contentRangeTotal(response.headers);
+        await response.drain<void>();
+
+        if (totalBytes != null && totalBytes == existingBytes) {
+          if (!await _matchesExpected(partial, release)) {
+            if (await partial.exists()) await partial.delete();
+            throw const FormatException('发码器更新包完整性校验失败，请重新下载。');
+          }
+          if (await target.exists()) await target.delete();
+          await partial.rename(target.path);
+          onProgress?.call(existingBytes, release.sizeBytes ?? totalBytes);
+          return await _install(target);
+        }
+
+        if (await partial.exists()) await partial.delete();
+        throw HttpException(
+          '服务器拒绝继续当前断点，请重新点击下载。',
+          uri: release.downloadUri,
+        );
+      }
+
+      final acceptedRange =
+          existingBytes > 0 && response.statusCode == HttpStatus.partialContent;
+      final acceptedFresh = response.statusCode == HttpStatus.ok;
+      if (!acceptedRange && !acceptedFresh) {
         await response.drain<void>();
         throw HttpException(
           '发码器更新下载失败：HTTP ${response.statusCode}',
@@ -161,27 +245,65 @@ class IssuerUpdateService {
         );
       }
 
-      final total = release.sizeBytes ??
-          (response.contentLength > 0 ? response.contentLength : null);
-      var received = 0;
-      final sink = partial.openWrite();
+      // Some redirect targets ignore Range. In that case restart this build
+      // cleanly instead of appending a full response to the partial APK.
+      if (!acceptedRange) {
+        existingBytes = 0;
+      }
+
+      final contentRangeTotal = _contentRangeTotal(response.headers);
+      final totalBytes = release.sizeBytes ??
+          contentRangeTotal ??
+          (response.contentLength > 0
+              ? existingBytes + response.contentLength
+              : null);
+      var receivedBytes = existingBytes;
+      var lastReportedAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+      final sink = partial.openWrite(
+        mode: acceptedRange ? FileMode.append : FileMode.write,
+      );
+
       try {
+        onProgress?.call(receivedBytes, totalBytes);
+
         await for (final chunk in response) {
           sink.add(chunk);
-          received += chunk.length;
-          onProgress?.call(received, total);
+          receivedBytes += chunk.length;
+
+          final now = DateTime.now();
+          final shouldReport =
+              totalBytes != null && receivedBytes >= totalBytes ||
+              now.difference(lastReportedAt) >=
+                  const Duration(milliseconds: 120);
+          if (shouldReport) {
+            lastReportedAt = now;
+            onProgress?.call(receivedBytes, totalBytes);
+          }
         }
+
         await sink.flush();
         await sink.close();
       } catch (_) {
         await sink.close();
+        // Keep the partial APK so the next tap/relaunch can resume.
         rethrow;
+      }
+
+      onProgress?.call(receivedBytes, totalBytes);
+      if (totalBytes != null && receivedBytes < totalBytes) {
+        throw HttpException(
+          '更新下载提前结束，已保留断点，可继续下载。',
+          uri: release.downloadUri,
+        );
       }
 
       if (!await _matchesExpected(partial, release)) {
         if (await partial.exists()) await partial.delete();
         throw const FormatException('发码器更新包完整性校验失败，请重新下载。');
       }
+
+      if (await target.exists()) await target.delete();
       await partial.rename(target.path);
     } finally {
       client.close(force: true);
@@ -228,9 +350,7 @@ class IssuerUpdateService {
   }
 
   Future<List<dynamic>> _fetchJsonList(Uri uri) async {
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 10)
-      ..idleTimeout = const Duration(seconds: 10);
+    final client = HttpClient();
     try {
       final request = await client.getUrl(uri);
       request.headers
