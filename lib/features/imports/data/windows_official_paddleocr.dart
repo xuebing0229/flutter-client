@@ -42,7 +42,7 @@ class WindowsOfficialPaddleOcr {
 
     final temp = await Directory.systemTemp.createTemp('ag-paddleocr-');
     try {
-      final fileName = imageFile.replaceAll('\\\\', '/').split('/').last;
+      final fileName = imageFile.replaceAll('\\', '/').split('/').last;
       final dotIndex = fileName.lastIndexOf('.');
       final extension =
           dotIndex > 0 && dotIndex < fileName.length - 1
