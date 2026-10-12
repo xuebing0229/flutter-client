@@ -6,9 +6,14 @@ import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
     private lateinit var issuerSecretBridge: IssuerSecretBridge
+    private lateinit var licenseDirectHttpsBridge: LicenseDirectHttpsBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        licenseDirectHttpsBridge = LicenseDirectHttpsBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
 
         issuerSecretBridge = IssuerSecretBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
