@@ -705,7 +705,10 @@ class DesktopPetSettings extends ChangeNotifier {
     if (!Platform.isWindows) return null;
     final selected = await openFile(
       acceptedTypeGroups: const <XTypeGroup>[
-        XTypeGroup(label: '透明背景 PNG', extensions: <String>['png']),
+        XTypeGroup(
+          label: '气泡图片',
+          extensions: <String>['png', 'gif'],
+        ),
       ],
     );
     return selected?.path;
@@ -715,7 +718,8 @@ class DesktopPetSettings extends ChangeNotifier {
     if (!Platform.isWindows) return;
     await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
-    if (index < 0 || !sourcePath.toLowerCase().endsWith('.png')) return;
+    final extension = sourcePath.split('.').last.toLowerCase();
+    if (index < 0 || !const <String>{'png', 'gif'}.contains(extension)) return;
     final source = File(sourcePath);
     if (!await source.exists()) return;
     final root = await _rootDirectory();
@@ -724,7 +728,7 @@ class DesktopPetSettings extends ChangeNotifier {
     // Use a fresh filename for every import. This guarantees the desktop host
     // sees a new path and never races a replacement of an image it is decoding.
     final destination = File(
-      '${folder.path}/bubble-image.${DateTime.now().microsecondsSinceEpoch}.png',
+      '${folder.path}/bubble-image.${DateTime.now().microsecondsSinceEpoch}.$extension',
     );
     if (source.absolute.path != destination.absolute.path) {
       await source.copy(destination.path);
