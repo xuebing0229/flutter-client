@@ -4,6 +4,7 @@ class IssuedLicenseRecord {
     required this.serial,
     required this.activationCode,
     required this.createdAt,
+    this.revision = 0,
     this.note = '',
     this.generatedBy = '',
     this.soldAt,
@@ -15,6 +16,7 @@ class IssuedLicenseRecord {
   final String serial;
   final String activationCode;
   final DateTime createdAt;
+  final int revision;
   final String note;
   final String generatedBy;
   final DateTime? soldAt;
@@ -26,6 +28,7 @@ class IssuedLicenseRecord {
   bool get isLegacyCode => activationCode.startsWith('AW1.');
 
   IssuedLicenseRecord copyWith({
+    int? revision,
     String? note,
     String? generatedBy,
     DateTime? soldAt,
@@ -40,6 +43,7 @@ class IssuedLicenseRecord {
       serial: serial,
       activationCode: activationCode,
       createdAt: createdAt,
+      revision: revision ?? this.revision,
       note: note ?? this.note,
       generatedBy: generatedBy ?? this.generatedBy,
       soldAt: clearSoldAt ? null : soldAt ?? this.soldAt,
@@ -54,6 +58,7 @@ class IssuedLicenseRecord {
         'serial': serial,
         'activationCode': activationCode,
         'createdAt': createdAt.toUtc().toIso8601String(),
+        'revision': revision,
         'note': note,
         'generatedBy': generatedBy,
         'soldAt': soldAt?.toUtc().toIso8601String(),
@@ -85,6 +90,10 @@ class IssuedLicenseRecord {
     if (int.tryParse(serial) == null) {
       throw const FormatException('发码记录编号格式无效。');
     }
+    final revision = json['revision'] ?? 0;
+    if (revision is! int || revision < 0) {
+      throw const FormatException('发码记录版本格式无效。');
+    }
     final note = json['note'];
     if (note is! String) {
       throw const FormatException('发码记录备注格式无效。');
@@ -112,6 +121,7 @@ class IssuedLicenseRecord {
       serial: serial,
       activationCode: requiredString('activationCode'),
       createdAt: requiredDate(json['createdAt'], 'createdAt'),
+      revision: revision,
       note: note,
       generatedBy: (generatedBy as String?)?.trim().isNotEmpty == true
           ? (generatedBy as String).trim()
