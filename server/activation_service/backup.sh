@@ -10,15 +10,18 @@ if [[ ! -f "$DB_PATH" ]]; then
   exit 1
 fi
 
-install -d -o adventure-license -g adventure-license -m 0750 "$BACKUP_DIR"
+# Backups are recovery material, not runtime data. Keep them outside the
+# service account's write access so a compromised API process cannot erase or
+# replace the copies that would be needed to recover the ledger.
+install -d -o root -g root -m 0700 "$BACKUP_DIR"
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 tmp="$BACKUP_DIR/.license-$timestamp.sqlite.tmp"
 dest="$BACKUP_DIR/license-$timestamp.sqlite"
 
 sqlite3 "$DB_PATH" ".timeout 15000" ".backup '$tmp'"
-chown adventure-license:adventure-license "$tmp"
-chmod 0640 "$tmp"
+chown root:root "$tmp"
+chmod 0600 "$tmp"
 mv "$tmp" "$dest"
 
 find "$BACKUP_DIR" -type f -name 'license-*.sqlite' -mtime "+$RETENTION_DAYS" -delete
