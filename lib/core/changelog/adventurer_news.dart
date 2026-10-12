@@ -133,6 +133,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '内测回归继续清理',
     description: '继续对照审计前功能修复回归：排单和成品在处理同步同字段冲突时，选择同步版本只替换真正冲突的字段，不再误丢本机其它编辑；应用更新会重新获取最新测试版，并加强 Android 下载完成后的系统安装页面唤起。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 143,
+    title: '桌宠素材保护修复',
+    description: '修复电脑端更新或重启后可能误删桌宠预设图片的问题。桌宠不再根据配置自动猜测并清理“旧图片”；只有你明确执行删除预设或移除图片时，才会记录并清理对应的本机素材文件。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
