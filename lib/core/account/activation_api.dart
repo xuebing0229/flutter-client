@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../network/resilient_license_http.dart';
+
 class ActivationApiException implements Exception {
   const ActivationApiException(
     this.message, {
@@ -72,28 +74,22 @@ class ActivationApiClient {
       );
     }
 
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 8)
-      ..idleTimeout = const Duration(seconds: 8);
-
     try {
-      final request = await client
-          .postUrl(uri)
-          .timeout(const Duration(seconds: 10));
-      request.headers.contentType = ContentType.json;
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      request.write(
-        jsonEncode(<String, dynamic>{
+      final response = await const LicenseHttpTransport().send(
+        method: 'POST',
+        uri: uri,
+        headers: const <String, String>{
+          HttpHeaders.acceptHeader: 'application/json',
+          HttpHeaders.contentTypeHeader: 'application/json',
+        },
+        body: jsonEncode(<String, dynamic>{
           'activationCode': activationCode.trim(),
           'claimId': claimId,
         }),
       );
-
-      final response = await request.close().timeout(const Duration(seconds: 12));
-      final body = await utf8.decoder.bind(response).join();
       Map<String, dynamic>? json;
-      if (body.isNotEmpty) {
-        final decoded = jsonDecode(body);
+      if (response.body.isNotEmpty) {
+        final decoded = jsonDecode(response.body);
         if (decoded is Map) {
           json = decoded.map(
             (key, value) => MapEntry(key.toString(), value),
@@ -147,7 +143,7 @@ class ActivationApiClient {
       rethrow;
     } on SocketException {
       throw const ActivationApiException(
-        '暂时无法连接激活服务器，请检查网络后重试。已注册账号不受影响。',
+        '暂时无法连接激活服务器，请检查网络后重试。',
         code: 'network_unavailable',
       );
     } on HandshakeException {
@@ -170,8 +166,6 @@ class ActivationApiClient {
         '连接激活服务器超时，请检查网络后重试。',
         code: 'timeout',
       );
-    } finally {
-      client.close(force: true);
     }
   }
 }
