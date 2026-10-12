@@ -42,9 +42,12 @@ class WindowsOfficialPaddleOcr {
 
     final temp = await Directory.systemTemp.createTemp('ag-paddleocr-');
     try {
-      final extension = imageFile.contains('.')
-          ? imageFile.substring(imageFile.lastIndexOf('.'))
-          : '.png';
+      final fileName = imageFile.replaceAll('\\\\', '/').split('/').last;
+      final dotIndex = fileName.lastIndexOf('.');
+      final extension =
+          dotIndex > 0 && dotIndex < fileName.length - 1
+              ? fileName.substring(dotIndex)
+              : '.png';
       final local = File('${temp.path}\\screenshot$extension');
       await local.writeAsBytes(sourceBytes, flush: true);
       final output = Directory('${temp.path}\\output');
