@@ -279,7 +279,13 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
     _customTextSaveDebounce?.cancel();
     _customTextSaveDebounce = Timer(
       const Duration(milliseconds: 350),
-      () => unawaited(_settings.setCustomText(value)),
+      () async {
+        try {
+          await _settings.setCustomText(value);
+        } catch (_) {
+          // Keep text editing usable even if a transient local file write fails.
+        }
+      },
     );
   }
 
@@ -1466,7 +1472,7 @@ class _DesktopPetOverlayPreviewState
     final decoration = BoxDecoration(
       color: colors.surface,
       border: Border.all(color: colors.outlineVariant),
-      borderRadius: BorderRadius.circular(thought ? 40 : 12),
+      borderRadius: BorderRadius.circular(12),
       boxShadow: [
         BoxShadow(
           blurRadius: 8,
