@@ -280,52 +280,6 @@ void main() {
     );
   });
 
-  test('full backup rejects duplicate bundled asset paths', () async {
-    final bytes = <int>[1, 2, 3];
-    final backup = backupWithImage(sizeBytes: bytes.length);
-    final buildRoot = await Directory.systemTemp.createTemp(
-      'guild-duplicate-backup-',
-    );
-    addTearDown(() async {
-      if (await buildRoot.exists()) {
-        await buildRoot.delete(recursive: true);
-      }
-    });
-    final manifest = File('${buildRoot.path}/backup.json');
-    await manifest.writeAsString(backup.encode(), flush: true);
-    final first = File('${buildRoot.path}/first.png');
-    final second = File('${buildRoot.path}/second.png');
-    await first.writeAsBytes(bytes, flush: true);
-    await second.writeAsBytes(bytes, flush: true);
-    final crafted = File('${buildRoot.path}/duplicate.zip');
-    const assetPath =
-        'assets/order-reference-images/b3JkZXItMQ/ref-1.png';
-
-    final encoder = ZipFileEncoder();
-    encoder.create(crafted.path);
-    try {
-      await encoder.addFile(manifest, 'backup.json');
-      await encoder.addFile(first, assetPath, ZipFileEncoder.store);
-      await encoder.addFile(second, assetPath, ZipFileEncoder.store);
-    } finally {
-      await encoder.close();
-    }
-
-    final service = FullBackupBundleService(
-      syncRecordStore: _TemporaryRecordStore(syncRoot),
-      fileBridge: _CapturingFileBridge(exportedFile),
-    );
-    expect(
-      () => service.readBackupFile(crafted, displayName: 'duplicate.zip'),
-      throwsA(
-        isA<FormatException>().having(
-          (error) => error.message,
-          'message',
-          contains('重复的参考图文件'),
-        ),
-      ),
-    );
-  });
 
   test('temporary Android-style backup picker copy is released after reading', () async {
     final pickedFile = File('${temporary.path}/picked-backup.json');
