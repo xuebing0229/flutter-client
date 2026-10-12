@@ -281,6 +281,53 @@ void main() {
   });
 
 
+  test('full backup rejects duplicate backup.json manifests', () async {
+    final backup = AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 6, 2),
+      orders: const <QueueOrder>[],
+      products: const <FinishedProduct>[],
+      nodePresets: const <NodePreset>[preset],
+      syncRecords: const <Map<String, dynamic>>[],
+    );
+    final buildRoot = await Directory.systemTemp.createTemp(
+      'guild-duplicate-manifest-',
+    );
+    addTearDown(() async {
+      if (await buildRoot.exists()) {
+        await buildRoot.delete(recursive: true);
+      }
+    });
+    final first = File('${buildRoot.path}/first.json');
+    final second = File('${buildRoot.path}/second.json');
+    await first.writeAsString(backup.encode(), flush: true);
+    await second.writeAsString(backup.encode(), flush: true);
+    final crafted = File('${buildRoot.path}/crafted.zip');
+
+    final encoder = ZipFileEncoder();
+    encoder.create(crafted.path);
+    try {
+      await encoder.addFile(first, 'backup.json');
+      await encoder.addFile(second, 'backup.json');
+    } finally {
+      await encoder.close();
+    }
+
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+    expect(
+      () => service.readBackupFile(crafted, displayName: 'crafted.zip'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('重复的数据清单'),
+        ),
+      ),
+    );
+  });
+
   test('temporary Android-style backup picker copy is released after reading', () async {
     final pickedFile = File('${temporary.path}/picked-backup.json');
     final backup = AppBackupData(
