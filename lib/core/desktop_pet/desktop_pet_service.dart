@@ -247,7 +247,7 @@ class DesktopPetSettings extends ChangeNotifier {
   Future<void>? _runtimePersistInFlight;
   Future<void> _persistTail = Future<void>.value();
   bool _enabled = false;
-  bool _configLoadedFromDisk = false;
+  final Set<String> _pendingAssetDeletes = <String>{};
   String? _selectedPresetId;
   DesktopPetBubbleContentMode _bubbleContentMode =
       DesktopPetBubbleContentMode.text;
@@ -315,48 +315,52 @@ class DesktopPetSettings extends ChangeNotifier {
     return File('${root.path}/config.json');
   }
 
-  Future<void> _cleanupStaleAssetsAtStartup() async {
-    if (!_configLoadedFromDisk) return;
+  Future<void> _cleanupExplicitlyRemovedAssetsAtStartup() async {
+    if (_pendingAssetDeletes.isEmpty) return;
 
     final root = await _rootDirectory();
-    final presetsRoot = Directory('${root.path}/presets');
-    if (!await presetsRoot.exists()) return;
+    final managedRoot =
+        Directory('${root.path}/presets').absolute.path.toLowerCase();
+    final livePaths = <String>{
+      for (final preset in _presets) ...<String>[
+        if (preset.imageA != null) File(preset.imageA!).absolute.path,
+        if (preset.imageB != null) File(preset.imageB!).absolute.path,
+        if (preset.bubbleImage != null) File(preset.bubbleImage!).absolute.path,
+      ],
+    }.map((path) => path.toLowerCase()).toSet();
 
-    final liveByPreset = <String, Set<String>>{
-      for (final preset in _presets)
-        preset.id: <String>{
-          if (preset.imageA != null) File(preset.imageA!).absolute.path,
-          if (preset.imageB != null) File(preset.imageB!).absolute.path,
-          if (preset.bubbleImage != null) File(preset.bubbleImage!).absolute.path,
-        },
-    };
+    final completed = <String>[];
+    for (final rawPath in _pendingAssetDeletes) {
+      final file = File(rawPath);
+      final absolute = file.absolute.path;
+      final normalized = absolute.toLowerCase();
 
-    try {
-      await for (final entity in presetsRoot.list(followLinks: false)) {
-        if (entity is! Directory) continue;
-        final presetId = entity.path.split(Platform.pathSeparator).last;
-        final live = liveByPreset[presetId];
-        if (live == null) {
-          try {
-            await entity.delete(recursive: true);
-          } catch (_) {}
-          continue;
-        }
-
-        await for (final child in entity.list(followLinks: false)) {
-          if (child is! File) continue;
-          if (live.contains(child.absolute.path)) continue;
-          try {
-            await child.delete();
-          } catch (_) {
-            // Startup cleanup is best-effort. Never delete assets while the
-            // current UI/native host may still be rendering them.
-          }
-        }
+      // Only delete exact files that a user explicitly removed from a preset.
+      // Never infer "stale" assets from the current config, and never allow a
+      // config entry to delete anything outside the desktop-pet asset folder.
+      final managedPrefix = managedRoot.endsWith(Platform.pathSeparator)
+          ? managedRoot
+          : '$managedRoot${Platform.pathSeparator}';
+      if (!normalized.startsWith(managedPrefix) ||
+          livePaths.contains(normalized)) {
+        completed.add(rawPath);
+        continue;
       }
-    } catch (_) {
-      // Stale local assets are harmless; cleanup must never affect the app.
+
+      try {
+        if (await file.exists()) {
+          await file.delete();
+        }
+        completed.add(rawPath);
+      } catch (_) {
+        // A file may still be locked briefly by Windows. Keep this exact,
+        // explicitly requested deletion queued for a later launch.
+      }
     }
+
+    if (completed.isEmpty) return;
+    _pendingAssetDeletes.removeAll(completed);
+    await _persist();
   }
 
   Future<void> load() async {
@@ -380,7 +384,7 @@ class DesktopPetSettings extends ChangeNotifier {
 
   Future<void> _loadOnce() async {
     await _readFromDisk();
-    await _cleanupStaleAssetsAtStartup();
+    await _cleanupExplicitlyRemovedAssetsAtStartup();
     _loaded = true;
     notifyListeners();
   }
@@ -470,6 +474,14 @@ class DesktopPetSettings extends ChangeNotifier {
               .map(DesktopPetPreset.fromJson)
               .whereType<DesktopPetPreset>(),
         );
+      _pendingAssetDeletes
+        ..clear()
+        ..addAll(
+          (raw['pendingAssetDeletes'] is List
+                  ? raw['pendingAssetDeletes'] as List
+                  : const <Object?>[])
+              .whereType<String>(),
+        );
 
       if (_selectedPresetId == null ||
           !_presets.any((preset) => preset.id == _selectedPresetId)) {
@@ -490,10 +502,6 @@ class DesktopPetSettings extends ChangeNotifier {
             : DesktopPetBubbleContentMode.text;
       }
 
-      // Only a completely parsed config is safe to use as the authority for
-      // startup stale-file cleanup. A malformed/corrupt config must never make
-      // an empty/partially parsed preset list delete valid local image assets.
-      _configLoadedFromDisk = true;
     } catch (_) {
       // The desktop pet is optional. A bad config must not affect work data.
     }
@@ -538,9 +546,14 @@ class DesktopPetSettings extends ChangeNotifier {
     final index = _presets.indexWhere((preset) => preset.id == id);
     if (index < 0) return;
 
-    // Detach from state first. Deleting image files while Flutter/WPF is still
-    // rendering them is a common Windows native-crash path. Physical cleanup
-    // is deferred until the next app start, before any preview is mounted.
+    // The user explicitly chose to delete this preset. Queue only these exact
+    // app-managed files for later cleanup; never infer deletions from config.
+    final removed = _presets[index];
+    _pendingAssetDeletes.addAll(<String>[
+      if (removed.imageA != null) removed.imageA!,
+      if (removed.imageB != null) removed.imageB!,
+      if (removed.bubbleImage != null) removed.bubbleImage!,
+    ]);
     _presets.removeAt(index);
     if (_selectedPresetId == id) {
       _selectedPresetId = _presets.isEmpty ? null : _presets.first.id;
@@ -618,12 +631,19 @@ class DesktopPetSettings extends ChangeNotifier {
     await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return;
+    final removedPath = switch (slot) {
+      DesktopPetAssetSlot.idleA => _presets[index].imageA,
+      DesktopPetAssetSlot.keyB => _presets[index].imageB,
+    };
     _presets[index] = switch (slot) {
       DesktopPetAssetSlot.idleA =>
         _presets[index].copyWith(clearImageA: true),
       DesktopPetAssetSlot.keyB =>
         _presets[index].copyWith(clearImageB: true),
     };
+    if (removedPath != null) {
+      _pendingAssetDeletes.add(removedPath);
+    }
     await _persist();
     notifyListeners();
   }
@@ -721,7 +741,9 @@ class DesktopPetSettings extends ChangeNotifier {
     await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0 || _presets[index].bubbleImage == null) return;
+    final removedPath = _presets[index].bubbleImage!;
     _presets[index] = _presets[index].copyWith(clearBubbleImage: true);
+    _pendingAssetDeletes.add(removedPath);
     _bubbleContentMode = DesktopPetBubbleContentMode.text;
     await _persist();
     notifyListeners();
@@ -894,7 +916,7 @@ class DesktopPetSettings extends ChangeNotifier {
     final file = await _configFile();
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 11,
+      'schema': 12,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
@@ -927,6 +949,7 @@ class DesktopPetSettings extends ChangeNotifier {
       'presets': <Map<String, dynamic>>[
         for (final preset in _presets) preset.toJson(),
       ],
+      'pendingAssetDeletes': _pendingAssetDeletes.toList()..sort(),
     };
     final encoded = const JsonEncoder.withIndent('  ').convert(payload);
 
