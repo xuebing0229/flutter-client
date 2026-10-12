@@ -173,6 +173,9 @@ class FullBackupBundleService {
 
         if (entry.isFile) {
           if (name == manifestFileName) {
+            if (hasManifest) {
+              throw const FormatException('备份中存在重复的数据清单。');
+            }
             hasManifest = true;
             continue;
           }
