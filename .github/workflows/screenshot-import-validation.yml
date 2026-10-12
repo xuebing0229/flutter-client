@@ -8,6 +8,7 @@ on:
       - 'lib/features/imports/**'
       - 'test/features/screenshot_*'
       - 'test/features/import_batch_preset_state_test.dart'
+      - 'test/features/windows_official_paddleocr_test.dart'
       - 'tool/bundle_windows_official_paddleocr.ps1'
       - 'tool/fetch_official_ppocrv6_models.py'
       - '.github/workflows/screenshot-import-validation.yml'
