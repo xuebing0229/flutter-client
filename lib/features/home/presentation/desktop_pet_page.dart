@@ -100,22 +100,27 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
       if (action == null) return;
       if (action == 'restart') {
         widget.focusStore.stopActive();
-        await _settings.selectCurrentOrder(
-          orderId: order.id,
-          title: order.title,
-          node: order.currentNode.name,
-          deadline: order.deadline,
+        final saved = await _tryPetWrite(
+          () => _settings.selectCurrentOrder(
+            orderId: order.id,
+            title: order.title,
+            node: order.currentNode.name,
+            deadline: order.deadline,
+          ),
         );
+        if (!saved) return;
         widget.focusStore.start(order: order);
         return;
       }
     }
 
-    await _settings.selectCurrentOrder(
-      orderId: order.id,
-      title: order.title,
-      node: order.currentNode.name,
-      deadline: order.deadline,
+    await _tryPetWrite(
+      () => _settings.selectCurrentOrder(
+        orderId: order.id,
+        title: order.title,
+        node: order.currentNode.name,
+        deadline: order.deadline,
+      ),
     );
   }
 
