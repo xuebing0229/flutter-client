@@ -58,9 +58,16 @@ class ActivationApiClient {
     }
 
     final uri = Uri.tryParse('$root/v1/activate');
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    final loopbackHttp = uri != null &&
+        uri.scheme == 'http' &&
+        (uri.host == '127.0.0.1' ||
+            uri.host == 'localhost' ||
+            uri.host == '::1');
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'https' && !loopbackHttp)) {
       throw const ActivationApiException(
-        '激活服务地址配置无效。',
+        '激活服务地址必须使用 HTTPS。',
         code: 'not_configured',
       );
     }
