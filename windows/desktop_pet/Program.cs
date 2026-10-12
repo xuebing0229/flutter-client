@@ -1092,6 +1092,9 @@ internal sealed class DesktopPetWindow : Window
             // Deliberately use the exact same decoded ImageSource pipeline as
             // the A/B desktop-pet image. The only difference is that this Image
             // control is constrained by the bubble container.
+            var imageScale = Math.Clamp(_config.BubbleImageScale, 0.5, 2.0);
+            _bubbleArt.Width = 120 * imageScale;
+            _bubbleArt.MaxHeight = 140 * imageScale;
             _bubbleArt.Source = art;
             _bubbleContent.Children.Add(_bubbleArt);
             _bubbleHost.Visibility = Visibility.Visible;
@@ -1408,6 +1411,7 @@ internal sealed class DesktopPetWindow : Window
         public double PetScale { get; set; } = 1;
         public double BubbleScale { get; set; } = 1;
         public double? BubbleTextScale { get; set; }
+        public double BubbleImageScale { get; set; } = 1;
         public double FocusClockScale { get; set; } = 1;
         public PetOverlayOffset BubbleAboveOffset { get; set; } = new();
         public PetOverlayOffset BubbleSideOffset { get; set; } = new();
