@@ -389,6 +389,59 @@ class LicenseIssuerStore extends ChangeNotifier {
     });
   }
 
+  Future<void> deleteLocalLegacy(String accountId) {
+    return _serverLock.synchronized(() async {
+      if (_connected) {
+        throw const IssuerApiException(
+          '当前已连接服务器，请使用服务器账本删除。',
+          code: 'connected',
+        );
+      }
+      final record = recordByAccountId(accountId);
+      if (record == null) return;
+      if (!record.isLegacyCode) {
+        throw const IssuerApiException(
+          '只有本机旧版激活码记录可以在离线状态下删除。',
+          code: 'not_local_legacy',
+        );
+      }
+      _records.removeWhere((item) => item.accountId == accountId);
+      await _save();
+      notifyListeners();
+    });
+  }
+
+  Future<int> deleteLocalLegacyMany(Iterable<String> accountIds) {
+    final ids = accountIds.toSet();
+    if (ids.isEmpty) return Future<int>.value(0);
+
+    return _serverLock.synchronized(() async {
+      if (_connected) {
+        throw const IssuerApiException(
+          '当前已连接服务器，请使用服务器账本删除。',
+          code: 'connected',
+        );
+      }
+
+      var deleted = 0;
+      for (final accountId in ids) {
+        final record = recordByAccountId(accountId);
+        if (record == null) continue;
+        if (!record.isLegacyCode) {
+          throw const IssuerApiException(
+            '离线批量删除只能包含本机旧版激活码记录。',
+            code: 'not_local_legacy',
+          );
+        }
+        _records.removeWhere((item) => item.accountId == accountId);
+        deleted += 1;
+      }
+      await _save();
+      notifyListeners();
+      return deleted;
+    });
+  }
+
   Future<void> delete(
     String accountId, {
     int? expectedRevision,
