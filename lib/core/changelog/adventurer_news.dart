@@ -118,6 +118,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '桌宠稳定性与交互修复',
     description: '修复思考气泡实际显示成大椭圆、调整气泡或计时板位置时人物跟着乱跑、气泡透明 PNG 导入后不显示的问题；A/B 图片恢复为按键或鼠标按下立即切到 B、松开立即回 A。进一步减少文字更新和 A/B 切换时的重复布局与图片重建，限制桌宠预览和宿主图片解码内存与缓存，并隔离配置热更新、计时刷新、拖动保存和宿主进程异常，降低大图、连续输入或快速调节设置时的闪退概率。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 139,
+    title: '桌宠气泡图片与闪退继续修复',
+    description: '文字泡内容改为“文字 / 图片”二选一：图片模式只显示导入的透明 PNG，不再和订单文字或自定义文字叠加。桌宠图片删除与替换不再在当前界面仍可能使用文件时立即物理删除，改为下次启动前安全清理；同时把桌宠配置写入串行化，减少快速修改设置时的文件竞争与随机闪退。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

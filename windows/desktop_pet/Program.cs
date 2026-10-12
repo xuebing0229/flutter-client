@@ -197,11 +197,11 @@ internal sealed class DesktopPetWindow : Window
         _thoughtDots.Children.Add(_thoughtDotSmall);
         _bubbleArt = new Image
         {
-            Width = 88,
-            MaxHeight = 100,
+            Width = 120,
+            MaxHeight = 140,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 4),
+            Margin = new Thickness(0),
         };
         _bubbleContent = new StackPanel { Orientation = Orientation.Vertical };
         _bubble.Child = null;
@@ -1070,6 +1070,29 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
+        _bubbleContent.Children.Clear();
+        var imageMode = string.Equals(
+            _config.BubbleContentMode,
+            "image",
+            StringComparison.OrdinalIgnoreCase
+        );
+        if (imageMode)
+        {
+            var art = LoadBubbleArt(_config.BubbleImage);
+            if (art is null)
+            {
+                _bubbleArt.Source = null;
+                _bubbleHost.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            _bubbleArt.Source = art;
+            _bubbleContent.Children.Add(_bubbleArt);
+            _bubbleHost.Visibility = Visibility.Visible;
+            return;
+        }
+
+        _bubbleArt.Source = null;
         string text;
         if (string.Equals(_config.TextMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
@@ -1112,17 +1135,6 @@ internal sealed class DesktopPetWindow : Window
             "side",
             StringComparison.OrdinalIgnoreCase
         );
-        _bubbleContent.Children.Clear();
-        var art = LoadBubbleArt(_config.BubbleImage);
-        if (art is not null)
-        {
-            _bubbleArt.Source = art;
-            _bubbleContent.Children.Add(_bubbleArt);
-        }
-        else
-        {
-            _bubbleArt.Source = null;
-        }
         if (side)
         {
             _bubbleContent.Children.Add(BuildVerticalBubbleContent(text));
@@ -1445,6 +1457,7 @@ internal sealed class DesktopPetWindow : Window
         public PetPlacement PlacementB { get; set; } = new();
         public string BubblePosition { get; set; } = "above";
         public string BubbleStyle { get; set; } = "speech";
+        public string BubbleContentMode { get; set; } = "text";
         public string? BubbleImage { get; set; }
         public double PetScale { get; set; } = 1;
         public double BubbleScale { get; set; } = 1;
