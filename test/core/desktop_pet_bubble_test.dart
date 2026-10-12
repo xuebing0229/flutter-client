@@ -22,5 +22,7 @@ void main() {
     expect(restored?.copyWith(clearBubbleImage: true).bubbleImage, isNull);
     expect(DesktopPetBubbleStyle.speech.label, '说话气泡');
     expect(DesktopPetBubbleStyle.thought.label, '思考气泡');
+    expect(DesktopPetBubbleContentMode.text.label, '文字');
+    expect(DesktopPetBubbleContentMode.image.label, '图片');
   });
 }
