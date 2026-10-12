@@ -202,8 +202,48 @@ class LicenseIssuerStore extends ChangeNotifier {
         return ai.compareTo(bi);
       });
 
+    // The shared server ledger is authoritative for globally unique serials
+    // and account identities. Old local AW1/AW2 caches can legitimately carry
+    // records that were already imported or replaced on another administrator
+    // device, so those duplicates must never block admin login.
+    final remote = await _api.listLicenses(token);
+    final occupiedSerials = <String>{
+      for (final record in remote) record.serial,
+    };
+    final occupiedAccountIds = <String>{
+      for (final record in remote) record.accountId,
+    };
+    final occupiedCodes = <String>{
+      for (final record in remote)
+        if (record.activationCode.trim().isNotEmpty)
+          record.activationCode.trim(),
+    };
+
     for (final record in legacy) {
-      await _api.importLegacy(token: token, record: record);
+      final activationCode = record.activationCode.trim();
+      if (occupiedSerials.contains(record.serial) ||
+          occupiedAccountIds.contains(record.accountId) ||
+          (activationCode.isNotEmpty && occupiedCodes.contains(activationCode))) {
+        continue;
+      }
+
+      try {
+        final imported = await _api.importLegacy(
+          token: token,
+          record: record,
+        );
+        occupiedSerials.add(imported.serial);
+        occupiedAccountIds.add(imported.accountId);
+        if (imported.activationCode.trim().isNotEmpty) {
+          occupiedCodes.add(imported.activationCode.trim());
+        }
+      } on IssuerApiException catch (error) {
+        // A concurrent administrator may have imported the same historical
+        // serial/account after the initial list call. Treat that the same as
+        // an already-present server record instead of failing admin login.
+        if (error.code == 'import_conflict') continue;
+        rethrow;
+      }
     }
     _serverBackedCache = true;
   }
@@ -346,6 +386,59 @@ class LicenseIssuerStore extends ChangeNotifier {
         }
         rethrow;
       }
+    });
+  }
+
+  Future<void> deleteLocalLegacy(String accountId) {
+    return _serverLock.synchronized(() async {
+      if (_connected) {
+        throw const IssuerApiException(
+          '当前已连接服务器，请使用服务器账本删除。',
+          code: 'connected',
+        );
+      }
+      final record = recordByAccountId(accountId);
+      if (record == null) return;
+      if (!record.isLegacyCode) {
+        throw const IssuerApiException(
+          '只有本机旧版激活码记录可以在离线状态下删除。',
+          code: 'not_local_legacy',
+        );
+      }
+      _records.removeWhere((item) => item.accountId == accountId);
+      await _save();
+      notifyListeners();
+    });
+  }
+
+  Future<int> deleteLocalLegacyMany(Iterable<String> accountIds) {
+    final ids = accountIds.toSet();
+    if (ids.isEmpty) return Future<int>.value(0);
+
+    return _serverLock.synchronized(() async {
+      if (_connected) {
+        throw const IssuerApiException(
+          '当前已连接服务器，请使用服务器账本删除。',
+          code: 'connected',
+        );
+      }
+
+      var deleted = 0;
+      for (final accountId in ids) {
+        final record = recordByAccountId(accountId);
+        if (record == null) continue;
+        if (!record.isLegacyCode) {
+          throw const IssuerApiException(
+            '离线批量删除只能包含本机旧版激活码记录。',
+            code: 'not_local_legacy',
+          );
+        }
+        _records.removeWhere((item) => item.accountId == accountId);
+        deleted += 1;
+      }
+      await _save();
+      notifyListeners();
+      return deleted;
     });
   }
 

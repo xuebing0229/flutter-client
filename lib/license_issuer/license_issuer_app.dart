@@ -752,14 +752,19 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     if (!mounted) return;
     final current =
         widget.store.recordByAccountId(record.accountId) ?? record;
+    final localLegacyDelete =
+        !widget.store.isConnected && current.isLegacyCode;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除这条记录？'),
         content: Text(
-          '编号 ${_displaySerial(current.serial)} 会从服务器账本中作废并隐藏。'
-          '已核销的激活码不能直接删除。',
+          localLegacyDelete
+              ? '编号 ${_displaySerial(current.serial)} 只会从这台发码器的旧记录中移除，'
+                  '不会删除或修改服务器上的历史记录。'
+              : '编号 ${_displaySerial(current.serial)} 会从服务器账本中作废并隐藏。'
+                  '已核销的激活码不能直接删除。',
         ),
         actions: [
           TextButton(
@@ -776,10 +781,14 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     if (confirmed != true) return;
 
     try {
-      await widget.store.delete(
-        current.accountId,
-        expectedRevision: current.revision,
-      );
+      if (localLegacyDelete) {
+        await widget.store.deleteLocalLegacy(current.accountId);
+      } else {
+        await widget.store.delete(
+          current.accountId,
+          expectedRevision: current.revision,
+        );
+      }
     } on IssuerApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -827,20 +836,39 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     if (!mounted) return;
     final count = _selectedForDelete.length;
     if (count == 0) return;
-    final expectedRevisions = <String, int>{};
+
+    final selectedRecords = <IssuedLicenseRecord>[];
     for (final accountId in _selectedForDelete) {
       final record = widget.store.recordByAccountId(accountId);
-      if (record != null) {
-        expectedRevisions[accountId] = record.revision;
-      }
+      if (record != null) selectedRecords.add(record);
+    }
+    final localLegacyDelete =
+        !widget.store.isConnected &&
+        selectedRecords.isNotEmpty &&
+        selectedRecords.every((record) => record.isLegacyCode);
+
+    if (!widget.store.isConnected && !localLegacyDelete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('未连接服务器时，只能删除这台设备上的旧版激活码记录。'),
+        ),
+      );
+      return;
+    }
+
+    final expectedRevisions = <String, int>{};
+    for (final record in selectedRecords) {
+      expectedRevisions[record.accountId] = record.revision;
     }
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('删除选中的 $count 条记录？'),
-        content: const Text(
-          '选中的未核销记录会在服务器账本中作废；已核销记录不能直接删除。',
+        content: Text(
+          localLegacyDelete
+              ? '这些旧记录只会从当前设备移除，不会删除或修改服务器上的历史记录。'
+              : '选中的未核销记录会在服务器账本中作废；已核销记录不能直接删除。',
         ),
         actions: [
           TextButton(
@@ -857,10 +885,12 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     if (confirmed != true) return;
 
     try {
-      final deleted = await widget.store.deleteMany(
-        _selectedForDelete,
-        expectedRevisions: expectedRevisions,
-      );
+      final deleted = localLegacyDelete
+          ? await widget.store.deleteLocalLegacyMany(_selectedForDelete)
+          : await widget.store.deleteMany(
+              _selectedForDelete,
+              expectedRevisions: expectedRevisions,
+            );
       if (!mounted) return;
       setState(() {
         _selectingForDelete = false;

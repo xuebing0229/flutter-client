@@ -108,6 +108,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '更新与激活管理完善',
     description: '修复 Android 测试版 APK 下载到 100% 后安装动作丢失的问题；发码器新增拉取覆盖更新。激活与发码请求在 VPN 路由无法访问授权服务器时会仅针对授权域名尝试本地网络直连；发码器在打开、回到前台及服务端操作后自动刷新共享账本，并用记录版本冲突保护避免多管理员同时操作时静默覆盖。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 137,
+    title: '发码器旧记录接入修复',
+    description: '管理员首次接入共享账本时，旧发码器本地已有的 AW1/AW2 记录如果已在服务器存在相同编号、账号身份或激活码，会直接以服务器账本为准并跳过重复迁移，不再因为历史记录冲突导致管理员连接失败；未连接服务器时也允许直接删除当前设备上的旧版记录，不会误删服务器历史。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
