@@ -202,8 +202,48 @@ class LicenseIssuerStore extends ChangeNotifier {
         return ai.compareTo(bi);
       });
 
+    // The shared server ledger is authoritative for globally unique serials
+    // and account identities. Old local AW1/AW2 caches can legitimately carry
+    // records that were already imported or replaced on another administrator
+    // device, so those duplicates must never block admin login.
+    final remote = await _api.listLicenses(token);
+    final occupiedSerials = <String>{
+      for (final record in remote) record.serial,
+    };
+    final occupiedAccountIds = <String>{
+      for (final record in remote) record.accountId,
+    };
+    final occupiedCodes = <String>{
+      for (final record in remote)
+        if (record.activationCode.trim().isNotEmpty)
+          record.activationCode.trim(),
+    };
+
     for (final record in legacy) {
-      await _api.importLegacy(token: token, record: record);
+      final activationCode = record.activationCode.trim();
+      if (occupiedSerials.contains(record.serial) ||
+          occupiedAccountIds.contains(record.accountId) ||
+          (activationCode.isNotEmpty && occupiedCodes.contains(activationCode))) {
+        continue;
+      }
+
+      try {
+        final imported = await _api.importLegacy(
+          token: token,
+          record: record,
+        );
+        occupiedSerials.add(imported.serial);
+        occupiedAccountIds.add(imported.accountId);
+        if (imported.activationCode.trim().isNotEmpty) {
+          occupiedCodes.add(imported.activationCode.trim());
+        }
+      } on IssuerApiException catch (error) {
+        // A concurrent administrator may have imported the same historical
+        // serial/account after the initial list call. Treat that the same as
+        // an already-present server record instead of failing admin login.
+        if (error.code == 'import_conflict') continue;
+        rethrow;
+      }
     }
     _serverBackedCache = true;
   }
