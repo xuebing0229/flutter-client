@@ -220,7 +220,7 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('这个预设已在另一处更新'),
         content: Text(
-          '你编辑期间，同步设备也修改了\${fields.join('、')}。'
+          '你编辑期间，同步设备也修改了${fields.join('、')}。'
           '请选择保留哪一边；未冲突的修改会自动合并。',
         ),
         actions: [
@@ -242,6 +242,7 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
     if (!mounted) return null;
     return choice;
   }
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
 
