@@ -244,12 +244,29 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
       final latest = await _issuerUpdateService.fetchLatest();
       final hasUpdate = latest != null && latest.build > currentBuild;
 
+      var resumableBytes = 0;
+      if (hasUpdate) {
+        resumableBytes =
+            await _issuerUpdateService.resumableBytes(latest) ?? 0;
+      }
+
       if (!mounted) return;
       setState(() {
         _issuerUpdateInfo = hasUpdate ? latest : null;
-        _issuerUpdateStatus = hasUpdate
-            ? '发现新版本 ${latest.version} (${latest.build})'
-            : null;
+        _issuerUpdateReceived = resumableBytes;
+        _issuerUpdateTotal = hasUpdate ? latest.sizeBytes : null;
+        if (!hasUpdate) {
+          _issuerUpdateStatus = null;
+        } else if (resumableBytes > 0 &&
+            latest.sizeBytes != null &&
+            resumableBytes >= latest.sizeBytes!) {
+          _issuerUpdateStatus = '更新包已下载，可直接安装';
+        } else if (resumableBytes > 0) {
+          _issuerUpdateStatus = '发现未完成下载，可继续下载';
+        } else {
+          _issuerUpdateStatus =
+              '发现新版本 ${latest.version} (${latest.build})';
+        }
       });
 
       if (!silent) {
@@ -257,7 +274,9 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
           SnackBar(
             content: Text(
               hasUpdate
-                  ? '发现发码器新版本 ${latest.version} (${latest.build})'
+                  ? resumableBytes > 0
+                      ? '发现发码器新版本，已保留上次下载进度'
+                      : '发现发码器新版本 ${latest.version} (${latest.build})'
                   : '发码器已经是最新版本',
             ),
           ),
@@ -280,14 +299,20 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
     final release = _issuerUpdateInfo;
     if (release == null || _issuerUpdateBusy) return;
 
+    final existingBytes =
+        await _issuerUpdateService.resumableBytes(release) ?? 0;
+    if (!mounted) return;
+
     setState(() {
       _issuerUpdateBusy = true;
-      _issuerUpdateReceived = 0;
+      _issuerUpdateReceived = existingBytes;
       _issuerUpdateTotal = release.sizeBytes;
-      _issuerUpdateStatus = '正在下载发码器更新…';
+      _issuerUpdateStatus = existingBytes > 0
+          ? '正在继续下载发码器更新…'
+          : '正在下载发码器更新…';
     });
 
-    var lastUiBytes = 0;
+    var lastUiBytes = existingBytes;
     try {
       final result = await _issuerUpdateService.downloadAndInstall(
         release,
@@ -301,7 +326,8 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
           setState(() {
             _issuerUpdateReceived = received;
             _issuerUpdateTotal = total;
-            _issuerUpdateStatus = '正在下载发码器更新…';
+            _issuerUpdateStatus =
+                existingBytes > 0 ? '正在继续下载发码器更新…' : '正在下载发码器更新…';
           });
         },
       );
@@ -313,10 +339,24 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
             : '更新包已下载，已打开系统安装页面';
       });
     } catch (error) {
+      final resumableBytes =
+          await _issuerUpdateService.resumableBytes(release) ?? 0;
       if (!mounted) return;
-      setState(() => _issuerUpdateStatus = '更新失败：$error');
+      setState(() {
+        _issuerUpdateReceived = resumableBytes;
+        _issuerUpdateTotal = release.sizeBytes;
+        _issuerUpdateStatus = resumableBytes > 0
+            ? '下载中断，已保留断点，点击继续下载'
+            : '更新失败：$error';
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('发码器更新失败：$error')),
+        SnackBar(
+          content: Text(
+            resumableBytes > 0
+                ? '下载中断，已保留断点；再次点击即可继续'
+                : '发码器更新失败：$error',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _issuerUpdateBusy = false);
@@ -1438,7 +1478,17 @@ class _IssuerUpdateCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.download_rounded),
-                label: Text(busy ? '正在处理…' : '下载并覆盖更新'),
+                label: Text(
+                  busy
+                      ? '正在处理…'
+                      : total != null &&
+                              total > 0 &&
+                              receivedBytes >= total
+                          ? '安装已下载版本'
+                          : receivedBytes > 0
+                              ? '继续下载并更新'
+                              : '下载并覆盖更新',
+                ),
               ),
             ],
           ],
