@@ -275,6 +275,30 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD=$BUILD" >> "$GITHUB_ENV"
 
+      - name: Require a newer Beta build number
+        shell: bash
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN"
+          CURRENT_JSON="$RUNNER_TEMP/current-beta-version.json"
+          gh api repos/xuebing0229/release-files/contents/version.json \
+            --jq .content | base64 --decode > "$CURRENT_JSON"
+          python3 - "$CURRENT_JSON" "$BUILD" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          current = json.loads(Path(sys.argv[1]).read_text())
+          previous = current.get("build")
+          candidate = int(sys.argv[2])
+          if isinstance(previous, int) and candidate <= previous:
+              raise SystemExit(
+                  f"Beta build number must increase: current={previous}, candidate={candidate}. "
+                  "Increment pubspec.yaml before publishing."
+              )
+          PY
+
       - name: Prepare static Beta update manifest
         shell: bash
         run: |
