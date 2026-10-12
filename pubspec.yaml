@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.1.0
-# Internal release: 0.1.0 (Android manifest fix)
+# Internal release: 0.1.0 (normal visible app name)
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
