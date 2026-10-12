@@ -114,6 +114,32 @@ void main() {
     );
   });
 
+  test('画加实名状态不会被当成单主姓名', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 1050,
+      lines: [
+        // 第一种 OCR：姓名和状态被粘在同一个文字框。
+        at('碳-氮二氧四已实名', 220, x: 55),
+        at('妹宝only的平涂草盲盒', 330, x: 200),
+        at('截稿时间：2026-11-10 23:59', 430, x: 200),
+        at('¥88', 500, x: 560),
+
+        // 第二种 OCR：状态被识别成独立文字框，而且比姓名更靠近标题。
+        at('第二位单主', 650, x: 55),
+        at('已实名', 690, x: 130),
+        at('另一个稿件', 770, x: 200),
+        at('截稿时间：2026-11-12 23:59', 865, x: 200),
+        at('¥66', 930, x: 560),
+      ],
+    );
+
+    expect(rows, hasLength(2));
+    expect(rows.first.clientName, '碳-氮二氧四');
+    expect(rows.last.clientName, '第二位单主');
+    expect(rows.map((row) => row.clientName), isNot(contains('已实名')));
+  });
+
   test('画加: progress and price are not mixed with the next card', () {
     final entries = const ScreenshotLayoutParser().parse(
       imageWidth: 690,
