@@ -234,6 +234,7 @@ class DesktopPetSettings extends ChangeNotifier {
 
   bool _loaded = false;
   Future<void>? _loadInFlight;
+  Future<void>? _runtimePersistInFlight;
   bool _enabled = false;
   String? _selectedPresetId;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
@@ -528,7 +529,11 @@ class DesktopPetSettings extends ChangeNotifier {
 
     final ext = source.path.split('.').last.toLowerCase();
     final baseName = slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB';
-    final destination = File('${folder.path}/$baseName.$ext');
+    // Never overwrite an image the native host or Flutter preview may still be
+    // decoding. Persist the new path first, then prune stale slot files.
+    final destination = File(
+      '${folder.path}/$baseName.${DateTime.now().microsecondsSinceEpoch}.$ext',
+    );
     if (source.absolute.path != destination.absolute.path) {
       await source.copy(destination.path);
     }
@@ -793,7 +798,13 @@ class DesktopPetSettings extends ChangeNotifier {
         _bubbleAccentArgb == bubbleAccentArgb &&
         _focusEnabled == focusEnabled &&
         _focusStartedAt == focusStartedAt;
-    if (unchanged) return;
+    if (unchanged) {
+      final pending = _runtimePersistInFlight;
+      if (pending != null) {
+        await pending;
+      }
+      return;
+    }
 
     _enabled = enabled;
     _currentOrderTitle = currentOrderTitle;
@@ -805,12 +816,20 @@ class DesktopPetSettings extends ChangeNotifier {
     _bubbleAccentArgb = bubbleAccentArgb;
     _focusEnabled = focusEnabled;
     _focusStartedAt = focusStartedAt;
-    await _persist();
+
+    final operation = _persist();
+    _runtimePersistInFlight = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_runtimePersistInFlight, operation)) {
+        _runtimePersistInFlight = null;
+      }
+    }
   }
 
   Future<void> _persist() async {
     final file = await _configFile();
-    await file.parent.create(recursive: true);
     final active = selectedPreset;
     final payload = <String, dynamic>{
       'schema': 9,
@@ -845,11 +864,22 @@ class DesktopPetSettings extends ChangeNotifier {
         for (final preset in _presets) preset.toJson(),
       ],
     };
-    await atomicWriteString(
-      file,
-      const JsonEncoder.withIndent('  ').convert(payload),
-    );
+    final encoded = const JsonEncoder.withIndent('  ').convert(payload);
+
+    // Antivirus/indexers can briefly hold the config file on Windows. Retry
+    // one transient filesystem failure before surfacing it to the caller.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await file.parent.create(recursive: true);
+        await atomicWriteString(file, encoded);
+        return;
+      } on FileSystemException {
+        if (attempt != 0) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      }
+    }
   }
+
 }
 
 class DesktopPetService {
@@ -859,6 +889,7 @@ class DesktopPetService {
   final DesktopPetSettings settings;
   Process? _process;
   Future<void>? _startInFlight;
+  Future<void>? _stopInFlight;
   bool _enabledRequested = false;
 
   Future<void> sync({
@@ -892,6 +923,12 @@ class DesktopPetService {
     if (!enabled) {
       await stop();
       return;
+    }
+
+    final existingStop = _stopInFlight;
+    if (existingStop != null) {
+      await existingStop;
+      if (!_enabledRequested) return;
     }
     if (_process != null) return;
 
@@ -934,15 +971,27 @@ class DesktopPetService {
         mode: ProcessStartMode.detachedWithStdio,
       );
       if (!_enabledRequested) {
-        process.kill();
+        try {
+          process.kill();
+          await process.exitCode.timeout(const Duration(seconds: 2));
+        } catch (_) {}
         return;
       }
       _process = process;
-      unawaited(process.exitCode.then((_) {
-        if (identical(_process, process)) {
-          _process = null;
-        }
-      }));
+      unawaited(
+        process.exitCode.then<void>(
+          (_) {
+            if (identical(_process, process)) {
+              _process = null;
+            }
+          },
+          onError: (Object _, StackTrace __) {
+            if (identical(_process, process)) {
+              _process = null;
+            }
+          },
+        ),
+      );
     } catch (_) {
       _process = null;
     }
@@ -950,12 +999,34 @@ class DesktopPetService {
 
   Future<void> stop() async {
     _enabledRequested = false;
+    final existing = _stopInFlight;
+    if (existing != null) {
+      await existing;
+      return;
+    }
+
+    final operation = _stopHost();
+    _stopInFlight = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_stopInFlight, operation)) {
+        _stopInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _stopHost() async {
     final process = _process;
     _process = null;
     if (process == null) return;
+
     try {
       process.kill();
-    } catch (_) {}
+      await process.exitCode.timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // Shutdown is best-effort; the host also watches the parent PID.
+    }
   }
 
   void dispose() {

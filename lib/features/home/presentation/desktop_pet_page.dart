@@ -10,6 +10,9 @@ import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
+const int _desktopPetPreviewCacheWidth = 1600;
+const int _desktopPetThumbnailCacheWidth = 256;
+
 class DesktopPetPage extends StatefulWidget {
   const DesktopPetPage({
     required this.orderStore,
@@ -96,23 +99,28 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
       );
       if (action == null) return;
       if (action == 'restart') {
-        widget.focusStore.stopActive();
-        await _settings.selectCurrentOrder(
-          orderId: order.id,
-          title: order.title,
-          node: order.currentNode.name,
-          deadline: order.deadline,
+        final saved = await _tryPetWrite(
+          () => _settings.selectCurrentOrder(
+            orderId: order.id,
+            title: order.title,
+            node: order.currentNode.name,
+            deadline: order.deadline,
+          ),
         );
+        if (!saved) return;
+        widget.focusStore.stopActive();
         widget.focusStore.start(order: order);
         return;
       }
     }
 
-    await _settings.selectCurrentOrder(
-      orderId: order.id,
-      title: order.title,
-      node: order.currentNode.name,
-      deadline: order.deadline,
+    await _tryPetWrite(
+      () => _settings.selectCurrentOrder(
+        orderId: order.id,
+        title: order.title,
+        node: order.currentNode.name,
+        deadline: order.deadline,
+      ),
     );
   }
 
@@ -166,7 +174,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
   Future<void> _createPreset() async {
     final name = await _askName(title: '新建桌宠预设');
     if (name == null) return;
-    await _settings.createPreset(name);
+    await _tryPetWrite(() async {
+      await _settings.createPreset(name);
+    });
   }
 
   Future<void> _renamePreset(DesktopPetPreset preset) async {
@@ -175,7 +185,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
       initialValue: preset.name,
     );
     if (name == null) return;
-    await _settings.renamePreset(preset.id, name);
+    await _tryPetWrite(() => _settings.renamePreset(preset.id, name));
   }
 
   Future<void> _deletePreset(DesktopPetPreset preset) async {
@@ -197,7 +207,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
       ),
     );
     if (confirmed == true) {
-      await _settings.deletePreset(preset.id);
+      await _tryPetWrite(() => _settings.deletePreset(preset.id));
     }
   }
 
@@ -273,6 +283,29 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
         ),
       );
     }
+  }
+
+  Future<bool> _tryPetWrite(Future<void> Function() operation) async {
+    try {
+      await operation();
+      return true;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('桌宠设置保存失败，请重试。'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
+      return false;
+    }
+  }
+
+  void _queuePetWrite(Future<void> Function() operation) {
+    unawaited(_tryPetWrite(operation));
   }
 
   void _scheduleCustomTextSave(String value) {
@@ -375,8 +408,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                               label: Text(preset.name),
                               selected:
                                   preset.id == _settings.selectedPresetId,
-                              onSelected: (_) =>
-                                  _settings.selectPreset(preset.id),
+                              onSelected: (_) => _queuePetWrite(
+                                () => _settings.selectPreset(preset.id),
+                              ),
                             ),
                         ],
                       ),
@@ -413,9 +447,11 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                         path: selected.imageA,
                         onImport: () =>
                             _pick(selected, DesktopPetAssetSlot.idleA),
-                        onClear: () => _settings.clearAsset(
-                          selected.id,
-                          DesktopPetAssetSlot.idleA,
+                        onClear: () => _queuePetWrite(
+                          () => _settings.clearAsset(
+                            selected.id,
+                            DesktopPetAssetSlot.idleA,
+                          ),
                         ),
                       ),
                       const Divider(height: 1),
@@ -425,20 +461,25 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                         path: selected.imageB,
                         onImport: () =>
                             _pick(selected, DesktopPetAssetSlot.keyB),
-                        onClear: () => _settings.clearAsset(
-                          selected.id,
-                          DesktopPetAssetSlot.keyB,
+                        onClear: () => _queuePetWrite(
+                          () => _settings.clearAsset(
+                            selected.id,
+                            DesktopPetAssetSlot.keyB,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 14),
                       _PairPlacementPreview(
                         preset: selected,
-                        onPlacementChanged: (slot, placement) =>
-                            _settings.setPlacement(
-                          selected.id,
-                          slot,
-                          placement,
-                        ),
+                        onPlacementChanged: (slot, placement) async {
+                          await _tryPetWrite(
+                            () => _settings.setPlacement(
+                              selected.id,
+                              slot,
+                              placement,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ],
@@ -472,8 +513,8 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     },
                     onSelectionChanged: (selection) {
                       if (selection.isEmpty) return;
-                      unawaited(
-                        _settings.setBubblePosition(selection.first),
+                      _queuePetWrite(
+                        () => _settings.setBubblePosition(selection.first),
                       );
                     },
                   ),
@@ -501,7 +542,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     },
                     onSelectionChanged: (selection) {
                       if (selection.isEmpty) return;
-                      unawaited(_settings.setBubbleStyle(selection.first));
+                      _queuePetWrite(
+                        () => _settings.setBubbleStyle(selection.first),
+                      );
                     },
                   ),
                   const SizedBox(height: 12),
@@ -520,8 +563,8 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                         ),
                         if (selected.bubbleImage != null)
                           TextButton(
-                            onPressed: () => unawaited(
-                              _settings.clearBubbleImage(selected.id),
+                            onPressed: () => _queuePetWrite(
+                              () => _settings.clearBubbleImage(selected.id),
                             ),
                             child: const Text('移除图片'),
                           ),
@@ -570,8 +613,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     value: _settings.petScale,
                     min: 0.5,
                     max: 1.8,
-                    onChanged: (value) =>
-                        unawaited(_settings.setPetScale(value)),
+                    onChanged: (value) => _queuePetWrite(
+                      () => _settings.setPetScale(value),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   _ScaleSetting(
@@ -579,8 +623,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     value: _settings.bubbleTextScale,
                     min: 0.65,
                     max: 1.8,
-                    onChanged: (value) =>
-                        unawaited(_settings.setBubbleTextScale(value)),
+                    onChanged: (value) => _queuePetWrite(
+                      () => _settings.setBubbleTextScale(value),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   _ScaleSetting(
@@ -588,8 +633,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     value: _settings.focusClockScale,
                     min: 0.65,
                     max: 1.8,
-                    onChanged: (value) =>
-                        unawaited(_settings.setFocusClockScale(value)),
+                    onChanged: (value) => _queuePetWrite(
+                      () => _settings.setFocusClockScale(value),
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -621,7 +667,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     selected: <DesktopPetTextMode>{_settings.textMode},
                     onSelectionChanged: (selection) {
                       if (selection.isEmpty) return;
-                      _settings.setTextMode(selection.first);
+                      _queuePetWrite(
+                        () => _settings.setTextMode(selection.first),
+                      );
                     },
                   ),
                   const SizedBox(height: 14),
@@ -900,6 +948,7 @@ class _PlacementCanvas extends StatelessWidget {
             opacity: opacity,
             child: Image.file(
               File(path),
+              cacheWidth: _desktopPetPreviewCacheWidth,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) =>
                   const Center(child: Icon(Icons.broken_image_outlined)),
@@ -1126,6 +1175,17 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
       await widget.onPlacementChanged(_placement);
       if (!mounted) return;
       setState(() => _editing = false);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('桌宠位置保存失败，请重试。'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -1185,6 +1245,7 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
                 scale: _placement.scale,
                 child: Image.file(
                   file,
+                  cacheWidth: _desktopPetPreviewCacheWidth,
                   fit: BoxFit.contain,
                 ),
               ),
@@ -1423,24 +1484,40 @@ class _DesktopPetOverlayPreviewState
 
   Future<void> _saveBubble() async {
     _draggingBubble = false;
-    await widget.onBubbleOffsetChanged(_bubbleOffset);
+    try {
+      await widget.onBubbleOffsetChanged(_bubbleOffset);
+    } catch (_) {
+      // The preview stays interactive even if a transient local write fails.
+    }
   }
 
   Future<void> _saveClock() async {
     _draggingClock = false;
-    await widget.onFocusClockOffsetChanged(_clockOffset);
+    try {
+      await widget.onFocusClockOffsetChanged(_clockOffset);
+    } catch (_) {
+      // The preview stays interactive even if a transient local write fails.
+    }
   }
 
   Future<void> _resetBubble() async {
     const offset = DesktopPetOverlayOffset();
     setState(() => _bubbleOffset = offset);
-    await widget.onBubbleOffsetChanged(offset);
+    try {
+      await widget.onBubbleOffsetChanged(offset);
+    } catch (_) {
+      // Keep the UI alive; a later drag/save can retry persistence.
+    }
   }
 
   Future<void> _resetClock() async {
     const offset = DesktopPetOverlayOffset();
     setState(() => _clockOffset = offset);
-    await widget.onFocusClockOffsetChanged(offset);
+    try {
+      await widget.onFocusClockOffsetChanged(offset);
+    } catch (_) {
+      // Keep the UI alive; a later drag/save can retry persistence.
+    }
   }
 
   Widget _petImage(double petSide) {
@@ -1457,6 +1534,7 @@ class _DesktopPetOverlayPreviewState
             file,
             width: petSide,
             height: petSide,
+            cacheWidth: _desktopPetPreviewCacheWidth,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) =>
                 const Center(child: Icon(Icons.broken_image_outlined)),
@@ -1521,6 +1599,7 @@ class _DesktopPetOverlayPreviewState
               File(image),
               width: 54,
               height: 54,
+              cacheWidth: _desktopPetThumbnailCacheWidth,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) =>
                   const Icon(Icons.broken_image_outlined),
@@ -1898,6 +1977,7 @@ class _AssetTile extends StatelessWidget {
           child: exists
               ? Image.file(
                   file!,
+                  cacheWidth: _desktopPetThumbnailCacheWidth,
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) =>
                       const Icon(Icons.broken_image_outlined),

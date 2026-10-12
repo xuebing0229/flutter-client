@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -51,6 +52,15 @@ internal static class Program
             var app = new Application
             {
                 ShutdownMode = ShutdownMode.OnMainWindowClose,
+            };
+            app.DispatcherUnhandledException += (_, e) =>
+            {
+                if (DesktopPetWindow.IsRecoverableHostException(e.Exception))
+                {
+                    // Last-resort boundary for WPF layout/render callbacks that
+                    // are raised outside our own timer/file-watcher handlers.
+                    e.Handled = true;
+                }
             };
             var window = new DesktopPetWindow(fullConfigPath, parentPid);
             app.Run(window);
@@ -117,6 +127,7 @@ internal sealed class DesktopPetWindow : Window
     private bool _reloadInProgress;
     private bool _reloadPending;
     private bool _overlayPaddingInitialized;
+    private bool _layoutApplied;
 
     public DesktopPetWindow(string configPath, int parentPid)
     {
@@ -240,7 +251,8 @@ internal sealed class DesktopPetWindow : Window
             RenderTransformOrigin = new Point(0.5, 0.5),
         };
         _imageViewport.Children.Add(_petImage);
-        _imageViewport.SizeChanged += (_, _) => ApplyCurrentImagePlacement();
+        _imageViewport.SizeChanged += (_, _) =>
+            RunUiSafely(ApplyCurrentImagePlacement);
 
         _layoutPanel.Children.Add(_bubbleHost);
         _layoutPanel.Children.Add(_imageViewport);
@@ -268,42 +280,60 @@ internal sealed class DesktopPetWindow : Window
         {
             Interval = TimeSpan.FromMilliseconds(180),
         };
-        _reloadDebounce.Tick += async (_, _) =>
+        _reloadDebounce.Tick += (_, _) =>
         {
             _reloadDebounce.Stop();
-            await ReloadConfigAsync();
+            _ = ReloadConfigSafelyAsync();
         };
 
         _parentTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(350),
         };
-        _parentTimer.Tick += (_, _) => CheckParentProcess();
+        _parentTimer.Tick += (_, _) => RunUiSafely(CheckParentProcess);
 
         _deadlineTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(20),
         };
-        _deadlineTimer.Tick += (_, _) => RefreshBubble();
+        _deadlineTimer.Tick += (_, _) => RunUiSafely(RefreshBubble);
 
         _focusTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(1),
         };
-        _focusTimer.Tick += (_, _) => RefreshFocusClock();
+        _focusTimer.Tick += (_, _) => RunUiSafely(RefreshFocusClock);
 
         _inputHook = new GlobalInputActivityMonitor();
         _inputHook.ActivityChanged += active =>
         {
-            Dispatcher.BeginInvoke(() =>
+            if (_closed) return;
+            try
             {
-                if (_inputActive == active) return;
-                _inputActive = active;
-                RefreshImage();
-            });
+                Dispatcher.BeginInvoke(() =>
+                {
+                    RunUiSafely(() =>
+                    {
+                        if (_inputActive == active) return;
+                        _inputActive = active;
+                        RefreshImage();
+                    });
+                });
+            }
+            catch (InvalidOperationException)
+            {
+                // Dispatcher is already shutting down.
+            }
         };
 
-        Loaded += async (_, _) =>
+        Loaded += (_, _) => _ = InitializeSafelyAsync();
+
+        Closed += (_, _) => DisposeResources();
+    }
+
+    private async Task InitializeSafelyAsync()
+    {
+        try
         {
             RestorePetWindowState();
             StartConfigWatcher();
@@ -312,10 +342,52 @@ internal sealed class DesktopPetWindow : Window
             _deadlineTimer.Start();
             _focusTimer.Start();
             await ReloadConfigAsync();
-        };
-
-        Closed += (_, _) => DisposeResources();
+        }
+        catch (Exception ex) when (IsRecoverableHostException(ex))
+        {
+            // The desktop pet is optional. A transient local/runtime failure
+            // must not terminate the host or the main Guild app.
+        }
     }
+
+    private async Task ReloadConfigSafelyAsync()
+    {
+        try
+        {
+            await ReloadConfigAsync();
+        }
+        catch (Exception ex) when (IsRecoverableHostException(ex))
+        {
+            // Keep the last valid frame. A later config watcher tick can retry.
+        }
+    }
+
+    private void RunUiSafely(Action action)
+    {
+        if (_closed) return;
+        try
+        {
+            action();
+        }
+        catch (Exception ex) when (IsRecoverableHostException(ex))
+        {
+            // Event/timer callbacks are process boundaries in WPF; never let a
+            // bad optional image or transient layout state tear down the host.
+        }
+    }
+
+    internal static bool IsRecoverableHostException(Exception ex) =>
+        ex is IOException or
+        UnauthorizedAccessException or
+        ArgumentException or
+        InvalidOperationException or
+        NotSupportedException or
+        ObjectDisposedException or
+        FormatException or
+        JsonException or
+        Win32Exception or
+        COMException or
+        OperationCanceledException;
 
     private void StartConfigWatcher()
     {
@@ -340,12 +412,19 @@ internal sealed class DesktopPetWindow : Window
     private void OnConfigChanged(object? sender, FileSystemEventArgs e)
     {
         if (_closed) return;
-        Dispatcher.BeginInvoke(() =>
+        try
         {
-            if (_closed) return;
-            _reloadDebounce.Stop();
-            _reloadDebounce.Start();
-        });
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_closed) return;
+                _reloadDebounce.Stop();
+                _reloadDebounce.Start();
+            });
+        }
+        catch (InvalidOperationException)
+        {
+            // Dispatcher is already shutting down.
+        }
     }
 
     private async Task ReloadConfigAsync()
@@ -397,9 +476,19 @@ internal sealed class DesktopPetWindow : Window
             {
                 await Task.Delay(80);
             }
+            catch (UnauthorizedAccessException)
+            {
+                await Task.Delay(80);
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
         }
 
-        if (next is null) return;
+        if (_closed || next is null) return;
+        var previous = _config;
+        var layoutChanged = !_layoutApplied || LayoutSettingsChanged(previous, next);
         _config = next;
 
         if (!_config.Enabled)
@@ -410,21 +499,51 @@ internal sealed class DesktopPetWindow : Window
 
         try
         {
-            ApplyLayoutAndTheme();
-            RefreshImage(force: true);
+            if (layoutChanged)
+            {
+                ApplyLayoutAndTheme();
+                _layoutApplied = true;
+            }
+            // Image placement/path can change independently of layout. Reusing
+            // the cached source here avoids re-decoding A/B on every text edit.
+            RefreshImage();
             RefreshBubble();
             RefreshFocusClock();
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (IsRecoverableHostException(ex))
         {
-            // A malformed or mid-write layout value must never terminate the
-            // optional desktop-pet host. Keep the last valid frame instead.
+            // A malformed or mid-write layout/image value must never terminate
+            // the optional desktop-pet host. Keep the last valid frame instead.
         }
-        catch (InvalidOperationException)
-        {
-            // WPF can reject a layout mutation while it is re-measuring after
-            // a config reload. The next watcher tick will retry safely.
-        }
+    }
+
+    private static bool LayoutSettingsChanged(PetConfig left, PetConfig right)
+    {
+        static bool SameOffset(PetOverlayOffset? a, PetOverlayOffset? b) =>
+            (a?.X ?? 0).Equals(b?.X ?? 0) &&
+            (a?.Y ?? 0).Equals(b?.Y ?? 0);
+
+        return !string.Equals(
+                   left.BubblePosition,
+                   right.BubblePosition,
+                   StringComparison.OrdinalIgnoreCase
+               ) ||
+               !string.Equals(
+                   left.BubbleStyle,
+                   right.BubbleStyle,
+                   StringComparison.OrdinalIgnoreCase
+               ) ||
+               !left.PetScale.Equals(right.PetScale) ||
+               !left.BubbleScale.Equals(right.BubbleScale) ||
+               !Nullable.Equals(left.BubbleTextScale, right.BubbleTextScale) ||
+               !left.FocusClockScale.Equals(right.FocusClockScale) ||
+               left.BubbleBackgroundArgb != right.BubbleBackgroundArgb ||
+               left.BubbleForegroundArgb != right.BubbleForegroundArgb ||
+               left.BubbleBorderArgb != right.BubbleBorderArgb ||
+               left.BubbleAccentArgb != right.BubbleAccentArgb ||
+               !SameOffset(left.BubbleAboveOffset, right.BubbleAboveOffset) ||
+               !SameOffset(left.BubbleSideOffset, right.BubbleSideOffset) ||
+               !SameOffset(left.FocusClockOffset, right.FocusClockOffset);
     }
 
     private void ApplyLayoutAndTheme()
@@ -829,7 +948,6 @@ internal sealed class DesktopPetWindow : Window
             }
         }
 
-        RefreshBubble();
     }
 
     private ImageSource? LoadPetImage(string fullPath)
@@ -857,11 +975,19 @@ internal sealed class DesktopPetWindow : Window
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
-            bitmap.DecodePixelWidth = 2048;
+            if (ShouldDecodeByWidth(fullPath))
+            {
+                bitmap.DecodePixelWidth = 1600;
+            }
+            else
+            {
+                bitmap.DecodePixelHeight = 1600;
+            }
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
 
+            TrimPetImageCache(fullPath);
             _petImageCache[fullPath] = new CachedImageSource(
                 changedAt,
                 length,
@@ -873,6 +999,41 @@ internal sealed class DesktopPetWindow : Window
         catch (UnauthorizedAccessException) { return null; }
         catch (ArgumentException) { return null; }
         catch (NotSupportedException) { return null; }
+    }
+
+    private static bool ShouldDecodeByWidth(string fullPath)
+    {
+        using var header = new FileStream(
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete
+        );
+        var decoder = BitmapDecoder.Create(
+            header,
+            BitmapCreateOptions.DelayCreation | BitmapCreateOptions.PreservePixelFormat,
+            BitmapCacheOption.None
+        );
+        if (decoder.Frames.Count == 0) return true;
+        var frame = decoder.Frames[0];
+        return frame.PixelWidth >= frame.PixelHeight;
+    }
+
+    private void TrimPetImageCache(string nextPath)
+    {
+        if (_petImageCache.Count < 8) return;
+
+        foreach (var key in _petImageCache.Keys.ToArray())
+        {
+            if (string.Equals(key, nextPath, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, _activeImagePath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            _petImageCache.Remove(key);
+            if (_petImageCache.Count <= 4) break;
+        }
     }
 
     private void ApplyCurrentImagePlacement()
@@ -1011,7 +1172,14 @@ internal sealed class DesktopPetWindow : Window
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
-            bitmap.DecodePixelWidth = 256;
+            if (ShouldDecodeByWidth(fullPath))
+            {
+                bitmap.DecodePixelWidth = 256;
+            }
+            else
+            {
+                bitmap.DecodePixelHeight = 256;
+            }
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
@@ -1153,6 +1321,12 @@ internal sealed class DesktopPetWindow : Window
         catch (InvalidOperationException)
         {
             // The parent process has already exited.
+        }
+        catch (Win32Exception)
+        {
+            // Access to the parent can fail briefly during Windows teardown.
+            // That does not prove it exited; retry on the next timer tick.
+            return;
         }
 
         Close();
@@ -1328,31 +1502,50 @@ internal sealed class GlobalInputActivityMonitor : IDisposable
 
     private void Poll()
     {
-        var pressed = false;
-
-        // Mouse buttons are the hottest path, so check them first.
-        for (var button = 0x01; button <= 0x06; button++)
+        try
         {
-            if ((GetAsyncKeyState(button) & 0x8000) == 0) continue;
-            pressed = true;
-            break;
-        }
+            var pressed = false;
 
-        if (!pressed)
-        {
-            for (var key = 0x08; key <= 0xFE; key++)
+            // Mouse buttons are the hottest path, so check them first.
+            for (var button = 0x01; button <= 0x06; button++)
             {
-                if ((GetAsyncKeyState(key) & 0x8000) == 0) continue;
+                if ((GetAsyncKeyState(button) & 0x8000) == 0) continue;
                 pressed = true;
                 break;
             }
-        }
 
-        // No artificial hold: B exists only while a key/button is physically
-        // down, and returns to A on the first poll after release.
-        if (_active == pressed) return;
-        _active = pressed;
-        ActivityChanged?.Invoke(pressed);
+            if (!pressed)
+            {
+                for (var key = 0x08; key <= 0xFE; key++)
+                {
+                    if ((GetAsyncKeyState(key) & 0x8000) == 0) continue;
+                    pressed = true;
+                    break;
+                }
+            }
+
+            // No artificial hold: B exists only while a key/button is physically
+            // down, and returns to A on the first poll after release.
+            if (_active == pressed) return;
+            _active = pressed;
+            ActivityChanged?.Invoke(pressed);
+        }
+        catch (Exception ex) when (
+            ex is InvalidOperationException or
+            ObjectDisposedException or
+            EntryPointNotFoundException or
+            DllNotFoundException
+        )
+        {
+            // Input monitoring is cosmetic. Disable it rather than allowing a
+            // platform/runtime edge case to terminate the pet host.
+            _timer.Stop();
+            if (_active)
+            {
+                _active = false;
+                ActivityChanged?.Invoke(false);
+            }
+        }
     }
 
     public void Dispose()

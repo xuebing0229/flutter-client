@@ -653,23 +653,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _syncDesktopPet() async {
-    final order = await _currentDesktopPetOrder();
-    if (!mounted) return;
-    final colors = _desktopPetColorScheme();
-    await _desktopPetService.sync(
-      enabled: widget.featureStore.enabled(AppFeature.desktopPet),
-      currentOrderTitle: order?.title,
-      currentOrderNode: order?.currentNode.name,
-      currentOrderDeadline: order?.deadline,
-      bubbleBackgroundArgb: colors.surfaceContainerHigh.toARGB32(),
-      bubbleForegroundArgb: colors.onSurface.toARGB32(),
-      bubbleBorderArgb: colors.outlineVariant.toARGB32(),
-      bubbleAccentArgb: colors.primary.toARGB32(),
-      focusEnabled: widget.featureStore.enabled(AppFeature.focus),
-      focusStartedAt: widget.featureStore.enabled(AppFeature.focus)
-          ? _focusStore.activeSession?.startedAt
-          : null,
-    );
+    if (!Platform.isWindows) return;
+    try {
+      final order = await _currentDesktopPetOrder();
+      if (!mounted) return;
+      final colors = _desktopPetColorScheme();
+      await _desktopPetService.sync(
+        enabled: widget.featureStore.enabled(AppFeature.desktopPet),
+        currentOrderTitle: order?.title,
+        currentOrderNode: order?.currentNode.name,
+        currentOrderDeadline: order?.deadline,
+        bubbleBackgroundArgb: colors.surfaceContainerHigh.toARGB32(),
+        bubbleForegroundArgb: colors.onSurface.toARGB32(),
+        bubbleBorderArgb: colors.outlineVariant.toARGB32(),
+        bubbleAccentArgb: colors.primary.toARGB32(),
+        focusEnabled: widget.featureStore.enabled(AppFeature.focus),
+        focusStartedAt: widget.featureStore.enabled(AppFeature.focus)
+            ? _focusStore.activeSession?.startedAt
+            : null,
+      );
+    } catch (_) {
+      // Desktop pet is optional and local-only. A host/config failure must not
+      // bubble into the main Guild UI zone or interrupt order/focus editing.
+    }
   }
 
   void _onThemeSettingsChanged() {
