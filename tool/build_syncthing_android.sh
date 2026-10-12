@@ -2,6 +2,14 @@
 set -euo pipefail
 
 SYNCTHING_VERSION="${SYNCTHING_VERSION:-v2.1.5}"
+SYNCTHING_COMMIT="${SYNCTHING_COMMIT:-}"
+if [[ -z "$SYNCTHING_COMMIT" && "$SYNCTHING_VERSION" == "v2.1.5" ]]; then
+  SYNCTHING_COMMIT="2ca95cf1498104113fdfde46df4107f2450a0f71"
+fi
+if [[ -z "$SYNCTHING_COMMIT" ]]; then
+  echo "SYNCTHING_COMMIT must pin the source commit for $SYNCTHING_VERSION." >&2
+  exit 1
+fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/android/app/src/sync/jniLibs"
 
@@ -45,6 +53,11 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 git clone --quiet --depth 1 --branch "$SYNCTHING_VERSION"   https://github.com/syncthing/syncthing.git   "$WORK_DIR/syncthing"
+ACTUAL_COMMIT="$(git -C "$WORK_DIR/syncthing" rev-parse HEAD)"
+if [[ "$ACTUAL_COMMIT" != "$SYNCTHING_COMMIT" ]]; then
+  echo "Syncthing source pin mismatch: expected $SYNCTHING_COMMIT, got $ACTUAL_COMMIT" >&2
+  exit 1
+fi
 
 build_one() {
   local abi="$1"
