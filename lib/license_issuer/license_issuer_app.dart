@@ -668,6 +668,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
 
   Future<void> _exportCsv() async {
     await _silentRefreshRecords();
+    if (!mounted) return;
     if (widget.store.records.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('还没有可导出的记录')),
@@ -695,6 +696,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
 
   Future<void> _editNote(IssuedLicenseRecord record) async {
     await _silentRefreshRecords();
+    if (!mounted) return;
     final current =
         widget.store.recordByAccountId(record.accountId) ?? record;
     final controller = TextEditingController(text: current.note);
@@ -747,6 +749,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
 
   Future<void> _deleteRecord(IssuedLicenseRecord record) async {
     await _silentRefreshRecords();
+    if (!mounted) return;
     final current =
         widget.store.recordByAccountId(record.accountId) ?? record;
 
@@ -821,6 +824,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage>
 
   Future<void> _deleteSelectedRecords() async {
     await _silentRefreshRecords();
+    if (!mounted) return;
     final count = _selectedForDelete.length;
     if (count == 0) return;
 
