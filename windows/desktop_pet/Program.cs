@@ -127,6 +127,7 @@ internal sealed class DesktopPetWindow : Window
     private bool _reloadInProgress;
     private bool _reloadPending;
     private bool _overlayPaddingInitialized;
+    private bool _layoutApplied;
 
     public DesktopPetWindow(string configPath, int parentPid)
     {
@@ -486,6 +487,8 @@ internal sealed class DesktopPetWindow : Window
         }
 
         if (_closed || next is null) return;
+        var previous = _config;
+        var layoutChanged = !_layoutApplied || LayoutSettingsChanged(previous, next);
         _config = next;
 
         if (!_config.Enabled)
@@ -496,8 +499,14 @@ internal sealed class DesktopPetWindow : Window
 
         try
         {
-            ApplyLayoutAndTheme();
-            RefreshImage(force: true);
+            if (layoutChanged)
+            {
+                ApplyLayoutAndTheme();
+                _layoutApplied = true;
+            }
+            // Image placement/path can change independently of layout. Reusing
+            // the cached source here avoids re-decoding A/B on every text edit.
+            RefreshImage();
             RefreshBubble();
             RefreshFocusClock();
         }
@@ -506,6 +515,35 @@ internal sealed class DesktopPetWindow : Window
             // A malformed or mid-write layout/image value must never terminate
             // the optional desktop-pet host. Keep the last valid frame instead.
         }
+    }
+
+    private static bool LayoutSettingsChanged(PetConfig left, PetConfig right)
+    {
+        static bool SameOffset(PetOverlayOffset? a, PetOverlayOffset? b) =>
+            (a?.X ?? 0).Equals(b?.X ?? 0) &&
+            (a?.Y ?? 0).Equals(b?.Y ?? 0);
+
+        return !string.Equals(
+                   left.BubblePosition,
+                   right.BubblePosition,
+                   StringComparison.OrdinalIgnoreCase
+               ) ||
+               !string.Equals(
+                   left.BubbleStyle,
+                   right.BubbleStyle,
+                   StringComparison.OrdinalIgnoreCase
+               ) ||
+               !left.PetScale.Equals(right.PetScale) ||
+               !left.BubbleScale.Equals(right.BubbleScale) ||
+               !Nullable.Equals(left.BubbleTextScale, right.BubbleTextScale) ||
+               !left.FocusClockScale.Equals(right.FocusClockScale) ||
+               left.BubbleBackgroundArgb != right.BubbleBackgroundArgb ||
+               left.BubbleForegroundArgb != right.BubbleForegroundArgb ||
+               left.BubbleBorderArgb != right.BubbleBorderArgb ||
+               left.BubbleAccentArgb != right.BubbleAccentArgb ||
+               !SameOffset(left.BubbleAboveOffset, right.BubbleAboveOffset) ||
+               !SameOffset(left.BubbleSideOffset, right.BubbleSideOffset) ||
+               !SameOffset(left.FocusClockOffset, right.FocusClockOffset);
     }
 
     private void ApplyLayoutAndTheme()
