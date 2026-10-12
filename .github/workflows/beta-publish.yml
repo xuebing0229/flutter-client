@@ -37,6 +37,8 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      - name: Run full Flutter test suite
+        run: flutter test
 
   android:
     needs: check
