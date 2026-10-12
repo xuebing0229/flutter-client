@@ -256,6 +256,7 @@ class DesktopPetSettings extends ChangeNotifier {
   DesktopPetBubbleStyle _bubbleStyle = DesktopPetBubbleStyle.speech;
   double _petScale = 1;
   double _bubbleTextScale = 1;
+  double _bubbleImageScale = 1;
   double _focusClockScale = 1;
   String _customText = '';
   String? _currentOrderId;
@@ -280,6 +281,7 @@ class DesktopPetSettings extends ChangeNotifier {
   DesktopPetBubbleStyle get bubbleStyle => _bubbleStyle;
   double get petScale => _petScale;
   double get bubbleTextScale => _bubbleTextScale;
+  double get bubbleImageScale => _bubbleImageScale;
   double get focusClockScale => _focusClockScale;
   DesktopPetOverlayOffset get bubbleAboveOffset =>
       selectedPreset?.bubbleAboveOffset ?? const DesktopPetOverlayOffset();
@@ -426,6 +428,10 @@ class DesktopPetSettings extends ChangeNotifier {
                   (raw['bubbleScale'] as num?)?.toDouble() ??
                   1)
               .clamp(0.65, 1.8)
+              .toDouble();
+      _bubbleImageScale =
+          ((raw['bubbleImageScale'] as num?)?.toDouble() ?? 1)
+              .clamp(0.5, 2.0)
               .toDouble();
       _focusClockScale = ((raw['focusClockScale'] as num?)?.toDouble() ?? 1)
           .clamp(0.65, 1.8)
@@ -735,6 +741,15 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setBubbleImageScale(double value) async {
+    await load();
+    final normalized = value.clamp(0.5, 2.0).toDouble();
+    if ((_bubbleImageScale - normalized).abs() < 0.001) return;
+    _bubbleImageScale = normalized;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> setBubbleOffset(
     DesktopPetBubblePosition position,
     DesktopPetOverlayOffset offset,
@@ -875,7 +890,7 @@ class DesktopPetSettings extends ChangeNotifier {
     final file = await _configFile();
     final active = selectedPreset;
     final payload = <String, dynamic>{
-      'schema': 10,
+      'schema': 11,
       'enabled': _enabled,
       'selectedPresetId': _selectedPresetId,
       'imageA': active?.imageA,
@@ -889,6 +904,7 @@ class DesktopPetSettings extends ChangeNotifier {
       'bubbleStyle': _bubbleStyle.name,
       'petScale': _petScale,
       'bubbleTextScale': _bubbleTextScale,
+      'bubbleImageScale': _bubbleImageScale,
       'focusClockScale': _focusClockScale,
       'bubbleAboveOffset': bubbleAboveOffset.toJson(),
       'bubbleSideOffset': bubbleSideOffset.toJson(),
