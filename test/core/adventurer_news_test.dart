@@ -98,4 +98,9 @@ void main() {
     final picked = newsBetweenBuilds(141, 142);
     expect(picked.map((e) => e.title).toList(), ['内测回归继续清理']);
   });
+
+  test('143 包含桌宠素材保护修复见闻', () {
+    final picked = newsBetweenBuilds(142, 143);
+    expect(picked.map((e) => e.title).toList(), ['桌宠素材保护修复']);
+  });
 }
