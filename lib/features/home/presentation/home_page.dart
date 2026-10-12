@@ -925,12 +925,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _leaveForegroundSync() async {
+  // Lifecycle events can overlap: a slow disk flush from an earlier
+  // background transition must never stop transport after a new resume.
+  int _syncLifecycleGeneration = 0;
+
+  Future<void> _leaveForegroundSync(int generation) async {
     _saveDebounce?.cancel();
     try {
       await _flushSyncThenPersist();
     } finally {
-      await _syncCoordinator.deactivateTransportForBackground();
+      if (mounted && generation == _syncLifecycleGeneration) {
+        await _syncCoordinator.deactivateTransportForBackground();
+      }
     }
   }
 
@@ -938,6 +944,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_ready || !_localDataHealthy) return;
     if (state == AppLifecycleState.resumed) {
+      ++_syncLifecycleGeneration;
       unawaited(_syncCoordinator.activateTransport());
       return;
     }
@@ -963,7 +970,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           value: leftAt,
         ),
       );
-      unawaited(_leaveForegroundSync());
+      unawaited(_leaveForegroundSync(++_syncLifecycleGeneration));
     }
   }
 

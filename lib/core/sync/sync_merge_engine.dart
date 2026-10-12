@@ -64,7 +64,8 @@ class SyncMergeEngine {
           right.fields['saleType']?.value == 'single' &&
           (left.fields['soldCount']?.value as num?)?.toInt() == 1 &&
           (right.fields['soldCount']?.value as num?)?.toInt() == 1 &&
-          !syncJsonEquals(a.value, b.value)) {
+          !syncJsonEquals(a.value, b.value) &&
+          a.clock.compare(b.clock) == SyncClockRelation.concurrent) {
         String? earliestSale(Object? raw) {
           if (raw is! List) return null;
           DateTime? earliestTime;

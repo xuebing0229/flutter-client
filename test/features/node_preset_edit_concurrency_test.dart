@@ -98,6 +98,42 @@ void main() {
     );
   });
 
+  testWidgets(
+    'choosing synced conflict keeps unrelated local preset edits',
+    (tester) async {
+      final store = NodePresetStore();
+      addTearDown(store.dispose);
+      final baseline = preset(name: '原预设');
+      store.upsert(baseline);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NodePresetEditorPage(store: store, preset: baseline),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField).first, '本机名称');
+      await tester.enterText(find.byType(TextField).at(1), '本机草图');
+
+      // Only the name conflicts remotely; the local node edit is independent.
+      store.upsert(preset(name: '远端名称'));
+      await tester.pump();
+
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      expect(find.text('这个预设已在另一处更新'), findsOneWidget);
+
+      await tester.tap(find.text('使用同步版本'));
+      await tester.pumpAndSettle();
+
+      final merged = store.presets.firstWhere(
+        (item) => item.id == baseline.id,
+      );
+      expect(merged.name, '远端名称');
+      expect(merged.nodes.first.name, '本机草图');
+    },
+  );
+
   testWidgets('deleted remote preset is not silently resurrected by stale editor', (
     tester,
   ) async {

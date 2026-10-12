@@ -693,7 +693,9 @@ class SyncCoordinator extends ChangeNotifier {
   Future<void> deactivateTransportForBackground() {
     _foregroundTransportEnabled = false;
     return _enqueue(() async {
-      if (_syncPaused) return;
+      // A resume may be queued after this stop request but before its turn.
+      // Never stop the newly foregrounded transport for a stale exit event.
+      if (_syncPaused || _foregroundTransportEnabled) return;
       try {
         await _bridge.stop(accountId: accountId);
       } finally {

@@ -214,7 +214,7 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
     return true;
   }
 
-  Future<bool> _confirmConcurrentOverwrite(List<String> fields) async {
+  Future<String?> _pickConcurrentResolution(List<String> fields) async {
     final choice = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -239,30 +239,8 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
         ],
       ),
     );
-    if (!mounted || choice == null) return false;
-    if (choice == 'remote') {
-      final id = widget.preset?.id;
-      NodePreset? current;
-      if (id != null) {
-        for (final preset in widget.store.presets) {
-          if (preset.id == id) {
-            current = preset;
-            break;
-          }
-        }
-      }
-      final synced = current;
-      if (synced != null) {
-        _nameController.text = synced.name;
-        setState(() {
-          _nodes = [
-            for (final node in synced.nodes) node.snapshot(),
-          ];
-        });
-      }
-      return false;
-    }
-    return choice == 'local';
+    if (!mounted) return null;
+    return choice;
   }
 
   Future<void> _save() async {
@@ -328,25 +306,34 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
       final remoteNameChanged = current.name != baseline.name;
       final localNodesChanged = !_sameNodes(localNodes, baseline.nodes);
       final remoteNodesChanged = !_sameNodes(current.nodes, baseline.nodes);
+      final nameConflict =
+          localNameChanged && remoteNameChanged && name != current.name;
+      final nodesConflict =
+          localNodesChanged &&
+          remoteNodesChanged &&
+          !_sameNodes(localNodes, current.nodes);
       final conflicts = <String>[
-        if (localNameChanged && remoteNameChanged && name != current.name)
-          '预设名称',
-        if (localNodesChanged &&
-            remoteNodesChanged &&
-            !_sameNodes(localNodes, current.nodes))
-          '节点内容',
+        if (nameConflict) '预设名称',
+        if (nodesConflict) '节点内容',
       ];
 
-      if (conflicts.isNotEmpty &&
-          !await _confirmConcurrentOverwrite(conflicts)) {
-        return;
+      String? conflictChoice;
+      if (conflicts.isNotEmpty) {
+        conflictChoice = await _pickConcurrentResolution(conflicts);
+        if (!mounted || conflictChoice == null) return;
       }
-      if (!mounted) return;
 
-      // Independent fields merge automatically. Only a field the user
-      // actually changed locally is allowed to replace the current value.
-      mergedName = localNameChanged ? name : current.name;
-      mergedNodes = localNodesChanged ? localNodes : current.nodes;
+      // Independent fields always merge. Choosing the synced version applies
+      // only to the fields that actually conflicted; it must not erase an
+      // unrelated local edit made in the same editor session.
+      mergedName =
+          localNameChanged && !(conflictChoice == 'remote' && nameConflict)
+              ? name
+              : current.name;
+      mergedNodes =
+          localNodesChanged && !(conflictChoice == 'remote' && nodesConflict)
+              ? localNodes
+              : current.nodes;
     }
 
     final preset = NodePreset(
