@@ -10,7 +10,7 @@ import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
-const int _desktopPetPreviewCacheWidth = 1600;
+const int _desktopPetPreviewCacheWidth = 1024;
 const int _desktopPetThumbnailCacheWidth = 256;
 
 class DesktopPetPage extends StatefulWidget {
