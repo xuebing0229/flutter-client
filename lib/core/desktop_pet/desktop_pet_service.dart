@@ -528,7 +528,11 @@ class DesktopPetSettings extends ChangeNotifier {
 
     final ext = source.path.split('.').last.toLowerCase();
     final baseName = slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB';
-    final destination = File('${folder.path}/$baseName.$ext');
+    // Never overwrite an image the native host or Flutter preview may still be
+    // decoding. Persist the new path first, then prune stale slot files.
+    final destination = File(
+      '${folder.path}/$baseName.${DateTime.now().microsecondsSinceEpoch}.$ext',
+    );
     if (source.absolute.path != destination.absolute.path) {
       await source.copy(destination.path);
     }
