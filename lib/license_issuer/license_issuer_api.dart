@@ -339,7 +339,8 @@ class LicenseIssuerApi {
         HttpHeaders.acceptHeader: 'application/json',
         if (token != null && token.trim().isNotEmpty)
           HttpHeaders.authorizationHeader: 'Bearer ${token.trim()}',
-        if (body != null) HttpHeaders.contentTypeHeader: 'application/json',
+        if (body != null)
+          HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
         ...extraHeaders,
       };
       final response = await const LicenseHttpTransport().send(
