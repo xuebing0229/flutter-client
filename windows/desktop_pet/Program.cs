@@ -266,9 +266,10 @@ internal sealed class DesktopPetWindow : Window
                 DragMove();
                 SavePetWindowState();
             }
-            catch (InvalidOperationException)
+            catch (Exception ex) when (IsRecoverableHostException(ex))
             {
-                // Ignore a drag that lost capture while the window was moving.
+                // Ignore a drag that lost capture or a transient Windows
+                // window-manager failure while the layered window was moving.
             }
         };
 
@@ -995,6 +996,9 @@ internal sealed class DesktopPetWindow : Window
         catch (UnauthorizedAccessException) { return null; }
         catch (ArgumentException) { return null; }
         catch (NotSupportedException) { return null; }
+        catch (FormatException) { return null; }
+        catch (COMException) { return null; }
+        catch (OutOfMemoryException) { return null; }
     }
 
     private static bool ShouldDecodeByWidth(string fullPath)
@@ -1017,7 +1021,10 @@ internal sealed class DesktopPetWindow : Window
 
     private void TrimDesktopImageCache(string nextPath)
     {
-        if (_desktopImageCache.Count < 8) return;
+        // A, B and the optional bubble PNG are the only images that need to
+        // stay hot. Keeping many superseded 1600px decodes around can consume
+        // tens of megabytes after repeated replacements.
+        if (_desktopImageCache.Count < 4) return;
 
         foreach (var key in _desktopImageCache.Keys.ToArray())
         {
@@ -1028,7 +1035,7 @@ internal sealed class DesktopPetWindow : Window
             }
 
             _desktopImageCache.Remove(key);
-            if (_desktopImageCache.Count <= 4) break;
+            if (_desktopImageCache.Count <= 2) break;
         }
     }
 
