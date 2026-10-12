@@ -83,7 +83,10 @@ class _SettingsPageState extends State<SettingsPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _betaUpdater.addListener(_onBetaUpdateChanged);
-    unawaited(_betaUpdater.ensureLoaded());
+    // Update state lives for the whole app process. Always refresh when the
+    // user opens Settings so an older discovered build cannot stay pinned
+    // after a newer Beta is published during the same app session.
+    unawaited(_betaUpdater.checkForUpdate());
     _refreshReminderDiagnostics();
   }
 

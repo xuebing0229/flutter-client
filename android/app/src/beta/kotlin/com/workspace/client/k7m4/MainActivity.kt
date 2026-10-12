@@ -1,5 +1,6 @@
 package com.workspace.client.k7m4
 
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -309,12 +310,43 @@ class MainActivity : FlutterActivity() {
             "${applicationContext.packageName}.update_files",
             apk,
         )
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        fun grantToResolvedHandlers(intent: Intent) {
+            intent.clipData = ClipData.newRawUri("app-update", uri)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            packageManager.queryIntentActivities(
+                intent,
+                android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+            ).forEach { handler ->
+                grantUriPermission(
+                    handler.activityInfo.packageName,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
         }
-        startActivity(intent)
+
+        // Prefer the dedicated package-install action. Some Android/OEM
+        // package installers accept ACTION_VIEW but then fail to surface the
+        // installer UI after receiving a FileProvider URI from app-private
+        // storage. Explicit ClipData + URI grants also keep the permission
+        // intact through intermediary system activities.
+        val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            data = uri
+        }
+        grantToResolvedHandlers(installIntent)
+        if (installIntent.resolveActivity(packageManager) != null) {
+            startActivity(installIntent)
+            return
+        }
+
+        // Compatibility fallback for devices without ACTION_INSTALL_PACKAGE.
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+        }
+        grantToResolvedHandlers(viewIntent)
+        startActivity(viewIntent)
     }
 
     override fun onResume() {
