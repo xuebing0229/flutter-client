@@ -31,6 +31,7 @@ class BetaUpdateSession extends ChangeNotifier {
   bool _busy = false;
   bool _downloading = false;
   bool _paused = false;
+  bool _installReady = false;
   bool _pauseRequested = false;
   int _receivedBytes = 0;
   int? _totalBytes;
@@ -43,6 +44,7 @@ class BetaUpdateSession extends ChangeNotifier {
   bool get busy => _busy;
   bool get downloading => _downloading;
   bool get paused => _paused;
+  bool get installReady => _installReady;
   bool get canPause =>
       _managedDownload && _downloading && !_pauseRequested;
   int get receivedBytes => _receivedBytes;
@@ -84,11 +86,18 @@ class BetaUpdateSession extends ChangeNotifier {
 
       if (resumableBytes != null && resumableBytes > 0) {
         _receivedBytes = resumableBytes;
-        _totalBytes = null;
-        _paused = true;
-        _status = '发现未完成下载，可继续下载';
+        _totalBytes = latest.sizeBytes;
+        _installReady =
+            Platform.isAndroid &&
+            latest.sizeBytes != null &&
+            resumableBytes == latest.sizeBytes;
+        _paused = !_installReady;
+        _status = _installReady
+            ? '更新包已下载，点击安装'
+            : '发现未完成下载，可继续下载';
       } else {
         _paused = false;
+        _installReady = false;
         _status =
             latest.build > _currentBuild ? '发现新的测试版' : '已经是最新测试版';
       }
@@ -114,17 +123,22 @@ class BetaUpdateSession extends ChangeNotifier {
     final latest = _latest;
     if (updater == null || latest == null || _busy) return;
 
-    final resuming = _managedDownload && _paused;
+    final installingExisting = Platform.isAndroid && _installReady;
+    final resuming = _managedDownload && _paused && !installingExisting;
     _busy = true;
-    _downloading = _managedDownload;
+    _downloading = _managedDownload && !installingExisting;
     _paused = false;
     _pauseRequested = false;
-    if (!resuming) {
+    if (!resuming && !installingExisting) {
       _receivedBytes = 0;
       _totalBytes = null;
     }
     if (_managedDownload) {
-      _status = resuming ? '正在继续下载…' : '正在下载新版…';
+      _status = installingExisting
+          ? '正在打开安装页面…'
+          : resuming
+          ? '正在继续下载…'
+          : '正在下载新版…';
     }
     notifyListeners();
 
@@ -148,12 +162,19 @@ class BetaUpdateSession extends ChangeNotifier {
 
       if (result == 'paused') {
         _paused = true;
+        _installReady = false;
         _status = '已暂停，可继续下载';
         return;
       }
       if (result == 'permission_required') {
-        _status = '请允许“安装未知应用”，返回后再次点击下载';
+        _installReady = Platform.isAndroid;
+        _status = Platform.isAndroid
+            ? '请允许“安装未知应用”；返回公会后会自动继续安装'
+            : '请允许“安装未知应用”，返回后重试';
       } else if (_managedDownload) {
+        if (Platform.isAndroid) {
+          _installReady = true;
+        }
         _status = Platform.isWindows
             ? '下载完成，正在启动自动更新…'
             : '下载完成，已打开安装页面';
@@ -165,10 +186,18 @@ class BetaUpdateSession extends ChangeNotifier {
         final resumableBytes = await updater.resumableBytes(latest);
         if (resumableBytes != null && resumableBytes > 0) {
           _receivedBytes = resumableBytes;
-          _paused = true;
-          _status = '下载中断，已保留断点，点击继续下载';
+          _totalBytes = latest.sizeBytes;
+          _installReady =
+              Platform.isAndroid &&
+              latest.sizeBytes != null &&
+              resumableBytes == latest.sizeBytes;
+          _paused = !_installReady;
+          _status = _installReady
+              ? '安装未完成，更新包已保留，可再次点击安装'
+              : '下载中断，已保留断点，点击继续下载';
         } else {
           _paused = false;
+          _installReady = false;
           _status = '更新失败：$error';
         }
       } else {
