@@ -309,7 +309,7 @@ class LicenseIssuerStore extends ChangeNotifier {
         await _refreshAfterMutation(token);
       } on IssuerApiException catch (error) {
         if (error.isStaleRecord) {
-          return _refreshAfterStale(token, error);
+          await _refreshAfterStale(token, error);
         }
         rethrow;
       }
@@ -342,7 +342,7 @@ class LicenseIssuerStore extends ChangeNotifier {
         await _refreshAfterMutation(token);
       } on IssuerApiException catch (error) {
         if (error.isStaleRecord) {
-          return _refreshAfterStale(token, error);
+          await _refreshAfterStale(token, error);
         }
         rethrow;
       }
@@ -365,7 +365,7 @@ class LicenseIssuerStore extends ChangeNotifier {
         await _refreshAfterMutation(token);
       } on IssuerApiException catch (error) {
         if (error.isStaleRecord) {
-          return _refreshAfterStale(token, error);
+          await _refreshAfterStale(token, error);
         }
         rethrow;
       }
@@ -397,7 +397,7 @@ class LicenseIssuerStore extends ChangeNotifier {
         return deleted;
       } on IssuerApiException catch (error) {
         if (error.isStaleRecord) {
-          return _refreshAfterStale(token, error);
+          await _refreshAfterStale(token, error);
         }
         await _refreshAfterMutation(token);
         rethrow;
