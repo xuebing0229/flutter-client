@@ -32,7 +32,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: android/app/src/sync/jniLibs
-          key: embedded-syncthing-v2.1.5-${{ runner.os }}-android
+          key: embedded-syncthing-v2.1.5-2ca95cf149810411-${{ runner.os }}-android
 
       - name: Build embedded Syncthing core
         env:
