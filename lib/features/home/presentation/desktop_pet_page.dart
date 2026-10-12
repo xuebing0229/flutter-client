@@ -10,6 +10,10 @@ import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
+const int _desktopPetPreviewCacheWidth = 1600;
+const int _desktopPetStageCacheWidth = 1024;
+const int _desktopPetThumbnailCacheWidth = 256;
+
 class DesktopPetPage extends StatefulWidget {
   const DesktopPetPage({
     required this.orderStore,
@@ -900,6 +904,7 @@ class _PlacementCanvas extends StatelessWidget {
             opacity: opacity,
             child: Image.file(
               File(path),
+              cacheWidth: _desktopPetPreviewCacheWidth,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) =>
                   const Center(child: Icon(Icons.broken_image_outlined)),
@@ -1126,6 +1131,17 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
       await widget.onPlacementChanged(_placement);
       if (!mounted) return;
       setState(() => _editing = false);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('桌宠位置保存失败，请重试。'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -1185,6 +1201,7 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
                 scale: _placement.scale,
                 child: Image.file(
                   file,
+                  cacheWidth: _desktopPetPreviewCacheWidth,
                   fit: BoxFit.contain,
                 ),
               ),
@@ -1423,24 +1440,40 @@ class _DesktopPetOverlayPreviewState
 
   Future<void> _saveBubble() async {
     _draggingBubble = false;
-    await widget.onBubbleOffsetChanged(_bubbleOffset);
+    try {
+      await widget.onBubbleOffsetChanged(_bubbleOffset);
+    } catch (_) {
+      // The preview stays interactive even if a transient local write fails.
+    }
   }
 
   Future<void> _saveClock() async {
     _draggingClock = false;
-    await widget.onFocusClockOffsetChanged(_clockOffset);
+    try {
+      await widget.onFocusClockOffsetChanged(_clockOffset);
+    } catch (_) {
+      // The preview stays interactive even if a transient local write fails.
+    }
   }
 
   Future<void> _resetBubble() async {
     const offset = DesktopPetOverlayOffset();
     setState(() => _bubbleOffset = offset);
-    await widget.onBubbleOffsetChanged(offset);
+    try {
+      await widget.onBubbleOffsetChanged(offset);
+    } catch (_) {
+      // Keep the UI alive; a later drag/save can retry persistence.
+    }
   }
 
   Future<void> _resetClock() async {
     const offset = DesktopPetOverlayOffset();
     setState(() => _clockOffset = offset);
-    await widget.onFocusClockOffsetChanged(offset);
+    try {
+      await widget.onFocusClockOffsetChanged(offset);
+    } catch (_) {
+      // Keep the UI alive; a later drag/save can retry persistence.
+    }
   }
 
   Widget _petImage(double petSide) {
@@ -1457,6 +1490,7 @@ class _DesktopPetOverlayPreviewState
             file,
             width: petSide,
             height: petSide,
+            cacheWidth: _desktopPetStageCacheWidth,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) =>
                 const Center(child: Icon(Icons.broken_image_outlined)),
@@ -1521,6 +1555,7 @@ class _DesktopPetOverlayPreviewState
               File(image),
               width: 54,
               height: 54,
+              cacheWidth: _desktopPetThumbnailCacheWidth,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) =>
                   const Icon(Icons.broken_image_outlined),
@@ -1898,6 +1933,7 @@ class _AssetTile extends StatelessWidget {
           child: exists
               ? Image.file(
                   file!,
+                  cacheWidth: _desktopPetThumbnailCacheWidth,
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) =>
                       const Icon(Icons.broken_image_outlined),
