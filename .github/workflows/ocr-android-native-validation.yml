@@ -5,6 +5,8 @@ on:
     paths:
       - 'android/app/src/androidTest/**'
       - 'android/app/build.gradle.kts'
+      - 'android/app/src/main/kotlin/com/workspace/client/k7m4/ScreenshotOcrBridge.kt'
+      - 'android/app/src/main/kotlin/com/workspace/client/k7m4/OcrCrashDiagnostics.kt'
       - 'android/ppocr-sdk/**'
       - '.github/workflows/ocr-android-native-validation.yml'
       - 'lib/features/imports/**'
