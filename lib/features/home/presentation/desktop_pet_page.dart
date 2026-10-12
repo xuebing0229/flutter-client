@@ -11,7 +11,6 @@ import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 const int _desktopPetPreviewCacheWidth = 1600;
-const int _desktopPetStageCacheWidth = 1024;
 const int _desktopPetThumbnailCacheWidth = 256;
 
 class DesktopPetPage extends StatefulWidget {
@@ -1490,7 +1489,7 @@ class _DesktopPetOverlayPreviewState
             file,
             width: petSide,
             height: petSide,
-            cacheWidth: _desktopPetStageCacheWidth,
+            cacheWidth: _desktopPetPreviewCacheWidth,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) =>
                 const Center(child: Icon(Icons.broken_image_outlined)),
