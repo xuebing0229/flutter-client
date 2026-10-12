@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -107,9 +108,7 @@ class LicenseHttpTransport {
 
       final response =
           await request.close().timeout(const Duration(seconds: 12));
-      final responseBody = await response
-          .transform(const SystemEncoding().decoder)
-          .join();
+      final responseBody = await utf8.decoder.bind(response).join();
       return LicenseHttpResponse(
         statusCode: response.statusCode,
         body: responseBody,
