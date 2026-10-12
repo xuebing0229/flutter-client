@@ -1,10 +1,6 @@
 name: Pet Focus Validation
 
 on:
-  push:
-    branches:
-      - fix/restore-combined-pet-focus-129
-      - fix/desktop-pet-bubble-input-20261010
   pull_request:
     paths:
       - 'lib/core/desktop_pet/**'
