@@ -156,6 +156,51 @@ void main() {
     );
   });
 
+  test('later single-sale correction wins over an earlier timestamp', () {
+    final engine = SyncMergeEngine();
+    const original = <String, dynamic>{
+      'id': 'product-single-correction',
+      'saleType': 'single',
+      'soldCount': 0,
+      'saleRecords': <String>[],
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'product-single-correction',
+      values: original,
+      deviceId: 'phone',
+    );
+    final firstSale = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: original,
+      nextValues: <String, dynamic>{
+        ...original,
+        'soldCount': 1,
+        'saleRecords': <String>['2026-10-11T10:00:00.000Z'],
+      },
+      deviceId: 'phone',
+    );
+    final corrected = engine.applyLocalSnapshot(
+      record: firstSale,
+      previousValues: engine.materialize(firstSale)!,
+      nextValues: <String, dynamic>{
+        ...engine.materialize(firstSale)!,
+        'saleRecords': <String>['2026-10-11T11:00:00.000Z'],
+      },
+      deviceId: 'phone',
+    );
+
+    for (final record in <SyncRecord>[
+      engine.merge(firstSale, corrected),
+      engine.merge(corrected, firstSale),
+    ]) {
+      expect(
+        engine.materialize(record)!['saleRecords'],
+        <String>['2026-10-11T11:00:00.000Z'],
+      );
+    }
+  });
+
   test('operation metadata survives transport decoding', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
