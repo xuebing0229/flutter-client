@@ -402,12 +402,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
 
     var latest = current;
-    final acceptedConflictFields = <String>{};
+    final keepLocalConflictFields = <String>{};
+    final useSyncedConflictFields = <String>{};
     while (true) {
       if (!widget.store.contains(widget.orderId)) return;
       latest = _order;
       final unresolved = concurrentFields(latest)
-          .where((field) => !acceptedConflictFields.contains(field))
+          .where(
+            (field) =>
+                !keepLocalConflictFields.contains(field) &&
+                !useSyncedConflictFields.contains(field),
+          )
           .toList(growable: false);
       if (unresolved.isEmpty) break;
 
@@ -418,48 +423,68 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
       if (!mounted) return;
       if (choice == ConcurrentEditChoice.useSynced) {
-        await _cancelEditing();
-        return;
+        useSyncedConflictFields.addAll(unresolved);
+        continue;
       }
       if (choice != ConcurrentEditChoice.keepLocal) return;
-      acceptedConflictFields.addAll(unresolved);
+      keepLocalConflictFields.addAll(unresolved);
     }
 
     final currentForSave = latest;
+    final applyTitle =
+        titleChanged && !useSyncedConflictFields.contains('图名');
+    final applyClient =
+        clientChanged && !useSyncedConflictFields.contains('单主');
+    final applyDeadline =
+        deadlineChanged && !useSyncedConflictFields.contains('截稿时间');
+    final applyPrice =
+        priceChanged && !useSyncedConflictFields.contains('稿费');
+    final applyDescription =
+        descriptionChanged && !useSyncedConflictFields.contains('备注');
+    final applyTags =
+        tagsChanged && !useSyncedConflictFields.contains('自定义标签');
+    final applyCommission =
+        !useSyncedConflictFields.contains('平台与手续费设置');
+    final applyNode =
+        nodeChanged && !useSyncedConflictFields.contains('节点或交稿状态');
+
     final reopenDeliveredOrder =
         currentForSave.isCompleted &&
         !currentForSave.isArchived &&
-        nodeChanged;
+        applyNode;
 
     final updated = currentForSave.copyWith(
-      title: titleChanged ? title : currentForSave.title,
-      clientName: clientChanged ? client : currentForSave.clientName,
-      platform: platformChanged ? _platform : currentForSave.platform,
-      deadline: deadlineChanged ? _deadline : currentForSave.deadline,
-      clearDeadline: deadlineChanged && _deadline == null,
-      nodePresetId: presetChanged ? _presetId : currentForSave.nodePresetId,
-      nodePresetSnapshot: presetChanged
+      title: applyTitle ? title : currentForSave.title,
+      clientName: applyClient ? client : currentForSave.clientName,
+      platform:
+          platformChanged && applyCommission ? _platform : currentForSave.platform,
+      deadline: applyDeadline ? _deadline : currentForSave.deadline,
+      clearDeadline: applyDeadline && _deadline == null,
+      nodePresetId:
+          presetChanged && applyNode ? _presetId : currentForSave.nodePresetId,
+      nodePresetSnapshot: presetChanged && applyNode
           ? _presetSnapshot.snapshot()
           : currentForSave.nodePresetSnapshot,
-      currentNodeId: nodeChanged
+      currentNodeId: applyNode
           ? _currentNodeId
           : currentForSave.currentNodeId,
-      currentNodeProgress: nodeChanged
+      currentNodeProgress: applyNode
           ? 0
           : currentForSave.currentNodeProgress,
       clearCompletedAt: reopenDeliveredOrder,
-      price: priceChanged ? price : currentForSave.price,
-      feeEnabled: feeChanged ? _feeEnabled : currentForSave.feeEnabled,
-      huajiaLoveLevel: loveLevelChanged
+      price: applyPrice ? price : currentForSave.price,
+      feeEnabled:
+          feeChanged && applyCommission ? _feeEnabled : currentForSave.feeEnabled,
+      huajiaLoveLevel: loveLevelChanged && applyCommission
           ? _huajiaLoveLevel
           : currentForSave.huajiaLoveLevel,
-      onlinePercent: onlinePercentChanged
+      onlinePercent: onlinePercentChanged && applyCommission
           ? _onlinePercent
           : currentForSave.onlinePercent,
-      description: descriptionChanged
+      description: applyDescription
           ? _descriptionController.text.trim()
           : currentForSave.description,
-      tags: tagsChanged
+      tags: applyTags
           ? normalizeOrderTags(_tags)
           : currentForSave.tags,
       referenceImages: referenceImagesChanged
