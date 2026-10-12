@@ -61,6 +61,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   int _rowSerial = 0;
   bool _working = false;
   bool _committing = false;
+  final Set<String> _temporaryImagePaths = <String>{};
+  bool _releaseTemporaryImagesWhenIdle = false;
   String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
 
@@ -166,6 +168,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     try {
       final selected = await _pick.pickImages();
       if (selected.isEmpty) return;
+      final temporaryPaths = <String>{
+        for (final image in selected)
+          if (image.temporary) image.path,
+      };
+      if (!mounted) {
+        await _deleteTemporaryImages(temporaryPaths);
+        return;
+      }
+      _temporaryImagePaths.addAll(temporaryPaths);
       setState(() {
         _working = true;
         _recognitionStep = '准备读取截图';
@@ -410,7 +421,28 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       if (mounted) {
         setState(() => _working = false);
       }
+      if (_releaseTemporaryImagesWhenIdle) {
+        await _releaseOwnedTemporaryImages();
+      }
     }
+  }
+
+  Future<void> _deleteTemporaryImages(Iterable<String> paths) async {
+    for (final path in paths) {
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // Android picker copies live in app cache. If a native handle lingers,
+        // the startup cache sweep can retry later.
+      }
+    }
+  }
+
+  Future<void> _releaseOwnedTemporaryImages() async {
+    final paths = _temporaryImagePaths.toList(growable: false);
+    _temporaryImagePaths.clear();
+    await _deleteTemporaryImages(paths);
   }
 
   ScreenshotImportDraft _draft({
@@ -963,6 +995,18 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       if (mounted) setState(() => _committing = false);
     }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  void dispose() {
+    if (_working) {
+      // OCR still owns these cache copies. Its finally block releases them
+      // after the native recognizer has stopped reading the files.
+      _releaseTemporaryImagesWhenIdle = true;
+    } else {
+      unawaited(_releaseOwnedTemporaryImages());
+    }
+    super.dispose();
   }
 
   @override
