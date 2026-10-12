@@ -99,7 +99,6 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
       );
       if (action == null) return;
       if (action == 'restart') {
-        widget.focusStore.stopActive();
         final saved = await _tryPetWrite(
           () => _settings.selectCurrentOrder(
             orderId: order.id,
@@ -109,6 +108,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
           ),
         );
         if (!saved) return;
+        widget.focusStore.stopActive();
         widget.focusStore.start(order: order);
         return;
       }
