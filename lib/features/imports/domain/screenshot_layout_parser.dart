@@ -658,8 +658,8 @@ class ScreenshotLayoutParser {
   }
 
   static String _cleanBuyerName(String source) {
-    // Huajia renders identity state next to the buyer name. It is account
-    // metadata, never part of the user's actual name. OCR may return it as a
+    // Some platform UIs render identity state next to the buyer name. It is
+    // account metadata, never part of the user's actual name. OCR may return it as a
     // standalone box or glue it directly onto the name.
     var text = source.trim().replaceFirst(RegExp(r'\s*[›＞>》»]\s*$'), '').trim();
     for (final status in const <String>['已实名', '未实名']) {
