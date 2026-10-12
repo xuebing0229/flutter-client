@@ -400,12 +400,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     }
 
     var latest = current;
-    final acceptedConflictFields = <String>{};
+    final keepLocalConflictFields = <String>{};
+    final useSyncedConflictFields = <String>{};
     while (true) {
       if (!widget.store.contains(widget.productId)) return;
       latest = _product;
       final unresolved = concurrentFields(latest)
-          .where((field) => !acceptedConflictFields.contains(field))
+          .where(
+            (field) =>
+                !keepLocalConflictFields.contains(field) &&
+                !useSyncedConflictFields.contains(field),
+          )
           .toList(growable: false);
       if (unresolved.isEmpty) break;
 
@@ -416,18 +421,34 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       );
       if (!mounted) return;
       if (choice == ConcurrentEditChoice.useSynced) {
-        await _cancelEditing();
-        return;
+        useSyncedConflictFields.addAll(unresolved);
+        continue;
       }
       if (choice != ConcurrentEditChoice.keepLocal) return;
-      acceptedConflictFields.addAll(unresolved);
+      keepLocalConflictFields.addAll(unresolved);
     }
 
     final currentForSave = latest;
+    final applyTitle =
+        titleChanged && !useSyncedConflictFields.contains('图名');
+    final applyPrice =
+        priceChanged && !useSyncedConflictFields.contains('价格');
+    final applyDescription =
+        descriptionChanged && !useSyncedConflictFields.contains('描述');
+    final applyCommission =
+        !useSyncedConflictFields.contains('平台与手续费设置');
+    final applySaleType =
+        saleTypeChanged &&
+        !useSyncedConflictFields.contains('售卖方式或售出记录');
+    final applySoldCount =
+        soldCountChanged &&
+        !useSyncedConflictFields.contains('售卖方式或售出记录') &&
+        !useSyncedConflictFields.contains('售出数量');
+
     final saleRecords = [...currentForSave.saleRecords];
     var reconciledSoldCount = currentForSave.soldCount;
 
-    if (soldCountChanged &&
+    if (applySoldCount &&
         _draftBaseline.saleType == ProductSaleType.multiple &&
         _saleType == ProductSaleType.multiple &&
         currentForSave.saleType == ProductSaleType.multiple) {
@@ -462,7 +483,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       if (reconciledSoldCount < saleRecords.length) {
         reconciledSoldCount = saleRecords.length;
       }
-    } else if (soldCountChanged) {
+    } else if (applySoldCount) {
       // Sale-type changes and single-sale toggles are explicit state changes,
       // so preserve the existing absolute behavior for those cases.
       if (soldCount > currentForSave.soldCount) {
@@ -483,18 +504,20 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
     widget.store.updateProduct(
       currentForSave.copyWith(
-        title: titleChanged ? title : currentForSave.title,
-        platform: platformChanged ? _platform : currentForSave.platform,
-        saleType: saleTypeChanged ? _saleType : currentForSave.saleType,
-        price: priceChanged ? price : currentForSave.price,
-        feeEnabled: feeChanged ? _feeEnabled : currentForSave.feeEnabled,
-        huajiaLoveLevel: loveLevelChanged
+        title: applyTitle ? title : currentForSave.title,
+        platform:
+            platformChanged && applyCommission ? _platform : currentForSave.platform,
+        saleType: applySaleType ? _saleType : currentForSave.saleType,
+        price: applyPrice ? price : currentForSave.price,
+        feeEnabled:
+            feeChanged && applyCommission ? _feeEnabled : currentForSave.feeEnabled,
+        huajiaLoveLevel: loveLevelChanged && applyCommission
             ? _huajiaLoveLevel
             : currentForSave.huajiaLoveLevel,
-        onlinePercent: onlinePercentChanged
+        onlinePercent: onlinePercentChanged && applyCommission
             ? _onlinePercent
             : currentForSave.onlinePercent,
-        description: descriptionChanged
+        description: applyDescription
             ? _descriptionController.text.trim()
             : currentForSave.description,
         referenceImages: referenceImagesChanged
@@ -504,10 +527,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 current: currentForSave.referenceImages,
               )
             : currentForSave.referenceImages,
-        soldCount: soldCountChanged
+        soldCount: applySoldCount
             ? reconciledSoldCount
             : currentForSave.soldCount,
-        saleRecords: soldCountChanged
+        saleRecords: applySoldCount
             ? saleRecords
             : currentForSave.saleRecords,
       ),
