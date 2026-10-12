@@ -927,7 +927,14 @@ internal sealed class DesktopPetWindow : Window
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
-            bitmap.DecodePixelWidth = 2048;
+            if (ShouldDecodeByWidth(fullPath))
+            {
+                bitmap.DecodePixelWidth = 1600;
+            }
+            else
+            {
+                bitmap.DecodePixelHeight = 1600;
+            }
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
@@ -944,6 +951,24 @@ internal sealed class DesktopPetWindow : Window
         catch (UnauthorizedAccessException) { return null; }
         catch (ArgumentException) { return null; }
         catch (NotSupportedException) { return null; }
+    }
+
+    private static bool ShouldDecodeByWidth(string fullPath)
+    {
+        using var header = new FileStream(
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete
+        );
+        var decoder = BitmapDecoder.Create(
+            header,
+            BitmapCreateOptions.DelayCreation | BitmapCreateOptions.PreservePixelFormat,
+            BitmapCacheOption.None
+        );
+        if (decoder.Frames.Count == 0) return true;
+        var frame = decoder.Frames[0];
+        return frame.PixelWidth >= frame.PixelHeight;
     }
 
     private void TrimPetImageCache(string nextPath)
@@ -1099,7 +1124,14 @@ internal sealed class DesktopPetWindow : Window
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
-            bitmap.DecodePixelWidth = 256;
+            if (ShouldDecodeByWidth(fullPath))
+            {
+                bitmap.DecodePixelWidth = 256;
+            }
+            else
+            {
+                bitmap.DecodePixelHeight = 256;
+            }
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
