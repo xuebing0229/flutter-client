@@ -400,7 +400,6 @@ class DesktopPetSettings extends ChangeNotifier {
     try {
       final raw = jsonDecode(await file.readAsString());
       if (raw is! Map) return;
-      _configLoadedFromDisk = true;
 
       _enabled = raw['enabled'] == true;
       _selectedPresetId =
@@ -490,6 +489,11 @@ class DesktopPetSettings extends ChangeNotifier {
             ? DesktopPetBubbleContentMode.image
             : DesktopPetBubbleContentMode.text;
       }
+
+      // Only a completely parsed config is safe to use as the authority for
+      // startup stale-file cleanup. A malformed/corrupt config must never make
+      // an empty/partially parsed preset list delete valid local image assets.
+      _configLoadedFromDisk = true;
     } catch (_) {
       // The desktop pet is optional. A bad config must not affect work data.
     }
