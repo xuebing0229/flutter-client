@@ -104,7 +104,13 @@ class LicenseHttpTransport {
       }
 
       headers.forEach(request.headers.set);
-      if (body != null) request.write(body);
+      if (body != null) {
+        // HttpClientRequest's String writer can use a single-byte encoding on
+        // some runtimes/routes. JSON notes may contain Chinese or other
+        // non-Latin-1 characters, so always send the already-defined UTF-8
+        // request body as bytes instead of relying on IOSink.write(String).
+        request.add(utf8.encode(body));
+      }
 
       final response =
           await request.close().timeout(const Duration(seconds: 12));
