@@ -139,7 +139,7 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     description: '修复电脑端更新或重启后可能误删桌宠预设图片的问题。桌宠不再根据配置自动猜测并清理“旧图片”；只有你明确执行删除预设或移除图片时，才会记录并清理对应的本机素材文件。',
   ),
   AdventurerNewsEntry(
-    introducedBuild: 144,
+    introducedBuild: 145,
     title: '新设备加入状态修复',
     description: '修复首次扫码加入新设备时，两台设备其实已经建立同步连接却仍被误判为“等待原设备确认超时”的问题。加入页现在会识别真实连接状态，确认成功后直接显示已连接与账号传输进度；连接建立后也不会再被固定五分钟超时错误中断。',
   ),
