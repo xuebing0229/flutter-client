@@ -48,7 +48,7 @@ jobs:
         run: flutter analyze --no-fatal-warnings
 
       - name: Test issuer code path
-        run: flutter test test/license_issuer_engine_test.dart
+        run: flutter test test/license_issuer_engine_test.dart test/license_issuer_api_test.dart
 
       - name: Build signed issuer APK
         run: |
