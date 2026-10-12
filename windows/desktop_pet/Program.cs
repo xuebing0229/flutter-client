@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Path = System.IO.Path;
 using System.Windows.Threading;
+using WpfAnimatedGif;
 
 namespace AdventurersGuild.DesktopPet;
 
@@ -114,15 +115,10 @@ internal sealed class DesktopPetWindow : Window
     private readonly GlobalInputActivityMonitor _inputHook;
     private readonly Dictionary<string, CachedImageSource> _desktopImageCache =
         new(StringComparer.OrdinalIgnoreCase);
-    private readonly DispatcherTimer _bubbleAnimationTimer;
-    private readonly List<BitmapSource> _bubbleAnimationFrames = new();
-    private readonly List<TimeSpan> _bubbleAnimationDelays = new();
 
     private FileSystemWatcher? _watcher;
     private PetConfig _config = new();
     private string? _activeImagePath;
-    private string? _activeBubbleAnimationPath;
-    private int _bubbleAnimationFrameIndex;
     private bool _inputActive;
     private bool _closed;
     private bool _reloadInProgress;
@@ -305,9 +301,6 @@ internal sealed class DesktopPetWindow : Window
             Interval = TimeSpan.FromSeconds(1),
         };
         _focusTimer.Tick += (_, _) => RunUiSafely(RefreshFocusClock);
-
-        _bubbleAnimationTimer = new DispatcherTimer();
-        _bubbleAnimationTimer.Tick += (_, _) => RunUiSafely(AdvanceBubbleAnimation);
 
         _inputHook = new GlobalInputActivityMonitor();
         _inputHook.ActivityChanged += active =>
@@ -1011,121 +1004,44 @@ internal sealed class DesktopPetWindow : Window
 
     private bool TryShowBubbleImage(string fullPath)
     {
-        if (string.Equals(
-                Path.GetExtension(fullPath),
-                ".gif",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return TryStartBubbleGif(fullPath);
-        }
-
-        StopBubbleAnimation();
-        var art = LoadDesktopImage(fullPath);
-        _bubbleArt.Source = art;
-        return art is not null;
-    }
-
-    private bool TryStartBubbleGif(string fullPath)
-    {
-        if (string.Equals(
-                _activeBubbleAnimationPath,
-                fullPath,
-                StringComparison.OrdinalIgnoreCase) &&
-            _bubbleAnimationFrames.Count > 0)
-        {
-            return true;
-        }
-
-        StopBubbleAnimation();
         try
         {
-            using var stream = new FileStream(
-                fullPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete
-            );
-            var decoder = new GifBitmapDecoder(
-                stream,
-                BitmapCreateOptions.PreservePixelFormat,
-                BitmapCacheOption.OnLoad
-            );
-            if (decoder.Frames.Count == 0) return false;
-
-            foreach (var sourceFrame in decoder.Frames)
+            if (string.Equals(
+                    Path.GetExtension(fullPath),
+                    ".gif",
+                    StringComparison.OrdinalIgnoreCase))
             {
-                var frame = new WriteableBitmap(sourceFrame);
-                frame.Freeze();
-                _bubbleAnimationFrames.Add(frame);
-                _bubbleAnimationDelays.Add(GetGifFrameDelay(sourceFrame));
+                ClearBubbleImageSource();
+                var animated = new BitmapImage();
+                animated.BeginInit();
+                animated.CacheOption = BitmapCacheOption.OnLoad;
+                animated.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
+                animated.UriSource = new Uri(fullPath, UriKind.Absolute);
+                animated.EndInit();
+
+                // WpfAnimatedGif owns GIF frame timing, disposal/compositing and
+                // repeat metadata. Do not duplicate an animation engine here.
+                ImageBehavior.SetAnimatedSource(_bubbleArt, animated);
+                return true;
             }
 
-            _activeBubbleAnimationPath = fullPath;
-            _bubbleAnimationFrameIndex = 0;
-            _bubbleArt.Source = _bubbleAnimationFrames[0];
-
-            if (_bubbleAnimationFrames.Count > 1)
-            {
-                _bubbleAnimationTimer.Interval = _bubbleAnimationDelays[0];
-                _bubbleAnimationTimer.Start();
-            }
-            return true;
+            ClearBubbleImageSource();
+            var art = LoadDesktopImage(fullPath);
+            _bubbleArt.Source = art;
+            return art is not null;
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-        catch (ArgumentException) { }
-        catch (NotSupportedException) { }
-        catch (COMException) { }
-        catch (OutOfMemoryException) { }
-
-        StopBubbleAnimation();
-        return false;
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (ArgumentException) { return false; }
+        catch (NotSupportedException) { return false; }
+        catch (FormatException) { return false; }
+        catch (COMException) { return false; }
+        catch (OutOfMemoryException) { return false; }
     }
 
-    private static TimeSpan GetGifFrameDelay(BitmapFrame frame)
+    private void ClearBubbleImageSource()
     {
-        try
-        {
-            if (frame.Metadata is BitmapMetadata metadata)
-            {
-                var hundredths = Convert.ToInt32(metadata.GetQuery("/grctlext/Delay"));
-                if (hundredths > 0)
-                {
-                    return TimeSpan.FromMilliseconds(Math.Max(20, hundredths * 10));
-                }
-            }
-        }
-        catch (NotSupportedException) { }
-        catch (InvalidOperationException) { }
-        catch (FormatException) { }
-        catch (InvalidCastException) { }
-        catch (OverflowException) { }
-
-        return TimeSpan.FromMilliseconds(100);
-    }
-
-    private void AdvanceBubbleAnimation()
-    {
-        if (_bubbleAnimationFrames.Count <= 1)
-        {
-            _bubbleAnimationTimer.Stop();
-            return;
-        }
-
-        _bubbleAnimationFrameIndex =
-            (_bubbleAnimationFrameIndex + 1) % _bubbleAnimationFrames.Count;
-        _bubbleArt.Source = _bubbleAnimationFrames[_bubbleAnimationFrameIndex];
-        _bubbleAnimationTimer.Interval =
-            _bubbleAnimationDelays[_bubbleAnimationFrameIndex];
-    }
-
-    private void StopBubbleAnimation()
-    {
-        _bubbleAnimationTimer.Stop();
-        _bubbleAnimationFrames.Clear();
-        _bubbleAnimationDelays.Clear();
-        _activeBubbleAnimationPath = null;
-        _bubbleAnimationFrameIndex = 0;
+        ImageBehavior.SetAnimatedSource(_bubbleArt, null);
         _bubbleArt.Source = null;
     }
 
@@ -1197,7 +1113,7 @@ internal sealed class DesktopPetWindow : Window
     {
         if (!IsUsableImage(_config.ImageA))
         {
-            StopBubbleAnimation();
+            ClearBubbleImageSource();
             _bubbleHost.Visibility = Visibility.Collapsed;
             return;
         }
@@ -1212,7 +1128,7 @@ internal sealed class DesktopPetWindow : Window
         {
             if (!IsUsableImage(_config.BubbleImage))
             {
-                StopBubbleAnimation();
+                ClearBubbleImageSource();
                 _bubbleHost.Visibility = Visibility.Collapsed;
                 return;
             }
@@ -1231,7 +1147,7 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
-        StopBubbleAnimation();
+        ClearBubbleImageSource();
         string text;
         if (string.Equals(_config.TextMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
@@ -1515,7 +1431,7 @@ internal sealed class DesktopPetWindow : Window
 
         _inputHook.Dispose();
         _petImage.Source = null;
-        StopBubbleAnimation();
+        ClearBubbleImageSource();
         _desktopImageCache.Clear();
     }
 
