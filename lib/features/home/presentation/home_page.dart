@@ -583,7 +583,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<QueueOrder?> _currentDesktopPetOrder() async {
-    await _desktopPetService.settings.refresh();
+    await _desktopPetService.settings.load();
     final selectedOrderId = _desktopPetService.settings.currentOrderId;
     if (selectedOrderId == null || selectedOrderId.isEmpty) return null;
 
@@ -1264,6 +1264,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.desktopPetTool => DesktopPetPage(
         orderStore: _orderStore,
         focusStore: _focusStore,
+        settings: _desktopPetService.settings,
         onOpenOrder: _openOrderFromFocus,
         showDesktopPet:
             Platform.isWindows &&
@@ -1457,6 +1458,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               productStore: _productStore,
               nodePresetStore: _nodePresetStore,
               focusStore: _focusStore,
+              desktopPetSettings: _desktopPetService.settings,
               onOpenOrder: _openOrderFromFocus,
               themeStore: widget.themeStore,
               featureStore: widget.featureStore,
@@ -1556,6 +1558,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     productStore: _productStore,
                                     nodePresetStore: _nodePresetStore,
                                     focusStore: _focusStore,
+                                    desktopPetSettings:
+                                        _desktopPetService.settings,
                                     onOpenOrder: _openOrderFromFocus,
                                     themeStore: widget.themeStore,
                                     featureStore: widget.featureStore,

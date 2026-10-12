@@ -52,15 +52,22 @@ class FocusStore extends ChangeNotifier {
   FocusSession? stopActiveAt(DateTime requestedEnd) {
     final active = activeSession;
     if (active == null) return null;
-    final index = _sessions.indexWhere((item) => item.id == active.id);
+    return stopSessionAt(active.id, requestedEnd);
+  }
+
+  FocusSession? stopSessionAt(String id, DateTime requestedEnd) {
+    final index = _sessions.indexWhere((item) => item.id == id);
     if (index < 0) return null;
-    final end = requestedEnd.isAfter(active.startedAt)
+    final session = _sessions[index];
+    if (!session.isActive) return null;
+
+    final end = requestedEnd.isAfter(session.startedAt)
         ? requestedEnd
-        : active.startedAt.add(const Duration(seconds: 1));
-    _sessions[index] = active.copyWith(endedAt: end);
+        : session.startedAt.add(const Duration(seconds: 1));
+    _sessions[index] = session.copyWith(endedAt: end);
     _sort();
     notifyListeners();
-    return _sessions[index];
+    return _sessions.firstWhere((item) => item.id == id);
   }
 
   FocusSession? discardActive() {
@@ -88,9 +95,13 @@ class FocusStore extends ChangeNotifier {
     if (active.length > 1) {
       final keep = active.last;
       for (final session in active.take(active.length - 1)) {
-        final end = keep.startedAt.isAfter(session.startedAt)
-            ? keep.startedAt
-            : session.startedAt.add(const Duration(seconds: 1));
+        // Equal start times are possible when two offline devices start
+        // independently. Ending the losing session one second later would
+        // manufacture an overlap with the kept active session; a zero-length
+        // historical session is valid and keeps the timeline convergent.
+        final end = keep.startedAt.isBefore(session.startedAt)
+            ? session.startedAt
+            : keep.startedAt;
         byId[session.id] = session.copyWith(endedAt: end);
       }
     }

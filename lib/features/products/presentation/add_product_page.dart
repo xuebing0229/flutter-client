@@ -135,13 +135,24 @@ class _AddProductPageState extends State<AddProductPage> {
       return;
     }
 
+    final price = double.tryParse(_priceController.text.trim()) ?? 0;
+    if (!price.isFinite || price < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     widget.store.addProduct(
       FinishedProduct(
         id: _draftProductId,
         title: title,
         platform: _platform,
         saleType: _saleType,
-        price: double.tryParse(_priceController.text.trim()) ?? 0,
+        price: price,
         feeEnabled: _feeEnabled,
         huajiaLoveLevel: _huajiaLoveLevel,
         onlinePercent: _onlinePercent,

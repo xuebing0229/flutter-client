@@ -6,8 +6,6 @@ import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
-import '../../orders/data/order_reference_image_store.dart';
-import '../../orders/domain/queue_order.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
 import 'product_detail_page.dart';
@@ -49,7 +47,6 @@ class ProductPage extends StatefulWidget {
 }
 
 class _ProductPageState extends State<ProductPage> {
-  final OrderReferenceImageStore _referenceImageStore = OrderReferenceImageStore();
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String _searchField = 'all';
@@ -251,16 +248,6 @@ class _ProductPageState extends State<ProductPage> {
     );
 
     if (confirmed == true) {
-      final images = <OrderReferenceImage>[
-        for (final product in widget.store.products)
-          if (ids.contains(product.id)) ...product.referenceImages,
-      ];
-      if (images.isNotEmpty) {
-        await _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: images,
-        );
-      }
       widget.store.deleteProducts(ids);
     }
   }
@@ -297,9 +284,29 @@ class _ProductPageState extends State<ProductPage> {
 
     if (confirmed != true || !mounted) return;
 
+    if (!widget.store.contains(product.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('这个成品已经不存在，未记录售出。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final current = widget.store.byId(product.id);
+    if (current.isArchived || current.saleType != product.saleType) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('成品状态已在另一处更新，请按当前状态重新确认售出。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     widget.store.markSold(product.id);
 
-    if (!mounted) return;
+    if (!mounted || !widget.store.contains(product.id)) return;
     final updated = widget.store.byId(product.id);
     final message = updated.saleType == ProductSaleType.multiple
         ? '已记录第 ${updated.soldCount} 次售出'
@@ -319,12 +326,6 @@ class _ProductPageState extends State<ProductPage> {
       title: product.title,
     );
     if (confirmed) {
-      if (product.referenceImages.isNotEmpty) {
-        await _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: product.referenceImages,
-        );
-      }
       widget.store.deleteProduct(product.id);
     }
   }

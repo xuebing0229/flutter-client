@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: beta-publish
+  cancel-in-progress: false
+
 env:
   RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
   BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
@@ -31,12 +35,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Run screenshot parser regression tests
-        run: flutter test test/features/screenshot_layout_parser_test.dart test/features/screenshot_huajia_detail_layout_test.dart test/features/screenshot_mihuashi_detail_layout_test.dart test/features/screenshot_ocr_real_world_regression_test.dart
-
       - name: Analyze
         run: flutter analyze
 
+      - name: Run full Flutter test suite
+        run: flutter test
 
   android:
     needs: check
@@ -67,7 +70,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: android/app/src/sync/jniLibs
-          key: embedded-syncthing-v2.1.5-${{ runner.os }}-android
+          key: embedded-syncthing-v2.1.5-2ca95cf149810411-${{ runner.os }}-android
 
       - name: Build embedded Syncthing core
         env:
@@ -95,6 +98,12 @@ jobs:
             --dart-define=APP_CHANNEL=beta \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-beta-release.apk app-beta.apk
+
+      - name: Verify Beta APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app-beta.apk
 
       - name: Upload Android Beta package
         uses: actions/upload-artifact@v4
@@ -266,6 +275,30 @@ jobs:
           BUILD=$(printf '%s\n' "$META" | sed -n '2p')
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+
+      - name: Require a newer Beta build number
+        shell: bash
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN"
+          CURRENT_JSON="$RUNNER_TEMP/current-beta-version.json"
+          gh api repos/xuebing0229/release-files/contents/version.json \
+            --jq .content | base64 --decode > "$CURRENT_JSON"
+          python3 - "$CURRENT_JSON" "$BUILD" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          current = json.loads(Path(sys.argv[1]).read_text())
+          previous = current.get("build")
+          candidate = int(sys.argv[2])
+          if isinstance(previous, int) and candidate <= previous:
+              raise SystemExit(
+                  f"Beta build number must increase: current={previous}, candidate={candidate}. "
+                  "Increment pubspec.yaml before publishing."
+              )
+          PY
 
       - name: Prepare static Beta update manifest
         shell: bash

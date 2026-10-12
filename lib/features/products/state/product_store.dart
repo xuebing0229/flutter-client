@@ -55,6 +55,7 @@ class ProductStore extends ChangeNotifier {
     if (index == -1) return;
 
     final product = _products[index];
+    if (product.isArchived) return;
     if (product.saleType == ProductSaleType.single && product.isSold) {
       return;
     }
@@ -78,6 +79,7 @@ class ProductStore extends ChangeNotifier {
     if (index == -1) return;
 
     final product = _products[index];
+    if (product.isArchived == archived) return;
     _products[index] = product.copyWith(
       archivedAt: archived ? DateTime.now() : null,
       clearArchivedAt: !archived,
@@ -92,17 +94,21 @@ class ProductStore extends ChangeNotifier {
     if (idSet.isEmpty) return;
 
     final archivedAt = archived ? DateTime.now() : null;
+    var changed = false;
     for (var i = 0; i < _products.length; i++) {
-      if (idSet.contains(_products[i].id)) {
-        _products[i] = _products[i].copyWith(
-          archivedAt: archivedAt,
-          clearArchivedAt: !archived,
-          isArchived: archived,
-          isPinned: archived ? false : _products[i].isPinned,
-        );
+      if (!idSet.contains(_products[i].id) ||
+          _products[i].isArchived == archived) {
+        continue;
       }
+      _products[i] = _products[i].copyWith(
+        archivedAt: archivedAt,
+        clearArchivedAt: !archived,
+        isArchived: archived,
+        isPinned: archived ? false : _products[i].isPinned,
+      );
+      changed = true;
     }
-    notifyListeners();
+    if (changed) notifyListeners();
   }
 
   void setPinned(String id, bool pinned) {

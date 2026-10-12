@@ -39,6 +39,7 @@ class BackupFileBridge(
     private var pendingLocalFilePath: String? = null
 
     fun configure(messenger: BinaryMessenger) {
+        cleanupTemporaryImports()
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "exportBackup" -> handleExport(call, result)
@@ -49,6 +50,14 @@ class BackupFileBridge(
                 "pickReferenceImages" -> handleReferenceImages(result)
                 "exportLocalFile" -> handleLocalFileExport(call, result)
                 else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun cleanupTemporaryImports() {
+        for (name in listOf("backup-import", "reference-import", "qr-import")) {
+            runCatching {
+                File(activity.cacheDir, name).deleteRecursively()
             }
         }
     }
@@ -445,21 +454,18 @@ class BackupFileBridge(
         }
 
         Thread {
+            var temporaryFile: File? = null
             try {
                 val displayName = queryDisplayName(uri)
                 val extension = safeExtension(displayName)
                 val cacheDir = File(activity.cacheDir, "backup-import").apply {
                     mkdirs()
                 }
-                runCatching {
-                    cacheDir.listFiles()?.forEach { stale ->
-                        if (stale.isFile) stale.delete()
-                    }
-                }
                 val file = File(
                     cacheDir,
                     "backup-${UUID.randomUUID()}${extension ?: ".bin"}",
                 )
+                temporaryFile = file
 
                 val input = activity.contentResolver.openInputStream(uri)
                     ?: throw IllegalStateException("Unable to open backup file.")
@@ -478,6 +484,7 @@ class BackupFileBridge(
                     )
                 }
             } catch (error: Exception) {
+                temporaryFile?.let { file -> runCatching { file.delete() } }
                 activity.runOnUiThread {
                     result.error(
                         "BACKUP_FILE_IMPORT_FAILED",
@@ -498,6 +505,7 @@ class BackupFileBridge(
             return
         }
 
+        var temporaryFile: File? = null
         try {
             val input = activity.contentResolver.openInputStream(uri)
                 ?: throw IllegalStateException("Unable to open selected image.")
@@ -508,6 +516,9 @@ class BackupFileBridge(
                 cacheDir,
                 "qr-${UUID.randomUUID()}.img",
             )
+            // Register the destination before copying so a provider/read error
+            // cannot leave a partial QR image in cache until the next launch.
+            temporaryFile = file
 
             input.use { source ->
                 file.outputStream().use { destination ->
@@ -517,6 +528,7 @@ class BackupFileBridge(
 
             result.success(file.absolutePath)
         } catch (error: Exception) {
+            temporaryFile?.let { file -> runCatching { file.delete() } }
             result.error(
                 "QR_IMAGE_IMPORT_FAILED",
                 error.message ?: "QR image import failed.",
@@ -558,11 +570,6 @@ class BackupFileBridge(
                 val cacheDir = File(activity.cacheDir, "reference-import").apply {
                     mkdirs()
                 }
-                runCatching {
-                    cacheDir.listFiles()?.forEach { stale ->
-                        if (stale.isFile) stale.delete()
-                    }
-                }
 
                 val payload = mutableListOf<Map<String, String>>()
                 for (uri in uris) {
@@ -582,6 +589,9 @@ class BackupFileBridge(
                         cacheDir,
                         "ref-${UUID.randomUUID()}${extension ?: ".img"}",
                     )
+                    // Register the destination before copying so an I/O error
+                    // cannot strand a partially written large cache file.
+                    createdFiles.add(file)
 
                     val input = activity.contentResolver.openInputStream(uri)
                         ?: throw IllegalStateException(
@@ -592,7 +602,6 @@ class BackupFileBridge(
                             source.copyTo(destination)
                         }
                     }
-                    createdFiles.add(file)
                     payload.add(
                         linkedMapOf(
                             "path" to file.absolutePath,

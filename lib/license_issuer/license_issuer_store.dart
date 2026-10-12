@@ -120,16 +120,20 @@ class LicenseIssuerStore extends ChangeNotifier {
     final session = await _api.me(normalized);
     _adminToken = normalized;
     _adminName = session.name;
-    _connected = true;
-    notifyListeners();
 
     try {
       if (!_serverBackedCache && _records.isNotEmpty) {
-        await _migrateLegacyRecords();
+        await _migrateLegacyRecords(normalized);
       }
-      await refresh();
+      await _refreshWithToken(normalized);
       _serverBackedCache = true;
       await _save();
+
+      // Do not expose a connected issuer while migration/refresh is still in
+      // flight. Otherwise the UI can start generating codes against a ledger
+      // that has not finished synchronizing yet.
+      _connected = true;
+      notifyListeners();
     } catch (_) {
       // Never allow generation against a ledger that failed to synchronize.
       // Keep the token in secure storage so the user can simply reconnect.
@@ -162,18 +166,21 @@ class LicenseIssuerStore extends ChangeNotifier {
 
   Future<void> refresh() async {
     final token = _requireToken();
+    await _refreshWithToken(token);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> _refreshWithToken(String token) async {
     final remote = await _api.listLicenses(token);
     _records
       ..clear()
       ..addAll(remote);
     _sortRecords();
     _serverBackedCache = true;
-    await _save();
-    notifyListeners();
   }
 
-  Future<void> _migrateLegacyRecords() async {
-    final token = _requireToken();
+  Future<void> _migrateLegacyRecords(String token) async {
     final legacy = List<IssuedLicenseRecord>.from(_records)
       ..sort((a, b) {
         final ai = int.tryParse(a.serial) ?? 0;

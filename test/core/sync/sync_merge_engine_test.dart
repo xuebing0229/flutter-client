@@ -58,6 +58,104 @@ void main() {
     );
   });
 
+  test('legacy multi-sale count survives sync without sale timestamps', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'legacy-product',
+      'saleType': 'multiple',
+      'soldCount': 3,
+      'saleRecords': <String>[],
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'legacy-product',
+      values: values,
+      deviceId: 'phone',
+    );
+
+    expect(engine.materialize(baseline)!['soldCount'], 3);
+    expect(engine.materialize(baseline)!['saleRecords'], isEmpty);
+
+    final changed = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'soldCount': 4,
+        'saleRecords': <String>['2026-10-11T12:00:00.000Z'],
+      },
+      deviceId: 'desktop',
+    );
+    final materialized = engine.materialize(changed)!;
+    expect(materialized['soldCount'], 4);
+    expect(
+      materialized['saleRecords'],
+      <String>['2026-10-11T12:00:00.000Z'],
+    );
+
+    final compacted = engine.compactAcknowledgedOperations(
+      changed,
+      deviceId: 'phone',
+    );
+    expect(engine.materialize(compacted)!['soldCount'], 4);
+    expect(
+      engine.materialize(compacted)!['saleRecords'],
+      <String>['2026-10-11T12:00:00.000Z'],
+    );
+  });
+
+  test('concurrent single-sale marks converge without sale-record conflict', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'product-single',
+      'saleType': 'single',
+      'soldCount': 0,
+      'saleRecords': <String>[],
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'product-single',
+      values: values,
+      deviceId: 'seed',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'soldCount': 1,
+        'saleRecords': <String>['2026-10-11T10:00:00.000Z'],
+      },
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'soldCount': 1,
+        'saleRecords': <String>['2026-10-11T10:00:02.000Z'],
+      },
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    final materialized = engine.materialize(merged)!;
+
+    expect(materialized['soldCount'], 1);
+    expect(
+      materialized['saleRecords'],
+      <String>['2026-10-11T10:00:00.000Z'],
+    );
+    expect(
+      merged.conflicts.values.where(
+        (conflict) => conflict.field == 'saleRecords',
+      ),
+      isEmpty,
+    );
+  });
+
   test('operation metadata survives transport decoding', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
@@ -111,6 +209,76 @@ void main() {
     expect(
       engine.materialize(decodedProduct)!['saleRecords'],
       <String>['sale-1'],
+    );
+  });
+
+  test('older snapshot preserves fields introduced by a newer client', () {
+    final engine = SyncMergeEngine();
+    const oldValues = <String, dynamic>{
+      'id': 'order-forward-compatible',
+      'title': '旧客户端可见标题',
+    };
+    final record = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-forward-compatible',
+      values: <String, dynamic>{
+        ...oldValues,
+        'futureField': <String, dynamic>{'value': 42},
+      },
+      deviceId: 'newer-client',
+    );
+
+    final changed = engine.applyLocalSnapshot(
+      record: record,
+      previousValues: oldValues,
+      nextValues: <String, dynamic>{
+        ...oldValues,
+        'title': '旧客户端修改后的标题',
+      },
+      deviceId: 'older-client',
+    );
+
+    final materialized = engine.materialize(changed)!;
+    expect(materialized['title'], '旧客户端修改后的标题');
+    expect(materialized['futureField'], <String, dynamic>{'value': 42});
+  });
+
+  test('older client never compacts an unknown future operation kind', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'order-future-operation',
+      'title': '测试',
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-future-operation',
+      values: values,
+      deviceId: 'newer-client',
+    );
+    final futureOperation = SyncOperation(
+      id: 'future-op-1',
+      field: 'futureField',
+      kind: 'future-operation-v2',
+      deviceId: 'newer-client',
+      occurredAt: DateTime.utc(2026, 10, 12),
+      metadata: const <String, dynamic>{'payload': 'must-survive'},
+    );
+    final record = baseline.copyWith(
+      operations: <String, SyncOperation>{
+        futureOperation.id: futureOperation,
+      },
+    );
+
+    expect(engine.hasUnsupportedOperations(record), isTrue);
+
+    final compacted = engine.compactAcknowledgedOperations(
+      record,
+      deviceId: 'older-client',
+    );
+    expect(compacted.toJson(), record.toJson());
+    expect(
+      compacted.operations['future-op-1']!.metadata['payload'],
+      'must-survive',
     );
   });
 
@@ -251,4 +419,88 @@ void main() {
     expect(merged.conflicts, isEmpty);
   });
 
+  test('concurrent amount reductions never materialize below zero', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'order-amount',
+      'supplementAmount': 10.0,
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-amount',
+      values: values,
+      deviceId: 'phone',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'supplementAmount': 0.0},
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'supplementAmount': 0.0},
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    expect(engine.materialize(merged)!['supplementAmount'], 0.0);
+  });
+  test('reference image cleanup metadata survives first compaction phase', () {
+    final engine = SyncMergeEngine();
+    final image = <String, dynamic>{
+      'id': 'ref-a',
+      'fileName': 'a.png',
+      'relativePath': 'assets/order-reference-images/order/ref-a.png',
+      'addedAt': '2026-10-11T00:00:00.000Z',
+      'sizeBytes': 10,
+    };
+    final values = <String, dynamic>{
+      'id': 'order-image',
+      'referenceImages': <dynamic>[image],
+    };
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-image',
+      values: values,
+      deviceId: 'phone',
+    );
+    final removed = engine.applyLocalSnapshot(
+      record: base,
+      previousValues: values,
+      nextValues: <String, dynamic>{...values, 'referenceImages': <dynamic>[]},
+      deviceId: 'phone',
+    );
+
+    final compacted = engine.compactAcknowledgedOperations(
+      removed,
+      deviceId: 'phone',
+    );
+    final marker = compacted.operations.values.single;
+    expect(marker.compacted, isTrue);
+    expect(marker.metadata['removed'], isNotEmpty);
+    expect(engine.materialize(compacted)!['referenceImages'], isEmpty);
+  });
+
+  test('deleted records enter compacted tombstone phase before disappearing', () {
+    final engine = SyncMergeEngine();
+    final base = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'order-deleted',
+      values: const <String, dynamic>{'id': 'order-deleted'},
+      deviceId: 'phone',
+    );
+    final deleted = engine.markDeleted(base, deviceId: 'phone');
+
+    final compacted = engine.compactAcknowledgedOperations(
+      deleted,
+      deviceId: 'phone',
+    );
+
+    expect(compacted.isDeleted, isTrue);
+    expect(compacted.operations, isNotEmpty);
+    expect(compacted.operations.values.every((operation) => operation.compacted), isTrue);
+  });
 }

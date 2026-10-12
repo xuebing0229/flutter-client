@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../orders/data/node_presets.dart';
-import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_summary_card.dart';
@@ -37,9 +36,6 @@ class ArchivePage extends StatefulWidget {
 }
 
 class _ArchivePageState extends State<ArchivePage> {
-  final OrderReferenceImageStore _referenceImageStore =
-      OrderReferenceImageStore();
-
   bool _cleaning = false;
 
   void _openOrder(BuildContext context, String orderId) {
@@ -172,9 +168,25 @@ class _ArchivePageState extends State<ArchivePage> {
             _insideRange(product.archivedAt!, range))
           product,
     ];
+    final undatedLegacyOrders = widget.orderStore.orders
+        .where(
+          (order) =>
+              order.isArchived &&
+              _orderArchiveTime(order) == null,
+        )
+        .length;
     final undatedLegacyProducts = widget.productStore.products
         .where((product) => product.isArchived && product.archivedAt == null)
         .length;
+    final undatedLegacyCount =
+        undatedLegacyOrders + undatedLegacyProducts;
+    final legacyWarning = undatedLegacyCount == 0
+        ? ''
+        : '\n\n另有'
+              '${undatedLegacyOrders > 0 ? ' $undatedLegacyOrders 个旧版排单' : ''}'
+              '${undatedLegacyOrders > 0 && undatedLegacyProducts > 0 ? '、' : ''}'
+              '${undatedLegacyProducts > 0 ? ' $undatedLegacyProducts 个旧版成品' : ''}'
+              '没有归档日期，本次不会自动删除。';
 
     final images = <OrderReferenceImage>[
       for (final order in orders) ...order.referenceImages,
@@ -189,10 +201,10 @@ class _ArchivePageState extends State<ArchivePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            undatedLegacyProducts == 0
+            undatedLegacyCount == 0
                 ? '这个时间范围内没有可清理的归档内容。'
-                : '这个时间范围内没有带归档日期的内容；'
-                    '另有 $undatedLegacyProducts 个旧版成品没有归档日期，未自动删除。',
+                : '这个时间范围内没有可按日期清理的归档内容。'
+                    '$legacyWarning',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -212,8 +224,7 @@ class _ArchivePageState extends State<ArchivePage> {
             '成品：${products.length} 个\n'
             '参考图：${images.length} 张'
             '${imageBytes > 0 ? '（约 ${_formatBytes(imageBytes)}）' : ''}'
-            '${undatedLegacyProducts > 0 ? '\n\n有 $undatedLegacyProducts 个旧版成品没有归档日期，'
-                '本次不会删除。' : ''}'
+            '$legacyWarning'
             '\n\n删除后无法从归档恢复，对应的历史收入、日程记录和参考图也会一起移除，'
             '并同步删除到其他设备。'
             '如需长期留存，建议先导出完整备份。',
@@ -240,29 +251,58 @@ class _ArchivePageState extends State<ArchivePage> {
     setState(() => _cleaning = true);
     String? syncWarning;
     try {
-      await _referenceImageStore.deleteImages(
-        accountId: widget.accountId,
-        images: images,
-      );
+      // The confirmation dialog can stay open while another device restores
+      // or re-archives an item. Only delete the exact archive snapshot the
+      // user reviewed; never let a stale confirmation permanently delete a
+      // record whose archive state changed in the meantime.
+      final currentOrderIds = <String>{
+        for (final snapshot in orders)
+          if (widget.orderStore.contains(snapshot.id))
+            if (widget.orderStore.byId(snapshot.id).isArchived &&
+                _orderArchiveTime(widget.orderStore.byId(snapshot.id)) ==
+                    _orderArchiveTime(snapshot))
+              snapshot.id,
+      };
+      final currentProductIds = <String>{
+        for (final snapshot in products)
+          if (widget.productStore.contains(snapshot.id))
+            if (widget.productStore.byId(snapshot.id).isArchived &&
+                widget.productStore.byId(snapshot.id).archivedAt ==
+                    snapshot.archivedAt)
+              snapshot.id,
+      };
+      final skipped =
+          orders.length +
+          products.length -
+          currentOrderIds.length -
+          currentProductIds.length;
 
-      widget.orderStore.deleteOrders(orders.map((order) => order.id));
-      widget.productStore.deleteProducts(
-        products.map((product) => product.id),
-      );
+      widget.orderStore.deleteOrders(currentOrderIds);
+      widget.productStore.deleteProducts(currentProductIds);
 
-      try {
-        await widget.syncCoordinator.flushNow();
-      } catch (_) {
-        syncWarning = '本机已删除，但这次同步没有立即完成，之后联网会继续同步删除记录。';
+      if (currentOrderIds.isNotEmpty || currentProductIds.isNotEmpty) {
+        try {
+          await widget.syncCoordinator.flushNow();
+        } catch (_) {
+          syncWarning = '本机已删除，但这次同步没有立即完成，之后联网会继续同步删除记录。';
+        }
       }
 
       if (!mounted) return;
+      final deletedImages = <OrderReferenceImage>[
+        for (final order in orders)
+          if (currentOrderIds.contains(order.id)) ...order.referenceImages,
+        for (final product in products)
+          if (currentProductIds.contains(product.id)) ...product.referenceImages,
+      ];
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             syncWarning ??
-                '已永久删除 ${orders.length} 个排单、${products.length} 个成品'
-                    '${images.isEmpty ? '' : '和 ${images.length} 张参考图'}。',
+                '已永久删除 ${currentOrderIds.length} 个排单、'
+                    '${currentProductIds.length} 个成品'
+                    '${deletedImages.isEmpty ? '。' : '；${deletedImages.length} 张参考图会在所有绑定设备确认删除后自动清理。'}'
+                    '${skipped > 0 ? ' 有 $skipped 条归档状态已变化，未删除。' : ''}',
           ),
           behavior: SnackBarBehavior.floating,
         ),

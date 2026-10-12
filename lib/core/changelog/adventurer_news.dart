@@ -98,6 +98,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '桌宠气泡新装扮与截图后卡住修复',
     description: '电脑桌宠文字泡可切换说话与思考两种样式，思考气泡采用圆点尾巴而不是对话框三角尖；每组桌宠预设可选配透明 PNG 图片放在文字泡内。修复使用快捷截图软件后桌宠可能一直停在按键 B 图的问题：改为实时检测按键与鼠标状态，释放按键后可自动回到 A 图，不再依赖容易漏掉松键事件的全局钩子。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 135,
+    title: '内测前稳定性完善',
+    description: '全面修复双端同步、完整备份恢复、截图批量导入、订单与成品并发操作、专注计时、Windows 桌宠和自动更新中的边界问题；同时关闭 Android 系统云备份，并加强激活与发码数据、安装包签名和更新文件完整性校验，减少异常中断、重复写入和跨设备状态互相覆盖。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

@@ -51,6 +51,9 @@ class OrderReferenceImageStore {
           ),
         );
       }
+
+      await _requestScan(accountId);
+      return imported;
     } catch (_) {
       await deleteImages(
         accountId: accountId,
@@ -58,10 +61,18 @@ class OrderReferenceImageStore {
         requestScan: false,
       );
       rethrow;
+    } finally {
+      for (final image in picked) {
+        if (!image.temporary) continue;
+        try {
+          final source = File(image.path);
+          if (await source.exists()) await source.delete();
+        } catch (_) {
+          // Android picker copies are cache files. A lingering handle can be
+          // left for normal cache cleanup without affecting the imported copy.
+        }
+      }
     }
-
-    await _requestScan(accountId);
-    return imported;
   }
 
   Future<OrderReferenceImage> _importOne({

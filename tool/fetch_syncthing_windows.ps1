@@ -13,6 +13,10 @@ if ([string]::IsNullOrWhiteSpace($Destination)) {
 $versionWithoutV = $Version.TrimStart("v")
 $archiveName = "syncthing-windows-amd64-$Version.zip"
 $url = "https://github.com/syncthing/syncthing/releases/download/$Version/$archiveName"
+$expectedSha256 = switch ($Version) {
+    "v2.1.5" { "39571e4d0900c2a2cab14c0b170f49751340a869e49734ccc8079d9b98a7974b" }
+    default { throw "No trusted Syncthing checksum is pinned for $Version." }
+}
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("artist-workbench-syncthing-" + [Guid]::NewGuid().ToString("N"))
 $archive = Join-Path $tempRoot $archiveName
@@ -22,6 +26,10 @@ New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 try {
     Write-Host "Downloading Syncthing $Version for Windows..."
     Invoke-WebRequest -Uri $url -OutFile $archive
+    $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualSha256 -ne $expectedSha256) {
+        throw "Syncthing archive checksum mismatch: expected $expectedSha256, got $actualSha256"
+    }
     Expand-Archive -Path $archive -DestinationPath $extract -Force
 
     $binary = Get-ChildItem -Path $extract -Filter "syncthing.exe" -Recurse |

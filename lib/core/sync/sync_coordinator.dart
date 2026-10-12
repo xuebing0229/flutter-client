@@ -12,6 +12,7 @@ import '../portability/app_backup_data.dart';
 import '../../features/focus/domain/focus_session.dart';
 import '../../features/focus/state/focus_store.dart';
 import '../../features/orders/data/node_presets.dart';
+import '../../features/orders/data/order_reference_image_store.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/orders/state/order_store.dart';
 import '../../features/products/domain/finished_product.dart';
@@ -24,9 +25,25 @@ import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
+import 'sync_reference_image_gc.dart';
 
 typedef SyncSettingsCapture = Map<String, dynamic> Function();
 typedef SyncSettingsApply = Future<void> Function(Map<String, dynamic> settings);
+
+@visibleForTesting
+Future<void> runWorkspaceRestoreTransaction({
+  required Future<void> Function() applyWorkspace,
+  required Future<void> Function() commitSyncHistory,
+  required Future<void> Function() rollbackWorkspace,
+}) async {
+  try {
+    await applyWorkspace();
+    await commitSyncHistory();
+  } catch (error, stackTrace) {
+    await rollbackWorkspace();
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+}
 
 class PortableWorkspaceSnapshot {
   const PortableWorkspaceSnapshot({
@@ -159,6 +176,9 @@ class SyncCoordinator extends ChangeNotifier {
   }) : focusStore = focusStore ?? FocusStore(),
        _mergeEngine = mergeEngine ?? SyncMergeEngine(),
        _recordStore = recordStore ?? SyncRecordStore(),
+       _referenceImageStore = OrderReferenceImageStore(
+         syncRecordStore: recordStore,
+       ),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
        _bridge = bridge;
@@ -175,6 +195,7 @@ class SyncCoordinator extends ChangeNotifier {
   final SyncSettingsApply applySettings;
   final SyncMergeEngine _mergeEngine;
   final SyncRecordStore _recordStore;
+  final OrderReferenceImageStore _referenceImageStore;
   final AccountSyncRecordStore _accountSyncStore;
   final SyncGcAckStore _gcAckStore;
   final EmbeddedSyncthingBridge _bridge;
@@ -437,20 +458,59 @@ class SyncCoordinator extends ChangeNotifier {
 
     _changeDebounce?.cancel();
     return _enqueue(() async {
-      await _restorePortableBackup(
-        backup: backup,
-        applyWorkspace: applyWorkspace,
-        assetSourceDirectory: assetSourceDirectory,
-      );
+      var pausedTransportForRestore = false;
+      try {
+        // Replacing the portable sync directory while Syncthing is scanning it
+        // can race with remote writes and is especially fragile on Windows,
+        // where an active watcher may keep directory handles open. Pause only
+        // the configured folder for the short restore transaction; this does
+        // not change the user's persisted sync-pause preference.
+        if (_transportPrepared && !_syncPaused) {
+          await _bridge.setAccountFolderPaused(
+            accountId: accountId,
+            paused: true,
+          );
+          pausedTransportForRestore = true;
+          // Let any scan/file operation already in flight leave the folder
+          // before the directory swap begins.
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        }
 
-      _lastEntityValues = _captureEntities();
+        await _restorePortableBackup(
+          backup: backup,
+          applyWorkspace: applyWorkspace,
+          assetSourceDirectory: assetSourceDirectory,
+        );
 
-      // Older complete backups can legitimately predate the settings entity.
-      // Re-seed anything absent after applying the imported workspace so a
-      // restore cannot silently leave UI settings outside the sync graph.
-      await _reconcileFromSyncDirectory(seedMissing: true);
-      if (_transportPrepared) {
-        await _bridge.requestScan(accountId: accountId);
+        _lastEntityValues = _captureEntities();
+
+        // Older complete backups can legitimately predate the settings entity.
+        // Re-seed anything absent after applying the imported workspace so a
+        // restore cannot silently leave UI settings outside the sync graph.
+        await _reconcileFromSyncDirectory(seedMissing: true);
+      } finally {
+        if (pausedTransportForRestore) {
+          try {
+            await _bridge.setAccountFolderPaused(
+              accountId: accountId,
+              paused: false,
+            );
+            await _bridge.requestScan(accountId: accountId);
+          } catch (error) {
+            // The workspace restore itself has already succeeded or rolled
+            // back. Keep that result authoritative and surface only the
+            // transport recovery problem through normal sync diagnostics.
+            _lastError = '备份恢复后恢复设备同步失败：$error';
+            if (!_disposed) notifyListeners();
+          }
+        } else if (_transportPrepared && !_syncPaused) {
+          try {
+            await _bridge.requestScan(accountId: accountId);
+          } catch (error) {
+            _lastError = '备份恢复后触发设备同步失败：$error';
+            if (!_disposed) notifyListeners();
+          }
+        }
       }
     });
   }
@@ -466,33 +526,59 @@ class SyncCoordinator extends ChangeNotifier {
     );
     final records = backup.syncRecords!;
 
-    await _recordStore.replacePortableRecords(
-      accountId: accountId,
-      records: records,
-      assetSourceDirectory: assetSourceDirectory,
-      requiredIds: <SyncEntityKind, Set<String>>{
-        SyncEntityKind.order: <String>{
-          for (final order in backup.orders) order.id,
-        },
-        SyncEntityKind.product: <String>{
-          for (final product in backup.products) product.id,
-        },
-        SyncEntityKind.nodePreset: <String>{
-          for (final preset in backup.nodePresets) preset.id,
-        },
-        SyncEntityKind.focusSession: <String>{
-          for (final session in backup.focusSessions) session.id,
-        },
+    final requiredIds = <SyncEntityKind, Set<String>>{
+      SyncEntityKind.order: <String>{
+        for (final order in backup.orders) order.id,
       },
-    );
+      SyncEntityKind.product: <String>{
+        for (final product in backup.products) product.id,
+      },
+      SyncEntityKind.nodePreset: <String>{
+        for (final preset in backup.nodePresets) preset.id,
+      },
+      SyncEntityKind.focusSession: <String>{
+        for (final session in backup.focusSessions) session.id,
+      },
+    };
 
-    if (applyWorkspace != null) {
-      _applyingRemote = true;
-      try {
-        await applyWorkspace();
-      } finally {
-        _applyingRemote = false;
-      }
+    if (applyWorkspace == null) {
+      await _recordStore.replacePortableRecords(
+        accountId: accountId,
+        records: records,
+        assetSourceDirectory: assetSourceDirectory,
+        requiredIds: requiredIds,
+      );
+      return;
+    }
+
+    final previousOrders = <QueueOrder>[...orderStore.orders];
+    final previousProducts = <FinishedProduct>[...productStore.products];
+    final previousPresets = <NodePreset>[
+      for (final preset in nodePresetStore.presets) preset.snapshot(),
+    ];
+    final previousFocusSessions = <FocusSession>[...focusStore.sessions];
+    final previousSettings = Map<String, dynamic>.from(captureSettings());
+
+    _applyingRemote = true;
+    try {
+      await runWorkspaceRestoreTransaction(
+        applyWorkspace: applyWorkspace,
+        commitSyncHistory: () => _recordStore.replacePortableRecords(
+          accountId: accountId,
+          records: records,
+          assetSourceDirectory: assetSourceDirectory,
+          requiredIds: requiredIds,
+        ),
+        rollbackWorkspace: () async {
+          nodePresetStore.replaceAll(previousPresets);
+          orderStore.replaceAll(previousOrders);
+          productStore.replaceAll(previousProducts);
+          focusStore.replaceAll(previousFocusSessions);
+          await applySettings(previousSettings);
+        },
+      );
+    } finally {
+      _applyingRemote = false;
     }
   }
 
@@ -1303,7 +1389,10 @@ class SyncCoordinator extends ChangeNotifier {
     }
 
     var changed = false;
-    final now = DateTime.now().toUtc();
+    final protectedReferencePaths = syncGcProtectedReferencePaths(
+      recordsByKind: recordsByKind,
+      mergeEngine: _mergeEngine,
+    );
 
     for (final kind in SyncEntityKind.values) {
       final records = recordsByKind[kind]!;
@@ -1311,7 +1400,36 @@ class SyncCoordinator extends ChangeNotifier {
 
       for (final entry in entries) {
         final record = entry.value;
-        if (record.conflicts.isNotEmpty) continue;
+        if (record.conflicts.isNotEmpty ||
+            _mergeEngine.hasUnsupportedOperations(record)) {
+          // Do not let an older app garbage-collect a newer operation kind it
+          // cannot materialize. Keeping the record is safe; a newer peer can
+          // compact it once every active device understands the operation.
+          continue;
+        }
+
+        final hasFullOperations =
+            record.operations.values.any((operation) => !operation.compacted);
+        final hasOnlyCompactedOperations =
+            record.operations.isNotEmpty && !hasFullOperations;
+
+        // A compacted marker proves that every active device acknowledged the
+        // full operation in the previous GC phase. Each device may therefore
+        // remove its own orphaned image immediately when it sees that marker,
+        // before a different peer strips the final cleanup metadata.
+        if (hasOnlyCompactedOperations) {
+          final orphanedImages = syncGcOrphanReferenceImages(
+            record: record,
+            protectedPaths: protectedReferencePaths,
+          );
+          if (orphanedImages.isNotEmpty) {
+            await _referenceImageStore.deleteImages(
+              accountId: accountId,
+              images: orphanedImages,
+              requestScan: false,
+            );
+          }
+        }
 
         final key = _gcAckStore.recordKey(record);
         final signature = await _gcAckStore.signature(record);
@@ -1320,35 +1438,10 @@ class SyncCoordinator extends ChangeNotifier {
         );
         if (!seenByAll) continue;
 
-        if (record.isDeleted) {
-          DateTime? deletedAt;
-          for (final operation in record.operations.values) {
-            if (operation.kind != 'delete') continue;
-            if (deletedAt == null || operation.occurredAt.isAfter(deletedAt)) {
-              deletedAt = operation.occurredAt;
-            }
-          }
-          // Keep a short safety window even after every active device has seen
-          // the tombstone. Revoked devices no longer participate.
-          if (deletedAt == null ||
-              now.difference(deletedAt.toUtc()) <
-                  const Duration(hours: 24)) {
-            continue;
-          }
-
-          await _recordStore.deleteRecord(
-            accountId: accountId,
-            kind: kind,
-            recordId: record.id,
-          );
-          records.remove(record.id);
-          changed = true;
-          continue;
-        }
-
-        final hasFullOperations =
-            record.operations.values.any((operation) => !operation.compacted);
         if (hasFullOperations) {
+          // First phase: fold live operations, or mark a deletion as globally
+          // acknowledged. Reference-image metadata deliberately survives in
+          // the compacted marker for per-device physical cleanup.
           final compacted = _mergeEngine.compactAcknowledgedOperations(
             record,
             deviceId: deviceId,
@@ -1361,9 +1454,23 @@ class SyncCoordinator extends ChangeNotifier {
           continue;
         }
 
+        if (record.isDeleted) {
+          // Second phase for deletions: every device has acknowledged the
+          // compacted tombstone, and each had an opportunity to remove local
+          // image files from the preserved metadata.
+          await _recordStore.deleteRecord(
+            accountId: accountId,
+            kind: kind,
+            recordId: record.id,
+          );
+          records.remove(record.id);
+          changed = true;
+          continue;
+        }
+
         if (record.operations.isNotEmpty) {
-          // Second phase: every device has now acknowledged the folded record,
-          // so the tiny operation markers themselves can disappear too.
+          // Second phase for live records: every device has acknowledged the
+          // folded state, so the tiny operation markers can disappear.
           final stripped = record.copyWith(
             operations: const <String, SyncOperation>{},
           );

@@ -6,6 +6,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/atomic_file.dart';
+
 enum DesktopPetAssetSlot { idleA, keyB }
 
 class DesktopPetPlacement {
@@ -231,6 +233,7 @@ class DesktopPetSettings extends ChangeNotifier {
   DesktopPetSettings();
 
   bool _loaded = false;
+  Future<void>? _loadInFlight;
   bool _enabled = false;
   String? _selectedPresetId;
   DesktopPetTextMode _textMode = DesktopPetTextMode.currentOrder;
@@ -294,13 +297,64 @@ class DesktopPetSettings extends ChangeNotifier {
     return File('${root.path}/config.json');
   }
 
+  Future<void> _prunePresetSlotFiles(
+    String presetId,
+    String baseName, {
+    String? keepPath,
+  }) async {
+    final root = await _rootDirectory();
+    final folder = Directory('${root.path}/presets/$presetId');
+    if (!await folder.exists()) return;
+
+    final keepAbsolute = keepPath == null ? null : File(keepPath).absolute.path;
+    try {
+      await for (final entity in folder.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = entity.path.split(Platform.pathSeparator).last;
+        if (name != baseName && !name.startsWith('$baseName.')) continue;
+        if (keepAbsolute != null && entity.absolute.path == keepAbsolute) {
+          continue;
+        }
+        try {
+          await entity.delete();
+        } catch (_) {
+          // The config no longer references this file. A locked stale asset
+          // can be retried by a later import/clear without breaking the preset.
+        }
+      }
+    } catch (_) {
+      // Asset cleanup is best-effort after the new config is safely persisted.
+    }
+  }
+
   Future<void> load() async {
     if (_loaded) return;
+    final existing = _loadInFlight;
+    if (existing != null) {
+      await existing;
+      return;
+    }
+
+    final operation = _loadOnce();
+    _loadInFlight = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_loadInFlight, operation)) {
+        _loadInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _loadOnce() async {
     await _readFromDisk();
     _loaded = true;
     notifyListeners();
   }
 
+  /// Re-read is retained for diagnostics/recovery, but normal mutations use
+  /// the single shared in-memory settings instance and never merge stale disk
+  /// state back over a newer change.
   Future<void> refresh() async {
     await _readFromDisk();
     _loaded = true;
@@ -391,7 +445,6 @@ class DesktopPetSettings extends ChangeNotifier {
 
   Future<DesktopPetPreset> createPreset(String rawName) async {
     await load();
-    await _readFromDisk();
     final name = rawName.trim().isEmpty ? '未命名桌宠' : rawName.trim();
     final preset = DesktopPetPreset(
       id: 'pet_${DateTime.now().microsecondsSinceEpoch}',
@@ -405,7 +458,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> renamePreset(String id, String rawName) async {
-    await _readFromDisk();
+    await load();
     final name = rawName.trim();
     if (name.isEmpty) return;
     final index = _presets.indexWhere((preset) => preset.id == id);
@@ -416,7 +469,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> selectPreset(String id) async {
-    await _readFromDisk();
+    await load();
     if (_selectedPresetId == id) return;
     if (!_presets.any((preset) => preset.id == id)) return;
     _selectedPresetId = id;
@@ -425,7 +478,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> deletePreset(String id) async {
-    await _readFromDisk();
+    await load();
     final index = _presets.indexWhere((preset) => preset.id == id);
     if (index < 0) return;
 
@@ -462,7 +515,7 @@ class DesktopPetSettings extends ChangeNotifier {
     DesktopPetPlacement placement,
   ) async {
     if (!Platform.isWindows) return null;
-    await _readFromDisk();
+    await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return null;
 
@@ -484,13 +537,20 @@ class DesktopPetSettings extends ChangeNotifier {
       DesktopPetAssetSlot.idleA => _presets[index].copyWith(
           imageA: destination.path,
           placementA: placement,
+          importPlacementA: placement,
         ),
       DesktopPetAssetSlot.keyB => _presets[index].copyWith(
           imageB: destination.path,
           placementB: placement,
+          importPlacementB: placement,
         ),
     };
     await _persist();
+    await _prunePresetSlotFiles(
+      presetId,
+      baseName,
+      keepPath: destination.path,
+    );
     notifyListeners();
     return destination.path;
   }
@@ -499,7 +559,7 @@ class DesktopPetSettings extends ChangeNotifier {
     String presetId,
     DesktopPetAssetSlot slot,
   ) async {
-    await _readFromDisk();
+    await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return;
     _presets[index] = switch (slot) {
@@ -509,6 +569,10 @@ class DesktopPetSettings extends ChangeNotifier {
         _presets[index].copyWith(clearImageB: true),
     };
     await _persist();
+    await _prunePresetSlotFiles(
+      presetId,
+      slot == DesktopPetAssetSlot.idleA ? 'imageA' : 'imageB',
+    );
     notifyListeners();
   }
 
@@ -517,7 +581,7 @@ class DesktopPetSettings extends ChangeNotifier {
     DesktopPetAssetSlot slot,
     DesktopPetPlacement placement,
   ) async {
-    await _readFromDisk();
+    await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0) return;
 
@@ -532,7 +596,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setTextMode(DesktopPetTextMode mode) async {
-    await _readFromDisk();
+    await load();
     if (_textMode == mode) return;
     _textMode = mode;
     await _persist();
@@ -540,7 +604,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setBubblePosition(DesktopPetBubblePosition position) async {
-    await _readFromDisk();
+    await load();
     if (_bubblePosition == position) return;
     _bubblePosition = position;
     await _persist();
@@ -548,7 +612,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setBubbleStyle(DesktopPetBubbleStyle style) async {
-    await _readFromDisk();
+    await load();
     if (_bubbleStyle == style) return;
     _bubbleStyle = style;
     await _persist();
@@ -567,7 +631,7 @@ class DesktopPetSettings extends ChangeNotifier {
 
   Future<void> importBubbleImage(String presetId, String sourcePath) async {
     if (!Platform.isWindows) return;
-    await _readFromDisk();
+    await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0 || !sourcePath.toLowerCase().endsWith('.png')) return;
     final source = File(sourcePath);
@@ -583,20 +647,26 @@ class DesktopPetSettings extends ChangeNotifier {
       bubbleImage: destination.path,
     );
     await _persist();
+    await _prunePresetSlotFiles(
+      presetId,
+      'bubble-image',
+      keepPath: destination.path,
+    );
     notifyListeners();
   }
 
   Future<void> clearBubbleImage(String presetId) async {
-    await _readFromDisk();
+    await load();
     final index = _presets.indexWhere((preset) => preset.id == presetId);
     if (index < 0 || _presets[index].bubbleImage == null) return;
     _presets[index] = _presets[index].copyWith(clearBubbleImage: true);
     await _persist();
+    await _prunePresetSlotFiles(presetId, 'bubble-image');
     notifyListeners();
   }
 
   Future<void> setPetScale(double value) async {
-    await _readFromDisk();
+    await load();
     final normalized = value.clamp(0.5, 1.8).toDouble();
     if ((_petScale - normalized).abs() < 0.001) return;
     _petScale = normalized;
@@ -605,7 +675,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setBubbleTextScale(double value) async {
-    await _readFromDisk();
+    await load();
     final normalized = value.clamp(0.65, 1.8).toDouble();
     if ((_bubbleTextScale - normalized).abs() < 0.001) return;
     _bubbleTextScale = normalized;
@@ -617,7 +687,7 @@ class DesktopPetSettings extends ChangeNotifier {
     DesktopPetBubblePosition position,
     DesktopPetOverlayOffset offset,
   ) async {
-    await _readFromDisk();
+    await load();
     final selectedId = _selectedPresetId;
     if (selectedId == null) return;
     final index = _presets.indexWhere((preset) => preset.id == selectedId);
@@ -631,7 +701,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setFocusClockOffset(DesktopPetOverlayOffset offset) async {
-    await _readFromDisk();
+    await load();
     final selectedId = _selectedPresetId;
     if (selectedId == null) return;
     final index = _presets.indexWhere((preset) => preset.id == selectedId);
@@ -644,7 +714,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setFocusClockScale(double value) async {
-    await _readFromDisk();
+    await load();
     final normalized = value.clamp(0.65, 1.8).toDouble();
     if ((_focusClockScale - normalized).abs() < 0.001) return;
     _focusClockScale = normalized;
@@ -653,7 +723,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> setCustomText(String value) async {
-    await _readFromDisk();
+    await load();
     if (_customText == value) return;
     _customText = value;
     await _persist();
@@ -666,7 +736,7 @@ class DesktopPetSettings extends ChangeNotifier {
     required String node,
     required DateTime? deadline,
   }) async {
-    await _readFromDisk();
+    await load();
     _currentOrderId = orderId;
     _currentOrderTitle = title;
     _currentOrderNode = node;
@@ -676,7 +746,7 @@ class DesktopPetSettings extends ChangeNotifier {
   }
 
   Future<void> clearCurrentOrderSelection() async {
-    await _readFromDisk();
+    await load();
     if (_currentOrderId == null &&
         _currentOrderTitle == null &&
         _currentOrderNode == null &&
@@ -703,7 +773,7 @@ class DesktopPetSettings extends ChangeNotifier {
     required bool focusEnabled,
     required DateTime? focusStartedAt,
   }) async {
-    await _readFromDisk();
+    await load();
     _loaded = true;
     _enabled = enabled;
     _currentOrderTitle = currentOrderTitle;
@@ -755,9 +825,9 @@ class DesktopPetSettings extends ChangeNotifier {
         for (final preset in _presets) preset.toJson(),
       ],
     };
-    await file.writeAsString(
+    await atomicWriteString(
+      file,
       const JsonEncoder.withIndent('  ').convert(payload),
-      flush: true,
     );
   }
 }

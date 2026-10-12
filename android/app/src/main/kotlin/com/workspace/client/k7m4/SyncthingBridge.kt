@@ -108,7 +108,7 @@ class SyncthingBridge(
                 }
 
                 "stop" -> background(result) {
-                    stopService()
+                    shutdownCoreThenStopService()
                     null
                 }
 
@@ -562,6 +562,31 @@ class SyncthingBridge(
 
     private fun stopService() {
         activity.stopService(Intent(activity, SyncthingService::class.java))
+    }
+
+    private fun shutdownCoreThenStopService() {
+        if (SyncthingService.isRunning) {
+            // Flutter can leave and re-enter the foreground quickly. If the
+            // service is destroyed before Syncthing releases its localhost
+            // port/config lock, the next start can briefly attach to the old
+            // process and then lose sync when that process finally exits.
+            // Ask the core to shut down first and wait for the API to disappear.
+            runCatching {
+                request("POST", "/rest/system/shutdown")
+            }
+            repeat(20) {
+                val stillReady = runCatching {
+                    request("GET", "/rest/system/ping")
+                    true
+                }.getOrDefault(false)
+                if (!stillReady) {
+                    stopService()
+                    return
+                }
+                Thread.sleep(100)
+            }
+        }
+        stopService()
     }
 
     private fun waitForReady(maxAttempts: Int = 32): Boolean {

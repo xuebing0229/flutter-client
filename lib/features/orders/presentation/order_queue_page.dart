@@ -59,6 +59,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   String _query = '';
   String _searchField = 'all';
   final Set<String> _selectedTags = <String>{};
+  final Map<String, _TerminationDraft> _bulkTerminationDrafts =
+      <String, _TerminationDraft>{};
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -260,9 +262,33 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
     if (confirmed != true || !mounted) return;
 
+    if (!widget.store.contains(order.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('这笔排单已经不存在，未执行节点推进。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final current = widget.store.byId(order.id);
+    if (current.isArchived ||
+        current.isCompleted != order.isCompleted ||
+        current.currentNodeId != order.currentNodeId ||
+        current.nodePresetId != order.nodePresetId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('排单节点已在另一处更新，请按当前状态重新确认。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     widget.store.advanceOrder(order.id);
 
-    if (!mounted) return;
+    if (!mounted || !widget.store.contains(order.id)) return;
     final updated = widget.store.byId(order.id);
 
     if (updated.isCompleted) {
@@ -294,6 +320,25 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('已更新到「${updated.currentNode.name}」'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  bool _archiveSnapshotIsCurrent(QueueOrder snapshot) {
+    if (!widget.store.contains(snapshot.id)) return false;
+    final current = widget.store.byId(snapshot.id);
+    return !current.isArchived &&
+        current.isCompleted == snapshot.isCompleted &&
+        current.currentNodeId == snapshot.currentNodeId &&
+        current.nodePresetId == snapshot.nodePresetId &&
+        current.realIncome == snapshot.realIncome;
+  }
+
+  void _showStaleArchiveMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('排单已在另一处更新，请按当前状态重新归档。'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -434,6 +479,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
     switch (mode) {
       case _BulkOrderArchiveMode.successful:
+        for (final id in ids) {
+          _bulkTerminationDrafts.remove(id);
+        }
         widget.store.archiveManyAsSettled(ids);
       case _BulkOrderArchiveMode.terminatedIndividually:
         await _bulkArchiveAsTerminated(ids);
@@ -445,31 +493,78 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         .where((order) => ids.contains(order.id))
         .toList();
 
+    // Configuration is transactional: no order is archived until every
+    // selected order has a settlement. Keep completed drafts if the user
+    // leaves midway so reopening the batch flow does not wipe earlier input.
+    _bulkTerminationDrafts.removeWhere((id, _) => !ids.contains(id));
+
     for (var index = 0; index < selectedOrders.length; index++) {
       if (!mounted) return;
 
       final order = selectedOrders[index];
       final stepLabel =
           '${index + 1}/${selectedOrders.length} · ${order.title}';
+      final existing = _bulkTerminationDrafts[order.id];
 
-      final mode = await _pickTerminationSettlementMode(title: stepLabel);
+      final mode = await _pickTerminationSettlementMode(
+        title: stepLabel,
+        savedMode: existing?.mode,
+      );
       if (!mounted || mode == null) return;
 
       if (mode == _TerminationSettlementMode.node) {
         final settlementNodeId = await _pickTerminationNode(
           order,
           title: stepLabel,
+          initialNodeId:
+              existing?.mode == _TerminationSettlementMode.node
+                  ? existing?.settlementNodeId
+                  : null,
         );
         if (!mounted || settlementNodeId == null) return;
-        widget.store.archiveAsTerminated(order.id, settlementNodeId);
+        _bulkTerminationDrafts[order.id] = _TerminationDraft.node(
+          settlementNodeId,
+        );
       } else {
-        final refundAmount = await _pickCustomRefund(order, title: stepLabel);
+        final refundAmount = await _pickCustomRefund(
+          order,
+          title: stepLabel,
+          initialRefund:
+              existing?.mode == _TerminationSettlementMode.customRefund
+                  ? existing?.refundAmount
+                  : null,
+        );
         if (!mounted || refundAmount == null) return;
-        widget.store.archiveAsTerminatedWithCustomRefund(
-          order.id,
+        _bulkTerminationDrafts[order.id] = _TerminationDraft.customRefund(
           refundAmount,
         );
       }
+    }
+
+    // All entries are configured. Only now mutate the actual order store.
+    // If sync changed any settlement-relevant field while the dialogs were
+    // open, keep the drafts and ask the user to review the new current state.
+    if (selectedOrders.any((order) => !_archiveSnapshotIsCurrent(order))) {
+      _showStaleArchiveMessage();
+      return;
+    }
+
+    for (final order in selectedOrders) {
+      final draft = _bulkTerminationDrafts[order.id];
+      if (draft == null) return;
+      if (draft.mode == _TerminationSettlementMode.node) {
+        final nodeId = draft.settlementNodeId;
+        if (nodeId == null) return;
+        widget.store.archiveAsTerminated(order.id, nodeId);
+      } else {
+        final refund = draft.refundAmount;
+        if (refund == null) return;
+        widget.store.archiveAsTerminatedWithCustomRefund(order.id, refund);
+      }
+    }
+
+    for (final order in selectedOrders) {
+      _bulkTerminationDrafts.remove(order.id);
     }
   }
 
@@ -523,6 +618,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     if (!mounted || outcome == null) return;
 
     if (outcome == OrderArchiveOutcome.successful) {
+      if (!_archiveSnapshotIsCurrent(order)) {
+        _showStaleArchiveMessage();
+        return;
+      }
       widget.store.archiveAsSettled(order.id);
       return;
     }
@@ -533,17 +632,26 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     if (mode == _TerminationSettlementMode.node) {
       final settlementNodeId = await _pickTerminationNode(order);
       if (!mounted || settlementNodeId == null) return;
+      if (!_archiveSnapshotIsCurrent(order)) {
+        _showStaleArchiveMessage();
+        return;
+      }
       widget.store.archiveAsTerminated(order.id, settlementNodeId);
       return;
     }
 
     final refundAmount = await _pickCustomRefund(order);
     if (!mounted || refundAmount == null) return;
+    if (!_archiveSnapshotIsCurrent(order)) {
+      _showStaleArchiveMessage();
+      return;
+    }
     widget.store.archiveAsTerminatedWithCustomRefund(order.id, refundAmount);
   }
 
   Future<_TerminationSettlementMode?> _pickTerminationSettlementMode({
     String? title,
+    _TerminationSettlementMode? savedMode,
   }) {
     return showModalBottomSheet<_TerminationSettlementMode>(
       context: context,
@@ -560,7 +668,13 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                     title ?? '中止合作如何结算',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: title == null ? null : const Text('选择这笔排单的结算方式'),
+                  subtitle: title == null
+                      ? null
+                      : Text(
+                          savedMode == null
+                              ? '选择这笔排单的结算方式'
+                              : '已保存：${savedMode == _TerminationSettlementMode.node ? '按节点结算' : '自定义退款'}，可重新选择',
+                        ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.account_tree_outlined),
@@ -588,10 +702,16 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     );
   }
 
-  Future<double?> _pickCustomRefund(QueueOrder order, {String? title}) async {
-    final controller = TextEditingController();
+  Future<double?> _pickCustomRefund(
+    QueueOrder order, {
+    String? title,
+    double? initialRefund,
+  }) async {
+    final controller = TextEditingController(
+      text: initialRefund == null ? '' : _formatMoney(initialRefund),
+    );
     String? errorText;
-    var previewRefund = 0.0;
+    var previewRefund = initialRefund ?? 0.0;
 
     final result = await showDialog<double>(
       context: context,
@@ -624,7 +744,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         final parsed = double.tryParse(value.trim());
                         setDialogState(() {
                           errorText = null;
-                          previewRefund = parsed == null || parsed < 0
+                          previewRefund = parsed == null ||
+                                  !parsed.isFinite ||
+                                  parsed < 0
                               ? 0
                               : parsed;
                         });
@@ -661,7 +783,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   onPressed: () {
                     final raw = controller.text.trim();
                     final parsed = double.tryParse(raw);
-                    if (parsed == null || parsed < 0) {
+                    if (parsed == null || !parsed.isFinite || parsed < 0) {
                       setDialogState(() {
                         errorText = '请输入有效的退款金额';
                       });
@@ -682,14 +804,21 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     return result;
   }
 
-  Future<String?> _pickTerminationNode(QueueOrder order, {String? title}) {
+  Future<String?> _pickTerminationNode(
+    QueueOrder order, {
+    String? title,
+    String? initialNodeId,
+  }) {
     final nodes = order.nodePresetSnapshot.nodes;
     if (nodes.isEmpty) return Future<String?>.value(null);
 
     final validNodeIds = <String>{for (final node in nodes) node.id};
-    var selectedNodeId = validNodeIds.contains(order.currentNodeId)
-        ? order.currentNodeId
-        : nodes.first.id;
+    var selectedNodeId = initialNodeId != null &&
+            validNodeIds.contains(initialNodeId)
+        ? initialNodeId
+        : validNodeIds.contains(order.currentNodeId)
+            ? order.currentNodeId
+            : nodes.first.id;
 
     NodeDefinition selectedNode() {
       return order.nodePresetSnapshot.nodeById(selectedNodeId);
@@ -1039,3 +1168,28 @@ int _compareDeadline(DateTime? left, DateTime? right) {
   if (right == null) return -1;
   return left.compareTo(right);
 }
+
+class _TerminationDraft {
+  const _TerminationDraft._({
+    required this.mode,
+    this.settlementNodeId,
+    this.refundAmount,
+  });
+
+  const _TerminationDraft.node(String settlementNodeId)
+      : this._(
+          mode: _TerminationSettlementMode.node,
+          settlementNodeId: settlementNodeId,
+        );
+
+  const _TerminationDraft.customRefund(double refundAmount)
+      : this._(
+          mode: _TerminationSettlementMode.customRefund,
+          refundAmount: refundAmount,
+        );
+
+  final _TerminationSettlementMode mode;
+  final String? settlementNodeId;
+  final double? refundAmount;
+}
+

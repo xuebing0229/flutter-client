@@ -60,6 +60,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   int _imageSerial = 0;
   int _rowSerial = 0;
   bool _working = false;
+  bool _committing = false;
+  final Set<String> _temporaryImagePaths = <String>{};
+  bool _releaseTemporaryImagesWhenIdle = false;
   String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
 
@@ -165,6 +168,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     try {
       final selected = await _pick.pickImages();
       if (selected.isEmpty) return;
+      final temporaryPaths = <String>{
+        for (final image in selected)
+          if (image.temporary) image.path,
+      };
+      if (!mounted) {
+        await _deleteTemporaryImages(temporaryPaths);
+        return;
+      }
+      _temporaryImagePaths.addAll(temporaryPaths);
       setState(() {
         _working = true;
         _recognitionStep = '准备读取截图';
@@ -409,7 +421,28 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       if (mounted) {
         setState(() => _working = false);
       }
+      if (_releaseTemporaryImagesWhenIdle) {
+        await _releaseOwnedTemporaryImages();
+      }
     }
+  }
+
+  Future<void> _deleteTemporaryImages(Iterable<String> paths) async {
+    for (final path in paths) {
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // Android picker copies live in app cache. If a native handle lingers,
+        // the startup cache sweep can retry later.
+      }
+    }
+  }
+
+  Future<void> _releaseOwnedTemporaryImages() async {
+    final paths = _temporaryImagePaths.toList(growable: false);
+    _temporaryImagePaths.clear();
+    await _deleteTemporaryImages(paths);
   }
 
   ScreenshotImportDraft _draft({
@@ -845,11 +878,12 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   }
 
   Future<void> _confirm() async {
+    if (_committing) return;
     // Titles and buyers can change in the editable preview. Recheck against
     // both local records and all other screenshot rows just before writing.
     final previouslySelected = _rows.where((row) => row.selected).length;
     setState(_refreshDuplicateWarnings);
-    final selected = _rows.where((row) => row.selected).toList();
+    var selected = _rows.where((row) => row.selected).toList();
     if (selected.length < previouslySelected) {
       _message('发现新的疑似重复项，已标注并默认取消勾选，请检查后再次确认。');
       return;
@@ -858,8 +892,18 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       _message('没有选中要导入的记录');
       return;
     }
-    for (final row in selected) {
+    String? validationIssue(ScreenshotImportDraft row) {
       final issue = row.validate(importingProducts: _products);
+      if (issue != null) return issue;
+      if (_products) return null;
+      return validateScreenshotPresetSelection(
+        row: row,
+        presets: widget.presetStore.presets,
+      );
+    }
+
+    for (final row in selected) {
+      final issue = validationIssue(row);
       if (issue != null) {
         _message('「' + row.title + '」：' + issue);
         return;
@@ -886,7 +930,28 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     );
     if (!mounted || ok != true) return;
 
-    final now = DateTime.now().microsecondsSinceEpoch;
+    // A peer can sync new records or change a node preset while this modal is
+    // open. Recheck the exact rows the user approved before writing anything.
+    final approvedIds = <String>{for (final row in selected) row.id};
+    setState(_refreshDuplicateWarnings);
+    selected = _rows
+        .where((row) => approvedIds.contains(row.id) && row.selected)
+        .toList();
+    if (selected.length != approvedIds.length) {
+      _message('确认期间同步数据发生了变化，已重新标出疑似重复项，请再检查一次。');
+      return;
+    }
+    for (final row in selected) {
+      final issue = validationIssue(row);
+      if (issue != null) {
+        _message('「' + row.title + '」：' + issue);
+        return;
+      }
+    }
+
+    setState(() => _committing = true);
+    try {
+      final now = DateTime.now().microsecondsSinceEpoch;
     if (_products) {
       final created = <FinishedProduct>[];
       final keys = <String>{};
@@ -955,7 +1020,22 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         _message('导入成功，但本机截图去重记录保存失败；下次请检查疑似重复提示。');
       }
     }
+    } finally {
+      if (mounted) setState(() => _committing = false);
+    }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  void dispose() {
+    if (_working) {
+      // OCR still owns these cache copies. Its finally block releases them
+      // after the native recognizer has stopped reading the files.
+      _releaseTemporaryImagesWhenIdle = true;
+    } else {
+      unawaited(_releaseOwnedTemporaryImages());
+    }
+    super.dispose();
   }
 
   @override
@@ -967,13 +1047,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         actions: [
           IconButton(
             tooltip: '复制 OCR 诊断（不会上传原图）',
-            onPressed: _working || _ocrDiagnostics.isEmpty
+            onPressed: _working || _committing || _ocrDiagnostics.isEmpty
                 ? null
                 : () => unawaited(_copyOcrDiagnostic()),
             icon: const Icon(Icons.bug_report_outlined),
           ),
           TextButton.icon(
-            onPressed: _working ? null : () => unawaited(_pickAndRecognize()),
+            onPressed: _working || _committing
+                ? null
+                : () => unawaited(_pickAndRecognize()),
             icon: const Icon(Icons.add_photo_alternate_outlined),
             label: const Text('选择截图'),
           ),
@@ -1146,7 +1228,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
         child: FilledButton.icon(
-          onPressed: _working || count == 0 ? null : _confirm,
+          onPressed: _working || _committing || count == 0 ? null : _confirm,
           icon: const Icon(Icons.check_circle_outline_rounded),
           label: Text('确认导入（' + count.toString() + '）'),
         ),

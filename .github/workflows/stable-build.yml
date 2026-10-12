@@ -16,6 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Set up Java with Gradle cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.5'
@@ -32,7 +39,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: android/app/src/sync/jniLibs
-          key: embedded-syncthing-v2.1.5-${{ runner.os }}-android
+          key: embedded-syncthing-v2.1.5-2ca95cf149810411-${{ runner.os }}-android
 
       - name: Build embedded Syncthing core
         env:
@@ -54,6 +61,8 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      - name: Run full Flutter test suite
+        run: flutter test
 
       - name: Bundle verified PP-OCRv6 Small models
         run: python3 tool/fetch_official_ppocrv6_models.py
@@ -66,6 +75,12 @@ jobs:
             --dart-define=APP_CHANNEL=release \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-stable-release.apk app-stable.apk
+
+      - name: Verify Stable APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app-stable.apk
 
       - name: Upload Stable APK
         uses: actions/upload-artifact@v4

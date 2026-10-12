@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/account/account_store.dart';
+import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/sync/sync_coordinator.dart';
@@ -44,6 +45,7 @@ class AppDrawer extends StatelessWidget {
     required this.productStore,
     required this.nodePresetStore,
     required this.focusStore,
+    required this.desktopPetSettings,
     required this.onOpenOrder,
     required this.themeStore,
     required this.featureStore,
@@ -61,6 +63,7 @@ class AppDrawer extends StatelessWidget {
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
   final FocusStore focusStore;
+  final DesktopPetSettings desktopPetSettings;
   final Future<void> Function(String orderId) onOpenOrder;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
@@ -86,6 +89,7 @@ class AppDrawer extends StatelessWidget {
           productStore: productStore,
           nodePresetStore: nodePresetStore,
           focusStore: focusStore,
+          desktopPetSettings: desktopPetSettings,
           onOpenOrder: onOpenOrder,
           themeStore: themeStore,
           featureStore: featureStore,
@@ -121,6 +125,7 @@ class AppToolMenu extends StatelessWidget {
     required this.productStore,
     required this.nodePresetStore,
     required this.focusStore,
+    required this.desktopPetSettings,
     required this.onOpenOrder,
     required this.themeStore,
     required this.featureStore,
@@ -144,6 +149,7 @@ class AppToolMenu extends StatelessWidget {
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
   final FocusStore focusStore;
+  final DesktopPetSettings desktopPetSettings;
   final Future<void> Function(String orderId) onOpenOrder;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
@@ -238,6 +244,7 @@ class AppToolMenu extends StatelessWidget {
               DesktopPetPage(
                 orderStore: orderStore,
                 focusStore: focusStore,
+                settings: desktopPetSettings,
                 onOpenOrder: onOpenOrder,
                 showDesktopPet: showDesktopPet,
                 showFocus: showFocus,

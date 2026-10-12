@@ -101,21 +101,40 @@ class LicenseIssuerApi {
   }
 
   Future<List<IssuedLicenseRecord>> listLicenses(String token) async {
-    final json = await _request(
-      'GET',
-      '/v1/licenses?limit=500',
-      token: token,
-    );
-    final raw = json['licenses'];
-    if (raw is! List) {
-      throw const IssuerApiException(
-        '服务器返回的发码记录格式无效。',
-        code: 'invalid_response',
-      );
+    const pageSize = 500;
+    final records = <IssuedLicenseRecord>[];
+    int? beforeId;
+
+    while (true) {
+      final path = beforeId == null
+          ? '/v1/licenses?limit=$pageSize'
+          : '/v1/licenses?limit=$pageSize&before_id=$beforeId';
+      final json = await _request('GET', path, token: token);
+      final raw = json['licenses'];
+      if (raw is! List) {
+        throw const IssuerApiException(
+          '服务器返回的发码记录格式无效。',
+          code: 'invalid_response',
+        );
+      }
+      records.addAll(<IssuedLicenseRecord>[
+        for (final item in raw) _licenseFrom(item),
+      ]);
+
+      final next = json['nextBeforeId'];
+      if (next == null) break;
+      if (next is! int ||
+          next < 1 ||
+          (beforeId != null && next >= beforeId)) {
+        throw const IssuerApiException(
+          '服务器返回的发码分页信息无效。',
+          code: 'invalid_response',
+        );
+      }
+      beforeId = next;
     }
-    return <IssuedLicenseRecord>[
-      for (final item in raw) _licenseFrom(item),
-    ];
+
+    return records;
   }
 
   Future<ReservedLicenseIdentity> reserve({
@@ -286,9 +305,16 @@ class LicenseIssuerApi {
     }
 
     final uri = Uri.tryParse('$root$path');
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    final loopbackHttp = uri != null &&
+        uri.scheme == 'http' &&
+        (uri.host == '127.0.0.1' ||
+            uri.host == 'localhost' ||
+            uri.host == '::1');
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'https' && !loopbackHttp)) {
       throw const IssuerApiException(
-        '激活服务器地址配置无效。',
+        '激活服务器地址必须使用 HTTPS。',
         code: 'not_configured',
       );
     }

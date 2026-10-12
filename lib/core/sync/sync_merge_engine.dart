@@ -11,6 +11,26 @@ class SyncMergeEngine {
     'soldCount',
   };
 
+  static const Set<String> _supportedOperationKinds = <String>{
+    'amount-delta',
+    'sale-delta',
+    'single-sale-state',
+    'progress-delta',
+    'node-transition',
+    'reference-image-delta',
+    'delete',
+    'conflict-resolution',
+  };
+
+  /// A newer app may introduce an operation this version cannot materialize.
+  /// Preserve such history verbatim instead of compacting or stripping it;
+  /// the newer peer can perform GC once every active device understands it.
+  bool hasUnsupportedOperations(SyncRecord record) {
+    return record.operations.values.any(
+      (operation) => !_supportedOperationKinds.contains(operation.kind),
+    );
+  }
+
   SyncRecord merge(SyncRecord left, SyncRecord right) {
     if (left.kind != right.kind || left.id != right.id) {
       throw const FormatException('不能合并不同对象的同步记录。');
@@ -35,6 +55,52 @@ class SyncMergeEngine {
       }
       if (b == null) {
         fields[fieldName] = a;
+        continue;
+      }
+
+      if (left.kind == SyncEntityKind.product &&
+          fieldName == 'saleRecords' &&
+          left.fields['saleType']?.value == 'single' &&
+          right.fields['saleType']?.value == 'single' &&
+          (left.fields['soldCount']?.value as num?)?.toInt() == 1 &&
+          (right.fields['soldCount']?.value as num?)?.toInt() == 1 &&
+          !syncJsonEquals(a.value, b.value)) {
+        String? earliestSale(Object? raw) {
+          if (raw is! List) return null;
+          DateTime? earliestTime;
+          String? earliestRaw;
+          for (final item in raw) {
+            if (item is! String) continue;
+            final time = DateTime.tryParse(item);
+            if (time == null) continue;
+            if (earliestTime == null || time.isBefore(earliestTime)) {
+              earliestTime = time;
+              earliestRaw = item;
+            }
+          }
+          return earliestRaw;
+        }
+
+        final leftSale = earliestSale(a.value);
+        final rightSale = earliestSale(b.value);
+        String? selected;
+        if (leftSale == null) {
+          selected = rightSale;
+        } else if (rightSale == null) {
+          selected = leftSale;
+        } else {
+          final leftTime = DateTime.parse(leftSale);
+          final rightTime = DateTime.parse(rightSale);
+          selected = leftTime.isBefore(rightTime) ? leftSale : rightSale;
+        }
+
+        fields[fieldName] = SyncFieldValue(
+          value: selected == null
+              ? _deterministicField(a, b).value
+              : <String>[selected],
+          clock: a.clock.merge(b.clock),
+          updatedBy: _deterministicDevice(a.updatedBy, b.updatedBy),
+        );
         continue;
       }
 
@@ -350,10 +416,16 @@ class SyncMergeEngine {
     SyncRecord record, {
     required String deviceId,
   }) {
-    if (record.isDeleted ||
-        record.conflicts.isNotEmpty ||
+    if (record.conflicts.isNotEmpty ||
+        hasUnsupportedOperations(record) ||
         !record.operations.values.any((operation) => !operation.compacted)) {
       return record;
+    }
+
+    if (record.isDeleted) {
+      return record.copyWith(
+        operations: _compactedOperationMarkers(record),
+      );
     }
 
     final materialized = _materialize(record);
@@ -391,7 +463,72 @@ class SyncMergeEngine {
       );
     }
 
-    final operations = <String, SyncOperation>{
+    final operations = _compactedOperationMarkers(record);
+
+    return record.copyWith(
+      fields: fields,
+      operations: operations,
+    );
+  }
+
+  Map<String, SyncOperation> _compactedOperationMarkers(
+    SyncRecord record,
+  ) {
+    final referenceImagesById = <String, Map<String, dynamic>>{};
+
+    void collectReferenceImage(Object? raw) {
+      if (raw is! Map) return;
+      final image = raw.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      final id = image['id'];
+      if (id is String && id.isNotEmpty) {
+        referenceImagesById[id] = image;
+      }
+    }
+
+    final baseImages = record.fields['referenceImages']?.value;
+    if (baseImages is List) {
+      for (final image in baseImages) {
+        collectReferenceImage(image);
+      }
+    }
+    for (final operation in record.operations.values) {
+      final added = operation.metadata['added'];
+      if (added is List) {
+        for (final image in added) {
+          collectReferenceImage(image);
+        }
+      }
+      final removedImages = operation.metadata['removedImages'];
+      if (removedImages is List) {
+        for (final image in removedImages) {
+          collectReferenceImage(image);
+        }
+      }
+    }
+
+    Map<String, dynamic> compactedMetadata(SyncOperation operation) {
+      if (operation.kind != 'reference-image-delta') {
+        return const <String, dynamic>{};
+      }
+
+      final metadata = <String, dynamic>{...operation.metadata};
+      final removed = metadata['removed'];
+      if (removed is List) {
+        final removedImages = <Map<String, dynamic>>[
+          for (final item in removed)
+            if (item is String && referenceImagesById[item] != null)
+              referenceImagesById[item]!,
+        ];
+        if (removedImages.isNotEmpty) {
+          metadata['removedImages'] = removedImages;
+        }
+      }
+      return metadata;
+    }
+
+    return <String, SyncOperation>{
       for (final entry in record.operations.entries)
         entry.key: entry.value.compacted
             ? entry.value
@@ -401,16 +538,16 @@ class SyncMergeEngine {
                 kind: entry.value.kind,
                 deviceId: entry.value.deviceId,
                 occurredAt: entry.value.occurredAt,
+                // Reference-image metadata remains until the second GC phase
+                // so every device can delete its local copy after seeing the
+                // first all-device acknowledgement marker. Removed images are
+                // expanded from IDs before the base field is folded, otherwise
+                // their file metadata would be lost at exactly this boundary.
+                metadata: compactedMetadata(entry.value),
                 compacted: true,
               ),
     };
-
-    return record.copyWith(
-      fields: fields,
-      operations: operations,
-    );
   }
-
   SyncRecord resolveConflict({
     required SyncRecord record,
     required String conflictId,
@@ -488,7 +625,10 @@ class SyncMergeEngine {
           value += operation.delta!;
         }
       }
-      values[field] = value.toDouble();
+      final normalized = value.toDouble();
+      values[field] = normalized.isFinite && normalized >= 0
+          ? normalized
+          : 0.0;
     }
 
     final baseProgress = values['currentNodeProgress'];
@@ -591,7 +731,14 @@ class SyncMergeEngine {
             return byTime != 0 ? byTime : a.id.compareTo(b.id);
           });
 
+        num soldCount = values['soldCount'] is num
+            ? values['soldCount'] as num
+            : records.length;
         for (final operation in saleOperations) {
+          if (operation.delta != null) {
+            soldCount += operation.delta!;
+          }
+
           final added = operation.metadata['added'];
           if (added is List) {
             for (final item in added) {
@@ -609,7 +756,12 @@ class SyncMergeEngine {
           }
         }
 
-        values['soldCount'] = records.length;
+        // Older versions tracked only the count and had no per-sale
+        // timestamps. Keep that unattributed historical count instead of
+        // silently replacing it with saleRecords.length during first sync.
+        final normalizedCount = soldCount.round().clamp(0, 0x7fffffff);
+        values['soldCount'] =
+            normalizedCount < records.length ? records.length : normalizedCount;
         values['saleRecords'] = records;
       }
     }

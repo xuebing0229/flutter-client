@@ -103,6 +103,7 @@ class OrderStore extends ChangeNotifier {
     if (index == -1) return;
 
     final order = _orders[index];
+    if (order.isArchived) return;
     final nodes = order.nodePresetSnapshot.nodes;
     final finalNodeId =
         nodes.isEmpty ? order.currentNodeId : nodes.last.id;
@@ -193,6 +194,7 @@ class OrderStore extends ChangeNotifier {
     if (index == -1) return;
 
     final order = _orders[index];
+    if (order.isArchived) return;
     final validNodeIds = <String>{
       notStartedNodeId,
       for (final node in order.nodePresetSnapshot.nodes) node.id,
@@ -222,20 +224,21 @@ class OrderStore extends ChangeNotifier {
     String id,
     double refundAmount,
   ) {
+    if (!refundAmount.isFinite || refundAmount < 0) return;
     final index = _orders.indexWhere((order) => order.id == id);
     if (index == -1) return;
 
     final order = _orders[index];
-    final normalizedRefund = refundAmount < 0 ? 0.0 : refundAmount;
+    if (order.isArchived) return;
 
     _orders[index] = order.copyWith(
       currentNodeProgress: 0,
       completedAt: DateTime.now(),
       settledAt: DateTime.now(),
-      settledIncome: order.realIncome - normalizedRefund,
+      settledIncome: order.realIncome - refundAmount,
       archiveOutcome: OrderArchiveOutcome.terminated,
       clearSettlementNodeId: true,
-      customRefundAmount: normalizedRefund,
+      customRefundAmount: refundAmount,
       isArchived: true,
       isPinned: false,
     );
@@ -291,7 +294,7 @@ class OrderStore extends ChangeNotifier {
     if (index == -1) return;
 
     final order = _orders[index];
-    if (order.isCompleted) return;
+    if (order.isArchived || order.isCompleted) return;
 
     final nodes = order.nodePresetSnapshot.nodes;
     if (nodes.isEmpty) return;

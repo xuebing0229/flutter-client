@@ -7,6 +7,7 @@ import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/adjustment_widgets.dart';
+import '../../shared/presentation/concurrent_edit_dialog.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
 import '../data/node_presets.dart';
 import '../data/order_reference_image_store.dart';
@@ -228,13 +229,59 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     return true;
   }
 
-  void _save() {
+  bool _sameNodePresetSnapshot(NodePreset left, NodePreset right) {
+    if (left.id != right.id ||
+        left.name != right.name ||
+        left.nodes.length != right.nodes.length) {
+      return false;
+    }
+    for (var index = 0; index < left.nodes.length; index++) {
+      final a = left.nodes[index];
+      final b = right.nodes[index];
+      if (a.id != b.id ||
+          a.name != b.name ||
+          a.iconKey != b.iconKey ||
+          a.colorValue != b.colorValue ||
+          a.progressPercent != b.progressPercent ||
+          a.builtIn != b.builtIn) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _save() async {
     FocusManager.instance.primaryFocus?.unfocus();
+    final title = _titleController.text.trim();
+    final client = _clientController.text.trim();
+    if (title.isEmpty ||
+        (widget.featureStore.clientInfo && client.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.featureStore.clientInfo
+                ? '图名和单主需要填写'
+                : '图名需要填写',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final current = _order;
     final price = double.tryParse(_priceController.text.trim()) ?? 0;
-    final titleChanged = _titleController.text.trim() != _draftBaseline.title;
-    final clientChanged =
-        _clientController.text.trim() != _draftBaseline.clientName;
+    if (!price.isFinite || price < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final titleChanged = title != _draftBaseline.title;
+    final clientChanged = client != _draftBaseline.clientName;
     final platformChanged = _platform != _draftBaseline.platform;
     final deadlineChanged = _deadline != _draftBaseline.deadline;
     final presetChanged = _presetId != _draftBaseline.nodePresetId;
@@ -253,57 +300,180 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       _referenceImages,
       _draftBaseline.referenceImages,
     );
-    final removedReferenceImages = referenceImagesChanged
-        ? <OrderReferenceImage>[
-            for (final image in _draftBaseline.referenceImages)
-              if (!_referenceImages.any((item) => item.id == image.id)) image,
-          ]
-        : const <OrderReferenceImage>[];
-    final reopenDeliveredOrder =
-        current.isCompleted && !current.isArchived && nodeChanged;
 
-    final updated = current.copyWith(
-      title: titleChanged ? _titleController.text.trim() : current.title,
-      clientName: clientChanged
-          ? _clientController.text.trim()
-          : current.clientName,
-      platform: platformChanged ? _platform : current.platform,
-      deadline: deadlineChanged ? _deadline : current.deadline,
+    List<String> concurrentFields(QueueOrder latest) {
+      final fields = <String>[];
+      if (titleChanged &&
+          latest.title != _draftBaseline.title &&
+          title != latest.title) {
+        fields.add('图名');
+      }
+      if (clientChanged &&
+          latest.clientName != _draftBaseline.clientName &&
+          client != latest.clientName) {
+        fields.add('单主');
+      }
+      if (deadlineChanged &&
+          latest.deadline != _draftBaseline.deadline &&
+          _deadline != latest.deadline) {
+        fields.add('截稿时间');
+      }
+      if (priceChanged &&
+          latest.price != _draftBaseline.price &&
+          price != latest.price) {
+        fields.add('稿费');
+      }
+      if (descriptionChanged &&
+          latest.description != _draftBaseline.description &&
+          _descriptionController.text.trim() != latest.description) {
+        fields.add('备注');
+      }
+      if (tagsChanged &&
+          !listEquals(latest.tags, _draftBaseline.tags) &&
+          !listEquals(normalizeOrderTags(_tags), latest.tags)) {
+        fields.add('自定义标签');
+      }
+
+      final localCommissionChanged =
+          platformChanged ||
+          feeChanged ||
+          loveLevelChanged ||
+          onlinePercentChanged;
+      final remoteCommissionChanged =
+          latest.platform != _draftBaseline.platform ||
+          latest.feeEnabled != _draftBaseline.feeEnabled ||
+          latest.huajiaLoveLevel != _draftBaseline.huajiaLoveLevel ||
+          latest.normalizedOnlinePercent !=
+              _draftBaseline.normalizedOnlinePercent;
+      final localCommissionMatchesCurrent =
+          _platform == latest.platform &&
+          _feeEnabled == latest.feeEnabled &&
+          _huajiaLoveLevel == latest.huajiaLoveLevel &&
+          _onlinePercent == latest.normalizedOnlinePercent;
+      if (localCommissionChanged &&
+          remoteCommissionChanged &&
+          !localCommissionMatchesCurrent) {
+        fields.add('平台与手续费设置');
+      }
+
+      final remoteNodeChanged =
+          latest.nodePresetId != _draftBaseline.nodePresetId ||
+          !_sameNodePresetSnapshot(
+            latest.nodePresetSnapshot,
+            _draftBaseline.nodePresetSnapshot,
+          ) ||
+          latest.currentNodeId != _draftBaseline.currentNodeId ||
+          latest.completedAt != _draftBaseline.completedAt;
+      final localNodeMatchesCurrent =
+          _presetId == latest.nodePresetId &&
+          _currentNodeId == latest.currentNodeId &&
+          (!presetChanged ||
+              _sameNodePresetSnapshot(
+                _presetSnapshot,
+                latest.nodePresetSnapshot,
+              ));
+      if (nodeChanged && remoteNodeChanged && !localNodeMatchesCurrent) {
+        fields.add('节点或交稿状态');
+      } else if (nodeChanged &&
+          latest.completedAt != _draftBaseline.completedAt) {
+        // Even when both sides arrived at the same node, a remote delivery
+        // changes whether this local node edit would reopen the order.
+        fields.add('节点或交稿状态');
+      }
+
+      final anyLocalChanged =
+          titleChanged ||
+          clientChanged ||
+          platformChanged ||
+          deadlineChanged ||
+          nodeChanged ||
+          descriptionChanged ||
+          tagsChanged ||
+          priceChanged ||
+          feeChanged ||
+          loveLevelChanged ||
+          onlinePercentChanged ||
+          referenceImagesChanged;
+      if (anyLocalChanged &&
+          latest.isArchived != _draftBaseline.isArchived) {
+        fields.add('归档状态');
+      }
+      return fields;
+    }
+
+    var latest = current;
+    final acceptedConflictFields = <String>{};
+    while (true) {
+      if (!widget.store.contains(widget.orderId)) return;
+      latest = _order;
+      final unresolved = concurrentFields(latest)
+          .where((field) => !acceptedConflictFields.contains(field))
+          .toList(growable: false);
+      if (unresolved.isEmpty) break;
+
+      final choice = await showConcurrentEditDialog(
+        context: context,
+        subject: '这笔排单',
+        fields: unresolved,
+      );
+      if (!mounted) return;
+      if (choice == ConcurrentEditChoice.useSynced) {
+        await _cancelEditing();
+        return;
+      }
+      if (choice != ConcurrentEditChoice.keepLocal) return;
+      acceptedConflictFields.addAll(unresolved);
+    }
+
+    final currentForSave = latest;
+    final reopenDeliveredOrder =
+        currentForSave.isCompleted &&
+        !currentForSave.isArchived &&
+        nodeChanged;
+
+    final updated = currentForSave.copyWith(
+      title: titleChanged ? title : currentForSave.title,
+      clientName: clientChanged ? client : currentForSave.clientName,
+      platform: platformChanged ? _platform : currentForSave.platform,
+      deadline: deadlineChanged ? _deadline : currentForSave.deadline,
       clearDeadline: deadlineChanged && _deadline == null,
-      nodePresetId: presetChanged ? _presetId : current.nodePresetId,
+      nodePresetId: presetChanged ? _presetId : currentForSave.nodePresetId,
       nodePresetSnapshot: presetChanged
           ? _presetSnapshot.snapshot()
-          : current.nodePresetSnapshot,
-      currentNodeId: nodeChanged ? _currentNodeId : current.currentNodeId,
-      currentNodeProgress: nodeChanged ? 0 : current.currentNodeProgress,
+          : currentForSave.nodePresetSnapshot,
+      currentNodeId: nodeChanged
+          ? _currentNodeId
+          : currentForSave.currentNodeId,
+      currentNodeProgress: nodeChanged
+          ? 0
+          : currentForSave.currentNodeProgress,
       clearCompletedAt: reopenDeliveredOrder,
-      price: priceChanged ? price : current.price,
-      feeEnabled: feeChanged ? _feeEnabled : current.feeEnabled,
+      price: priceChanged ? price : currentForSave.price,
+      feeEnabled: feeChanged ? _feeEnabled : currentForSave.feeEnabled,
       huajiaLoveLevel: loveLevelChanged
           ? _huajiaLoveLevel
-          : current.huajiaLoveLevel,
+          : currentForSave.huajiaLoveLevel,
       onlinePercent: onlinePercentChanged
           ? _onlinePercent
-          : current.onlinePercent,
+          : currentForSave.onlinePercent,
       description: descriptionChanged
           ? _descriptionController.text.trim()
-          : current.description,
-      tags: tagsChanged ? normalizeOrderTags(_tags) : current.tags,
+          : currentForSave.description,
+      tags: tagsChanged
+          ? normalizeOrderTags(_tags)
+          : currentForSave.tags,
       referenceImages: referenceImagesChanged
-          ? List<OrderReferenceImage>.unmodifiable(_referenceImages)
-          : current.referenceImages,
+          ? mergeReferenceImageEdits(
+              baseline: _draftBaseline.referenceImages,
+              draft: _referenceImages,
+              current: currentForSave.referenceImages,
+            )
+          : currentForSave.referenceImages,
     );
 
     widget.store.updateOrder(updated);
     _sessionAddedReferenceImages.clear();
-    if (removedReferenceImages.isNotEmpty) {
-      unawaited(
-        _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: removedReferenceImages,
-        ),
-      );
-    }
+
     setState(() => _editing = false);
   }
 
@@ -317,10 +487,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     if (!mounted || result == null) return;
 
     final current = widget.store.byId(widget.orderId);
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: order.supplementAmount,
+      baselineFeeEnabled: order.supplementFeeEnabled,
+      draft: result,
+      currentAmount: current.supplementAmount,
+      currentFeeEnabled: current.supplementFeeEnabled,
+    );
     widget.store.updateOrder(
       current.copyWith(
-        supplementAmount: result.amount,
-        supplementFeeEnabled: result.feeEnabled,
+        supplementAmount: merged.amount,
+        supplementFeeEnabled: merged.feeEnabled,
       ),
     );
   }
@@ -335,10 +512,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     if (!mounted || result == null) return;
 
     final current = widget.store.byId(widget.orderId);
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: order.deductionAmount,
+      baselineFeeEnabled: order.deductionFeeEnabled,
+      draft: result,
+      currentAmount: current.deductionAmount,
+      currentFeeEnabled: current.deductionFeeEnabled,
+    );
     widget.store.updateOrder(
       current.copyWith(
-        deductionAmount: result.amount,
-        deductionFeeEnabled: result.feeEnabled,
+        deductionAmount: merged.amount,
+        deductionFeeEnabled: merged.feeEnabled,
       ),
     );
   }
@@ -379,7 +563,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 ),
                 IconButton(
                   tooltip: '保存',
-                  onPressed: _pickingReferenceImages ? null : _save,
+                  onPressed: _pickingReferenceImages
+                      ? null
+                      : () => unawaited(_save()),
                   icon: const Icon(Icons.check_rounded),
                 ),
               ],

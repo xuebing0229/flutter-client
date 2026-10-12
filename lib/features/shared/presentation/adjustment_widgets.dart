@@ -10,6 +10,28 @@ class AdjustmentDialogResult {
   final bool feeEnabled;
 }
 
+AdjustmentDialogResult mergeAdjustmentEdit({
+  required double baselineAmount,
+  required bool baselineFeeEnabled,
+  required AdjustmentDialogResult draft,
+  required double currentAmount,
+  required bool currentFeeEnabled,
+}) {
+  final amountChanged = draft.amount != baselineAmount;
+  final feeChanged = draft.feeEnabled != baselineFeeEnabled;
+
+  final mergedAmount = amountChanged
+      ? (currentAmount + (draft.amount - baselineAmount))
+          .clamp(0, double.infinity)
+          .toDouble()
+      : currentAmount;
+
+  return AdjustmentDialogResult(
+    amount: mergedAmount,
+    feeEnabled: feeChanged ? draft.feeEnabled : currentFeeEnabled,
+  );
+}
+
 class AdjustmentDetailRow extends StatelessWidget {
   const AdjustmentDetailRow({
     required this.label,
@@ -76,6 +98,7 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
     text: amount == 0 ? '' : formatAdjustmentMoney(amount),
   );
   var nextFeeEnabled = feeEnabled;
+  String? errorText;
 
   return showDialog<AdjustmentDialogResult>(
     context: context,
@@ -99,6 +122,7 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
                       labelText: '$label金额',
                       prefixText: '¥ ',
                       hintText: '0',
+                      errorText: errorText,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -123,10 +147,17 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
               ),
               FilledButton(
                 onPressed: () {
-                  final parsed = double.tryParse(controller.text.trim()) ?? 0;
+                  final raw = controller.text.trim();
+                  final parsed = raw.isEmpty ? 0.0 : double.tryParse(raw);
+                  if (parsed == null || !parsed.isFinite || parsed < 0) {
+                    setDialogState(() {
+                      errorText = '请输入有效的金额';
+                    });
+                    return;
+                  }
                   Navigator.of(dialogContext).pop(
                     AdjustmentDialogResult(
-                      amount: parsed < 0 ? 0 : parsed,
+                      amount: parsed,
                       feeEnabled: nextFeeEnabled,
                     ),
                   );

@@ -254,17 +254,64 @@ class Handler(BaseHTTPRequestHandler):
                 with connect_db() as db:
                     self._admin(db)
                     query = parse_qs(parsed.query)
-                    limit = min(max(int(query.get("limit", ["200"])[0]), 1), 500)
-                    rows = db.execute(
-                        """
-                        SELECT * FROM licenses
-                        WHERE voided_at IS NULL AND activation_code IS NOT NULL
-                        ORDER BY id DESC
-                        LIMIT ?
-                        """,
-                        (limit,),
-                    ).fetchall()
-                    return self._ok({"licenses": [license_json(row) for row in rows]})
+                    try:
+                        limit = min(max(int(query.get("limit", ["200"])[0]), 1), 500)
+                    except (TypeError, ValueError):
+                        raise ApiError(
+                            HTTPStatus.BAD_REQUEST,
+                            "limit 参数格式无效。",
+                            "invalid_pagination",
+                        )
+                    before_raw = query.get("before_id", [None])[0]
+                    before_id = None
+                    if before_raw is not None:
+                        try:
+                            before_id = int(before_raw)
+                        except (TypeError, ValueError):
+                            raise ApiError(
+                                HTTPStatus.BAD_REQUEST,
+                                "before_id 参数格式无效。",
+                                "invalid_pagination",
+                            )
+                        if before_id < 1:
+                            raise ApiError(
+                                HTTPStatus.BAD_REQUEST,
+                                "before_id 参数格式无效。",
+                                "invalid_pagination",
+                            )
+
+                    if before_id is None:
+                        rows = db.execute(
+                            """
+                            SELECT * FROM licenses
+                            WHERE voided_at IS NULL AND activation_code IS NOT NULL
+                            ORDER BY id DESC
+                            LIMIT ?
+                            """,
+                            (limit + 1,),
+                        ).fetchall()
+                    else:
+                        rows = db.execute(
+                            """
+                            SELECT * FROM licenses
+                            WHERE voided_at IS NULL
+                              AND activation_code IS NOT NULL
+                              AND id < ?
+                            ORDER BY id DESC
+                            LIMIT ?
+                            """,
+                            (before_id, limit + 1),
+                        ).fetchall()
+
+                    has_more = len(rows) > limit
+                    page = rows[:limit]
+                    next_before_id = page[-1]["id"] if has_more and page else None
+                    return self._ok(
+                        {
+                            "licenses": [license_json(row) for row in page],
+                            "nextBeforeId": next_before_id,
+                        }
+                    )
             raise ApiError(HTTPStatus.NOT_FOUND, "接口不存在。", "not_found")
         except ApiError as err:
             self._error(err)

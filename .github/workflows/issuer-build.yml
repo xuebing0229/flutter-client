@@ -48,7 +48,7 @@ jobs:
         run: flutter analyze --no-fatal-warnings
 
       - name: Test issuer code path
-        run: flutter test test/license_issuer_engine_test.dart
+        run: flutter test test/license_issuer_engine_test.dart test/license_issuer_api_test.dart
 
       - name: Build signed issuer APK
         run: |
@@ -58,6 +58,12 @@ jobs:
             --target lib/license_issuer/main.dart \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-issuer-release.apk app-license-issuer.apk
+
+      - name: Verify issuer APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app-license-issuer.apk
 
       - name: Upload issuer APK
         uses: actions/upload-artifact@v4

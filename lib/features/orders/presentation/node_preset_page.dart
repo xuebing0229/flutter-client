@@ -197,7 +197,75 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
     );
   }
 
-  void _save() {
+  bool _sameNodes(List<NodeDefinition> left, List<NodeDefinition> right) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      final a = left[index];
+      final b = right[index];
+      if (a.id != b.id ||
+          a.name != b.name ||
+          a.iconKey != b.iconKey ||
+          a.colorValue != b.colorValue ||
+          a.progressPercent != b.progressPercent ||
+          a.builtIn != b.builtIn) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<bool> _confirmConcurrentOverwrite(List<String> fields) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('这个预设已在另一处更新'),
+        content: Text(
+          '你编辑期间，同步设备也修改了${fields.join('、')}。'
+          '请选择保留哪一边；未冲突的修改会自动合并。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('remote'),
+            child: const Text('使用同步版本'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('local'),
+            child: const Text('保留本机修改'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null) return false;
+    if (choice == 'remote') {
+      final id = widget.preset?.id;
+      NodePreset? current;
+      if (id != null) {
+        for (final preset in widget.store.presets) {
+          if (preset.id == id) {
+            current = preset;
+            break;
+          }
+        }
+      }
+      final synced = current;
+      if (synced != null) {
+        _nameController.text = synced.name;
+        setState(() {
+          _nodes = [
+            for (final node in synced.nodes) node.snapshot(),
+          ];
+        });
+      }
+      return false;
+    }
+    return choice == 'local';
+  }
+
+  Future<void> _save() async {
     final name = _nameController.text.trim();
 
     if (name.isEmpty) {
@@ -225,28 +293,72 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
       }
     }
 
+    final localNodes = <NodeDefinition>[
+      for (var index = 0; index < _nodes.length; index++)
+        NodeDefinition(
+          id: _nodes[index].id,
+          name: _nodes[index].name.trim(),
+          iconKey: _nodes[index].iconKey,
+          colorValue: _nodes[index].colorValue,
+          progressPercent: index == _nodes.length - 1
+              ? 100
+              : _nodes[index].progressPercent,
+          builtIn: _nodes[index].builtIn,
+        ),
+    ];
+
+    final baseline = widget.preset;
+    var mergedName = name;
+    var mergedNodes = localNodes;
+
+    if (baseline != null) {
+      NodePreset? current;
+      for (final preset in widget.store.presets) {
+        if (preset.id == baseline.id) {
+          current = preset;
+          break;
+        }
+      }
+      if (current == null) {
+        _message('这个预设已在另一处删除，请返回后重新新建。');
+        return;
+      }
+
+      final localNameChanged = name != baseline.name;
+      final remoteNameChanged = current.name != baseline.name;
+      final localNodesChanged = !_sameNodes(localNodes, baseline.nodes);
+      final remoteNodesChanged = !_sameNodes(current.nodes, baseline.nodes);
+      final conflicts = <String>[
+        if (localNameChanged && remoteNameChanged && name != current.name)
+          '预设名称',
+        if (localNodesChanged &&
+            remoteNodesChanged &&
+            !_sameNodes(localNodes, current.nodes))
+          '节点内容',
+      ];
+
+      if (conflicts.isNotEmpty &&
+          !await _confirmConcurrentOverwrite(conflicts)) {
+        return;
+      }
+      if (!mounted) return;
+
+      // Independent fields merge automatically. Only a field the user
+      // actually changed locally is allowed to replace the current value.
+      mergedName = localNameChanged ? name : current.name;
+      mergedNodes = localNodesChanged ? localNodes : current.nodes;
+    }
+
     final preset = NodePreset(
       id:
-          widget.preset?.id ??
+          baseline?.id ??
           'preset-${DateTime.now().microsecondsSinceEpoch}',
-      name: name,
-      nodes: [
-        for (var index = 0; index < _nodes.length; index++)
-          NodeDefinition(
-            id: _nodes[index].id,
-            name: _nodes[index].name.trim(),
-            iconKey: _nodes[index].iconKey,
-            colorValue: _nodes[index].colorValue,
-            progressPercent: index == _nodes.length - 1
-                ? 100
-                : _nodes[index].progressPercent,
-            builtIn: _nodes[index].builtIn,
-          ),
-      ],
+      name: mergedName,
+      nodes: [for (final node in mergedNodes) node.snapshot()],
     );
 
     widget.store.upsert(preset);
-    Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _message(String message) {
@@ -304,7 +416,10 @@ class _NodePresetEditorPageState extends State<NodePresetEditorPage> {
               onPressed: _deletePreset,
               icon: const Icon(Icons.delete_outline_rounded),
             ),
-          TextButton(onPressed: _save, child: const Text('保存')),
+          TextButton(
+            onPressed: () => _save(),
+            child: const Text('保存'),
+          ),
           const SizedBox(width: 6),
         ],
       ),

@@ -40,6 +40,8 @@ void main() {
   });
 
   testWidgets('wide content pane uses four columns', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(harness(920));
     for (var index = 0; index < 4; index++) {
       expect(tester.getTopLeft(find.byKey(Key('item-$index'))).dy,

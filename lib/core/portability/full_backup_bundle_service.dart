@@ -5,6 +5,7 @@ import 'package:archive/archive_io.dart';
 import '../sync/sync_record_store.dart';
 import 'app_backup_data.dart';
 import 'data_portability_file_bridge.dart';
+import '../../features/orders/domain/queue_order.dart';
 
 class ImportedBackupBundle {
   ImportedBackupBundle({
@@ -109,10 +110,23 @@ class FullBackupBundleService {
   Future<ImportedBackupBundle?> pickAndReadBackup() async {
     final picked = await _fileBridge.pickBackupFile();
     if (picked == null) return null;
-    return readBackupFile(
-      File(picked.path),
-      displayName: picked.name,
-    );
+
+    final source = File(picked.path);
+    try {
+      return await readBackupFile(
+        source,
+        displayName: picked.name,
+      );
+    } finally {
+      if (picked.temporary) {
+        try {
+          if (await source.exists()) await source.delete();
+        } catch (_) {
+          // Android picker copies live in app cache and can be reclaimed by the
+          // OS if a provider/file handle briefly prevents immediate cleanup.
+        }
+      }
+    }
   }
 
   Future<ImportedBackupBundle> readBackupFile(
@@ -146,6 +160,7 @@ class FullBackupBundleService {
       archive = ZipDecoder().decodeStream(input);
 
       var hasManifest = false;
+      final assetEntryPaths = <String>{};
       for (final entry in archive) {
         if (entry.isSymbolicLink) {
           throw const FormatException('备份中包含不允许的符号链接。');
@@ -158,15 +173,13 @@ class FullBackupBundleService {
 
         if (entry.isFile) {
           if (name == manifestFileName) {
-            if (hasManifest) {
-              throw const FormatException('备份中存在重复的数据清单。');
-            }
             hasManifest = true;
             continue;
           }
           if (!_isReferenceAssetPath(name)) {
             throw FormatException('备份中包含未知文件：$name');
           }
+          assetEntryPaths.add(name);
         } else if (name != 'assets' &&
             name != 'assets/' &&
             !name.startsWith('assets/order-reference-images')) {
@@ -191,6 +204,7 @@ class FullBackupBundleService {
       await _validateExtractedAssets(
         backup: backup,
         extractedRoot: temporary,
+        archivedAssetPaths: assetEntryPaths,
       );
 
       await input.close();
@@ -226,18 +240,21 @@ class FullBackupBundleService {
     final result = <String, File>{};
     final missing = <String>[];
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
+    Future<void> collect({
+      required String owner,
+      required Iterable<OrderReferenceImage> images,
+    }) async {
+      for (final image in images) {
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
+            '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
         }
 
         final file = File(_joinRelative(syncRoot.path, relativePath));
         if (!await file.exists()) {
-          missing.add(image.fileName);
+          missing.add('$owner：${image.fileName}');
           continue;
         }
 
@@ -249,12 +266,15 @@ class FullBackupBundleService {
           );
         }
 
-        final previous = result[relativePath];
-        if (previous != null && previous.path != file.path) {
-          throw FormatException('参考图路径重复：$relativePath');
-        }
         result[relativePath] = file;
       }
+    }
+
+    for (final order in backup.orders) {
+      await collect(owner: '排单', images: order.referenceImages);
+    }
+    for (final product in backup.products) {
+      await collect(owner: '成品', images: product.referenceImages);
     }
 
     if (missing.isNotEmpty) {
@@ -272,20 +292,22 @@ class FullBackupBundleService {
   Future<void> _validateExtractedAssets({
     required AppBackupData backup,
     required Directory extractedRoot,
+    required Set<String> archivedAssetPaths,
   }) async {
     final paths = <String>{};
 
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
+    Future<void> collect({
+      required String owner,
+      required Iterable<OrderReferenceImage> images,
+    }) async {
+      for (final image in images) {
         final relativePath = image.relativePath;
         if (!_isReferenceAssetPath(relativePath)) {
           throw FormatException(
-            '排单“${order.title}”包含无效参考图路径：$relativePath',
+            '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
         }
-        if (!paths.add(relativePath)) {
-          continue;
-        }
+        if (!paths.add(relativePath)) continue;
 
         final file = File(_joinRelative(extractedRoot.path, relativePath));
         if (!await file.exists()) {
@@ -299,6 +321,22 @@ class FullBackupBundleService {
           );
         }
       }
+    }
+
+    for (final order in backup.orders) {
+      await collect(owner: '排单', images: order.referenceImages);
+    }
+    for (final product in backup.products) {
+      await collect(owner: '成品', images: product.referenceImages);
+    }
+
+    final extraPaths = archivedAssetPaths.difference(paths);
+    if (extraPaths.isNotEmpty) {
+      final preview = (extraPaths.toList()..sort()).take(3).join('、');
+      throw FormatException(
+        '完整备份包含未被数据清单引用的参考图文件：$preview'
+        '${extraPaths.length > 3 ? ' 等 ${extraPaths.length} 个' : ''}',
+      );
     }
   }
 

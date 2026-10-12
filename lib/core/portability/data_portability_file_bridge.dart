@@ -7,20 +7,24 @@ class PickedBackupFile {
   const PickedBackupFile({
     required this.path,
     required this.name,
+    this.temporary = false,
   });
 
   final String path;
   final String name;
+  final bool temporary;
 }
 
 class PickedLocalImage {
   const PickedLocalImage({
     required this.path,
     required this.name,
+    this.temporary = false,
   });
 
   final String path;
   final String name;
+  final bool temporary;
 }
 
 class DataPortabilityFileBridge {
@@ -143,6 +147,7 @@ class DataPortabilityFileBridge {
     return PickedBackupFile(
       path: raw['path'] as String,
       name: raw['name'] as String,
+      temporary: true,
     );
   }
 
@@ -207,6 +212,7 @@ class DataPortabilityFileBridge {
           PickedLocalImage(
             path: item['path'] as String,
             name: item['name'] as String,
+            temporary: true,
           ),
     ];
   }

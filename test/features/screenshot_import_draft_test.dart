@@ -86,6 +86,44 @@ void main() {
     expect(manual.presetId, defaultNodePreset.id);
   });
 
+  test('screenshot commit rejects a preset removed by sync', () {
+    final row = create('stale-preset')
+      ..presetId = 'removed-preset'
+      ..nodeId = 'removed-node';
+
+    expect(
+      validateScreenshotPresetSelection(
+        row: row,
+        presets: const <NodePreset>[defaultNodePreset],
+      ),
+      contains('删除'),
+    );
+  });
+
+  test('screenshot commit rejects a node removed from the selected preset', () {
+    final changed = NodePreset(
+      id: 'changed-preset',
+      name: '同步后的预设',
+      nodes: const [
+        NodeDefinition(
+          id: 'new-node',
+          name: '新节点',
+          progressPercent: 20,
+          iconKey: 'edit',
+          colorValue: 0,
+        ),
+      ],
+    );
+    final row = create('stale-node')
+      ..presetId = changed.id
+      ..nodeId = 'old-node';
+
+    expect(
+      validateScreenshotPresetSelection(row: row, presets: <NodePreset>[changed]),
+      contains('变化'),
+    );
+  });
+
   test('incomplete deadlines are held for review before an order write', () {
     final row = create('order');
     row.deadlineConfirmed = false;

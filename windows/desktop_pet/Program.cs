@@ -750,11 +750,13 @@ internal sealed class DesktopPetWindow : Window
             return;
         }
 
+        Picture? nextPicture = null;
         try
         {
             _activePicture?.Dispose();
+            _activePicture = null;
 
-            var picture = new Picture(
+            nextPicture = new Picture(
                 _graphCore,
                 path,
                 new GraphInfo(
@@ -767,8 +769,9 @@ internal sealed class DesktopPetWindow : Window
                 isloop: true
             );
 
-            _ = picture.Run(_petImage);
-            _activePicture = picture;
+            _ = nextPicture.Run(_petImage);
+            _activePicture = nextPicture;
+            nextPicture = null;
             _activeImagePath = path;
             _petImage.Visibility = Visibility.Visible;
             Opacity = 1;
@@ -779,6 +782,10 @@ internal sealed class DesktopPetWindow : Window
         }
         catch
         {
+            // A malformed/replaced image can fail after Picture has allocated
+            // VPet resources but before it becomes the active instance.
+            nextPicture?.Dispose();
+            _activePicture = null;
             _activeImagePath = null;
             _petImage.Source = null;
             _petImage.Visibility = Visibility.Collapsed;

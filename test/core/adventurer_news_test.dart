@@ -88,4 +88,9 @@ void main() {
       ['专注、参考图与 Windows 截图识别升级'],
     );
   });
+
+  test('135 包含内测前稳定性完善见闻', () {
+    final picked = newsBetweenBuilds(134, 135);
+    expect(picked.map((e) => e.title).toList(), ['内测前稳定性完善']);
+  });
 }
