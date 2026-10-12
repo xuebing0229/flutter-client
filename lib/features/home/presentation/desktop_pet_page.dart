@@ -10,7 +10,7 @@ import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
-const int _desktopPetPreviewCacheWidth = 1600;
+const int _desktopPetPreviewCacheWidth = 1024;
 const int _desktopPetThumbnailCacheWidth = 256;
 
 class DesktopPetPage extends StatefulWidget {
@@ -39,6 +39,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
   late final DesktopPetSettings _settings;
   final TextEditingController _customTextController = TextEditingController();
   Timer? _customTextSaveDebounce;
+  bool _settingsLoadFailed = false;
 
   @override
   void initState() {
@@ -48,9 +49,14 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
   }
 
   Future<void> _initialize() async {
-    await _settings.load();
-    if (!mounted) return;
-    _customTextController.text = _settings.customText;
+    try {
+      await _settings.load();
+      if (!mounted) return;
+      _customTextController.text = _settings.customText;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _settingsLoadFailed = true);
+    }
   }
 
   @override
@@ -351,6 +357,17 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
           widget.focusStore,
         ]),
         builder: (context, _) {
+          if (_settingsLoadFailed) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  '桌宠本地设置读取失败，请重新打开桌宠页面。',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
           if (!_settings.loaded) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -1299,6 +1316,8 @@ class _SinglePlacementPreviewState extends State<_SinglePlacementPreview> {
                   file,
                   cacheWidth: _desktopPetPreviewCacheWidth,
                   fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      const Center(child: Icon(Icons.broken_image_outlined)),
                 ),
               ),
             ),
