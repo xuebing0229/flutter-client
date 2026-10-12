@@ -171,10 +171,12 @@ class _IssuerHomePage extends StatefulWidget {
   State<_IssuerHomePage> createState() => _IssuerHomePageState();
 }
 
-class _IssuerHomePageState extends State<_IssuerHomePage> {
+class _IssuerHomePageState extends State<_IssuerHomePage>
+    with WidgetsBindingObserver {
   final _noteController = TextEditingController();
   bool _busy = false;
   bool _adminBusy = true;
+  bool _silentRefreshInFlight = false;
   String? _adminError;
   _IssuerFilter _filter = _IssuerFilter.all;
   bool _selectingForDelete = false;
@@ -183,7 +185,40 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_restoreAdminSession(promptIfMissing: true));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_silentRefreshRecords());
+    }
+  }
+
+  Future<bool> _silentRefreshRecords() async {
+    if (_silentRefreshInFlight ||
+        _adminBusy ||
+        _busy ||
+        !widget.store.isConnected) {
+      return false;
+    }
+
+    _silentRefreshInFlight = true;
+    try {
+      await widget.store.refresh();
+      if (mounted && _adminError != null) {
+        setState(() => _adminError = null);
+      }
+      return true;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _adminError = error.toString());
+      }
+      return false;
+    } finally {
+      _silentRefreshInFlight = false;
+    }
   }
 
   Future<void> _restoreAdminSession({bool promptIfMissing = false}) async {
@@ -453,6 +488,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _noteController.dispose();
     super.dispose();
   }
@@ -529,6 +565,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   }
 
   Future<void> _exportCsv() async {
+    await _silentRefreshRecords();
     if (widget.store.records.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('还没有可导出的记录')),
@@ -555,11 +592,14 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   }
 
   Future<void> _editNote(IssuedLicenseRecord record) async {
-    final controller = TextEditingController(text: record.note);
+    await _silentRefreshRecords();
+    final current =
+        widget.store.recordByAccountId(record.accountId) ?? record;
+    final controller = TextEditingController(text: current.note);
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('备注 · 编号 ${_displaySerial(record.serial)}'),
+        title: Text('备注 · 编号 ${_displaySerial(current.serial)}'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -581,18 +621,39 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
       ),
     );
     controller.dispose();
-    if (result != null) {
-      await widget.store.updateNote(record.accountId, result);
+    if (result == null) return;
+
+    try {
+      await widget.store.updateNote(
+        current.accountId,
+        result,
+        expectedRevision: current.revision,
+      );
+    } on IssuerApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isStaleRecord
+                ? '这条记录刚刚在别处发生变化，已经自动刷新，请重新修改。'
+                : '保存备注失败：$error',
+          ),
+        ),
+      );
     }
   }
 
   Future<void> _deleteRecord(IssuedLicenseRecord record) async {
+    await _silentRefreshRecords();
+    final current =
+        widget.store.recordByAccountId(record.accountId) ?? record;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除这条记录？'),
         content: Text(
-          '编号 ${_displaySerial(record.serial)} 会从服务器账本中作废并隐藏。'
+          '编号 ${_displaySerial(current.serial)} 会从服务器账本中作废并隐藏。'
           '已核销的激活码不能直接删除。',
         ),
         actions: [
@@ -607,8 +668,24 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
         ],
       ),
     );
-    if (confirmed == true) {
-      await widget.store.delete(record.accountId);
+    if (confirmed != true) return;
+
+    try {
+      await widget.store.delete(
+        current.accountId,
+        expectedRevision: current.revision,
+      );
+    } on IssuerApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isStaleRecord
+                ? '这条记录刚刚在别处发生变化，已经自动刷新，请重新确认。'
+                : '删除失败：$error',
+          ),
+        ),
+      );
     }
   }
 
@@ -641,6 +718,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
   }
 
   Future<void> _deleteSelectedRecords() async {
+    await _silentRefreshRecords();
     final count = _selectedForDelete.length;
     if (count == 0) return;
 
@@ -665,15 +743,28 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
     );
     if (confirmed != true) return;
 
-    final deleted = await widget.store.deleteMany(_selectedForDelete);
-    if (!mounted) return;
-    setState(() {
-      _selectingForDelete = false;
-      _selectedForDelete.clear();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已删除 $deleted 条发码记录')),
-    );
+    try {
+      final deleted = await widget.store.deleteMany(_selectedForDelete);
+      if (!mounted) return;
+      setState(() {
+        _selectingForDelete = false;
+        _selectedForDelete.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已删除 $deleted 条发码记录')),
+      );
+    } on IssuerApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.isStaleRecord
+                ? '有记录刚刚在别处发生变化，已经自动刷新，请重新选择。'
+                : '批量删除失败：$error',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _confirmClearPrivateKey() async {
@@ -875,6 +966,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
                 selected: <_IssuerFilter>{_filter},
                 onSelectionChanged: (value) {
                   setState(() => _filter = value.first);
+                  unawaited(_silentRefreshRecords());
                 },
               ),
               const SizedBox(height: 10),
@@ -916,10 +1008,7 @@ class _IssuerHomePageState extends State<_IssuerHomePage> {
                     },
                     onToggleSold: () async {
                       try {
-                        await widget.store.setSold(
-                          record.accountId,
-                          !record.isSold,
-                        );
+                        await widget.store.toggleSold(record.accountId);
                       } catch (error) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
