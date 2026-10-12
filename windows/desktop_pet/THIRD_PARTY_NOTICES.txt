@@ -10,3 +10,15 @@ Adventurer's Guild supplies its own A/B images at runtime and does not redistrib
 VPet's built-in character animation assets.
 
 The complete Apache License 2.0 text for VPet is included as LICENSE-VPET.txt.
+
+WpfAnimatedGif
+Copyright © Thomas Levesque and contributors
+Project: https://github.com/XamlAnimatedGif/WpfAnimatedGif
+License: Apache License 2.0
+
+This companion uses WpfAnimatedGif only for rendering user-provided animated
+GIF images inside the optional desktop-pet bubble. PNG images continue to use
+the existing WPF image pipeline.
+
+The Apache License 2.0 text already distributed with this companion applies to
+this dependency as well.
