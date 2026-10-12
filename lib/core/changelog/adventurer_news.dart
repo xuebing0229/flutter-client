@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../build/build_channel.dart';
 import '../storage/atomic_file.dart';
 
 /// Each feature is recorded once, against the FIRST build where it ships.
@@ -186,6 +187,9 @@ class AdventurerNewsStore {
   }
 
   Future<int> installedBuild() async {
+    if (isInternalBuild && internalSourceBuild > 0) {
+      return internalSourceBuild;
+    }
     final info = await PackageInfo.fromPlatform();
     return int.tryParse(info.buildNumber) ?? 0;
   }
