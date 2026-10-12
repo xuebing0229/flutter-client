@@ -54,6 +54,39 @@ void main() {
     expect(rows.map((row) => row.progressPercent).toList(), [60, 60, 60]);
   });
 
+  test('米画师实名状态不会被当成单主姓名', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 980,
+      lines: [
+        at('已实名', 205, x: 150),
+        at('米家单主', 245, x: 80),
+        at('【常驻】测试稿件', 355, x: 275),
+        at('¥94', 405, x: 280),
+        at('2026-10-31', 500, x: 290),
+        at('60%', 535, x: 280),
+      ],
+    );
+    expect(entries, hasLength(1));
+    expect(entries.single.clientName, '米家单主');
+  });
+
+  test('米画师姓名和实名状态粘连时只保留姓名', () {
+    final entries = const ScreenshotLayoutParser().parse(
+      imageWidth: 690,
+      imageHeight: 980,
+      lines: [
+        at('米家单主未实名', 245, x: 80),
+        at('【常驻】测试稿件', 355, x: 275),
+        at('¥94', 405, x: 280),
+        at('2026-10-31', 500, x: 290),
+        at('60%', 535, x: 280),
+      ],
+    );
+    expect(entries, hasLength(1));
+    expect(entries.single.clientName, '米家单主');
+  });
+
   test('米画师 screenshot can separate two cards without crossing fields', () {
     final entries = const ScreenshotLayoutParser().parse(
       imageWidth: 690,
