@@ -466,6 +466,12 @@ Future<void> _cleanupBootstrapFolder(
   } catch (_) {}
 }
 
+typedef AccountTransferStatus = ({
+  bool sourceConnected,
+  String? folderState,
+  Map<String, dynamic>? progress,
+});
+
 class SyncthingAccountTransferClientSession {
   SyncthingAccountTransferClientSession._({
     required this.descriptor,
@@ -488,18 +494,37 @@ class SyncthingAccountTransferClientSession {
 
   bool _closed = false;
 
-  Future<Map<String, dynamic>?> transferProgress() async {
+  Future<AccountTransferStatus> transferStatus() async {
     final status = await _bridge.statusFolder(descriptor.folderId);
-    return status.syncProgress;
+    return (
+      sourceConnected: status.connectedDeviceIds.contains(
+        descriptor.sourceDeviceId,
+      ),
+      folderState: status.folderState,
+      progress: status.syncProgress,
+    );
+  }
+
+  Future<Map<String, dynamic>?> transferProgress() async {
+    return (await transferStatus()).progress;
   }
 
   Future<String> receive({
     Duration timeout = const Duration(minutes: 5),
+    void Function(AccountTransferStatus status)? onStatus,
   }) async {
-    final deadline = DateTime.now().add(timeout);
+    final connectionDeadline = DateTime.now().add(timeout);
+    var sourceConnected = false;
 
-    while (!_closed && DateTime.now().isBefore(deadline)) {
+    while (!_closed) {
       await _bridge.requestScanFolder(descriptor.folderId);
+
+      final status = await transferStatus();
+      onStatus?.call(status);
+      if (status.sourceConnected) {
+        sourceConnected = true;
+      }
+
       if (await _payloadFile.exists()) {
         final encrypted = await _payloadFile.readAsString();
         final clear = await _decryptTransferPayload(
@@ -510,16 +535,23 @@ class SyncthingAccountTransferClientSession {
         await _bridge.requestScanFolder(descriptor.folderId);
         return clear;
       }
+
+      // The five-minute limit is only for waiting for the original device to
+      // confirm and establish the bootstrap connection. Once Syncthing reports
+      // the source device connected, confirmation has already succeeded; keep
+      // waiting for the account payload instead of misreporting a timeout.
+      if (!sourceConnected &&
+          !DateTime.now().isBefore(connectionDeadline)) {
+        throw const FormatException(
+          '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
+          '并已经扫描或粘贴了这台设备的回应码。',
+        );
+      }
+
       await Future<void>.delayed(const Duration(seconds: 1));
     }
 
-    if (_closed) {
-      throw const FormatException('设备加入已取消。');
-    }
-    throw const FormatException(
-      '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
-      '并已经扫描或粘贴了这台设备的回应码。',
-    );
+    throw const FormatException('设备加入已取消。');
   }
 
   Future<void> close() async {
