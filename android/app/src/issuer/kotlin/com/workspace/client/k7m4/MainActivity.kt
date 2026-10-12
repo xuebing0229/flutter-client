@@ -10,8 +10,16 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        private const val RELEASES_API_URL =
+            "https://api.github.com/repos/xuebing0229/release-files/releases?per_page=50"
+        private const val USER_AGENT = "adventurers-guild-license-issuer"
+    }
+
     private lateinit var issuerSecretBridge: IssuerSecretBridge
     private lateinit var licenseDirectHttpsBridge: LicenseDirectHttpsBridge
     private var pendingUpdateApk: File? = null
@@ -32,10 +40,64 @@ class MainActivity : FlutterActivity() {
             "app.issuer_update",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+                "fetchIssuerReleases" -> handleFetchIssuerReleases(result)
                 "installDownloadedUpdate" -> handleInstallDownloadedUpdate(call, result)
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun handleFetchIssuerReleases(
+        result: MethodChannel.Result,
+    ) {
+        Thread {
+            try {
+                val connection =
+                    (URL(RELEASES_API_URL).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        instanceFollowRedirects = true
+                        connectTimeout = 12000
+                        readTimeout = 12000
+                        useCaches = false
+                        setRequestProperty("User-Agent", USER_AGENT)
+                        setRequestProperty("Accept", "application/vnd.github+json")
+                        setRequestProperty("Cache-Control", "no-cache")
+                        setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
+                    }
+
+                val body = try {
+                    val status = connection.responseCode
+                    if (status !in 200..299) {
+                        val errorBody =
+                            connection.errorStream
+                                ?.bufferedReader()
+                                ?.use { it.readText() }
+                                .orEmpty()
+                        throw IllegalStateException(
+                            "GitHub update endpoint returned HTTP $status" +
+                                if (errorBody.isBlank()) "" else ": $errorBody",
+                        )
+                    }
+                    connection.inputStream
+                        .bufferedReader()
+                        .use { it.readText() }
+                } finally {
+                    connection.disconnect()
+                }
+
+                runOnUiThread {
+                    result.success(body)
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    result.error(
+                        "ISSUER_UPDATE_CHECK_FAILED",
+                        error.message ?: "Unable to reach GitHub update service.",
+                        null,
+                    )
+                }
+            }
+        }.start()
     }
 
     private fun handleInstallDownloadedUpdate(
