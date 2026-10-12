@@ -105,3 +105,19 @@ jobs:
             --title "License Issuer ${VERSION} (${BUILD})" \
             --notes "Automated signed license issuer build ${VERSION} (${BUILD})." \
             --latest=false
+
+          # A build number identifies one installable issuer version. If we
+          # intentionally republish the same build during testing, keep only
+          # the newest run so clients never pick an older same-build APK.
+          gh api \
+            --paginate \
+            "repos/xuebing0229/release-files/releases?per_page=100" \
+            --jq ".[] | select(.tag_name | startswith(\"issuer-v${VERSION}+${BUILD}-run\")) | .tag_name" |
+          while IFS= read -r OLD_TAG; do
+            test -n "$OLD_TAG" || continue
+            test "$OLD_TAG" = "$TAG" && continue
+            gh release delete "$OLD_TAG" \
+              --repo xuebing0229/release-files \
+              --cleanup-tag \
+              --yes
+          done
