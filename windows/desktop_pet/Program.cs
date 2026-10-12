@@ -114,10 +114,15 @@ internal sealed class DesktopPetWindow : Window
     private readonly GlobalInputActivityMonitor _inputHook;
     private readonly Dictionary<string, CachedImageSource> _desktopImageCache =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly DispatcherTimer _bubbleAnimationTimer;
+    private readonly List<BitmapSource> _bubbleAnimationFrames = new();
+    private readonly List<TimeSpan> _bubbleAnimationDelays = new();
 
     private FileSystemWatcher? _watcher;
     private PetConfig _config = new();
     private string? _activeImagePath;
+    private string? _activeBubbleAnimationPath;
+    private int _bubbleAnimationFrameIndex;
     private bool _inputActive;
     private bool _closed;
     private bool _reloadInProgress;
@@ -214,7 +219,7 @@ internal sealed class DesktopPetWindow : Window
 
         _focusClockText = new TextBlock
         {
-            Text = "⏱ 00:00",
+            Text = "00:00:00",
             FontSize = 13,
             FontWeight = FontWeights.SemiBold,
             TextAlignment = TextAlignment.Center,
@@ -300,6 +305,9 @@ internal sealed class DesktopPetWindow : Window
             Interval = TimeSpan.FromSeconds(1),
         };
         _focusTimer.Tick += (_, _) => RunUiSafely(RefreshFocusClock);
+
+        _bubbleAnimationTimer = new DispatcherTimer();
+        _bubbleAnimationTimer.Tick += (_, _) => RunUiSafely(AdvanceBubbleAnimation);
 
         _inputHook = new GlobalInputActivityMonitor();
         _inputHook.ActivityChanged += active =>
@@ -845,7 +853,7 @@ internal sealed class DesktopPetWindow : Window
         _focusClock.Visibility = Visibility.Visible;
         if (!DateTime.TryParse(_config.FocusStartedAt, out var startedAt))
         {
-            _focusClockText.Text = "⏱ 00:00:00";
+            _focusClockText.Text = "00:00:00";
             return;
         }
 
@@ -854,7 +862,7 @@ internal sealed class DesktopPetWindow : Window
         if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
         var totalHours = (int)Math.Floor(elapsed.TotalHours);
         _focusClockText.Text =
-            $"⏱ {totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+            $"{totalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
     }
 
     private static SolidColorBrush BrushFromArgb(long value, long fallback)
@@ -1001,6 +1009,126 @@ internal sealed class DesktopPetWindow : Window
         catch (OutOfMemoryException) { return null; }
     }
 
+    private bool TryShowBubbleImage(string fullPath)
+    {
+        if (string.Equals(
+                Path.GetExtension(fullPath),
+                ".gif",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return TryStartBubbleGif(fullPath);
+        }
+
+        StopBubbleAnimation();
+        var art = LoadDesktopImage(fullPath);
+        _bubbleArt.Source = art;
+        return art is not null;
+    }
+
+    private bool TryStartBubbleGif(string fullPath)
+    {
+        if (string.Equals(
+                _activeBubbleAnimationPath,
+                fullPath,
+                StringComparison.OrdinalIgnoreCase) &&
+            _bubbleAnimationFrames.Count > 0)
+        {
+            return true;
+        }
+
+        StopBubbleAnimation();
+        try
+        {
+            using var stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete
+            );
+            var decoder = new GifBitmapDecoder(
+                stream,
+                BitmapCreateOptions.PreservePixelFormat,
+                BitmapCacheOption.OnLoad
+            );
+            if (decoder.Frames.Count == 0) return false;
+
+            foreach (var sourceFrame in decoder.Frames)
+            {
+                var frame = new WriteableBitmap(sourceFrame);
+                frame.Freeze();
+                _bubbleAnimationFrames.Add(frame);
+                _bubbleAnimationDelays.Add(GetGifFrameDelay(sourceFrame));
+            }
+
+            _activeBubbleAnimationPath = fullPath;
+            _bubbleAnimationFrameIndex = 0;
+            _bubbleArt.Source = _bubbleAnimationFrames[0];
+
+            if (_bubbleAnimationFrames.Count > 1)
+            {
+                _bubbleAnimationTimer.Interval = _bubbleAnimationDelays[0];
+                _bubbleAnimationTimer.Start();
+            }
+            return true;
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (ArgumentException) { }
+        catch (NotSupportedException) { }
+        catch (COMException) { }
+        catch (OutOfMemoryException) { }
+
+        StopBubbleAnimation();
+        return false;
+    }
+
+    private static TimeSpan GetGifFrameDelay(BitmapFrame frame)
+    {
+        try
+        {
+            if (frame.Metadata is BitmapMetadata metadata)
+            {
+                var hundredths = Convert.ToInt32(metadata.GetQuery("/grctlext/Delay"));
+                if (hundredths > 0)
+                {
+                    return TimeSpan.FromMilliseconds(Math.Max(20, hundredths * 10));
+                }
+            }
+        }
+        catch (NotSupportedException) { }
+        catch (InvalidOperationException) { }
+        catch (FormatException) { }
+        catch (InvalidCastException) { }
+        catch (OverflowException) { }
+
+        return TimeSpan.FromMilliseconds(100);
+    }
+
+    private void AdvanceBubbleAnimation()
+    {
+        if (_bubbleAnimationFrames.Count <= 1)
+        {
+            _bubbleAnimationTimer.Stop();
+            return;
+        }
+
+        _bubbleAnimationFrameIndex =
+            (_bubbleAnimationFrameIndex + 1) % _bubbleAnimationFrames.Count;
+        _bubbleArt.Source = _bubbleAnimationFrames[_bubbleAnimationFrameIndex];
+        _bubbleAnimationTimer.Interval =
+            _bubbleAnimationDelays[_bubbleAnimationFrameIndex];
+    }
+
+    private void StopBubbleAnimation()
+    {
+        _bubbleAnimationTimer.Stop();
+        _bubbleAnimationFrames.Clear();
+        _bubbleAnimationDelays.Clear();
+        _activeBubbleAnimationPath = null;
+        _bubbleAnimationFrameIndex = 0;
+        _bubbleArt.Source = null;
+    }
+
     private static bool ShouldDecodeByWidth(string fullPath)
     {
         using var header = new FileStream(
@@ -1021,7 +1149,7 @@ internal sealed class DesktopPetWindow : Window
 
     private void TrimDesktopImageCache(string nextPath)
     {
-        // A, B and the optional bubble PNG are the only images that need to
+        // A, B and the optional static bubble image are the only images that need to
         // stay hot. Keeping many superseded 1600px decodes around can consume
         // tens of megabytes after repeated replacements.
         if (_desktopImageCache.Count < 4) return;
@@ -1069,6 +1197,7 @@ internal sealed class DesktopPetWindow : Window
     {
         if (!IsUsableImage(_config.ImageA))
         {
+            StopBubbleAnimation();
             _bubbleHost.Visibility = Visibility.Collapsed;
             return;
         }
@@ -1083,32 +1212,26 @@ internal sealed class DesktopPetWindow : Window
         {
             if (!IsUsableImage(_config.BubbleImage))
             {
-                _bubbleArt.Source = null;
+                StopBubbleAnimation();
                 _bubbleHost.Visibility = Visibility.Collapsed;
                 return;
             }
             var bubblePath = Path.GetFullPath(_config.BubbleImage!);
-            var art = LoadDesktopImage(bubblePath);
-            if (art is null)
+            if (!TryShowBubbleImage(bubblePath))
             {
-                _bubbleArt.Source = null;
                 _bubbleHost.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            // Deliberately use the exact same decoded ImageSource pipeline as
-            // the A/B desktop-pet image. The only difference is that this Image
-            // control is constrained by the bubble container.
             var imageScale = Math.Clamp(_config.BubbleImageScale, 0.5, 2.0);
             _bubbleArt.Width = 120 * imageScale;
             _bubbleArt.MaxHeight = 140 * imageScale;
-            _bubbleArt.Source = art;
             _bubbleContent.Children.Add(_bubbleArt);
             _bubbleHost.Visibility = Visibility.Visible;
             return;
         }
 
-        _bubbleArt.Source = null;
+        StopBubbleAnimation();
         string text;
         if (string.Equals(_config.TextMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
@@ -1392,7 +1515,7 @@ internal sealed class DesktopPetWindow : Window
 
         _inputHook.Dispose();
         _petImage.Source = null;
-        _bubbleArt.Source = null;
+        StopBubbleAnimation();
         _desktopImageCache.Clear();
     }
 
