@@ -1,0 +1,65 @@
+name: Windows Platform Validation
+
+on:
+  pull_request:
+    paths:
+      - 'lib/core/update/**'
+      - 'lib/core/sync/**'
+      - 'lib/core/desktop_pet/**'
+      - 'lib/features/home/presentation/desktop_pet_page.dart'
+      - 'lib/features/imports/data/windows_official_paddleocr.dart'
+      - 'windows/**'
+      - 'tool/test_windows_updater.ps1'
+      - 'tool/fetch_syncthing_windows.ps1'
+      - 'tool/bundle_windows_official_paddleocr.ps1'
+      - '.github/workflows/windows-platform-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-platform-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - name: Enable Windows
+        shell: pwsh
+        run: flutter config --enable-windows-desktop
+      - name: Install dependencies
+        shell: pwsh
+        run: flutter pub get
+      - name: Test Windows updater and installer process shutdown
+        shell: powershell
+        run: ./tool/test_windows_updater.ps1
+      - name: Compile Windows debug
+        shell: pwsh
+        run: flutter build windows --debug
+      - name: Compile desktop pet host
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'validation-desktop-pet'
+          dotnet publish 'windows/desktop_pet/AdventurersGuild.DesktopPet.csproj' `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o $output
+          if (-not (Test-Path (Join-Path $output 'AdventurersGuild.DesktopPet.exe'))) {
+            throw 'Desktop pet host was not created.'
+          }

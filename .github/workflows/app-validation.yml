@@ -1,9 +1,6 @@
-name: Sol Audit Validation
+name: App Validation
 
 on:
-  push:
-    branches:
-      - 'audit/sol-recheck-20261011'
   pull_request:
     branches:
       - main
@@ -13,12 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: sol-audit-validation-${{ github.ref }}
+  group: app-validation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   flutter:
-    if: github.event_name != 'pull_request' || github.head_ref == 'audit/sol-recheck-20261011'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -43,7 +39,6 @@ jobs:
           bash -n tool/build_syncthing_android.sh
 
   android-beta-debug:
-    if: github.event_name != 'pull_request' || github.head_ref == 'audit/sol-recheck-20261011'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
