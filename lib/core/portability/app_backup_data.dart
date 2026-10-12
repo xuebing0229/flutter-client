@@ -669,13 +669,21 @@ int _asInt(Object? value, String field) {
 }
 
 double _asDouble(Object? value, String field) {
-  if (value is num) return value.toDouble();
+  if (value is num) {
+    final parsed = value.toDouble();
+    if (parsed.isFinite) return parsed;
+    throw FormatException('$field 必须是有限数值。');
+  }
   throw FormatException('$field 缺失或格式无效。');
 }
 
 double? _asNullableDouble(Object? value, String field) {
   if (value == null) return null;
-  if (value is num) return value.toDouble();
+  if (value is num) {
+    final parsed = value.toDouble();
+    if (parsed.isFinite) return parsed;
+    throw FormatException('$field 必须是有限数值。');
+  }
   throw FormatException('$field 格式无效。');
 }
 
