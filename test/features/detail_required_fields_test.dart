@@ -247,13 +247,13 @@ void main() {
       await tester.tap(find.byTooltip('编辑'));
       await tester.pump();
       await tester.enterText(find.byType(TextField).first, '本机成品名');
-      final descriptionField = find.byWidgetPredicate(
+      final priceField = find.byWidgetPredicate(
         (widget) =>
             widget is TextField &&
-            widget.decoration?.hintText == '成品内容、说明或备注',
+            widget.decoration?.prefixText == '¥ ',
       );
-      expect(descriptionField, findsOneWidget);
-      await tester.enterText(descriptionField, '本机描述');
+      expect(priceField, findsOneWidget);
+      await tester.enterText(priceField, '88');
 
       final current = store.byId('product-synced-field-only');
       store.updateProduct(current.copyWith(title: '同步成品名'));
@@ -268,7 +268,7 @@ void main() {
 
       final merged = store.byId('product-synced-field-only');
       expect(merged.title, '同步成品名');
-      expect(merged.description, '本机描述');
+      expect(merged.price, 88);
       expect(find.byTooltip('编辑'), findsOneWidget);
     },
   );
