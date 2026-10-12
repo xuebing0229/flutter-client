@@ -13,6 +13,7 @@ permissions:
 
 env:
   BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
+  RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
   ACTIVATION_API_BASE_URL: https://license.apixb.top
 
 jobs:
@@ -71,3 +72,36 @@ jobs:
           name: app-license-issuer
           path: app-license-issuer.apk
           if-no-files-found: error
+
+      - name: Read issuer build metadata
+        shell: bash
+        run: |
+          META=$(python3 - <<'PY'
+          from pathlib import Path
+          for line in Path("pubspec.yaml").read_text().splitlines():
+              if line.startswith("version:"):
+                  value = line.split(":", 1)[1].strip()
+                  version, build = value.split("+", 1)
+                  print(version)
+                  print(build)
+                  break
+          PY
+          )
+          VERSION=$(printf '%s\n' "$META" | sed -n '1p')
+          BUILD=$(printf '%s\n' "$META" | sed -n '2p')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+
+      - name: Publish issuer update package
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        shell: bash
+        run: |
+          test -n "$GH_TOKEN"
+          TAG="issuer-v${VERSION}+${BUILD}-run${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            "app-license-issuer.apk#app-license-issuer.apk" \
+            --repo xuebing0229/release-files \
+            --title "License Issuer ${VERSION} (${BUILD})" \
+            --notes "Automated signed license issuer build ${VERSION} (${BUILD})." \
+            --latest=false
