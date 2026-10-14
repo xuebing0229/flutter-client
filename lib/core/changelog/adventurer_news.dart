@@ -143,6 +143,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '桌宠气泡动图与计时板简化',
     description: '电脑桌宠的气泡图片新增 GIF 动图支持，PNG 仍可照常使用；桌面计时板去掉时间前的小秒表标识，只保留更干净的时分秒显示。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 145,
+    title: '新设备加入状态修复',
+    description: '修复首次扫码加入新设备时，两台设备其实已经建立同步连接却仍被误判为“等待原设备确认超时”的问题。加入页现在会识别真实连接状态，确认成功后直接显示已连接与账号传输进度；连接建立后也不会再被固定五分钟超时错误中断。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
