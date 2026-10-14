@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.0+143"
+  #define MyAppVersion "0.1.2"
 #endif
 
 #define MyAppName "冒险者公会"
@@ -38,13 +38,15 @@ Source: "..\..\build\windows\x64\runner\Release\app_icon_{#MyAppVersion}.ico"; D
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Excludes: "app_icon*.ico"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\冒险者公会 内测版"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon_{#MyAppVersion}.ico"
-Name: "{autoprograms}\卸载冒险者公会 内测版"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\冒险者公会 内测版"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon_{#MyAppVersion}.ico"; Tasks: desktopicon
+Name: "{autoprograms}\冒险者公会"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon_{#MyAppVersion}.ico"
+Name: "{autoprograms}\卸载冒险者公会"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\冒险者公会"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon_{#MyAppVersion}.ico"; Tasks: desktopicon
 
 [InstallDelete]
-Type: files; Name: "{autodesktop}\冒险者公会 内测版.lnk"; Tasks: desktopicon
+Type: files; Name: "{autodesktop}\冒险者公会 内测版.lnk"
 Type: files; Name: "{autoprograms}\冒险者公会 内测版.lnk"
+Type: files; Name: "{autodesktop}\冒险者公会.lnk"; Tasks: desktopicon
+Type: files; Name: "{autoprograms}\冒险者公会.lnk"
 Type: files; Name: "{app}\app_icon_*.ico"
 
 [Run]
