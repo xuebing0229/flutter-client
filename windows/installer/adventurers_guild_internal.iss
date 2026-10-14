@@ -2,7 +2,7 @@
   #define MyAppVersion "0.1.0+143"
 #endif
 
-#define MyAppName "冒险者公会 内测版"
+#define MyAppName "冒险者公会"
 #define MyAppExeName "adventurers_guild.exe"
 
 [Setup]
@@ -12,7 +12,7 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher=xuebing0229
 DefaultDirName={localappdata}\Programs\AdventurersGuildInternal
-DefaultGroupName=冒险者公会 内测版
+DefaultGroupName=冒险者公会
 DisableProgramGroupPage=yes
 DisableDirPage=no
 PrivilegesRequired=lowest
@@ -49,7 +49,7 @@ Type: files; Name: "{app}\app_icon_*.ico"
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\refresh_app_shortcuts.ps1"" -ExePath ""{app}\{#MyAppExeName}"""; Flags: runhidden; StatusMsg: "正在刷新应用快捷方式和图标…"
-Filename: "{app}\{#MyAppExeName}"; Description: "启动冒险者公会 内测版"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "启动冒险者公会"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
@@ -99,7 +99,7 @@ var
 begin
   Result := '';
   if not StopInstalledProcessesForInstall(ResultCode) then
-    Result := '无法在安装前关闭旧版冒险者公会内测版、桌宠或内置同步核心。请关闭后重试。';
+    Result := '无法在安装前关闭旧版冒险者公会、桌宠或内置同步核心。请关闭后重试。';
 end;
 
 function InitializeUninstall(): Boolean;
@@ -107,7 +107,7 @@ var
   Choice: Integer;
 begin
   Choice := MsgBox(
-    '是否同时删除这台电脑上的冒险者公会内测版账号、排单、成品、同步数据和设置？' + #13#10 + #13#10 +
+    '是否同时删除这台电脑上的冒险者公会账号、排单、成品、同步数据和设置？' + #13#10 + #13#10 +
     '选择“否”只卸载程序，数据会保留，之后重新安装仍可继续使用。',
     mbConfirmation,
     MB_YESNO
