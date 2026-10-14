@@ -15,14 +15,9 @@ constexpr const wchar_t kWindowTitle[] =
     L"\u5192\u9669\u8005\u516c\u4f1a";
 
 HWND FindExistingInstanceWindow() {
-  // Current builds use the Flutter runner class and a stable title. Keeping
-  // the title fallback also catches an already-running older build that did
-  // not yet participate in the mutex protocol.
-  HWND existing = ::FindWindowW(kWindowClassName, kWindowTitle);
-  if (existing != nullptr) {
-    return existing;
-  }
-  return ::FindWindowW(nullptr, kWindowTitle);
+  // Internal/Test/Stable may share the same visible title. Use the
+  // channel-specific hidden window class so one channel never steals another.
+  return ::FindWindowW(kWindowClassName, kWindowTitle);
 }
 
 bool RestoreExistingInstance() {
