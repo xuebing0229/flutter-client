@@ -355,10 +355,10 @@ class _ReceiveAccountTransferPageState
       SyncthingAccountTransferClient();
 
   SyncthingAccountTransferClientSession? _session;
-  Timer? _progressTimer;
-  Map<String, dynamic>? _transferProgress;
+  AccountTransferStatus? _transferStatus;
   String? _error;
   bool _finished = false;
+  bool _peerConnectedOnce = false;
 
   @override
   void initState() {
@@ -375,51 +375,31 @@ class _ReceiveAccountTransferPageState
         return;
       }
       setState(() => _session = session);
-      _startProgressPolling(session);
 
-      final source = await session.receive();
+      final source = await session.receive(
+        onStatus: (status) {
+          if (!mounted || !identical(_session, session)) return;
+          setState(() {
+            _transferStatus = status;
+            if (status.sourceConnected) {
+              _peerConnectedOnce = true;
+            }
+          });
+        },
+      );
       _finished = true;
-      _stopProgressPolling();
       await Future<void>.delayed(const Duration(milliseconds: 700));
       await session.close();
 
       if (!mounted) return;
       Navigator.of(context).pop(source);
     } on FormatException catch (error) {
-      _stopProgressPolling();
       await session?.close();
       if (mounted) setState(() => _error = error.message);
     } catch (error) {
-      _stopProgressPolling();
       await session?.close();
       if (mounted) setState(() => _error = '设备确认失败：$error');
     }
-  }
-
-  void _startProgressPolling(SyncthingAccountTransferClientSession session) {
-    _progressTimer?.cancel();
-    unawaited(_refreshTransferProgress(session));
-    _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      unawaited(_refreshTransferProgress(session));
-    });
-  }
-
-  Future<void> _refreshTransferProgress(
-    SyncthingAccountTransferClientSession session,
-  ) async {
-    try {
-      final progress = await session.transferProgress();
-      if (!mounted || !identical(_session, session)) return;
-      setState(() => _transferProgress = progress);
-    } catch (_) {
-      // Progress is supplemental. The transfer itself keeps running if a
-      // status sample is temporarily unavailable.
-    }
-  }
-
-  void _stopProgressPolling() {
-    _progressTimer?.cancel();
-    _progressTimer = null;
   }
 
   Future<void> _copyResponse() async {
@@ -437,7 +417,6 @@ class _ReceiveAccountTransferPageState
 
   @override
   void dispose() {
-    _stopProgressPolling();
     if (!_finished) {
       unawaited(_session?.close());
     }
@@ -448,7 +427,11 @@ class _ReceiveAccountTransferPageState
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final response = _session?.response.encode();
-    final progress = _transferProgress;
+    final transferStatus = _transferStatus;
+    final progress = transferStatus?.progress;
+    final sourceConnected = transferStatus?.sourceConnected == true;
+    final peerConfirmed = _peerConnectedOnce || sourceConnected;
+    final folderState = transferStatus?.folderState;
     final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
         .clamp(0, 100)
         .toDouble();
@@ -501,47 +484,73 @@ class _ReceiveAccountTransferPageState
                       textAlign: TextAlign.center,
                     ),
                   ] else ...[
-                    const Text(
-                      '请让原设备扫描下面的回应二维码',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
+                    if (!peerConfirmed) ...[
+                      const Text(
+                        '请让原设备扫描下面的回应二维码',
+                        style: TextStyle(fontWeight: FontWeight.w800),
                       ),
-                      child: QrImageView(
-                        data: response,
-                        size: 250,
-                        backgroundColor: Colors.white,
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: QrImageView(
+                          data: response,
+                          size: 250,
+                          backgroundColor: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      '如果不方便扫码，也可以复制回应码，在原设备「添加设备」页面粘贴确认。',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: colors.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _copyResponse,
-                        icon: const Icon(Icons.copy_rounded),
-                        label: const Text('复制回应码'),
+                      const SizedBox(height: 14),
+                      Text(
+                        '如果不方便扫码，也可以复制回应码，在原设备「添加设备」页面粘贴确认。',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: colors.onSurfaceVariant),
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _copyResponse,
+                          icon: const Icon(Icons.copy_rounded),
+                          label: const Text('复制回应码'),
+                        ),
+                      ),
+                    ] else ...[
+                      Icon(
+                        sourceConnected
+                            ? Icons.check_circle_rounded
+                            : Icons.sync_rounded,
+                        size: 46,
+                        color: sourceConnected
+                            ? colors.primary
+                            : colors.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        sourceConnected
+                            ? '已连接原设备'
+                            : '原设备已确认，正在重新连接同步通道',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     LinearProgressIndicator(
                       value: hasMeasuredProgress ? completion / 100 : null,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      hasMeasuredProgress
-                          ? '正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
-                          : '原设备确认后会自动接收账号信息。完成后本页会自动关闭，不需要再操作。',
+                      sourceConnected && hasMeasuredProgress
+                          ? '已连接原设备 · 正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
+                          : sourceConnected
+                              ? '已连接原设备，正在等待账号数据到达……'
+                              : peerConfirmed
+                                  ? '原设备已经确认成功，正在恢复同步连接……'
+                                  : folderState == 'scanning'
+                                      ? '同步通道已准备，正在连接原设备……'
+                                      : '等待原设备确认并建立连接……',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
