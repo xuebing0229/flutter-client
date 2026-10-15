@@ -8,6 +8,7 @@ import '../../../core/features/app_feature_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_store.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../account/presentation/account_page.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/presentation/node_preset_page.dart';
@@ -78,13 +79,18 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Drawer(
-      width: MediaQuery.sizeOf(context).width * 0.78,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(26)),
-      ),
-      child: SafeArea(
-        child: AppToolMenu(
+    final texture = GuildTextureTheme.of(context);
+    const radius = BorderRadius.horizontal(right: Radius.circular(26));
+    return GuildGlassSurface(
+      borderRadius: radius,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      child: Drawer(
+        width: MediaQuery.sizeOf(context).width * 0.78,
+        backgroundColor: texture.enabled ? Colors.transparent : null,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(borderRadius: radius),
+        child: SafeArea(
+          child: AppToolMenu(
           orderStore: orderStore,
           productStore: productStore,
           nodePresetStore: nodePresetStore,
@@ -102,7 +108,8 @@ class AppDrawer extends StatelessWidget {
           showFeatureToggle: showFeatureToggle,
           onHideFeatureToggle: onHideFeatureToggle,
           closeBeforeTutorial: true,
-          padding: const EdgeInsets.fromLTRB(12, 24, 12, 20),
+            padding: const EdgeInsets.fromLTRB(12, 24, 12, 20),
+          ),
         ),
       ),
     );
