@@ -4,18 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_theme_palette.dart';
-import 'app_ui_texture.dart';
+import 'app_ui_style.dart';
 
 class AppThemeStore extends ChangeNotifier {
   Future<void> _persistTail = Future<void>.value();
   ThemeMode _mode = ThemeMode.system;
   String _paletteId = AppThemePalettes.guildOriginal.id;
-  AppUiTexture _texture = AppUiTexture.classic;
+  AppUiStyle _style = AppUiStyle.classic;
 
   ThemeMode get mode => _mode;
   String get paletteId => _paletteId;
   AppThemePalette get palette => AppThemePalettes.byId(_paletteId);
-  AppUiTexture get texture => _texture;
+  AppUiStyle get style => _style;
 
   Future<File> _modeFile() async {
     final dir = await getApplicationSupportDirectory();
@@ -27,7 +27,12 @@ class AppThemeStore extends ChangeNotifier {
     return File('${dir.path}/theme-palette.txt');
   }
 
-  Future<File> _textureFile() async {
+  Future<File> _styleFile() async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}/ui-style.txt');
+  }
+
+  Future<File> _legacyTextureFile() async {
     final dir = await getApplicationSupportDirectory();
     return File('${dir.path}/ui-texture.txt');
   }
@@ -69,17 +74,24 @@ class AppThemeStore extends ChangeNotifier {
     }
 
     try {
-      final file = await _textureFile();
+      final file = await _styleFile();
+      AppUiStyle? loaded;
       if (await file.exists()) {
-        final value = (await file.readAsString()).trim();
-        final loaded = AppUiTexture.byId(value);
-        if (loaded != _texture) {
-          _texture = loaded;
-          changed = true;
+        loaded = AppUiStyle.byId((await file.readAsString()).trim());
+      } else {
+        final legacyFile = await _legacyTextureFile();
+        if (await legacyFile.exists()) {
+          loaded = AppUiStyle.fromLegacyTextureId(
+            (await legacyFile.readAsString()).trim(),
+          );
         }
       }
+      if (loaded != null && loaded != _style) {
+        _style = loaded;
+        changed = true;
+      }
     } catch (_) {
-      // Keep the classic texture if the texture file is unreadable.
+      // Keep the classic UI style if the saved style is unreadable.
     }
 
     if (changed) notifyListeners();
@@ -88,7 +100,7 @@ class AppThemeStore extends ChangeNotifier {
   Future<void> resetToDefaults() async {
     await setMode(ThemeMode.system);
     await setPaletteId(AppThemePalettes.guildOriginal.id);
-    await setTexture(AppUiTexture.classic);
+    await setStyle(AppUiStyle.classic);
   }
 
   Future<void> setMode(ThemeMode mode) async {
@@ -130,19 +142,19 @@ class AppThemeStore extends ChangeNotifier {
     await operation;
   }
 
-  Future<void> setTexture(AppUiTexture texture) async {
-    if (_texture == texture) return;
+  Future<void> setStyle(AppUiStyle style) async {
+    if (_style == style) return;
 
-    _texture = texture;
+    _style = style;
     notifyListeners();
 
     final operation = _persistTail.then<void>((_) async {
       try {
-        final file = await _textureFile();
+        final file = await _styleFile();
         await file.parent.create(recursive: true);
-        await file.writeAsString(_texture.id, flush: true);
+        await file.writeAsString(_style.id, flush: true);
       } catch (_) {
-        // Texture switching should still work for this session.
+        // Style switching should still work for this session.
       }
     });
     _persistTail = operation;
