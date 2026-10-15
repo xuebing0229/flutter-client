@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_ui_style.dart';
+import '../../../core/theme/guild_visual_theme.dart';
+
 class SummaryCardSurface extends StatelessWidget {
   const SummaryCardSurface({
     required this.compact,
@@ -16,6 +19,43 @@ class SummaryCardSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = GuildStyleTheme.of(context);
+    if (style.isClassic) {
+      return _buildClassic(context);
+    }
+
+    final radius = style.cardBorderRadius;
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.content,
+      borderRadius: radius,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Stack(
+            children: [
+              if (_accentBar(context, style) case final accent?) accent,
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 12 : 18,
+                  compact ? 12 : 16,
+                  compact ? 12 : 18,
+                  compact ? 12 : 16,
+                ),
+                child: child,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClassic(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     const radius = 20.0;
@@ -81,7 +121,6 @@ class SummaryCardSurface extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  // Exactly the original spacing: visual strokes add no size.
                   padding: EdgeInsets.fromLTRB(
                     compact ? 12 : 18,
                     compact ? 12 : 16,
@@ -96,6 +135,41 @@ class SummaryCardSurface extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget? _accentBar(BuildContext context, GuildStyleTheme style) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return switch (style.style) {
+      AppUiStyle.minimal => Positioned(
+          left: 0,
+          top: 12,
+          bottom: 12,
+          width: 2,
+          child: ColoredBox(color: style.foreground),
+        ),
+      AppUiStyle.geometric => Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 5,
+          child: ColoredBox(color: primary),
+        ),
+      AppUiStyle.retroLight => Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          child: ColoredBox(color: primary),
+        ),
+      AppUiStyle.collage => Positioned(
+          left: 0,
+          top: 8,
+          bottom: 8,
+          width: 5,
+          child: ColoredBox(color: primary),
+        ),
+      _ => null,
+    };
   }
 }
 
@@ -112,11 +186,23 @@ class SummaryTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final style = GuildStyleTheme.of(context);
+    final radius = style.isClassic
+        ? BorderRadius.circular(8)
+        : BorderRadius.circular(
+            style.style == AppUiStyle.clay ? 12 : style.radius,
+          );
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: radius,
+        border: !style.isClassic && style.borderWidth > 0
+            ? Border.all(
+                color: style.borderColor,
+                width: style.borderWidth.clamp(0.8, 2.0),
+              )
+            : null,
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(
