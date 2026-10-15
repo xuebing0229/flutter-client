@@ -9,25 +9,29 @@ class GuildTextureTheme extends ThemeExtension<GuildTextureTheme> {
 
   final AppUiTexture texture;
 
-  bool get enabled => texture.isGlass;
+  bool get enabled => texture != AppUiTexture.classic;
 
   double get blurSigma => switch (texture) {
     AppUiTexture.classic => 0,
-    AppUiTexture.frosted => 10,
-    AppUiTexture.liquid => 16,
+    AppUiTexture.frosted => 14,
+    // On non-Apple platforms this is an adaptive glass fallback, not
+    // simulated optical refraction. Keep blur within the verified
+    // Glassmorphism 10-20px range.
+    AppUiTexture.liquid => 14,
   };
 
-  double get surfaceOpacity => switch (texture) {
-    AppUiTexture.classic => 1,
-    AppUiTexture.frosted => 0.78,
-    AppUiTexture.liquid => 0.62,
-  };
-
-  double get strongSurfaceOpacity => switch (texture) {
-    AppUiTexture.classic => 1,
-    AppUiTexture.frosted => 0.88,
-    AppUiTexture.liquid => 0.74,
-  };
+  double overlayOpacity(TargetPlatform platform) {
+    return switch (texture) {
+      AppUiTexture.classic => 1,
+      AppUiTexture.frosted => 0.80,
+      AppUiTexture.liquid =>
+        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS
+            ? 0.74
+            : platform == TargetPlatform.android
+            ? 0.86
+            : 0.94,
+    };
+  }
 
   static GuildTextureTheme of(BuildContext context) =>
       Theme.of(context).extension<GuildTextureTheme>() ??
@@ -47,8 +51,11 @@ class GuildTextureTheme extends ThemeExtension<GuildTextureTheme> {
   }
 }
 
-/// Visual-only theme tokens. Existing widget dimensions, icons and callbacks
-/// remain the responsibility of their original components.
+/// Visual-only theme tokens.
+///
+/// ui-ux-pro-max product guidance classifies this app as a productivity tool:
+/// content remains flat/clear, while glass is limited to navigation and
+/// overlays that have a meaningful backdrop.
 abstract final class GuildVisualTheme {
   static ThemeData build(
     ColorScheme colors, {
@@ -56,7 +63,6 @@ abstract final class GuildVisualTheme {
   }) {
     final dark = colors.brightness == Brightness.dark;
     final textureTheme = GuildTextureTheme(texture);
-    final glass = texture.isGlass;
     final outline = colors.outlineVariant.withValues(alpha: dark ? 0.66 : 0.72);
     final innerOutline = colors.primary.withValues(alpha: dark ? 0.20 : 0.15);
     final raisedSurface = Color.alphaBlend(
@@ -71,13 +77,6 @@ abstract final class GuildVisualTheme {
       colors.onSurface.withValues(alpha: dark ? 0.48 : 0.53),
       colors.primary,
     );
-    final glassSurface = raisedSurface.withValues(
-      alpha: textureTheme.strongSurfaceOpacity,
-    );
-    final glassNavigation = Color.alphaBlend(
-      colors.primary.withValues(alpha: dark ? 0.075 : 0.045),
-      colors.surfaceContainer,
-    ).withValues(alpha: textureTheme.strongSurfaceOpacity);
     final dialogOutline = GuildDoubleOutline(
       outerColor: outline,
       innerColor: innerOutline,
@@ -93,7 +92,8 @@ abstract final class GuildVisualTheme {
       useMaterial3: true,
       colorScheme: colors,
       extensions: <ThemeExtension<dynamic>>[textureTheme],
-      // A hint of palette tint, not a parchment texture or a second surface.
+      // Preserve the existing subtle guild tint. Texture modes do not replace
+      // the user's palette with a new hard-coded color system.
       scaffoldBackgroundColor: Color.alphaBlend(
         colors.primary.withValues(alpha: dark ? 0.025 : 0.018),
         colors.surface,
@@ -102,11 +102,13 @@ abstract final class GuildVisualTheme {
       highlightColor: colors.primary.withValues(alpha: 0.07),
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: glass ? glassSurface : colors.surface,
+        // A normal AppBar has no backdrop layer to blur. Keep it opaque rather
+        // than faking glass with a translucent fill.
+        backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: glass ? glassNavigation : colors.surfaceContainer,
+        backgroundColor: colors.surfaceContainer,
         indicatorColor: selectedSurface,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
@@ -117,34 +119,31 @@ abstract final class GuildVisualTheme {
         ),
         height: 70,
       ),
-      drawerTheme: glass
-          ? const DrawerThemeData(
-              backgroundColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-            )
-          : const DrawerThemeData(),
+      drawerTheme: const DrawerThemeData(),
+      // Content surfaces stay opaque in every texture mode. This is the core
+      // productivity-tool rule that the first glass pass violated.
       cardTheme: CardThemeData(
-        color: glass ? glassSurface : raisedSurface,
+        color: raisedSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: glass ? glassSurface : raisedSurface,
+        backgroundColor: raisedSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 7,
         shadowColor: Colors.black.withValues(alpha: dark ? 0.27 : 0.14),
         shape: dialogOutline,
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: glass ? glassSurface : raisedSurface,
+        color: raisedSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 7,
         shadowColor: Colors.black.withValues(alpha: dark ? 0.27 : 0.13),
         shape: menuOutline,
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: glass ? glassSurface : raisedSurface,
-        modalBackgroundColor: glass ? glassSurface : raisedSurface,
+        backgroundColor: raisedSurface,
+        modalBackgroundColor: raisedSurface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: const BorderRadius.vertical(
@@ -185,73 +184,59 @@ abstract final class GuildVisualTheme {
   }
 }
 
+/// Glass chrome for navigation/overlay surfaces only.
+///
+/// [backdropAvailable] must be true only when actual app content exists behind
+/// this widget. When false (for example the Windows side navigation), the
+/// surface stays opaque and uses platform-aligned subtle depth instead of
+/// pretending a blur/refraction exists.
 class GuildGlassSurface extends StatelessWidget {
   const GuildGlassSurface({
     required this.child,
     this.borderRadius = BorderRadius.zero,
     this.backgroundColor,
-    this.blur = true,
-    this.paintHighlight = true,
+    this.backdropAvailable = true,
     super.key,
   });
 
   final Widget child;
   final BorderRadius borderRadius;
   final Color? backgroundColor;
-  final bool blur;
-  final bool paintHighlight;
+  final bool backdropAvailable;
 
   @override
   Widget build(BuildContext context) {
     final texture = GuildTextureTheme.of(context);
     if (!texture.enabled) return child;
 
-    final colors = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final base = (backgroundColor ?? colors.surface).withValues(
-      alpha: texture.surfaceOpacity,
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final platform = theme.platform;
+    final canBlur = backdropAvailable && texture.blurSigma > 0;
+    final opacity = canBlur ? texture.overlayOpacity(platform) : 1.0;
+    final base = (backgroundColor ?? colors.surfaceContainer).withValues(
+      alpha: opacity,
     );
 
-    final decoration = BoxDecoration(
-      color: base,
-      borderRadius: borderRadius,
-      border: Border.all(
-        color: Color.alphaBlend(
-          colors.primary.withValues(
-            alpha: texture.texture == AppUiTexture.liquid
-                ? (dark ? 0.28 : 0.22)
-                : (dark ? 0.20 : 0.16),
-          ),
-          colors.outlineVariant.withValues(alpha: dark ? 0.68 : 0.58),
-        ),
-        width: 0.8,
-      ),
-      gradient: !paintHighlight
-          ? null
-          : LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: texture.texture == AppUiTexture.liquid
-                  ? <Color>[
-                      colors.onSurface.withValues(alpha: dark ? 0.09 : 0.14),
-                      colors.primary.withValues(alpha: dark ? 0.08 : 0.065),
-                      Colors.transparent,
-                    ]
-                  : <Color>[
-                      colors.onSurface.withValues(alpha: dark ? 0.035 : 0.07),
-                      colors.primary.withValues(alpha: dark ? 0.035 : 0.025),
-                      Colors.transparent,
-                    ],
-              stops: const <double>[0, 0.42, 1],
-            ),
-    );
-
+    // No decorative highlight gradients and no synthetic refraction.
+    // Liquid Glass is native to Apple platforms; Android/Windows use their
+    // platform-aligned material treatment instead.
     Widget surface = DecoratedBox(
-      decoration: decoration,
+      decoration: BoxDecoration(
+        color: base,
+        borderRadius: borderRadius,
+        border: Border.all(
+          color: colors.outlineVariant.withValues(
+            alpha: dark ? 0.58 : 0.72,
+          ),
+          width: 0.8,
+        ),
+      ),
       child: child,
     );
 
-    if (blur) {
+    if (canBlur) {
       surface = BackdropFilter(
         filter: ui.ImageFilter.blur(
           sigmaX: texture.blurSigma,
