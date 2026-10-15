@@ -1215,14 +1215,14 @@ class _GuildResolvedStyle {
 }
 
 Color _mix(Color base, Color overlay, double amount) {
-  return Color.lerp(base, overlay, amount.clamp(0.0, 1.0)) ?? base;
+  return Color.lerp(base, overlay, amount.clamp(0.0, 1.0).toDouble()) ?? base;
 }
 
 Color _rotateHue(Color color, double degrees) {
   final hsl = HSLColor.fromColor(color);
   return hsl
       .withHue((hsl.hue + degrees) % 360)
-      .withSaturation((hsl.saturation * 1.04).clamp(0.0, 1.0))
+      .withSaturation((hsl.saturation * 1.04).clamp(0.0, 1.0).toDouble())
       .toColor();
 }
 
