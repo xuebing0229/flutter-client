@@ -280,11 +280,15 @@ class _AppState extends State<App> {
     );
   }
 
-  ThemeData _lightTheme() =>
-      GuildVisualTheme.build(_paletteScheme(Brightness.light));
+  ThemeData _lightTheme() => GuildVisualTheme.build(
+        _paletteScheme(Brightness.light),
+        texture: _themeStore.texture,
+      );
 
-  ThemeData _darkTheme() =>
-      GuildVisualTheme.build(_paletteScheme(Brightness.dark));
+  ThemeData _darkTheme() => GuildVisualTheme.build(
+        _paletteScheme(Brightness.dark),
+        texture: _themeStore.texture,
+      );
 
   @override
   Widget build(BuildContext context) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/core/theme/guild_visual_theme.dart';
 import 'package:flutter_app/core/theme/app_theme_palette.dart';
+import 'package:flutter_app/core/theme/app_ui_texture.dart';
 import 'package:flutter_app/features/shared/presentation/summary_card_widgets.dart';
 
 void main() {
@@ -51,6 +52,33 @@ void main() {
       final scheme = ColorScheme.fromSeed(seedColor: palette.lightSeed);
       expect(GuildVisualTheme.build(scheme).colorScheme.primary, scheme.primary);
     }
+  });
+
+  test('classic texture remains the default and glass modes expose native tokens', () {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    final classic = GuildVisualTheme.build(scheme);
+    final frosted = GuildVisualTheme.build(
+      scheme,
+      texture: AppUiTexture.frosted,
+    );
+    final liquid = GuildVisualTheme.build(
+      scheme,
+      texture: AppUiTexture.liquid,
+    );
+
+    expect(
+      classic.extension<GuildTextureTheme>()!.texture,
+      AppUiTexture.classic,
+    );
+    expect(frosted.extension<GuildTextureTheme>()!.enabled, isTrue);
+    expect(
+      liquid.extension<GuildTextureTheme>()!.blurSigma,
+      greaterThan(frosted.extension<GuildTextureTheme>()!.blurSigma),
+    );
+    expect(
+      liquid.navigationBarTheme.backgroundColor!.a,
+      lessThan(classic.navigationBarTheme.backgroundColor!.a),
+    );
   });
 
   for (final brightness in Brightness.values) {

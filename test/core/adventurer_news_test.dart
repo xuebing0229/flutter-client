@@ -108,4 +108,9 @@ void main() {
     final picked = newsBetweenBuilds(144, 145);
     expect(picked.map((e) => e.title).toList(), ['新设备加入状态修复']);
   });
+
+  test('146 包含 UI 质感见闻', () {
+    final picked = newsBetweenBuilds(145, 146);
+    expect(picked.map((e) => e.title).toList(), ['UI 质感：毛玻璃与液态玻璃']);
+  });
 }
