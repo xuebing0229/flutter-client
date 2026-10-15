@@ -1,10 +1,62 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
+import 'app_ui_texture.dart';
+
+class GuildTextureTheme extends ThemeExtension<GuildTextureTheme> {
+  const GuildTextureTheme(this.texture);
+
+  final AppUiTexture texture;
+
+  bool get enabled => texture.isGlass;
+
+  double get blurSigma => switch (texture) {
+    AppUiTexture.classic => 0,
+    AppUiTexture.frosted => 10,
+    AppUiTexture.liquid => 16,
+  };
+
+  double get surfaceOpacity => switch (texture) {
+    AppUiTexture.classic => 1,
+    AppUiTexture.frosted => 0.78,
+    AppUiTexture.liquid => 0.62,
+  };
+
+  double get strongSurfaceOpacity => switch (texture) {
+    AppUiTexture.classic => 1,
+    AppUiTexture.frosted => 0.88,
+    AppUiTexture.liquid => 0.74,
+  };
+
+  static GuildTextureTheme of(BuildContext context) =>
+      Theme.of(context).extension<GuildTextureTheme>() ??
+      const GuildTextureTheme(AppUiTexture.classic);
+
+  @override
+  GuildTextureTheme copyWith({AppUiTexture? texture}) =>
+      GuildTextureTheme(texture ?? this.texture);
+
+  @override
+  GuildTextureTheme lerp(
+    covariant ThemeExtension<GuildTextureTheme>? other,
+    double t,
+  ) {
+    if (other is! GuildTextureTheme) return this;
+    return t < 0.5 ? this : other;
+  }
+}
 
 /// Visual-only theme tokens. Existing widget dimensions, icons and callbacks
 /// remain the responsibility of their original components.
 abstract final class GuildVisualTheme {
-  static ThemeData build(ColorScheme colors) {
+  static ThemeData build(
+    ColorScheme colors, {
+    AppUiTexture texture = AppUiTexture.classic,
+  }) {
     final dark = colors.brightness == Brightness.dark;
+    final textureTheme = GuildTextureTheme(texture);
+    final glass = texture.isGlass;
     final outline = colors.outlineVariant.withValues(alpha: dark ? 0.66 : 0.72);
     final innerOutline = colors.primary.withValues(alpha: dark ? 0.20 : 0.15);
     final raisedSurface = Color.alphaBlend(
@@ -19,6 +71,13 @@ abstract final class GuildVisualTheme {
       colors.onSurface.withValues(alpha: dark ? 0.48 : 0.53),
       colors.primary,
     );
+    final glassSurface = raisedSurface.withValues(
+      alpha: textureTheme.strongSurfaceOpacity,
+    );
+    final glassNavigation = Color.alphaBlend(
+      colors.primary.withValues(alpha: dark ? 0.075 : 0.045),
+      colors.surfaceContainer,
+    ).withValues(alpha: textureTheme.strongSurfaceOpacity);
     final dialogOutline = GuildDoubleOutline(
       outerColor: outline,
       innerColor: innerOutline,
@@ -33,6 +92,7 @@ abstract final class GuildVisualTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colors,
+      extensions: <ThemeExtension<dynamic>>[textureTheme],
       // A hint of palette tint, not a parchment texture or a second surface.
       scaffoldBackgroundColor: Color.alphaBlend(
         colors.primary.withValues(alpha: dark ? 0.025 : 0.018),
@@ -42,11 +102,11 @@ abstract final class GuildVisualTheme {
       highlightColor: colors.primary.withValues(alpha: 0.07),
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: colors.surface,
+        backgroundColor: glass ? glassSurface : colors.surface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colors.surfaceContainer,
+        backgroundColor: glass ? glassNavigation : colors.surfaceContainer,
         indicatorColor: selectedSurface,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
@@ -57,28 +117,32 @@ abstract final class GuildVisualTheme {
         ),
         height: 70,
       ),
+      drawerTheme: DrawerThemeData(
+        backgroundColor: glass ? Colors.transparent : colors.surface,
+        surfaceTintColor: Colors.transparent,
+      ),
       cardTheme: CardThemeData(
-        color: raisedSurface,
+        color: glass ? glassSurface : raisedSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: raisedSurface,
+        backgroundColor: glass ? glassSurface : raisedSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 7,
         shadowColor: Colors.black.withValues(alpha: dark ? 0.27 : 0.14),
         shape: dialogOutline,
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: raisedSurface,
+        color: glass ? glassSurface : raisedSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 7,
         shadowColor: Colors.black.withValues(alpha: dark ? 0.27 : 0.13),
         shape: menuOutline,
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: raisedSurface,
-        modalBackgroundColor: raisedSurface,
+        backgroundColor: glass ? glassSurface : raisedSurface,
+        modalBackgroundColor: glass ? glassSurface : raisedSurface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: const BorderRadius.vertical(
@@ -115,6 +179,89 @@ abstract final class GuildVisualTheme {
         color: colors.primary,
         linearTrackColor: colors.surfaceContainerHighest,
       ),
+    );
+  }
+}
+
+class GuildGlassSurface extends StatelessWidget {
+  const GuildGlassSurface({
+    required this.child,
+    this.borderRadius = BorderRadius.zero,
+    this.backgroundColor,
+    this.blur = true,
+    this.paintHighlight = true,
+    super.key,
+  });
+
+  final Widget child;
+  final BorderRadius borderRadius;
+  final Color? backgroundColor;
+  final bool blur;
+  final bool paintHighlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final texture = GuildTextureTheme.of(context);
+    if (!texture.enabled) return child;
+
+    final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final base = (backgroundColor ?? colors.surface).withValues(
+      alpha: texture.surfaceOpacity,
+    );
+
+    final decoration = BoxDecoration(
+      color: base,
+      borderRadius: borderRadius,
+      border: Border.all(
+        color: Color.alphaBlend(
+          colors.primary.withValues(
+            alpha: texture.texture == AppUiTexture.liquid
+                ? (dark ? 0.28 : 0.22)
+                : (dark ? 0.20 : 0.16),
+          ),
+          colors.outlineVariant.withValues(alpha: dark ? 0.68 : 0.58),
+        ),
+        width: 0.8,
+      ),
+      gradient: !paintHighlight
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: texture.texture == AppUiTexture.liquid
+                  ? <Color>[
+                      colors.onSurface.withValues(alpha: dark ? 0.09 : 0.14),
+                      colors.primary.withValues(alpha: dark ? 0.08 : 0.065),
+                      Colors.transparent,
+                    ]
+                  : <Color>[
+                      colors.onSurface.withValues(alpha: dark ? 0.035 : 0.07),
+                      colors.primary.withValues(alpha: dark ? 0.035 : 0.025),
+                      Colors.transparent,
+                    ],
+              stops: const <double>[0, 0.42, 1],
+            ),
+    );
+
+    Widget surface = DecoratedBox(
+      decoration: decoration,
+      child: child,
+    );
+
+    if (blur) {
+      surface = BackdropFilter(
+        filter: ui.ImageFilter.blur(
+          sigmaX: texture.blurSigma,
+          sigmaY: texture.blurSigma,
+        ),
+        child: surface,
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: surface,
     );
   }
 }
