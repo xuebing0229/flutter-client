@@ -8,7 +8,8 @@ import '../../../core/features/app_feature_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/theme/app_theme_store.dart';
-import '../../../core/theme/app_ui_texture.dart';
+import '../../../core/theme/app_ui_style.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../../core/update/beta_update_session.dart';
 import '../../../core/update/update_manifest.dart';
 import '../../../core/sync/sync_coordinator.dart';
@@ -641,14 +642,13 @@ class _SettingsPageState extends State<SettingsPage>
                   },
                 ),
                 const Divider(height: 24),
-                const Text('UI质感'),
+                const Text('UI风格'),
                 const SizedBox(height: 6),
                 AnimatedBuilder(
                   animation: widget.themeStore,
                   builder: (context, _) {
-                    final texture = widget.themeStore.texture;
                     return Text(
-                      '当前：${texture.label} · ${texture.description}',
+                      '当前：${widget.themeStore.style.label}',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -656,7 +656,7 @@ class _SettingsPageState extends State<SettingsPage>
                   },
                 ),
                 const SizedBox(height: 14),
-                _UiTextureSelector(store: widget.themeStore),
+                _UiStyleSelector(store: widget.themeStore),
                 const SizedBox(height: 8),
                 const Divider(height: 24),
                 AnimatedBuilder(
@@ -934,8 +934,8 @@ class _ThemeModeButton extends StatelessWidget {
   }
 }
 
-class _UiTextureSelector extends StatelessWidget {
-  const _UiTextureSelector({required this.store});
+class _UiStyleSelector extends StatelessWidget {
+  const _UiStyleSelector({required this.store});
 
   final AppThemeStore store;
 
@@ -944,85 +944,73 @@ class _UiTextureSelector extends StatelessWidget {
     return AnimatedBuilder(
       animation: store,
       builder: (context, _) {
-        return Row(
-          children: [
-            for (var index = 0; index < AppUiTexture.values.length; index++) ...[
-              if (index > 0) const SizedBox(width: 8),
-              Expanded(
-                child: _UiTextureButton(
-                  texture: AppUiTexture.values[index],
-                  selected: store.texture == AppUiTexture.values[index],
-                  onPressed: () =>
-                      store.setTexture(AppUiTexture.values[index]),
-                ),
-              ),
-            ],
-          ],
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 8.0;
+            final columns = constraints.maxWidth >= 540 ? 4 : 3;
+            final itemWidth =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final style in AppUiStyle.values)
+                  SizedBox(
+                    width: itemWidth,
+                    child: _UiStyleButton(
+                      style: style,
+                      selected: store.style == style,
+                      onPressed: () => store.setStyle(style),
+                    ),
+                  ),
+              ],
+            );
+          },
         );
       },
     );
   }
 }
 
-class _UiTextureButton extends StatelessWidget {
-  const _UiTextureButton({
-    required this.texture,
+class _UiStyleButton extends StatelessWidget {
+  const _UiStyleButton({
+    required this.style,
     required this.selected,
     required this.onPressed,
   });
 
-  final AppUiTexture texture;
+  final AppUiStyle style;
   final bool selected;
   final VoidCallback onPressed;
 
-  IconData get _icon => switch (texture) {
-    AppUiTexture.classic => Icons.layers_outlined,
-    AppUiTexture.frosted => Icons.blur_on_rounded,
-    AppUiTexture.liquid => Icons.water_drop_outlined,
-  };
-
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: selected
-          ? colors.secondaryContainer.withValues(alpha: 0.72)
-          : Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: selected ? colors.primary : colors.outline,
+    if (selected) {
+      return FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(46),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         ),
+        child: Text(
+          style.label,
+          maxLines: 1,
+          overflow: TextOverflow.fade,
+          softWrap: false,
+        ),
+      );
+    }
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(46),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _icon,
-                size: 22,
-                color: selected
-                    ? colors.onSecondaryContainer
-                    : colors.onSurfaceVariant,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                texture.label,
-                maxLines: 1,
-                style: TextStyle(
-                  color: selected
-                      ? colors.onSecondaryContainer
-                      : colors.onSurface,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
+      child: Text(
+        style.label,
+        maxLines: 1,
+        overflow: TextOverflow.fade,
+        softWrap: false,
       ),
     );
   }
@@ -1041,30 +1029,38 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const radius = 18.0;
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(radius),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+    final style = GuildStyleTheme.of(context);
+    final radius = style.isClassic
+        ? const BorderRadius.all(Radius.circular(18))
+        : style.cardBorderRadius;
+    return GuildStyledSurface(
+      borderRadius: radius,
+      role: GuildSurfaceRole.content,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic ? Theme.of(context).colorScheme.surface : Colors.transparent,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon),
+                  const SizedBox(width: 10),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            child,
-          ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              child,
+            ],
+          ),
         ),
       ),
     );
