@@ -1070,9 +1070,26 @@ class GuildStyleBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = GuildStyleTheme.of(context);
-    if (tokens.isClassic) return child;
-
     final primary = Theme.of(context).colorScheme.primary;
+    if (tokens.isClassic) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: <Color>[
+              Color.alphaBlend(
+                primary.withValues(alpha: 0.045),
+                Theme.of(context).scaffoldBackgroundColor,
+              ),
+              Theme.of(context).scaffoldBackgroundColor,
+            ],
+          ),
+        ),
+        child: child,
+      );
+    }
+
     final gradient = switch (tokens.style) {
       AppUiStyle.retroLight => LinearGradient(
           begin: Alignment.topLeft,
