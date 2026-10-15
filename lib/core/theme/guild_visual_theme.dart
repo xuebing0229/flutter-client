@@ -207,6 +207,7 @@ class GuildGlassSurface extends StatelessWidget {
     this.borderRadius = BorderRadius.zero,
     this.backgroundColor,
     this.backdropAvailable = true,
+    this.showBorder = true,
     super.key,
   });
 
@@ -214,6 +215,7 @@ class GuildGlassSurface extends StatelessWidget {
   final BorderRadius borderRadius;
   final Color? backgroundColor;
   final bool backdropAvailable;
+  final bool showBorder;
 
   @override
   Widget build(BuildContext context) {
@@ -237,12 +239,14 @@ class GuildGlassSurface extends StatelessWidget {
       decoration: BoxDecoration(
         color: base,
         borderRadius: borderRadius,
-        border: Border.all(
-          color: colors.outlineVariant.withValues(
-            alpha: dark ? 0.58 : 0.72,
-          ),
-          width: 0.8,
-        ),
+        border: showBorder
+            ? Border.all(
+                color: colors.outlineVariant.withValues(
+                  alpha: dark ? 0.58 : 0.72,
+                ),
+                width: 0.8,
+              )
+            : null,
       ),
       child: child,
     );
