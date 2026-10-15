@@ -113,4 +113,9 @@ void main() {
     final picked = newsBetweenBuilds(145, 146);
     expect(picked.map((e) => e.title).toList(), ['UI 质感：毛玻璃与液态玻璃']);
   });
+
+  test('147 包含 UI 质感重新打磨见闻', () {
+    final picked = newsBetweenBuilds(146, 147);
+    expect(picked.map((e) => e.title).toList(), ['UI 质感重新打磨']);
+  });
 }
