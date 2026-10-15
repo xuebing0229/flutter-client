@@ -79,17 +79,21 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final texture = GuildTextureTheme.of(context);
-    const radius = BorderRadius.horizontal(right: Radius.circular(26));
+    final uiStyle = GuildStyleTheme.of(context);
+    final radius = BorderRadius.horizontal(
+      right: Radius.circular(uiStyle.isClassic ? 26 : uiStyle.cardRadius),
+    );
 
-    return GuildGlassSurface(
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.chrome,
       borderRadius: radius,
+      backdropAvailable: uiStyle.isGlass,
       backgroundColor: Theme.of(context).colorScheme.surface,
       child: Drawer(
         width: MediaQuery.sizeOf(context).width * 0.78,
-        backgroundColor: texture.enabled ? Colors.transparent : null,
-        surfaceTintColor: texture.enabled ? Colors.transparent : null,
-        shape: const RoundedRectangleBorder(borderRadius: radius),
+        backgroundColor: uiStyle.isClassic ? null : Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: radius),
         child: SafeArea(
           child: AppToolMenu(
             orderStore: orderStore,
