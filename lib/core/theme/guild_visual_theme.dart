@@ -1,8 +1,7 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
 import 'app_ui_style.dart';
+import 'guild_style_effects.dart';
 
 enum GuildSurfaceRole { content, chrome, inset, emphasized }
 
@@ -1030,31 +1029,37 @@ class GuildStyledSurface extends StatelessWidget {
     final tokens = GuildStyleTheme.of(context);
     if (tokens.isClassic) return child;
 
-    Widget surface = DecoratedBox(
-      decoration: tokens.decoration(
-        role: role,
-        borderRadius: borderRadius,
-        backgroundColor: backgroundColor,
-      ),
+    final colors = Theme.of(context).colorScheme;
+    final resolvedRadius = borderRadius ??
+        (role == GuildSurfaceRole.content
+            ? tokens.cardBorderRadius
+            : tokens.surfaceBorderRadius);
+
+    return GuildSurfaceEffect(
+      style: tokens.style,
+      role: switch (role) {
+        GuildSurfaceRole.content => GuildEffectRole.content,
+        GuildSurfaceRole.chrome => GuildEffectRole.chrome,
+        GuildSurfaceRole.inset => GuildEffectRole.inset,
+        GuildSurfaceRole.emphasized => GuildEffectRole.emphasized,
+      },
+      primary: colors.primary,
+      accent2: tokens.accent2,
+      accent3: tokens.accent3,
+      background: tokens.background,
+      surface: backgroundColor ?? tokens.surface,
+      surfaceAlt: tokens.surfaceAlt,
+      foreground: tokens.foreground,
+      borderColor: tokens.borderColor,
+      borderWidth: tokens.borderWidth,
+      borderRadius: resolvedRadius,
+      shadows: role == GuildSurfaceRole.chrome
+          ? tokens.chromeShadows
+          : tokens.shadows,
+      glassBlur: tokens.glassBlur,
+      glassOpacity: tokens.glassOpacity,
+      backdropAvailable: backdropAvailable,
       child: child,
-    );
-
-    if (tokens.isGlass && backdropAvailable && tokens.glassBlur > 0) {
-      surface = BackdropFilter(
-        filter: ui.ImageFilter.blur(
-          sigmaX: tokens.glassBlur,
-          sigmaY: tokens.glassBlur,
-        ),
-        child: surface,
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: borderRadius ??
-          (role == GuildSurfaceRole.content
-              ? tokens.cardBorderRadius
-              : tokens.surfaceBorderRadius),
-      child: surface,
     );
   }
 }
@@ -1070,7 +1075,7 @@ class GuildStyleBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = GuildStyleTheme.of(context);
-    final primary = Theme.of(context).colorScheme.primary;
+    final colors = Theme.of(context).colorScheme;
     if (tokens.isClassic) {
       return DecoratedBox(
         decoration: BoxDecoration(
@@ -1079,7 +1084,7 @@ class GuildStyleBackdrop extends StatelessWidget {
             end: Alignment.bottomLeft,
             colors: <Color>[
               Color.alphaBlend(
-                primary.withValues(alpha: 0.045),
+                colors.primary.withValues(alpha: 0.045),
                 Theme.of(context).scaffoldBackgroundColor,
               ),
               Theme.of(context).scaffoldBackgroundColor,
@@ -1090,59 +1095,12 @@ class GuildStyleBackdrop extends StatelessWidget {
       );
     }
 
-    final gradient = switch (tokens.style) {
-      AppUiStyle.retroLight => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            _mix(tokens.background, primary, 0.035),
-            tokens.background,
-          ],
-        ),
-      AppUiStyle.retroDark => RadialGradient(
-          center: const Alignment(-0.65, -0.75),
-          radius: 1.45,
-          colors: <Color>[
-            primary.withValues(alpha: 0.13),
-            tokens.background,
-          ],
-        ),
-      AppUiStyle.fluorescent => RadialGradient(
-          center: const Alignment(-0.75, -0.85),
-          radius: 1.55,
-          colors: <Color>[
-            primary.withValues(alpha: 0.12),
-            tokens.background,
-          ],
-        ),
-      AppUiStyle.glass => RadialGradient(
-          center: const Alignment(-0.55, -0.75),
-          radius: 1.35,
-          colors: <Color>[
-            primary.withValues(alpha: 0.18),
-            tokens.accent2.withValues(alpha: 0.07),
-            tokens.background,
-          ],
-          stops: const <double>[0, 0.46, 1],
-        ),
-      AppUiStyle.collage => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            tokens.accent2.withValues(alpha: 0.07),
-            tokens.background,
-            primary.withValues(alpha: 0.06),
-          ],
-        ),
-      _ => LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[tokens.background, tokens.background],
-        ),
-    };
-
-    return DecoratedBox(
-      decoration: BoxDecoration(gradient: gradient),
+    return GuildBackdropEffect(
+      style: tokens.style,
+      primary: colors.primary,
+      accent2: tokens.accent2,
+      accent3: tokens.accent3,
+      background: tokens.background,
       child: child,
     );
   }
