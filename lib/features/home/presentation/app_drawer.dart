@@ -81,6 +81,7 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final texture = GuildTextureTheme.of(context);
     const radius = BorderRadius.horizontal(right: Radius.circular(26));
+
     return GuildGlassSurface(
       borderRadius: radius,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -91,23 +92,23 @@ class AppDrawer extends StatelessWidget {
         shape: const RoundedRectangleBorder(borderRadius: radius),
         child: SafeArea(
           child: AppToolMenu(
-          orderStore: orderStore,
-          productStore: productStore,
-          nodePresetStore: nodePresetStore,
-          focusStore: focusStore,
-          desktopPetSettings: desktopPetSettings,
-          onOpenOrder: onOpenOrder,
-          themeStore: themeStore,
-          featureStore: featureStore,
-          accountStore: accountStore,
-          syncCoordinator: syncCoordinator,
-          onApplyWorkspaceSettings: onApplyWorkspaceSettings,
-          onBeforeSignOut: onBeforeSignOut,
-          onBeforeNavigate: () => Navigator.of(context).pop(),
-          onShowTutorial: onShowTutorial,
-          showFeatureToggle: showFeatureToggle,
-          onHideFeatureToggle: onHideFeatureToggle,
-          closeBeforeTutorial: true,
+            orderStore: orderStore,
+            productStore: productStore,
+            nodePresetStore: nodePresetStore,
+            focusStore: focusStore,
+            desktopPetSettings: desktopPetSettings,
+            onOpenOrder: onOpenOrder,
+            themeStore: themeStore,
+            featureStore: featureStore,
+            accountStore: accountStore,
+            syncCoordinator: syncCoordinator,
+            onApplyWorkspaceSettings: onApplyWorkspaceSettings,
+            onBeforeSignOut: onBeforeSignOut,
+            onBeforeNavigate: () => Navigator.of(context).pop(),
+            onShowTutorial: onShowTutorial,
+            showFeatureToggle: showFeatureToggle,
+            onHideFeatureToggle: onHideFeatureToggle,
+            closeBeforeTutorial: true,
             padding: const EdgeInsets.fromLTRB(12, 24, 12, 20),
           ),
         ),
