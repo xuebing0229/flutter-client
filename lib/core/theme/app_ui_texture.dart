@@ -7,12 +7,12 @@ enum AppUiTexture {
   frosted(
     id: 'frosted',
     label: '毛玻璃',
-    description: '柔和磨砂与半透明层次，背景会轻微虚化。',
+    description: '仅导航与浮层使用磨砂玻璃，内容区域保持清晰。',
   ),
   liquid(
     id: 'liquid',
     label: '液态玻璃',
-    description: '更通透的玻璃、高光与边缘层次。',
+    description: '平台自适应高级质感；非 Apple 平台不伪造折射。',
   );
 
   const AppUiTexture({
