@@ -1566,6 +1566,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             // A desktop rail is adjacent to content, not over
                             // it. Fluent-style liquid fallback stays opaque.
                             backdropAvailable: false,
+                            showBorder: false,
                             backgroundColor:
                                 texture.texture == AppUiTexture.liquid
                                 ? Theme.of(context)
