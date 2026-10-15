@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_ui_texture.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 
 class SummaryCardSurface extends StatelessWidget {
@@ -22,6 +23,7 @@ class SummaryCardSurface extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final texture = GuildTextureTheme.of(context);
     const radius = 20.0;
+
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
@@ -36,9 +38,8 @@ class SummaryCardSurface extends StatelessWidget {
       child: GuildGlassSurface(
         borderRadius: BorderRadius.circular(radius),
         backgroundColor: colors.surface,
-        // Scrolling lists can contain many cards. Keep their material
-        // translucent, but reserve the expensive backdrop blur for larger
-        // shared surfaces such as navigation, drawer and settings panels.
+        // Lists can contain many cards. Keep the card material translucent,
+        // but reserve backdrop blur for the larger shared glass panels.
         blur: false,
         child: Material(
           color: texture.enabled ? Colors.transparent : colors.surface,
@@ -63,12 +64,12 @@ class SummaryCardSurface extends StatelessWidget {
                   colors: texture.enabled
                       ? <Color>[
                           colors.onSurface.withValues(
-                            alpha: texture.texture.name == 'liquid'
+                            alpha: texture.texture == AppUiTexture.liquid
                                 ? (dark ? 0.055 : 0.095)
                                 : (dark ? 0.025 : 0.055),
                           ),
                           colors.primary.withValues(
-                            alpha: texture.texture.name == 'liquid'
+                            alpha: texture.texture == AppUiTexture.liquid
                                 ? (dark ? 0.065 : 0.045)
                                 : (dark ? 0.03 : 0.02),
                           ),
@@ -85,38 +86,38 @@ class SummaryCardSurface extends StatelessWidget {
                         ],
                 ),
               ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Padding(
-                      padding: const EdgeInsets.all(3),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(radius - 4),
-                          border: Border.all(
-                            color: colors.primary.withValues(
-                              alpha: dark ? 0.19 : 0.14,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius - 4),
+                            border: Border.all(
+                              color: colors.primary.withValues(
+                                alpha: dark ? 0.19 : 0.14,
+                              ),
+                              width: 0.7,
                             ),
-                            width: 0.7,
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Padding(
-                  // Exactly the original spacing: visual strokes add no size.
-                  padding: EdgeInsets.fromLTRB(
-                    compact ? 12 : 18,
-                    compact ? 12 : 16,
-                    compact ? 12 : 18,
-                    compact ? 12 : 16,
+                  Padding(
+                    // Exactly the original spacing: visual strokes add no size.
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 12 : 18,
+                      compact ? 12 : 16,
+                      compact ? 12 : 18,
+                      compact ? 12 : 16,
+                    ),
+                    child: child,
                   ),
-                  child: child,
-                ),
-              ],
-            ),
+                ],
+              ),
             ),
           ),
         ),
