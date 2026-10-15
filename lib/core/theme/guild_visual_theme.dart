@@ -62,6 +62,9 @@ abstract final class GuildVisualTheme {
     AppUiTexture texture = AppUiTexture.classic,
   }) {
     final dark = colors.brightness == Brightness.dark;
+    final platform = defaultTargetPlatform;
+    final liquidAndroid =
+        texture == AppUiTexture.liquid && platform == TargetPlatform.android;
     final textureTheme = GuildTextureTheme(texture);
     final outline = colors.outlineVariant.withValues(alpha: dark ? 0.66 : 0.72);
     final innerOutline = colors.primary.withValues(alpha: dark ? 0.20 : 0.15);
@@ -109,7 +112,8 @@ abstract final class GuildVisualTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: colors.surfaceContainer,
-        indicatorColor: selectedSurface,
+        indicatorColor:
+            liquidAndroid ? colors.secondaryContainer : selectedSurface,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
@@ -157,6 +161,10 @@ abstract final class GuildVisualTheme {
           elevation: const WidgetStatePropertyAll(0),
           shadowColor: const WidgetStatePropertyAll(Colors.transparent),
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          // Material 3 Expressive fallback for the non-Apple "liquid" mode.
+          shape: liquidAndroid
+              ? const WidgetStatePropertyAll(StadiumBorder())
+              : null,
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -164,6 +172,9 @@ abstract final class GuildVisualTheme {
           elevation: const WidgetStatePropertyAll(0),
           shadowColor: const WidgetStatePropertyAll(Colors.transparent),
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          shape: liquidAndroid
+              ? const WidgetStatePropertyAll(StadiumBorder())
+              : null,
         ),
       ),
       dividerTheme: DividerThemeData(
