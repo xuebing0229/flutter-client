@@ -117,10 +117,12 @@ abstract final class GuildVisualTheme {
         ),
         height: 70,
       ),
-      drawerTheme: DrawerThemeData(
-        backgroundColor: glass ? Colors.transparent : colors.surface,
-        surfaceTintColor: Colors.transparent,
-      ),
+      drawerTheme: glass
+          ? const DrawerThemeData(
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+            )
+          : const DrawerThemeData(),
       cardTheme: CardThemeData(
         color: glass ? glassSurface : raisedSurface,
         surfaceTintColor: Colors.transparent,
