@@ -15,6 +15,8 @@ import '../../../core/storage/app_data_persistence.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
+import '../../../core/theme/app_ui_texture.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
 import '../../focus/state/focus_store.dart';
@@ -168,6 +170,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           backup != null &&
           !bootstrapOnly &&
           (backup.settings.containsKey('themeMode') ||
+              backup.settings.containsKey('uiTexture') ||
               backup.settings.containsKey('features') ||
               backup.settings.keys.any(
                 (key) => key.startsWith(_featureSettingPrefix),
@@ -702,6 +705,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'id': SyncCoordinator.settingsRecordId,
       'themeMode': widget.themeStore.mode.name,
       'themePaletteId': widget.themeStore.paletteId,
+      'uiTexture': widget.themeStore.texture.id,
       for (final entry in features.entries)
         '$_featureSettingPrefix${entry.key}': entry.value,
       _orderCardViewSettingKey: _orderCardView,
@@ -729,6 +733,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await widget.themeStore.setPaletteId(paletteId);
     } else if (paletteId != null) {
       throw const FormatException('同步主题色无效。');
+    }
+
+    final textureId = settings['uiTexture'];
+    if (textureId is String && AppUiTexture.containsId(textureId)) {
+      await widget.themeStore.setTexture(AppUiTexture.byId(textureId));
+    } else if (textureId == null) {
+      // Older backups predate this setting and therefore mean "classic".
+      await widget.themeStore.setTexture(AppUiTexture.classic);
+    } else {
+      throw const FormatException('同步 UI 质感设置无效。');
     }
 
     // New settings records keep each feature as its own CRDT field so two
@@ -1442,6 +1456,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     };
     final width = MediaQuery.sizeOf(context).width;
     final useDesktopLayout = width >= 900;
+    final texture = GuildTextureTheme.of(context);
 
     final tabBody = IndexedStack(
       index: _index,
@@ -1650,20 +1665,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             },
       bottomNavigationBar: !_ready || tabs.length <= 1 || useDesktopLayout
           ? null
-          : NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (value) {
-                FocusManager.instance.primaryFocus?.unfocus();
-                setState(() => _index = value);
-              },
-              destinations: [
-                for (final tab in tabs)
-                  NavigationDestination(
-                    icon: Icon(tab.icon),
-                    selectedIcon: Icon(tab.selectedIcon),
-                    label: tab.label,
-                  ),
-              ],
+          : GuildGlassSurface(
+              backgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainer,
+              child: NavigationBar(
+                backgroundColor:
+                    texture.enabled ? Colors.transparent : null,
+                selectedIndex: _index,
+                onDestinationSelected: (value) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  setState(() => _index = value);
+                },
+                destinations: [
+                  for (final tab in tabs)
+                    NavigationDestination(
+                      icon: Icon(tab.icon),
+                      selectedIcon: Icon(tab.selectedIcon),
+                      label: tab.label,
+                    ),
+                ],
+              ),
             ),
     );
 
