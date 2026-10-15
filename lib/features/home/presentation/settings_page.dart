@@ -894,15 +894,31 @@ class _ThemeModeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final uiStyle = GuildStyleTheme.of(context);
+    final radius = uiStyle.isClassic
+        ? BorderRadius.circular(16)
+        : uiStyle.surfaceBorderRadius;
+    final side = BorderSide(
+      color: selected
+          ? colors.primary
+          : uiStyle.isClassic
+          ? colors.outline
+          : uiStyle.borderColor,
+      width: uiStyle.isClassic
+          ? 1
+          : uiStyle.borderWidth <= 0
+          ? 1
+          : uiStyle.borderWidth,
+    );
 
     return Material(
       color: selected ? colors.secondaryContainer : Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: selected ? colors.primary : colors.outline),
+        borderRadius: radius,
+        side: side,
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: radius,
         onTap: onPressed,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
