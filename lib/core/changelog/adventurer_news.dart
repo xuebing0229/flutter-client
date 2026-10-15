@@ -153,6 +153,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'UI 质感重新打磨',
     description: '重新整理毛玻璃与液态玻璃的使用范围：排单、成品与设置等内容卡片恢复清晰不透明，毛玻璃仅保留在确实有背景层的导航和浮层；液态玻璃在 Android 与 Windows 改为平台自适应质感，不再用渐变高光假装折射。经典模式保持不变。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 148,
+    title: '十二种 UI 风格',
+    description: '外观里的“UI质感”升级为“UI风格”，新增浮雕、极简、粗边、几何、复古浅色、复古深色、荧光、拼贴、黑白、黏土和玻璃，共十二种风格可选。每种风格会同时改变卡片、按钮、输入框、导航、弹窗、进度与背景等共享组件，并继续使用你当前选择的 UI 主题色；经典风格保持原版界面。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

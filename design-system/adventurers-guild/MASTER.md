@@ -1,89 +1,127 @@
-# Adventurer's Guild UI Design System
+# 冒险者公会 UI 风格系统
 
-> Source of truth for UI work in 冒险者公会.
-> Derived from verified rules in nextlevelbuilder/ui-ux-pro-max-skill.
-> Do not replace these choices with ad-hoc visual experiments.
+> 这是 UI 风格实现的单一真源。
+> 视觉依据优先级：用户提供的《14 种经典的 UI/UX 设计风格》DOCX 内嵌 HTML/CSS > 当前 App 已确认布局 > 通用 UI/UX 规则。
+> 不要自行把风格改成“更高级”“更克制”或其它审美方向。
 
-## Product fit
+## 设置结构
 
-- Product type: Productivity Tool / freelancer workflow tool.
-- Primary style: Flat Design + Micro-interactions.
-- Secondary style: Minimalism & Swiss Style + Soft UI Evolution.
-- Goal: fast scanning, clear hierarchy, functional color, low visual noise.
-- Existing guild/fantasy identity may remain as restrained accents, but must not reduce task readability.
+外观设置分成两个独立维度：
 
-## Texture modes
+- **UI主题色**：决定主强调色。
+- **UI风格**：决定形状、阴影、边框、材质、背景关系和组件语言。
 
-### Classic
+切换 UI 风格不能修改或覆盖用户保存的主题色；渲染时将两者组合。
 
-- Preserve the established app surfaces and layout.
-- No glass treatment.
+## UI 风格名称
 
-### Frosted Glass
+设置页只显示这些简短中文名，不显示英文设计术语，不加副标题：
 
-- Glassmorphism is allowed only where there is a real layer behind the surface:
-  - mobile bottom navigation
-  - mobile drawer
-  - overlay / floating chrome where background content genuinely exists behind it
-- Do not apply translucency to order cards, product cards, settings cards, dense reading surfaces, or data-heavy content.
-- Backdrop blur target: 10–20px equivalent.
-- Translucent surface opacity: roughly 70–85% in Flutter Material terms, tuned for 4.5:1 text contrast.
-- Border: thin, low-contrast, semantic; no decorative diagonal shine.
-- Never add fake glow, fake refraction, or decorative gradients just to make glass visible.
+1. 经典
+2. 浮雕
+3. 极简
+4. 粗边
+5. 几何
+6. 复古浅色
+7. 复古深色
+8. 荧光
+9. 拼贴
+10. 黑白
+11. 黏土
+12. 玻璃
 
-### Liquid Glass
+## 文档对应关系
 
-- True Liquid Glass is an Apple platform material for system-aligned navigation and controls.
-- Android and Windows must not fake Apple refraction/lensing.
-- Android fallback: Material 3 Expressive principles — tonal elevation, semantic color, clear state layers, rounded controls, no harsh box shadows.
-- Windows fallback: Fluent 2 principles — calm hierarchy, standardized corners, semantic tokens, subtle depth.
-- Content surfaces remain opaque and readable.
-- If Apple platform support is added later, use native platform Liquid Glass for navigation/controls only, with reduced-transparency and reduced-motion fallbacks.
+- 浮雕 → `neumorphism-components.html`
+- 极简 → `minimalism-components.html`
+- 粗边 → `neo-brutalism-components.html`
+- 几何 → `bauhaus-components.html`
+- 复古浅色 → `retrofuturism-components-light.html`
+- 复古深色 → `retrofuturism-components.html`
+- 荧光 → `acid-graphics-components.html`
+- 拼贴 → `anti-design-components.html`
+- 黑白 → `brutalism-components.html`
+- 黏土 → `claymorphism-components.html`
+- 玻璃 → `liquid-glass-components.html`
 
-## Content surfaces
+经典保持冒险者公会现有 UI，不改变现有布局、图标和操作。
 
-- Order/product cards: opaque content layer in all texture modes.
-- Settings cards: opaque content layer in all texture modes.
-- Dialogs and sheets: prioritize legibility; do not simulate glass unless a real blurred backdrop is provided.
-- Avoid mixing flat, skeuomorphic, and glass treatments within the same hierarchy level.
+## 主题色组合规则
 
-## Layout and spacing
+主题色始终保留为 `ColorScheme.primary`。
 
-- Use the existing 4/8dp rhythm.
-- Keep section spacing in consistent tiers such as 8 / 16 / 24 / 32.
-- Preserve safe-area clearance and existing bottom-navigation clearance.
-- Do not change existing app information architecture as part of texture work.
+- 浮雕、极简、粗边、黑白、黏土、玻璃：主题色直接用于主按钮、选中态、进度和重点边框。
+- 几何：主题色作为主几何色，其它色由主题色旋转色相派生，不固定死用红黄蓝。
+- 复古浅色、复古深色：主题色作为主强调色，再派生邻近/对比色形成复古多色关系。
+- 荧光：主题色作为主荧光色，第二荧光色由主题色派生。
+- 拼贴：主题色是最主要撞色，其它撞色由主题色派生。
 
-## Interaction
+## 组件覆盖范围
 
-- Touch targets: at least 48dp on Android.
-- Press feedback should be visible within 80–150ms.
-- State changes should not shift layout.
-- Prefer Material/Flutter state layers and implicit animations for simple feedback.
-- Respect reduced-motion behavior where applicable.
+每个风格必须同时作用于共享组件，而不是只改背景：
 
-## Color and contrast
+- 页面背景
+- AppBar / 底部导航 / 抽屉 / Windows 侧栏
+- 排单卡片 / 成品卡片 / 设置卡片
+- 按钮
+- 输入框
+- 开关 / 复选框 / 单选
+- 标签 / Chip
+- 进度条
+- 弹窗 / 菜单 / BottomSheet
+- FAB
+- 选中态和边框
 
-- Continue using the existing ColorScheme and user-selected UI theme color.
-- Do not hardcode a new visual palette for texture modes.
-- Normal text must remain >= 4.5:1 contrast in both light and dark mode.
-- Meaningful icons / control boundaries should remain >= 3:1 against adjacent surfaces.
-- Glass tint should be semantic and subtle, never the dominant content color.
+## 关键视觉参数
 
-## Flutter implementation
+### 浮雕
 
-- Use ThemeData + ColorScheme + ThemeExtension for design tokens.
-- Use BackdropFilter only where a meaningful backdrop exists.
-- Avoid rebuilding full trees for local visual state changes.
-- Use const widgets where possible.
-- Use RepaintBoundary for costly animated/blurred regions if profiling shows repaint pressure.
-- Do not introduce a third-party glass/refraction library unless a verified native/platform requirement cannot be met.
+参考文档：背景与卡片同色；双向浅/深阴影；圆角 12–18；输入区域偏内凹；无明显边框。
 
-## Forbidden patterns
+### 极简
 
-- No glass on every card.
-- No fake Apple-style refraction on Android/Windows.
-- No diagonal highlight gradients pretending to be optical glass.
-- No low-contrast translucent content surfaces.
-- No arbitrary icon-size changes, random spacing, or mixed filled/outline icon styles at the same hierarchy.
-- No visual change that hides content under fixed navigation.
+参考文档：低装饰；0 圆角或极小圆角；细分隔线；无阴影；卡片可用细竖线建立层级。
+
+### 粗边
+
+参考文档：3–4px 硬边框；0 圆角；硬偏移阴影；高对比；主题色作为主色块。
+
+### 几何
+
+参考文档：3px 左右硬边；0 圆角；几何色块；轻硬阴影；主题色及其派生色共同使用。
+
+### 复古浅色
+
+参考文档：暖浅背景；2px 边框；4–8px 圆角；主题色与派生色形成复古多色；轻硬偏移阴影。
+
+### 复古深色
+
+参考文档：深色底；细霓虹边；主题色与派生色发光；圆角 4–8；允许 glow。
+
+### 荧光
+
+参考文档：接近黑色背景；1–2px 荧光边；高饱和主题色；明显 glow；圆角接近 0。
+
+### 拼贴
+
+参考文档：不规则圆角；较粗边；多色硬阴影和撞色；主题色为主撞色。
+
+### 黑白
+
+参考文档：灰阶背景；2px 直线边框；0 圆角；无柔和阴影；主题色只用于必要强调。
+
+### 黏土
+
+参考文档：20px 左右厚圆角；厚实偏移阴影；柔和表面；主题色作为主色块并派生多色。
+
+### 玻璃
+
+参考文档：深色背景；半透明表面；约 16–18px 模糊；细亮边；主题色参与多层渐变和 glow；允许示范图中的高光效果。
+
+## 不允许
+
+- 不要只给卡片换一个透明度就称为新风格。
+- 不要把 12 个风格做成同一个圆角模板只换颜色。
+- 不要用英文风格名出现在设置页。
+- 不要因为风格切换改变排单业务布局、功能入口、字段或数据。
+- 不要覆盖用户选中的 UI 主题色。

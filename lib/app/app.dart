@@ -282,12 +282,12 @@ class _AppState extends State<App> {
 
   ThemeData _lightTheme() => GuildVisualTheme.build(
         _paletteScheme(Brightness.light),
-        texture: _themeStore.texture,
+        style: _themeStore.style,
       );
 
   ThemeData _darkTheme() => GuildVisualTheme.build(
         _paletteScheme(Brightness.dark),
-        texture: _themeStore.texture,
+        style: _themeStore.style,
       );
 
   @override

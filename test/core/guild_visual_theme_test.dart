@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_app/core/theme/guild_visual_theme.dart';
 import 'package:flutter_app/core/theme/app_theme_palette.dart';
-import 'package:flutter_app/core/theme/app_ui_texture.dart';
+import 'package:flutter_app/core/theme/app_ui_style.dart';
+import 'package:flutter_app/core/theme/guild_visual_theme.dart';
 import 'package:flutter_app/features/shared/presentation/summary_card_widgets.dart';
 
 void main() {
-  test('refined borders do not consume dialog or menu layout space', () {
+  test('refined classic borders do not consume layout space', () {
     const border = GuildDoubleOutline(
       outerColor: Colors.green,
       innerColor: Colors.grey,
@@ -19,7 +19,9 @@ void main() {
     );
   });
 
-  testWidgets('compact card retains its original padding and 1 px border', (tester) async {
+  testWidgets('classic compact card keeps its original geometry', (
+    tester,
+  ) async {
     final childKey = GlobalKey();
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
 
@@ -46,55 +48,101 @@ void main() {
     expect(card.size, const Size(98, 52));
   });
 
-  test('all existing palette definitions remain available', () {
+  test('twelve UI style presets are available with the agreed labels', () {
+    expect(
+      AppUiStyle.values.map((style) => style.label).toList(),
+      <String>[
+        '经典',
+        '浮雕',
+        '极简',
+        '粗边',
+        '几何',
+        '复古浅色',
+        '复古深色',
+        '荧光',
+        '拼贴',
+        '黑白',
+        '黏土',
+        '玻璃',
+      ],
+    );
+  });
+
+  test('every UI style keeps the selected theme color as primary', () {
     expect(AppThemePalettes.all.length, 17);
     for (final palette in AppThemePalettes.all) {
       final scheme = ColorScheme.fromSeed(seedColor: palette.lightSeed);
-      expect(GuildVisualTheme.build(scheme).colorScheme.primary, scheme.primary);
+      for (final style in AppUiStyle.values) {
+        final theme = GuildVisualTheme.build(scheme, style: style);
+        expect(
+          theme.colorScheme.primary,
+          scheme.primary,
+          reason: 'UI style must keep the selected theme color',
+        );
+      }
     }
   });
 
-  test('glass modes keep productivity content surfaces opaque', () {
+  test('document-backed presets expose visibly different surface tokens', () {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
-    final classic = GuildVisualTheme.build(scheme);
-    final frosted = GuildVisualTheme.build(
+    final relief = GuildVisualTheme.build(
       scheme,
-      texture: AppUiTexture.frosted,
-    );
-    final liquid = GuildVisualTheme.build(
+      style: AppUiStyle.relief,
+    ).extension<GuildStyleTheme>()!;
+    final bold = GuildVisualTheme.build(
       scheme,
-      texture: AppUiTexture.liquid,
+      style: AppUiStyle.bold,
+    ).extension<GuildStyleTheme>()!;
+    final clay = GuildVisualTheme.build(
+      scheme,
+      style: AppUiStyle.clay,
+    ).extension<GuildStyleTheme>()!;
+    final glass = GuildVisualTheme.build(
+      scheme,
+      style: AppUiStyle.glass,
+    ).extension<GuildStyleTheme>()!;
+
+    expect(relief.shadows.length, 2);
+    expect(bold.borderWidth, greaterThanOrEqualTo(3));
+    expect(bold.cardRadius, 0);
+    expect(clay.cardRadius, greaterThanOrEqualTo(20));
+    expect(glass.glassBlur, greaterThanOrEqualTo(16));
+    expect(glass.glassOpacity, lessThan(0.8));
+  });
+
+  test('named retro variants keep their intended light and dark bases', () {
+    final lightInput = ColorScheme.fromSeed(seedColor: Colors.teal);
+    final darkInput = ColorScheme.fromSeed(
+      seedColor: Colors.teal,
+      brightness: Brightness.dark,
     );
 
     expect(
-      classic.extension<GuildTextureTheme>()!.texture,
-      AppUiTexture.classic,
+      GuildVisualTheme.build(
+        darkInput,
+        style: AppUiStyle.retroLight,
+      ).brightness,
+      Brightness.light,
     );
-    expect(frosted.extension<GuildTextureTheme>()!.enabled, isTrue);
-    expect(frosted.extension<GuildTextureTheme>()!.blurSigma, inInclusiveRange(10, 20));
-    expect(liquid.extension<GuildTextureTheme>()!.blurSigma, inInclusiveRange(10, 20));
-
-    for (final theme in <ThemeData>[frosted, liquid]) {
-      expect(theme.cardTheme.color!.a, 1);
-      expect(theme.dialogTheme.backgroundColor!.a, 1);
-      expect(theme.bottomSheetTheme.backgroundColor!.a, 1);
-      expect(theme.appBarTheme.backgroundColor!.a, 1);
-    }
+    expect(
+      GuildVisualTheme.build(
+        lightInput,
+        style: AppUiStyle.retroDark,
+      ).brightness,
+      Brightness.dark,
+    );
   });
 
-  testWidgets('glass chrome only blurs when a real backdrop is available', (
+  testWidgets('glass surface blurs only when a backdrop is available', (
     tester,
   ) async {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: GuildVisualTheme.build(
-          scheme,
-          texture: AppUiTexture.frosted,
-        ),
+        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.glass),
         home: const Scaffold(
-          body: GuildGlassSurface(
+          body: GuildStyledSurface(
             backdropAvailable: false,
             child: SizedBox(width: 100, height: 50),
           ),
@@ -105,12 +153,10 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: GuildVisualTheme.build(
-          scheme,
-          texture: AppUiTexture.frosted,
-        ),
+        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.glass),
         home: const Scaffold(
-          body: GuildGlassSurface(
+          body: GuildStyledSurface(
+            backdropAvailable: true,
             child: SizedBox(width: 100, height: 50),
           ),
         ),
@@ -120,7 +166,7 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
-    test('visual tokens preserve controls for ${brightness.name}', () {
+    test('classic controls remain unchanged for brightness mode', () {
       final scheme = ColorScheme.fromSeed(
         seedColor: Colors.teal,
         brightness: brightness,
@@ -132,6 +178,10 @@ void main() {
       expect(theme.filledButtonTheme.style!.elevation!.resolve({}), 0);
       expect(theme.elevatedButtonTheme.style!.elevation!.resolve({}), 0);
       expect(theme.colorScheme.primary, scheme.primary);
+      expect(
+        theme.extension<GuildStyleTheme>()!.style,
+        AppUiStyle.classic,
+      );
     });
   }
 }

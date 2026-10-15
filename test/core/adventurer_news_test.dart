@@ -118,4 +118,10 @@ void main() {
     final picked = newsBetweenBuilds(146, 147);
     expect(picked.map((e) => e.title).toList(), ['UI 质感重新打磨']);
   });
+
+  test('148 包含十二种 UI 风格见闻', () {
+    final picked = newsBetweenBuilds(147, 148);
+    expect(picked.map((e) => e.title).toList(), ['十二种 UI 风格']);
+  });
+
 }

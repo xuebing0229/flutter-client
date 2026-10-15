@@ -15,7 +15,7 @@ import '../../../core/storage/app_data_persistence.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
-import '../../../core/theme/app_ui_texture.dart';
+import '../../../core/theme/app_ui_style.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
@@ -170,6 +170,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           backup != null &&
           !bootstrapOnly &&
           (backup.settings.containsKey('themeMode') ||
+              backup.settings.containsKey('uiStyle') ||
               backup.settings.containsKey('uiTexture') ||
               backup.settings.containsKey('features') ||
               backup.settings.keys.any(
@@ -705,7 +706,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'id': SyncCoordinator.settingsRecordId,
       'themeMode': widget.themeStore.mode.name,
       'themePaletteId': widget.themeStore.paletteId,
-      'uiTexture': widget.themeStore.texture.id,
+      'uiStyle': widget.themeStore.style.id,
       for (final entry in features.entries)
         '$_featureSettingPrefix${entry.key}': entry.value,
       _orderCardViewSettingKey: _orderCardView,
@@ -735,14 +736,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       throw const FormatException('同步主题色无效。');
     }
 
-    final textureId = settings['uiTexture'];
-    if (textureId is String && AppUiTexture.containsId(textureId)) {
-      await widget.themeStore.setTexture(AppUiTexture.byId(textureId));
-    } else if (textureId == null) {
-      // Older backups predate this setting and therefore mean "classic".
-      await widget.themeStore.setTexture(AppUiTexture.classic);
+    final styleId = settings['uiStyle'];
+    if (styleId is String && AppUiStyle.containsId(styleId)) {
+      await widget.themeStore.setStyle(AppUiStyle.byId(styleId));
+    } else if (styleId == null) {
+      final legacyTextureId = settings['uiTexture'];
+      if (legacyTextureId == null) {
+        await widget.themeStore.setStyle(AppUiStyle.classic);
+      } else if (legacyTextureId is String) {
+        await widget.themeStore.setStyle(
+          AppUiStyle.fromLegacyTextureId(legacyTextureId),
+        );
+      } else {
+        throw const FormatException('同步 UI 风格设置无效。');
+      }
     } else {
-      throw const FormatException('同步 UI 质感设置无效。');
+      throw const FormatException('同步 UI 风格设置无效。');
     }
 
     // New settings records keep each feature as its own CRDT field so two
@@ -1456,7 +1465,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     };
     final width = MediaQuery.sizeOf(context).width;
     final useDesktopLayout = width >= 900;
-    final texture = GuildTextureTheme.of(context);
+    final uiStyle = GuildStyleTheme.of(context);
 
     final tabBody = IndexedStack(
       index: _index,
@@ -1480,9 +1489,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
 
     final scaffold = Scaffold(
-      // The tab pages already reserve bottom-nav clearance. Extending the body
-      // gives frosted chrome a real backdrop instead of a fake translucent fill.
-      extendBody: texture.enabled && !useDesktopLayout,
+      // The tab pages already reserve bottom-nav clearance. Glass keeps real
+      // content behind the bottom chrome so the document-style blur can show.
+      extendBody: uiStyle.isGlass && !useDesktopLayout,
       drawer: _ready && _localDataHealthy
           ? AppDrawer(
               orderStore: _orderStore,
@@ -1525,30 +1534,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             )
           : null,
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          // Glass modes keep the productivity content layer visually quiet.
-          // Classic preserves the established guild tint exactly.
-          color: texture.enabled
-              ? Theme.of(context).scaffoldBackgroundColor
-              : null,
-          gradient: texture.enabled
-              ? null
-              : LinearGradient(
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
-                  colors: [
-                    Color.alphaBlend(
-                      Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.045),
-                      Theme.of(context).scaffoldBackgroundColor,
-                    ),
-                    Theme.of(context).scaffoldBackgroundColor,
-                  ],
-                ),
-        ),
+      body: GuildStyleBackdrop(
         child: !_ready
           ? const Center(child: CircularProgressIndicator())
           : !_localDataHealthy
@@ -1562,17 +1548,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     curve: Curves.easeInOut,
                     alignment: Alignment.centerLeft,
                     child: _desktopNavigationOpen
-                        ? GuildGlassSurface(
-                            // A desktop rail is adjacent to content, not over
-                            // it. Fluent-style liquid fallback stays opaque.
+                        ? GuildStyledSurface(
+                            role: GuildSurfaceRole.chrome,
                             backdropAvailable: false,
-                            showBorder: false,
-                            backgroundColor:
-                                texture.texture == AppUiTexture.liquid
-                                ? Theme.of(context)
-                                      .colorScheme
-                                      .surfaceContainerLow
-                                : Theme.of(context).colorScheme.surface,
+                            backgroundColor: Theme.of(context).colorScheme.surface,
                             child: SizedBox(
                             width: 320,
                             child: Column(
@@ -1690,12 +1669,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             },
       bottomNavigationBar: !_ready || tabs.length <= 1 || useDesktopLayout
           ? null
-          : GuildGlassSurface(
-              backgroundColor:
-                  Theme.of(context).colorScheme.surfaceContainer,
+          : GuildStyledSurface(
+              role: GuildSurfaceRole.chrome,
+              backdropAvailable: uiStyle.isGlass,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
               child: NavigationBar(
                 backgroundColor:
-                    texture.enabled ? Colors.transparent : null,
+                    uiStyle.isClassic ? null : Colors.transparent,
                 selectedIndex: _index,
                 onDestinationSelected: (value) {
                   FocusManager.instance.primaryFocus?.unfocus();

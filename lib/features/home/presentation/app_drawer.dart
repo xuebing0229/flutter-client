@@ -79,17 +79,21 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final texture = GuildTextureTheme.of(context);
-    const radius = BorderRadius.horizontal(right: Radius.circular(26));
+    final uiStyle = GuildStyleTheme.of(context);
+    final radius = BorderRadius.horizontal(
+      right: Radius.circular(uiStyle.isClassic ? 26 : uiStyle.cardRadius),
+    );
 
-    return GuildGlassSurface(
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.chrome,
       borderRadius: radius,
+      backdropAvailable: uiStyle.isGlass,
       backgroundColor: Theme.of(context).colorScheme.surface,
       child: Drawer(
         width: MediaQuery.sizeOf(context).width * 0.78,
-        backgroundColor: texture.enabled ? Colors.transparent : null,
-        surfaceTintColor: texture.enabled ? Colors.transparent : null,
-        shape: const RoundedRectangleBorder(borderRadius: radius),
+        backgroundColor: uiStyle.isClassic ? null : Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: radius),
         child: SafeArea(
           child: AppToolMenu(
             orderStore: orderStore,
@@ -375,26 +379,45 @@ class AppMenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final uiStyle = GuildStyleTheme.of(context);
+    final selectedTileColor = uiStyle.isClassic
+        ? Color.alphaBlend(
+            colors.primary.withValues(alpha: 0.11),
+            colors.surface,
+          )
+        : Color.alphaBlend(
+            colors.primary.withValues(alpha: 0.18),
+            uiStyle.surfaceAlt,
+          );
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: uiStyle.isClassic
+            ? BorderRadius.circular(16)
+            : uiStyle.surfaceBorderRadius,
         side: selected
             ? BorderSide(
-                color: colors.primary.withValues(alpha: 0.38),
-                width: 0.8,
+                color: uiStyle.isClassic
+                    ? colors.primary.withValues(alpha: 0.38)
+                    : uiStyle.borderWidth > 0
+                    ? uiStyle.borderColor
+                    : colors.primary.withValues(alpha: 0.55),
+                width: uiStyle.isClassic
+                    ? 0.8
+                    : uiStyle.borderWidth <= 0
+                    ? 1
+                    : uiStyle.borderWidth,
               )
             : BorderSide.none,
       ),
       selected: selected,
-      selectedTileColor: Color.alphaBlend(
-        colors.primary.withValues(alpha: 0.11),
-        colors.surface,
-      ),
-      selectedColor: Color.alphaBlend(
-        colors.onSurface.withValues(alpha: 0.53),
-        colors.primary,
-      ),
+      selectedTileColor: selectedTileColor,
+      selectedColor: uiStyle.isClassic
+          ? Color.alphaBlend(
+              colors.onSurface.withValues(alpha: 0.53),
+              colors.primary,
+            )
+          : colors.primary,
       leading: Icon(selected ? (selectedIcon ?? icon) : icon),
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle!),
