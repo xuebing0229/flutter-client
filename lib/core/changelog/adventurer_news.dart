@@ -143,6 +143,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新设备加入状态修复',
     description: '修复首次扫码加入新设备时，两台设备其实已经建立同步连接却仍被误判为“等待原设备确认超时”的问题。加入页现在会识别真实连接状态，确认成功后直接显示已连接与账号传输进度；连接建立后也不会再被固定五分钟超时错误中断。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 146,
+    title: 'UI 质感：毛玻璃与液态玻璃',
+    description: '设置的外观区域新增“UI质感”，可在经典、毛玻璃、液态玻璃三种模式间切换。玻璃模式沿用当前主题色与深浅色，通过 Flutter 原生背景模糊、半透明表面和轻量高光作用于导航、抽屉、设置面板与排单/成品卡片；经典模式保持原界面。该选择会随账号设置一起备份与双端同步。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
