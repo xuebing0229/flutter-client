@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_ui_texture.dart';
-import '../../../core/theme/guild_visual_theme.dart';
-
 class SummaryCardSurface extends StatelessWidget {
   const SummaryCardSurface({
     required this.compact,
@@ -21,7 +18,6 @@ class SummaryCardSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final texture = GuildTextureTheme.of(context);
     const radius = 20.0;
 
     return DecoratedBox(
@@ -35,89 +31,66 @@ class SummaryCardSurface extends StatelessWidget {
           ),
         ],
       ),
-      child: GuildGlassSurface(
+      child: Material(
+        color: colors.surface,
         borderRadius: BorderRadius.circular(radius),
-        backgroundColor: colors.surface,
-        // Lists can contain many cards. Keep the card material translucent,
-        // but reserve backdrop blur for the larger shared glass panels.
-        blur: false,
-        child: Material(
-          color: texture.enabled ? Colors.transparent : colors.surface,
+        child: InkWell(
           borderRadius: BorderRadius.circular(radius),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(radius),
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: Ink(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(radius),
-                border: Border.all(
-                  color: Color.alphaBlend(
-                    colors.primary.withValues(alpha: dark ? 0.35 : 0.27),
-                    colors.outlineVariant,
-                  ),
-                  width: 1,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: Color.alphaBlend(
+                  colors.primary.withValues(alpha: dark ? 0.35 : 0.27),
+                  colors.outlineVariant,
                 ),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: texture.enabled
-                      ? <Color>[
-                          colors.onSurface.withValues(
-                            alpha: texture.texture == AppUiTexture.liquid
-                                ? (dark ? 0.055 : 0.095)
-                                : (dark ? 0.025 : 0.055),
-                          ),
-                          colors.primary.withValues(
-                            alpha: texture.texture == AppUiTexture.liquid
-                                ? (dark ? 0.065 : 0.045)
-                                : (dark ? 0.03 : 0.02),
-                          ),
-                          Colors.transparent,
-                        ]
-                      : <Color>[
-                          Color.alphaBlend(
-                            colors.primary.withValues(
-                              alpha: dark ? 0.035 : 0.022,
-                            ),
-                            colors.surface,
-                          ),
-                          colors.surface,
-                        ],
-                ),
+                width: 1,
               ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Padding(
-                        padding: const EdgeInsets.all(3),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(radius - 4),
-                            border: Border.all(
-                              color: colors.primary.withValues(
-                                alpha: dark ? 0.19 : 0.14,
-                              ),
-                              width: 0.7,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.alphaBlend(
+                    colors.primary.withValues(alpha: dark ? 0.035 : 0.022),
+                    colors.surface,
+                  ),
+                  colors.surface,
+                ],
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Padding(
+                      padding: const EdgeInsets.all(3),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(radius - 4),
+                          border: Border.all(
+                            color: colors.primary.withValues(
+                              alpha: dark ? 0.19 : 0.14,
                             ),
+                            width: 0.7,
                           ),
                         ),
                       ),
                     ),
                   ),
-                  Padding(
-                    // Exactly the original spacing: visual strokes add no size.
-                    padding: EdgeInsets.fromLTRB(
-                      compact ? 12 : 18,
-                      compact ? 12 : 16,
-                      compact ? 12 : 18,
-                      compact ? 12 : 16,
-                    ),
-                    child: child,
+                ),
+                Padding(
+                  // Exactly the original spacing: visual strokes add no size.
+                  padding: EdgeInsets.fromLTRB(
+                    compact ? 12 : 18,
+                    compact ? 12 : 16,
+                    compact ? 12 : 18,
+                    compact ? 12 : 16,
                   ),
-                ],
-              ),
+                  child: child,
+                ),
+              ],
             ),
           ),
         ),

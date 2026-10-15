@@ -54,7 +54,7 @@ void main() {
     }
   });
 
-  test('classic texture remains the default and glass modes expose native tokens', () {
+  test('glass modes keep productivity content surfaces opaque', () {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
     final classic = GuildVisualTheme.build(scheme);
     final frosted = GuildVisualTheme.build(
@@ -71,14 +71,52 @@ void main() {
       AppUiTexture.classic,
     );
     expect(frosted.extension<GuildTextureTheme>()!.enabled, isTrue);
-    expect(
-      liquid.extension<GuildTextureTheme>()!.blurSigma,
-      greaterThan(frosted.extension<GuildTextureTheme>()!.blurSigma),
+    expect(frosted.extension<GuildTextureTheme>()!.blurSigma, inInclusiveRange(10, 20));
+    expect(liquid.extension<GuildTextureTheme>()!.blurSigma, inInclusiveRange(10, 20));
+
+    for (final theme in <ThemeData>[frosted, liquid]) {
+      expect(theme.cardTheme.color!.a, 1);
+      expect(theme.dialogTheme.backgroundColor!.a, 1);
+      expect(theme.bottomSheetTheme.backgroundColor!.a, 1);
+      expect(theme.appBarTheme.backgroundColor!.a, 1);
+    }
+  });
+
+  testWidgets('glass chrome only blurs when a real backdrop is available', (
+    tester,
+  ) async {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildVisualTheme.build(
+          scheme,
+          texture: AppUiTexture.frosted,
+        ),
+        home: const Scaffold(
+          body: GuildGlassSurface(
+            backdropAvailable: false,
+            child: SizedBox(width: 100, height: 50),
+          ),
+        ),
+      ),
     );
-    expect(
-      liquid.navigationBarTheme.backgroundColor!.a,
-      lessThan(classic.navigationBarTheme.backgroundColor!.a),
+    expect(find.byType(BackdropFilter), findsNothing);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildVisualTheme.build(
+          scheme,
+          texture: AppUiTexture.frosted,
+        ),
+        home: const Scaffold(
+          body: GuildGlassSurface(
+            child: SizedBox(width: 100, height: 50),
+          ),
+        ),
+      ),
     );
+    expect(find.byType(BackdropFilter), findsOneWidget);
   });
 
   for (final brightness in Brightness.values) {

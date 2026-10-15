@@ -9,7 +9,6 @@ import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/app_ui_texture.dart';
-import '../../../core/theme/guild_visual_theme.dart';
 import '../../../core/update/beta_update_session.dart';
 import '../../../core/update/update_manifest.dart';
 import '../../../core/sync/sync_coordinator.dart';
@@ -1043,34 +1042,29 @@ class _SettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const radius = 18.0;
-    final texture = GuildTextureTheme.of(context);
-    return GuildGlassSurface(
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(radius),
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      child: Material(
-        color: texture.enabled ? Colors.transparent : Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(radius),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon),
-                  const SizedBox(width: 10),
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              child,
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            child,
+          ],
         ),
       ),
     );

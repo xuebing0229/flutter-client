@@ -1480,6 +1480,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
 
     final scaffold = Scaffold(
+      // The tab pages already reserve bottom-nav clearance. Extending the body
+      // gives frosted chrome a real backdrop instead of a fake translucent fill.
+      extendBody: texture.enabled && !useDesktopLayout,
       drawer: _ready && _localDataHealthy
           ? AppDrawer(
               orderStore: _orderStore,
@@ -1524,17 +1527,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           : null,
       body: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [
-              Color.alphaBlend(
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.045),
-                Theme.of(context).scaffoldBackgroundColor,
-              ),
-              Theme.of(context).scaffoldBackgroundColor,
-            ],
-          ),
+          // Glass modes keep the productivity content layer visually quiet.
+          // Classic preserves the established guild tint exactly.
+          color: texture.enabled
+              ? Theme.of(context).scaffoldBackgroundColor
+              : null,
+          gradient: texture.enabled
+              ? null
+              : LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [
+                    Color.alphaBlend(
+                      Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.045),
+                      Theme.of(context).scaffoldBackgroundColor,
+                    ),
+                    Theme.of(context).scaffoldBackgroundColor,
+                  ],
+                ),
         ),
         child: !_ready
           ? const Center(child: CircularProgressIndicator())
@@ -1550,8 +1563,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     alignment: Alignment.centerLeft,
                     child: _desktopNavigationOpen
                         ? GuildGlassSurface(
+                            // A desktop rail is adjacent to content, not over
+                            // it. Fluent-style liquid fallback stays opaque.
+                            backdropAvailable: false,
+                            showBorder: false,
                             backgroundColor:
-                                Theme.of(context).colorScheme.surface,
+                                texture.texture == AppUiTexture.liquid
+                                ? Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerLow
+                                : Theme.of(context).colorScheme.surface,
                             child: SizedBox(
                             width: 320,
                             child: Column(
