@@ -1549,7 +1549,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     curve: Curves.easeInOut,
                     alignment: Alignment.centerLeft,
                     child: _desktopNavigationOpen
-                        ? SizedBox(
+                        ? GuildGlassSurface(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.surface,
+                            child: SizedBox(
                             width: 320,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1621,6 +1624,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 ),
                               ],
                             ),
+                          ),
                           )
                         : const SizedBox.shrink(),
                   ),
