@@ -87,7 +87,7 @@ class AppDrawer extends StatelessWidget {
       child: Drawer(
         width: MediaQuery.sizeOf(context).width * 0.78,
         backgroundColor: texture.enabled ? Colors.transparent : null,
-        surfaceTintColor: Colors.transparent,
+        surfaceTintColor: texture.enabled ? Colors.transparent : null,
         shape: const RoundedRectangleBorder(borderRadius: radius),
         child: SafeArea(
           child: AppToolMenu(
