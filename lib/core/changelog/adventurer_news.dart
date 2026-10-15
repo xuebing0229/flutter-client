@@ -148,6 +148,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'UI 质感：毛玻璃与液态玻璃',
     description: '设置的外观区域新增“UI质感”，可在经典、毛玻璃、液态玻璃三种模式间切换。玻璃模式沿用当前主题色与深浅色，通过 Flutter 原生背景模糊、半透明表面和轻量高光作用于导航、抽屉、设置面板与排单/成品卡片；经典模式保持原界面。该选择会随账号设置一起备份与双端同步。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 147,
+    title: 'UI 质感重新打磨',
+    description: '重新整理毛玻璃与液态玻璃的使用范围：排单、成品与设置等内容卡片恢复清晰不透明，毛玻璃仅保留在确实有背景层的导航和浮层；液态玻璃在 Android 与 Windows 改为平台自适应质感，不再用渐变高光假装折射。经典模式保持不变。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
