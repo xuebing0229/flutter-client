@@ -24,3 +24,10 @@ const int internalSourceBuild = int.fromEnvironment(
   'INTERNAL_SOURCE_BUILD',
   defaultValue: 0,
 );
+
+// Independent Internal release sequence used by Adventurer News. Keep source
+// build lineage separate: e.g. Internal 0.1.3 may be promoted from Beta 156.
+const int internalReleaseBuild = int.fromEnvironment(
+  'INTERNAL_RELEASE_BUILD',
+  defaultValue: 0,
+);
