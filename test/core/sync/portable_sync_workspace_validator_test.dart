@@ -38,6 +38,37 @@ void main() {
     expect(matches, isTrue);
   });
 
+  test('legacy uiTexture does not block a modern full backup', () {
+    final record = SyncRecord.bootstrap(
+      kind: SyncEntityKind.settings,
+      id: 'app',
+      values: const <String, dynamic>{
+        'id': 'app',
+        'themeMode': 'system',
+        'themePaletteId': 'guildOriginal',
+        'uiStyle': 'classic',
+        'uiTexture': 'frosted',
+      },
+      deviceId: 'phone',
+    ).copyWith(accountId: 'account-1');
+
+    final matches = PortableSyncWorkspaceValidator.recordsMatchWorkspace(
+      accountId: 'account-1',
+      records: <Map<String, dynamic>>[record.toJson()],
+      orders: const <String, Map<String, dynamic>>{},
+      products: const <String, Map<String, dynamic>>{},
+      presets: const <String, Map<String, dynamic>>{},
+      settings: const <String, dynamic>{
+        'id': 'app',
+        'themeMode': 'system',
+        'themePaletteId': 'guildOriginal',
+        'uiStyle': 'classic',
+      },
+    );
+
+    expect(matches, isTrue);
+  });
+
   test('backup-only settings do not invalidate portable sync history', () {
     final record = SyncRecord.bootstrap(
       kind: SyncEntityKind.settings,
