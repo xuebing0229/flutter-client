@@ -1,5 +1,126 @@
 import 'package:flutter/material.dart';
 
+class AppThemeSemanticColors {
+  const AppThemeSemanticColors({
+    required this.primary,
+    required this.accent,
+    required this.background,
+    required this.surface,
+    required this.surfaceAlt,
+    required this.foreground,
+    required this.mutedForeground,
+    required this.border,
+  });
+
+  final Color primary;
+  final Color accent;
+  final Color background;
+  final Color surface;
+  final Color surfaceAlt;
+  final Color foreground;
+  final Color mutedForeground;
+  final Color border;
+
+  factory AppThemeSemanticColors.fromSeed(
+    Color seed,
+    Brightness brightness,
+  ) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+    );
+    return AppThemeSemanticColors(
+      primary: scheme.primary,
+      accent: scheme.secondary,
+      background: scheme.surface,
+      surface: scheme.surfaceContainerLow,
+      surfaceAlt: scheme.surfaceContainer,
+      foreground: scheme.onSurface,
+      mutedForeground: scheme.onSurfaceVariant,
+      border: scheme.outlineVariant,
+    );
+  }
+
+  AppThemeSemanticColors copyWith({
+    Color? primary,
+    Color? accent,
+    Color? background,
+    Color? surface,
+    Color? surfaceAlt,
+    Color? foreground,
+    Color? mutedForeground,
+    Color? border,
+  }) {
+    return AppThemeSemanticColors(
+      primary: primary ?? this.primary,
+      accent: accent ?? this.accent,
+      background: background ?? this.background,
+      surface: surface ?? this.surface,
+      surfaceAlt: surfaceAlt ?? this.surfaceAlt,
+      foreground: foreground ?? this.foreground,
+      mutedForeground: mutedForeground ?? this.mutedForeground,
+      border: border ?? this.border,
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'primary': primary.toARGB32(),
+        'accent': accent.toARGB32(),
+        'background': background.toARGB32(),
+        'surface': surface.toARGB32(),
+        'surfaceAlt': surfaceAlt.toARGB32(),
+        'foreground': foreground.toARGB32(),
+        'mutedForeground': mutedForeground.toARGB32(),
+        'border': border.toARGB32(),
+      };
+
+  static AppThemeSemanticColors? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    Color? color(String key) {
+      final value = raw[key];
+      return value is int ? Color(value) : null;
+    }
+
+    final primary = color('primary');
+    final accent = color('accent');
+    final background = color('background');
+    final surface = color('surface');
+    final surfaceAlt = color('surfaceAlt');
+    final foreground = color('foreground');
+    final mutedForeground = color('mutedForeground');
+    final border = color('border');
+    if (primary == null ||
+        accent == null ||
+        background == null ||
+        surface == null ||
+        surfaceAlt == null ||
+        foreground == null ||
+        mutedForeground == null ||
+        border == null) {
+      return null;
+    }
+
+    return AppThemeSemanticColors(
+      primary: primary,
+      accent: accent,
+      background: background,
+      surface: surface,
+      surfaceAlt: surfaceAlt,
+      foreground: foreground,
+      mutedForeground: mutedForeground,
+      border: border,
+    );
+  }
+
+  List<Color> get previewColors => <Color>[
+        primary,
+        accent,
+        background,
+        surface,
+        foreground,
+      ];
+}
+
 class AppThemePalette {
   const AppThemePalette({
     required this.id,
@@ -7,6 +128,9 @@ class AppThemePalette {
     required this.lightSeed,
     required this.previewColors,
     this.darkSeed,
+    this.lightSemanticColors,
+    this.darkSemanticColors,
+    this.customAdvanced = false,
   });
 
   final String id;
@@ -14,8 +138,83 @@ class AppThemePalette {
   final Color lightSeed;
   final Color? darkSeed;
   final List<Color> previewColors;
+  final AppThemeSemanticColors? lightSemanticColors;
+  final AppThemeSemanticColors? darkSemanticColors;
+  final bool customAdvanced;
 
   Color get effectiveDarkSeed => darkSeed ?? lightSeed;
+  bool get isCustom => id.startsWith('custom:');
+
+  AppThemeSemanticColors? semanticColorsFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? darkSemanticColors
+          : lightSemanticColors;
+
+  Map<String, dynamic> toCustomJson() {
+    if (!isCustom ||
+        lightSemanticColors == null ||
+        darkSemanticColors == null) {
+      throw StateError('Only complete custom palettes can be serialized.');
+    }
+    return <String, dynamic>{
+      'id': id,
+      'name': name,
+      'lightSeed': lightSeed.toARGB32(),
+      'darkSeed': effectiveDarkSeed.toARGB32(),
+      'customAdvanced': customAdvanced,
+      'light': lightSemanticColors!.toJson(),
+      'dark': darkSemanticColors!.toJson(),
+    };
+  }
+
+  static AppThemePalette? fromCustomJson(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final name = raw['name'];
+    final lightSeed = raw['lightSeed'];
+    final darkSeed = raw['darkSeed'];
+    final light = AppThemeSemanticColors.fromJson(raw['light']);
+    final dark = AppThemeSemanticColors.fromJson(raw['dark']);
+    if (id is! String ||
+        !id.startsWith('custom:') ||
+        name is! String ||
+        lightSeed is! int ||
+        light == null ||
+        dark == null) {
+      return null;
+    }
+    final resolvedDarkSeed = darkSeed is int ? Color(darkSeed) : Color(lightSeed);
+    return AppThemePalette(
+      id: id,
+      name: name.trim().isEmpty ? '自定义配色' : name.trim(),
+      lightSeed: Color(lightSeed),
+      darkSeed: resolvedDarkSeed,
+      previewColors: light.previewColors,
+      lightSemanticColors: light,
+      darkSemanticColors: dark,
+      customAdvanced: raw['customAdvanced'] == true,
+    );
+  }
+
+  static AppThemePalette custom({
+    required String id,
+    required String name,
+    required Color seed,
+    required AppThemeSemanticColors light,
+    required AppThemeSemanticColors dark,
+    required bool advanced,
+  }) {
+    return AppThemePalette(
+      id: id.startsWith('custom:') ? id : 'custom:$id',
+      name: name.trim().isEmpty ? '自定义配色' : name.trim(),
+      lightSeed: seed,
+      darkSeed: seed,
+      previewColors: light.previewColors,
+      lightSemanticColors: light,
+      darkSemanticColors: dark,
+      customAdvanced: advanced,
+    );
+  }
 }
 
 abstract final class AppThemePalettes {
