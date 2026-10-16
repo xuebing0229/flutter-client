@@ -248,7 +248,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
 
     final updateDirectory = Directory(
       '${downloads.path}${Platform.pathSeparator}AdventurersGuild'
-      '${Platform.pathSeparator}updates',
+      '${Platform.pathSeparator}updates'
+      '${isInternalBuild ? '${Platform.pathSeparator}internal' : ''}',
     );
     final safeBaseName = fileName
         .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
@@ -319,7 +320,8 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
 
     final updateDirectory = Directory(
       '${downloads.path}${Platform.pathSeparator}AdventurersGuild'
-      '${Platform.pathSeparator}updates',
+      '${Platform.pathSeparator}updates'
+      '${isInternalBuild ? '${Platform.pathSeparator}internal' : ''}',
     );
     await updateDirectory.create(recursive: true);
 
