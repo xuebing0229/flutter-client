@@ -4,6 +4,7 @@ import 'package:flutter_app/core/theme/app_theme_palette.dart';
 import 'package:flutter_app/core/theme/app_ui_style.dart';
 import 'package:flutter_app/core/theme/guild_style_effects.dart';
 import 'package:flutter_app/core/theme/guild_visual_theme.dart';
+import 'package:flutter_app/features/shared/presentation/collection_widgets.dart';
 import 'package:flutter_app/features/shared/presentation/summary_card_widgets.dart';
 
 void main() {
@@ -102,16 +103,24 @@ void main() {
       scheme,
       style: AppUiStyle.glass,
     ).extension<GuildStyleTheme>()!;
+    final darkGlass = GuildVisualTheme.build(
+      ColorScheme.fromSeed(
+        seedColor: Colors.teal,
+        brightness: Brightness.dark,
+      ),
+      style: AppUiStyle.glass,
+    ).extension<GuildStyleTheme>()!;
 
     expect(relief.shadows.length, 2);
     expect(bold.borderWidth, greaterThanOrEqualTo(3));
     expect(bold.cardRadius, 0);
     expect(clay.cardRadius, greaterThanOrEqualTo(20));
     expect(glass.glassBlur, greaterThanOrEqualTo(24));
-    expect(glass.glassOpacity, lessThanOrEqualTo(0.35));
+    expect(glass.glassOpacity, greaterThan(0.4));
+    expect(darkGlass.glassOpacity, lessThanOrEqualTo(0.35));
   });
 
-  test('document presets keep their reference light or dark base', () {
+  test('UI styles follow app brightness except named retro variants', () {
     final lightInput = ColorScheme.fromSeed(seedColor: Colors.teal);
     final darkInput = ColorScheme.fromSeed(
       seedColor: Colors.teal,
@@ -123,30 +132,102 @@ void main() {
       AppUiStyle.minimal,
       AppUiStyle.bold,
       AppUiStyle.geometric,
-      AppUiStyle.retroLight,
+      AppUiStyle.fluorescent,
       AppUiStyle.collage,
       AppUiStyle.monochrome,
       AppUiStyle.clay,
-    ]) {
-      expect(
-        GuildVisualTheme.build(darkInput, style: style).brightness,
-        Brightness.light,
-        reason: '${style.label} follows the supplied light reference',
-      );
-    }
-
-    for (final style in <AppUiStyle>[
-      AppUiStyle.retroDark,
-      AppUiStyle.fluorescent,
       AppUiStyle.glass,
     ]) {
       expect(
         GuildVisualTheme.build(lightInput, style: style).brightness,
+        Brightness.light,
+        reason: '${style.label} should stay light in light mode',
+      );
+      expect(
+        GuildVisualTheme.build(darkInput, style: style).brightness,
         Brightness.dark,
-        reason: '${style.label} follows the supplied dark reference',
+        reason: '${style.label} should stay dark in dark mode',
       );
     }
+
+    expect(
+      GuildVisualTheme.build(
+        darkInput,
+        style: AppUiStyle.retroLight,
+      ).brightness,
+      Brightness.light,
+    );
+    expect(
+      GuildVisualTheme.build(
+        lightInput,
+        style: AppUiStyle.retroDark,
+      ).brightness,
+      Brightness.dark,
+    );
   });
+
+  test('light glass keeps a bright translucent base', () {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    final theme = GuildVisualTheme.build(scheme, style: AppUiStyle.glass);
+    final tokens = theme.extension<GuildStyleTheme>()!;
+
+    expect(theme.brightness, Brightness.light);
+    expect(tokens.background.computeLuminance(), greaterThan(0.75));
+    expect(tokens.surface.computeLuminance(), greaterThan(0.80));
+    expect(tokens.foreground.computeLuminance(), lessThan(0.20));
+  });
+
+  testWidgets('business cards no longer inject decorative left rails', (
+    tester,
+  ) async {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.minimal),
+        home: Scaffold(
+          body: SummaryCardSurface(
+            compact: false,
+            onTap: () {},
+            child: const SizedBox(width: 120, height: 80),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Positioned), findsNothing);
+  });
+
+  testWidgets('styled search field has only the outer style shell', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.glass),
+        home: Scaffold(
+          body: CollectionSearchField(
+            controller: controller,
+            query: '',
+            hintText: '搜索',
+            onChanged: (_) {},
+            onClear: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    final focused = textField.decoration?.focusedBorder;
+    expect(focused, isA<OutlineInputBorder>());
+    expect((focused! as OutlineInputBorder).borderSide, BorderSide.none);
+  });
+
 
   testWidgets('non-classic surfaces use dedicated effect painters', (
     tester,
