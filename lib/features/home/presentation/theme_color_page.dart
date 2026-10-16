@@ -1,11 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/account/qr_image_decoder.dart';
+import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/theme_palette_transfer.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import 'custom_theme_color_page.dart';
+import 'theme_share_image_page.dart';
+import 'theme_share_scan_page.dart';
 
 class ThemeColorPage extends StatelessWidget {
   const ThemeColorPage({
@@ -15,6 +21,7 @@ class ThemeColorPage extends StatelessWidget {
   });
 
   static const _transfer = ThemePaletteTransferService();
+  static const _fileBridge = DataPortabilityFileBridge();
 
   final AppThemeStore store;
   final VoidCallback? onBack;
@@ -168,6 +175,12 @@ class ThemeColorPage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('生成分享图片'),
+              subtitle: const Text('生成带配色预览和二维码的图片，适合直接发给别人'),
+              onTap: () => Navigator.of(sheetContext).pop('image'),
+            ),
+            ListTile(
               leading: const Icon(Icons.insert_drive_file_outlined),
               title: const Text('导出配色文件'),
               subtitle: const Text('生成 .agtheme 文件，发给别人后可以直接导入'),
@@ -187,7 +200,13 @@ class ThemeColorPage extends StatelessWidget {
     if (action == null || !context.mounted) return;
 
     try {
-      if (action == 'file') {
+      if (action == 'image') {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => ThemeShareImagePage(palette: palette),
+          ),
+        );
+      } else if (action == 'file') {
         final saved = await _transfer.exportPalette(palette);
         if (!context.mounted) return;
         if (saved) {
@@ -214,6 +233,19 @@ class ThemeColorPage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (Platform.isAndroid)
+              ListTile(
+                leading: const Icon(Icons.qr_code_scanner_rounded),
+                title: const Text('扫描分享图二维码'),
+                subtitle: const Text('用相机扫描别人分享图片里的二维码'),
+                onTap: () => Navigator.of(sheetContext).pop('scan'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('从分享图片导入'),
+              subtitle: const Text('从相册或图片文件中识别配色二维码'),
+              onTap: () => Navigator.of(sheetContext).pop('image'),
+            ),
             ListTile(
               leading: const Icon(Icons.insert_drive_file_outlined),
               title: const Text('从配色文件导入'),
@@ -235,7 +267,17 @@ class ThemeColorPage extends StatelessWidget {
 
     try {
       SharedThemePreset? preset;
-      if (action == 'file') {
+      if (action == 'scan') {
+        final raw = await Navigator.of(context).push<String>(
+          MaterialPageRoute(
+            builder: (_) => const ThemeShareScanPage(),
+          ),
+        );
+        if (raw == null || raw.trim().isEmpty) return;
+        preset = _transfer.decode(raw);
+      } else if (action == 'image') {
+        preset = await _importFromShareImage();
+      } else if (action == 'file') {
         preset = await _transfer.importFromFile();
       } else {
         final raw = await _askShareCode(context);
@@ -248,6 +290,26 @@ class ThemeColorPage extends StatelessWidget {
     } catch (error) {
       if (!context.mounted) return;
       _showError(context, error);
+    }
+  }
+
+  Future<SharedThemePreset?> _importFromShareImage() async {
+    final path = await _fileBridge.pickQrImage();
+    if (path == null) return null;
+
+    try {
+      final raw = decodeQrImage(await File(path).readAsBytes()).trim();
+      if (raw.isEmpty) {
+        throw const FormatException('所选图片中没有识别到配色二维码。');
+      }
+      return _transfer.decode(raw);
+    } finally {
+      if (Platform.isAndroid) {
+        try {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+      }
     }
   }
 
