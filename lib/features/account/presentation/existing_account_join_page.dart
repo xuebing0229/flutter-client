@@ -358,7 +358,7 @@ class _ReceiveAccountTransferPageState
   AccountTransferStatus? _transferStatus;
   String? _error;
   bool _finished = false;
-  bool _peerConnectedOnce = false;
+  bool _folderReadyOnce = false;
 
   @override
   void initState() {
@@ -381,8 +381,8 @@ class _ReceiveAccountTransferPageState
           if (!mounted || !identical(_session, session)) return;
           setState(() {
             _transferStatus = status;
-            if (status.sourceConnected) {
-              _peerConnectedOnce = true;
+            if (status.folderReady) {
+              _folderReadyOnce = true;
             }
           });
         },
@@ -430,7 +430,9 @@ class _ReceiveAccountTransferPageState
     final transferStatus = _transferStatus;
     final progress = transferStatus?.progress;
     final sourceConnected = transferStatus?.sourceConnected == true;
-    final peerConfirmed = _peerConnectedOnce || sourceConnected;
+    final folderReady = transferStatus?.folderReady == true;
+    final peerConfirmed = _folderReadyOnce || folderReady;
+    final remoteFolderState = transferStatus?.remoteFolderState;
     final folderState = transferStatus?.folderState;
     final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
         .clamp(0, 100)
@@ -519,19 +521,21 @@ class _ReceiveAccountTransferPageState
                       ),
                     ] else ...[
                       Icon(
-                        sourceConnected
+                        folderReady
                             ? Icons.check_circle_rounded
                             : Icons.sync_rounded,
                         size: 46,
-                        color: sourceConnected
+                        color: folderReady
                             ? colors.primary
                             : colors.onSurfaceVariant,
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        sourceConnected
-                            ? '已连接原设备'
-                            : '原设备已确认，正在重新连接同步通道',
+                        folderReady
+                            ? '账号传输通道已对接'
+                            : sourceConnected
+                                ? '已连接原设备，正在确认临时账号目录'
+                                : '原设备已确认，正在建立同步连接',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                         textAlign: TextAlign.center,
                       ),
@@ -542,15 +546,21 @@ class _ReceiveAccountTransferPageState
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      sourceConnected && hasMeasuredProgress
-                          ? '已连接原设备 · 正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
-                          : sourceConnected
-                              ? '已连接原设备，正在等待账号数据到达……'
-                              : peerConfirmed
-                                  ? '原设备已经确认成功，正在恢复同步连接……'
-                                  : folderState == 'scanning'
-                                      ? '同步通道已准备，正在连接原设备……'
-                                      : '等待原设备确认并建立连接……',
+                      folderReady && hasMeasuredProgress
+                          ? '账号传输通道已对接 · 正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
+                          : folderReady
+                              ? '临时账号目录已经双方确认，正在等待账号数据到达……'
+                              : sourceConnected
+                                  ? remoteFolderState == 'notSharing'
+                                      ? '设备已经连接，但临时账号目录尚未被原设备共享，正在自动修复……'
+                                      : remoteFolderState == 'paused'
+                                          ? '设备已经连接，但临时账号目录处于暂停状态……'
+                                          : '设备已经连接，正在完成临时账号目录握手……'
+                                  : peerConfirmed
+                                      ? '临时账号目录已确认，正在恢复同步连接……'
+                                      : folderState == 'scanning'
+                                          ? '同步通道已准备，正在连接原设备……'
+                                          : '等待原设备确认并建立连接……',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
