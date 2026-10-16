@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
+import '../../../core/build/build_channel.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
@@ -118,7 +119,7 @@ class _SettingsPageState extends State<SettingsPage>
       notice: AdventurerNewsNotice(
         previousBuild: 0,
         currentBuild: build,
-        entries: newsBetweenBuilds(0, build),
+        entries: newsBetweenCurrentChannelBuilds(0, build),
       ),
     );
   }
@@ -779,11 +780,13 @@ class _SettingsPageState extends State<SettingsPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('当前：$_currentVersion ($_currentBuild)'),
+                  Text(isInternalBuild ? '当前：$_currentVersion' : '当前：$_currentVersion ($_currentBuild)'),
                   const SizedBox(height: 6),
                   Text(
                     _latest == null
                         ? '最新：尚未获取'
+                        : isInternalBuild
+                        ? '最新：${_latest!.version}'
                         : '最新：${_latest!.version} (${_latest!.build})',
                   ),
                   const SizedBox(height: 10),
