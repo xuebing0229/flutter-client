@@ -59,7 +59,7 @@ Type: filesandordirs; Name: "{app}"
 var
   RemoveUserDataOnUninstall: Boolean;
 
-function StopInstalledProcessesForInstall(var ResultCode: Integer): Boolean;
+function StopInstalledProcesses(var ResultCode: Integer): Boolean;
 var
   PowerShellPath, InstallDir, Command, Parameters: String;
 begin
@@ -99,7 +99,7 @@ var
   ResultCode: Integer;
 begin
   Result := '';
-  if not StopInstalledProcessesForInstall(ResultCode) then
+  if not StopInstalledProcesses(ResultCode) then
     Result := '无法在安装前关闭旧版冒险者公会、桌宠或内置同步核心。请关闭后重试。';
 end;
 
@@ -108,27 +108,73 @@ var
   Choice: Integer;
 begin
   Choice := MsgBox(
-    '是否同时删除这台电脑上的冒险者公会账号、排单、成品、同步数据和设置？' + #13#10 + #13#10 +
-    '选择“否”只卸载程序，数据会保留，之后重新安装仍可继续使用。',
+    '是否同时删除这台电脑上的冒险者公会个人数据？' + #13#10 + #13#10 +
+    '选择“是”：彻底删除本机账号、排单、成品、同步记录、桌宠素材、截图导入记录和设置。' + #13#10 +
+    '选择“否”：只删除程序，个人数据会保留，之后重新安装仍可继续使用。' + #13#10 + #13#10 +
+    '你自己导出的备份文件和保存到其他位置的图片不会被删除。',
     mbConfirmation,
-    MB_YESNO
+    MB_YESNOCANCEL
   );
+
+  if Choice = IDCANCEL then
+  begin
+    Result := False;
+    Exit;
+  end;
+
   RemoveUserDataOnUninstall := Choice = IDYES;
   Result := True;
 end;
 
+procedure CleanupManagedUpdateCache();
+var
+  UserProfile, UpdateRoot, UpdateDir: String;
+begin
+  UserProfile := GetEnv('USERPROFILE');
+  if UserProfile = '' then
+    Exit;
+
+  UpdateRoot := UserProfile + '\Downloads\AdventurersGuild';
+  UpdateDir := UpdateRoot + '\updates';
+
+  { Only remove the updater-owned subdirectory. Never recursively delete the
+    whole AdventurersGuild downloads folder because users may place exported
+    backups or other files there themselves. }
+  DelTree(UpdateDir, True, True, True);
+
+  { Remove the parent only when it is empty. If the user has anything else in
+    it, RemoveDir fails safely and leaves those files untouched. }
+  RemoveDir(UpdateRoot);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
+  ResultCode: Integer;
   SupportDir: String;
-  UpdateDir: String;
 begin
-  if (CurUninstallStep = usPostUninstall) and RemoveUserDataOnUninstall then
+  if CurUninstallStep = usUninstall then
   begin
-    SupportDir := ExpandConstant('{userappdata}\com.workspace.client\Adventurers Guild');
-    DelTree(SupportDir, True, True, True);
+    if not StopInstalledProcesses(ResultCode) then
+    begin
+      MsgBox(
+        '无法关闭正在运行的冒险者公会、桌宠或内置同步核心。请先关闭后再卸载。',
+        mbError,
+        MB_OK
+      );
+      Abort;
+    end;
+  end;
 
-    UpdateDir := GetEnv('USERPROFILE') + '\Downloads\AdventurersGuild';
-    if UpdateDir <> '\Downloads\AdventurersGuild' then
-      DelTree(UpdateDir, True, True, True);
+  if CurUninstallStep = usPostUninstall then
+  begin
+    CleanupManagedUpdateCache();
+
+    if RemoveUserDataOnUninstall then
+    begin
+      SupportDir := ExpandConstant(
+        '{userappdata}\com.workspace.client\Adventurers Guild'
+      );
+      DelTree(SupportDir, True, True, True);
+    end;
   end;
 end;
