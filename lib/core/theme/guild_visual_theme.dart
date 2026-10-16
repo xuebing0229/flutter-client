@@ -301,10 +301,12 @@ abstract final class GuildVisualTheme {
         shape: squareOrRounded,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: tokens.surface,
+        backgroundColor: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.72)
+            : tokens.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        shadowColor: Colors.transparent,
+        elevation: _overlayElevation(style),
+        shadowColor: _overlayShadow(style, tokens, colors),
         shape: squareOrRounded,
         titleTextStyle: TextStyle(
           color: tokens.foreground,
@@ -313,18 +315,24 @@ abstract final class GuildVisualTheme {
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: tokens.surface,
+        color: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.78)
+            : tokens.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        shadowColor: Colors.transparent,
+        elevation: _overlayElevation(style),
+        shadowColor: _overlayShadow(style, tokens, colors),
         shape: squareOrRounded,
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: tokens.surface,
-        modalBackgroundColor: tokens.surface,
+        backgroundColor: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.76)
+            : tokens.surface,
+        modalBackgroundColor: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.76)
+            : tokens.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        modalElevation: 0,
+        elevation: _overlayElevation(style),
+        modalElevation: _overlayElevation(style),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(tokens.cardRadius),
@@ -338,9 +346,7 @@ abstract final class GuildVisualTheme {
           foregroundColor: WidgetStatePropertyAll(onPrimary),
           elevation: WidgetStatePropertyAll(_buttonElevation(style)),
           shadowColor: WidgetStatePropertyAll(
-            style == AppUiStyle.relief || style == AppUiStyle.clay
-                ? Colors.black.withValues(alpha: 0.22)
-                : Colors.transparent,
+            _buttonShadow(style, tokens, colors),
           ),
           surfaceTintColor:
               const WidgetStatePropertyAll(Colors.transparent),
@@ -353,9 +359,7 @@ abstract final class GuildVisualTheme {
           foregroundColor: WidgetStatePropertyAll(tokens.foreground),
           elevation: WidgetStatePropertyAll(_buttonElevation(style)),
           shadowColor: WidgetStatePropertyAll(
-            style == AppUiStyle.relief || style == AppUiStyle.clay
-                ? Colors.black.withValues(alpha: 0.22)
-                : Colors.transparent,
+            _buttonShadow(style, tokens, colors),
           ),
           surfaceTintColor:
               const WidgetStatePropertyAll(Colors.transparent),
@@ -499,6 +503,7 @@ abstract final class GuildVisualTheme {
       textTheme: _textThemeFor(
         tokens,
         ThemeData(colorScheme: colors, useMaterial3: true).textTheme,
+        colors.primary,
       ),
     );
   }
@@ -972,19 +977,94 @@ abstract final class GuildVisualTheme {
 
   static double _buttonElevation(AppUiStyle style) {
     return switch (style) {
-      AppUiStyle.relief => 4,
-      AppUiStyle.clay => 4,
+      AppUiStyle.relief => 5,
+      AppUiStyle.bold => 4,
+      AppUiStyle.geometric => 2,
+      AppUiStyle.collage => 3,
+      AppUiStyle.clay => 5,
+      AppUiStyle.glass => 2,
       _ => 0,
+    };
+  }
+
+  static double _overlayElevation(AppUiStyle style) {
+    return switch (style) {
+      AppUiStyle.relief => 6,
+      AppUiStyle.bold => 4,
+      AppUiStyle.geometric => 3,
+      AppUiStyle.retroDark => 5,
+      AppUiStyle.fluorescent => 5,
+      AppUiStyle.collage => 4,
+      AppUiStyle.clay => 6,
+      AppUiStyle.glass => 8,
+      _ => 0,
+    };
+  }
+
+  static Color _buttonShadow(
+    AppUiStyle style,
+    GuildStyleTheme tokens,
+    ColorScheme colors,
+  ) {
+    return switch (style) {
+      AppUiStyle.relief => const Color(0xFFA3B1C6),
+      AppUiStyle.bold => tokens.ink,
+      AppUiStyle.geometric => tokens.ink,
+      AppUiStyle.retroDark => tokens.accent2.withValues(alpha: 0.56),
+      AppUiStyle.fluorescent => colors.primary.withValues(alpha: 0.64),
+      AppUiStyle.collage => colors.primary,
+      AppUiStyle.clay => Colors.black.withValues(alpha: 0.22),
+      AppUiStyle.glass => Colors.black.withValues(alpha: 0.24),
+      _ => Colors.transparent,
+    };
+  }
+
+  static Color _overlayShadow(
+    AppUiStyle style,
+    GuildStyleTheme tokens,
+    ColorScheme colors,
+  ) {
+    return switch (style) {
+      AppUiStyle.retroDark => tokens.accent2.withValues(alpha: 0.42),
+      AppUiStyle.fluorescent => colors.primary.withValues(alpha: 0.44),
+      AppUiStyle.collage => colors.primary.withValues(alpha: 0.50),
+      AppUiStyle.glass => Colors.black.withValues(alpha: 0.34),
+      _ => Colors.black.withValues(alpha: 0.22),
     };
   }
 
   static TextTheme _textThemeFor(
     GuildStyleTheme tokens,
     TextTheme base,
+    Color primary,
   ) {
+    final shadows = switch (tokens.style) {
+      AppUiStyle.retroDark => <Shadow>[
+          Shadow(
+            color: tokens.accent2.withValues(alpha: 0.48),
+            blurRadius: 7,
+          ),
+        ],
+      AppUiStyle.fluorescent => <Shadow>[
+          Shadow(
+            color: primary.withValues(alpha: 0.52),
+            blurRadius: 7,
+          ),
+        ],
+      AppUiStyle.glass => <Shadow>[
+          Shadow(
+            color: Colors.black.withValues(alpha: 0.30),
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+          ),
+        ],
+      _ => const <Shadow>[],
+    };
+
     TextStyle? color(TextStyle? style, {bool muted = false}) =>
         style?.copyWith(
           color: muted ? tokens.mutedForeground : tokens.foreground,
+          shadows: shadows,
         );
     return base.copyWith(
       displayLarge: color(base.displayLarge),
