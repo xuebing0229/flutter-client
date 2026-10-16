@@ -769,12 +769,12 @@ class WindowsSyncthingTransport {
     final exe = quote(binary.absolute.path);
     final home = quote(configDir.absolute.path);
     final script =
-        r"$ErrorActionPreference='SilentlyContinue';"
-        r"Get-CimInstance Win32_Process -Filter \"Name='syncthing.exe'\" | "
-        r"Where-Object { "
-        "$_.ExecutablePath -eq '$exe' -or "
-        "($_.CommandLine -and $_.CommandLine.Contains('$home'))"
-        r" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }";
+        "\$ErrorActionPreference='SilentlyContinue';"
+        "Get-CimInstance Win32_Process -Filter \"Name='syncthing.exe'\" | "
+        "Where-Object { "
+        "\$_.ExecutablePath -eq '$exe' -or "
+        "(\$_.CommandLine -and \$_.CommandLine.Contains('$home'))"
+        " } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }";
     try {
       await Process.run(
         'powershell.exe',
