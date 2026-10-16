@@ -131,8 +131,7 @@ class SummaryCardSurface extends StatelessWidget {
       ),
     );
   }
-
-
+}
 
 class SummaryTag extends StatelessWidget {
   const SummaryTag({
