@@ -220,7 +220,7 @@ class AppThemePalette {
 abstract final class AppThemePalettes {
   static const guildOriginal = AppThemePalette(
     id: 'guildOriginal',
-    name: '公会原色',
+    name: '原版',
     lightSeed: Color(0xFF6C7A6B),
     darkSeed: Color(0xFF90A58E),
     previewColors: <Color>[
@@ -232,7 +232,7 @@ abstract final class AppThemePalettes {
 
   static const tavernBell = AppThemePalette(
     id: 'tavernBell',
-    name: '酒馆晚钟',
+    name: '酒红金',
     lightSeed: Color(0xFF6C1A21),
     previewColors: <Color>[
       Color(0xFF6C1A21),
@@ -245,7 +245,7 @@ abstract final class AppThemePalettes {
 
   static const clearSkyDew = AppThemePalette(
     id: 'clearSkyDew',
-    name: '晴空晨露',
+    name: '晴空蓝',
     lightSeed: Color(0xFF0097D0),
     previewColors: <Color>[
       Color(0xFF0097D0),
@@ -258,7 +258,7 @@ abstract final class AppThemePalettes {
 
   static const lateAutumnPost = AppThemePalette(
     id: 'lateAutumnPost',
-    name: '晚秋驿站',
+    name: '杏橙',
     lightSeed: Color(0xFFE4A273),
     previewColors: <Color>[
       Color(0xFF96B9B9),
@@ -271,7 +271,7 @@ abstract final class AppThemePalettes {
 
   static const rainbowCrystal = AppThemePalette(
     id: 'rainbowCrystal',
-    name: '虹晶幻境',
+    name: '雾紫',
     lightSeed: Color(0xFF9F99D1),
     previewColors: <Color>[
       Color(0xFF9F99D1),
@@ -284,7 +284,7 @@ abstract final class AppThemePalettes {
 
   static const deepBlueVow = AppThemePalette(
     id: 'deepBlueVow',
-    name: '深蓝誓约',
+    name: '深蓝',
     lightSeed: Color(0xFF2A5D85),
     previewColors: <Color>[
       Color(0xFF091831),
@@ -297,7 +297,7 @@ abstract final class AppThemePalettes {
 
   static const meadCampfire = AppThemePalette(
     id: 'meadCampfire',
-    name: '蜜酒篝火',
+    name: '焦糖橙',
     lightSeed: Color(0xFFB97621),
     previewColors: <Color>[
       Color(0xFF372111),
@@ -310,7 +310,7 @@ abstract final class AppThemePalettes {
 
   static const amberTreasure = AppThemePalette(
     id: 'amberTreasure',
-    name: '琥珀瑰宝',
+    name: '琥珀黄',
     lightSeed: Color(0xFFD48205),
     previewColors: <Color>[
       Color(0xFF442604),
@@ -323,7 +323,7 @@ abstract final class AppThemePalettes {
 
   static const cherryPotion = AppThemePalette(
     id: 'cherryPotion',
-    name: '樱桃药剂',
+    name: '樱桃红',
     lightSeed: Color(0xFFFF2446),
     previewColors: <Color>[
       Color(0xFFFF2446),
@@ -336,7 +336,7 @@ abstract final class AppThemePalettes {
 
   static const emeraldValley = AppThemePalette(
     id: 'emeraldValley',
-    name: '翠风溪谷',
+    name: '墨绿蓝',
     lightSeed: Color(0xFF03695E),
     previewColors: <Color>[
       Color(0xFF03695E),
@@ -349,7 +349,7 @@ abstract final class AppThemePalettes {
 
   static const roseCamp = AppThemePalette(
     id: 'roseCamp',
-    name: '蔷薇营地',
+    name: '豆沙粉',
     lightSeed: Color(0xFF9B5E61),
     previewColors: <Color>[
       Color(0xFF9B5E61),
@@ -362,7 +362,7 @@ abstract final class AppThemePalettes {
 
   static const tidalSecret = AppThemePalette(
     id: 'tidalSecret',
-    name: '潮汐秘境',
+    name: '青绿色',
     lightSeed: Color(0xFF006863),
     previewColors: <Color>[
       Color(0xFF006863),
@@ -375,7 +375,7 @@ abstract final class AppThemePalettes {
 
   static const flowerMarket = AppThemePalette(
     id: 'flowerMarket',
-    name: '花冠集市',
+    name: '奶油黄',
     lightSeed: Color(0xFFF9CF01),
     previewColors: <Color>[
       Color(0xFFF9CF01),
@@ -388,7 +388,7 @@ abstract final class AppThemePalettes {
 
   static const lemonMorning = AppThemePalette(
     id: 'lemonMorning',
-    name: '柠光晨信',
+    name: '浅黄蓝',
     lightSeed: Color(0xFFF9D77C),
     previewColors: <Color>[
       Color(0xFFF9D77C),
@@ -398,7 +398,7 @@ abstract final class AppThemePalettes {
 
   static const peachWhisper = AppThemePalette(
     id: 'peachWhisper',
-    name: '桃雾密语',
+    name: '粉蓝',
     lightSeed: Color(0xFFF2B6B6),
     previewColors: <Color>[
       Color(0xFFF2B6B6),
@@ -408,7 +408,7 @@ abstract final class AppThemePalettes {
 
   static const mintFountain = AppThemePalette(
     id: 'mintFountain',
-    name: '薄荷泉庭',
+    name: '薄荷蓝',
     lightSeed: Color(0xFFA9D8B7),
     previewColors: <Color>[
       Color(0xFFA9D8B7),
@@ -418,7 +418,7 @@ abstract final class AppThemePalettes {
 
   static const creamScroll = AppThemePalette(
     id: 'creamScroll',
-    name: '奶油卷轴',
+    name: '奶油灰',
     lightSeed: Color(0xFFFBE2A2),
     previewColors: <Color>[
       Color(0xFFFBE2A2),
