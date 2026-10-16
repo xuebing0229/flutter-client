@@ -569,50 +569,29 @@ class _SurfaceFinishPainter extends CustomPainter {
     required Color light,
     required double width,
   }) {
-    final rect = rrect.outerRect;
-    final topLeft = Paint()
-      ..shader = ui.Gradient.linear(
-        rect.topLeft,
-        rect.bottomRight,
-        <Color>[dark, Colors.transparent, Colors.transparent],
-        const <double>[0, 0.42, 1],
-      );
+    // Keep the inset effect on the same rounded geometry as the field.
+    // Horizontal/vertical edge strips read as a rectangular inner box inside
+    // a rounded outer shell, which is especially obvious on search fields.
+    final offset = width * 0.55;
+    final strokeWidth = width * 1.05;
+
+    final darkPaint = Paint()
+      ..color = dark
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, width * 0.28);
+    final lightPaint = Paint()
+      ..color = light
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, width * 0.28);
+
     canvas.save();
     canvas.clipRRect(rrect);
-    canvas.drawRect(
-      Rect.fromLTWH(rect.left, rect.top, rect.width, width),
-      topLeft,
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(rect.left, rect.top, width, rect.height),
-      topLeft,
-    );
-
-    final bottomRight = Paint()
-      ..shader = ui.Gradient.linear(
-        rect.bottomRight,
-        rect.topLeft,
-        <Color>[light, Colors.transparent, Colors.transparent],
-        const <double>[0, 0.42, 1],
-      );
-    canvas.drawRect(
-      Rect.fromLTWH(
-        rect.left,
-        rect.bottom - width,
-        rect.width,
-        width,
-      ),
-      bottomRight,
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(
-        rect.right - width,
-        rect.top,
-        width,
-        rect.height,
-      ),
-      bottomRight,
-    );
+    // Positive shift leaves the top/left portion visible inside the clip.
+    canvas.drawRRect(rrect.shift(Offset(offset, offset)), darkPaint);
+    // Negative shift leaves the bottom/right portion visible inside the clip.
+    canvas.drawRRect(rrect.shift(Offset(-offset, -offset)), lightPaint);
     canvas.restore();
   }
 
