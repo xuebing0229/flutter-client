@@ -13,6 +13,7 @@ import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/app_ui_style.dart';
 import '../../../core/theme/guild_visual_theme.dart';
