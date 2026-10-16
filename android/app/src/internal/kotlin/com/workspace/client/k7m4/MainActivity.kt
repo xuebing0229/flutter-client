@@ -11,6 +11,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var syncthingBridge: SyncthingBridge
     private lateinit var screenshotOcrBridge: ScreenshotOcrBridge
     private lateinit var licenseDirectHttpsBridge: LicenseDirectHttpsBridge
+    private lateinit var downloadedUpdateInstallBridge: DownloadedUpdateInstallBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -33,6 +34,16 @@ class MainActivity : FlutterActivity() {
         }
         screenshotOcrBridge = ScreenshotOcrBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
+        downloadedUpdateInstallBridge = DownloadedUpdateInstallBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::downloadedUpdateInstallBridge.isInitialized) {
+            downloadedUpdateInstallBridge.onResume()
         }
     }
 
