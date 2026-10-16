@@ -203,6 +203,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 卸载流程完善',
     description: 'Windows 卸载时会先关闭冒险者公会、桌宠和内置同步核心，再明确询问是否保留本机个人数据；选择彻底删除会清理账号、排单、成品、同步记录、桌宠素材、截图导入记录和设置。更新缓存只清理公会自己管理的 updates 目录，不再递归删除整个下载目录，用户导出的备份和图片不会被碰。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 158,
+    title: 'Windows 新设备加入修复',
+    description: '重新排查 Windows 新设备在生成回应码之前卡住的问题：旧实现固定占用 Syncthing 默认的 8384 端口，又把同步核心作为无日志后台进程启动，端口冲突、旧进程残留或首次启动变慢都会被误报成同一个“启动超时”。现在改为应用专用动态端口，兼容旧版 8384 实例，启动前只清理属于冒险者公会的残留同步进程，并记录同步核心启动日志；首次启动等待窗口也放宽到 60 秒，失败时会给出更具体原因。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
