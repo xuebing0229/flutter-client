@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../../core/account/account_store.dart';
 import '../../../core/account/account_transfer_service.dart';
 import '../../../core/account/qr_image_decoder.dart';
 import '../../../core/portability/app_backup_data.dart';
@@ -16,13 +14,8 @@ import '../../shared/presentation/layout_spacing.dart';
 import 'scan_account_transfer_page.dart';
 
 class ExistingAccountJoinPage extends StatefulWidget {
-  const ExistingAccountJoinPage({
-    required this.store,
-    required this.onAdoptBackup,
-    super.key,
-  });
+  const ExistingAccountJoinPage({required this.onAdoptBackup, super.key});
 
-  final AccountStore store;
   final Future<void> Function(AppBackupData backup) onAdoptBackup;
 
   @override
@@ -128,20 +121,8 @@ class _ExistingAccountJoinPageState extends State<ExistingAccountJoinPage> {
 
   Future<void> _receiveFromAddDeviceCode(String raw) async {
     try {
-      final addDeviceCode = AddDeviceCode.decode(raw);
-      final localAccountId = _localAccountIdFromPairing(
-        addDeviceCode.syncPairingPayload,
-      );
-      if (localAccountId != null &&
-          widget.store.localAccounts.any(
-            (account) => account.accountId == localAccountId,
-          )) {
-        await _handleAlreadyLocalAccount(localAccountId);
-        return;
-      }
-
       final descriptor = AccountTransferDescriptor.decode(
-        addDeviceCode.accountTransferPayload,
+        AddDeviceCode.accountTransferFrom(raw),
       );
       final source = await Navigator.of(context).push<String>(
         MaterialPageRoute<String>(
@@ -157,63 +138,6 @@ class _ExistingAccountJoinPageState extends State<ExistingAccountJoinPage> {
     } catch (error) {
       if (mounted) setState(() => _error = '加入设备失败：$error');
     }
-  }
-
-  String? _localAccountIdFromPairing(String? source) {
-    if (source == null || source.trim().isEmpty) return null;
-    try {
-      final decoded = jsonDecode(source);
-      if (decoded is! Map ||
-          decoded['kind'] != 'artist-workbench-sync' ||
-          decoded['version'] != 1) {
-        return null;
-      }
-      final accountId = decoded['accountId'];
-      if (accountId is! String || accountId.trim().isEmpty) return null;
-      return accountId.trim();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _handleAlreadyLocalAccount(String accountId) async {
-    LocalAccountSummary? local;
-    for (final account in widget.store.localAccounts) {
-      if (account.accountId == accountId) {
-        local = account;
-        break;
-      }
-    }
-    if (!mounted || local == null) return;
-
-    final accountName = local.accountName;
-    final goLogin = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('这个账号已经在本机'),
-        content: Text(
-          '“$accountName”已经登录过这台设备，所以它不是“新设备首次加入”。\n\n'
-          '继续走首次加入会重复建立临时账号传输，容易卡在“等待账号数据”。'
-          '请直接登录本机已有账号；如果电脑和手机都已经登录同一账号，'
-          '请在两台设备的「账号与设备 → 添加设备 → 已登录设备互相配对」中完成配对。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('留在这里'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('去登录已有账号'),
-          ),
-        ],
-      ),
-    );
-
-    if (goLogin != true || !mounted) return;
-    await widget.store.selectLocalAccount(accountId);
-    if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _importPackage() async {
