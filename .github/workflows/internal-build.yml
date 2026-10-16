@@ -413,13 +413,10 @@ jobs:
           SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes"
           $SSH "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST" \
             "mkdir -p '$RELEASE_DEPLOY_PATH/internal/$VERSION'"
-          rsync -av --chmod=F644,D755 \
-            -e "$SSH" \
-            "site/internal/$VERSION/" \
+          SCP="scp -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
+          $SCP -p site/internal/$VERSION/* \
             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/internal/$VERSION/"
-          rsync -av --chmod=F644 \
-            -e "$SSH" \
-            site/index.html \
+          $SCP -p site/index.html \
             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/index.html"
 
       - name: Publish latest manifests last
@@ -427,8 +424,8 @@ jobs:
         shell: bash
         run: |
           SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes"
-          rsync -av --chmod=F644 \
-            -e "$SSH" \
+          SCP="scp -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
+          $SCP -p \
             site/internal/android-latest.json \
             site/internal/windows-latest.json \
             site/internal/latest.json \
