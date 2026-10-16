@@ -163,6 +163,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'UI 风格质感重做',
     description: '按示范文档中的原始组件效果重新制作 UI 风格：浮雕补回内凹明暗层，粗边恢复硬边与硬阴影，复古深色加入扫描线、网格与暗角，荧光加入点阵和发光层，拼贴改用示范中的浅色反设计版本，黏土加强厚圆角和偏移阴影，玻璃改为水滴边框、多层高光和真实背景模糊。主题色继续作为主强调色，经典界面保持不变。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 150,
+    title: 'UI 风格明暗与组件统一修复',
+    description: 'UI风格不再擅自切换浅色或深色：除“复古浅色 / 复古深色”外，其余风格都跟随当前明暗模式，浅色玻璃恢复乳白清透效果。修复搜索栏内外双重边框、业务卡片左侧无意义竖线，以及账号、专注、设备同步等页面仍残留固定白色硬矩形的问题。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
