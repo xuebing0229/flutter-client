@@ -21,14 +21,18 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
   @override
   Future<Map<String, dynamic>> fetchLatestManifest() async {
     try {
-      final json = await _fetchJson(_staticManifestUri);
-      final normalized = _normalizeStaticManifest(json);
-      if (normalized != null) return normalized;
+      // The Releases API reflects a newly published build immediately, while
+      // the /releases/latest/download redirect may briefly keep pointing at
+      // the previous release.
+      return await _fetchReleaseApiManifest();
     } catch (_) {
-      // Fall back to the GitHub Releases API below.
+      // Keep the static manifest as a fallback for transient API failures.
     }
 
-    return _fetchReleaseApiManifest();
+    final json = await _fetchJson(_staticManifestUri);
+    final normalized = _normalizeStaticManifest(json);
+    if (normalized != null) return normalized;
+    throw const FormatException('无法读取最新 Beta 更新信息。');
   }
 
   Map<String, dynamic>? _normalizeStaticManifest(
