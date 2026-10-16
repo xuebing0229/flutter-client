@@ -8,7 +8,6 @@ on:
       - 'build/internal-*'
     paths:
       - pubspec.yaml
-      - .github/workflows/internal-build.yml
 
 permissions:
   contents: read
