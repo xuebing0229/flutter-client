@@ -120,25 +120,15 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
             base,
           ],
         ),
-      AppUiStyle.glass => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            Colors.white.withValues(alpha: 0.11),
-            ThemeData.estimateBrightnessForColor(base) == Brightness.dark
-                ? accent2.withValues(alpha: 0.12)
-                : accent2.withValues(alpha: 0.06),
-            base.withValues(alpha: glassOpacity),
-          ],
-          stops: const <double>[0, 0.35, 1],
-        ),
       _ => null,
     };
 
     return BoxDecoration(
       color: gradient == null
           ? (style == AppUiStyle.glass
-              ? base.withValues(alpha: glassOpacity)
+              ? Colors.white.withValues(
+                  alpha: foreground.computeLuminance() < 0.35 ? 0.55 : 0.04,
+                )
               : base)
           : null,
       gradient: gradient,
@@ -401,9 +391,15 @@ abstract final class GuildVisualTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: style != AppUiStyle.minimal,
-        fillColor: style == AppUiStyle.glass
-            ? tokens.surfaceAlt.withValues(alpha: 0.58)
-            : tokens.surfaceAlt,
+        fillColor: switch (style) {
+          AppUiStyle.glass => colors.brightness == Brightness.light
+              ? Colors.white.withValues(alpha: 0.50)
+              : Colors.white.withValues(alpha: 0.05),
+          AppUiStyle.relief => tokens.background,
+          AppUiStyle.clay => tokens.background,
+          AppUiStyle.collage => tokens.surface,
+          _ => tokens.surfaceAlt,
+        },
         border: inputBorder,
         enabledBorder: inputBorder,
         focusedBorder: _focusedInputBorder(tokens, colors.primary),
@@ -897,43 +893,36 @@ abstract final class GuildVisualTheme {
         ];
         chromeShadows = shadows;
       case AppUiStyle.glass:
-        background = dark
-            ? _mix(const Color(0xFF0E0E1A), primary, 0.08)
-            : _mix(const Color(0xFFF2F6FB), primary, 0.018);
-        surface = dark
-            ? _mix(const Color(0xFF11131A), primary, 0.07)
-            : _mix(const Color(0xFFFFFFFF), primary, 0.012);
-        surfaceAlt = dark
-            ? _mix(const Color(0xFF171B24), primary, 0.09)
-            : _mix(const Color(0xFFE9EFF6), primary, 0.028);
+        // Exact material values come from the supplied
+        // liquid-glass-components(.light).html references. Theme colour stays
+        // an accent; it must not recolour the glass base itself.
+        background =
+            dark ? const Color(0xFF0E0E1A) : const Color(0xFFF0EFF5);
+        surface =
+            dark ? const Color(0xFF0E0E1A) : const Color(0xFFFFFFFF);
+        surfaceAlt =
+            dark ? const Color(0xFF141420) : const Color(0xFFFFFFFF);
         foreground =
-            dark ? const Color(0xFFFFFFFF) : const Color(0xFF303743);
-        muted = dark
-            ? Colors.white.withValues(alpha: 0.60)
-            : const Color(0xFF7B8491);
+            dark ? const Color(0xFFE8E8F0) : const Color(0xFF1E1B3A);
+        muted =
+            dark ? const Color(0xFF8888A8) : const Color(0xFF7C7893);
         ink = foreground;
         border = dark
-            ? Colors.white.withValues(alpha: 0.34)
-            : _mix(const Color(0xFFCAD4E0), primary, 0.08);
+            ? Colors.white.withValues(alpha: 0.10)
+            : primary.withValues(alpha: 0.12);
         borderWidth = 1;
-        radius = 20;
-        cardRadius = 18;
+        radius = 16;
+        cardRadius = 16;
         shadows = <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.18 : 0.08),
-            offset: const Offset(0, 4),
-            blurRadius: dark ? 16 : 14,
+            color: primary.withValues(alpha: dark ? 0.16 : 0.08),
+            offset: Offset(0, dark ? 0 : 4),
+            blurRadius: dark ? 10 : 16,
           ),
         ];
-        chromeShadows = <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.24 : 0.10),
-            offset: const Offset(0, 8),
-            blurRadius: dark ? 28 : 24,
-          ),
-        ];
-        glassBlur = 24;
-        glassOpacity = dark ? 0.30 : 0.52;
+        chromeShadows = shadows;
+        glassBlur = dark ? 12 : 16;
+        glassOpacity = dark ? 0.04 : 0.55;
     }
 
     final colors = base.copyWith(
@@ -1021,6 +1010,22 @@ abstract final class GuildVisualTheme {
     if (tokens.style == AppUiStyle.minimal) {
       return UnderlineInputBorder(
         borderSide: BorderSide(color: primary, width: 2),
+      );
+    }
+    if (tokens.style == AppUiStyle.relief ||
+        tokens.style == AppUiStyle.clay) {
+      return OutlineInputBorder(
+        borderRadius: tokens.surfaceBorderRadius,
+        borderSide: BorderSide.none,
+      );
+    }
+    if (tokens.style == AppUiStyle.glass) {
+      return OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: primary.withValues(alpha: 0.35),
+          width: 1,
+        ),
       );
     }
     return OutlineInputBorder(
@@ -1199,7 +1204,10 @@ class GuildStyledSurface extends StatelessWidget {
       accent2: tokens.accent2,
       accent3: tokens.accent3,
       background: tokens.background,
-      surface: backgroundColor ?? tokens.surface,
+      surface: backgroundColor ??
+          (role == GuildSurfaceRole.inset
+              ? tokens.surfaceAlt
+              : tokens.surface),
       surfaceAlt: tokens.surfaceAlt,
       foreground: tokens.foreground,
       borderColor: tokens.borderColor,
