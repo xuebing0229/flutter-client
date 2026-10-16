@@ -73,8 +73,15 @@ class MainActivity : FlutterActivity() {
     ) {
         Thread {
             try {
+                // Prefer the Releases API because the "latest/download"
+                // redirect can briefly lag behind a newly published release.
+                // Keep the static manifest as a fallback for API/network issues.
                 val manifest =
-                    fetchStaticManifest() ?: fetchReleaseApiManifest()
+                    runCatching { fetchReleaseApiManifest() }.getOrNull()
+                        ?: fetchStaticManifest()
+                        ?: throw IllegalStateException(
+                            "Could not load the latest Beta release metadata.",
+                        )
 
                 runOnUiThread {
                     result.success(manifest)
