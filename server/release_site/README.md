@@ -7,10 +7,14 @@
 1. 生成一对专门用于 GitHub Actions 发布的 SSH 密钥，不要复用 root 登录密钥。
 2. 把公钥交给服务器脚本，把私钥保存到 GitHub 仓库 Secret：
    `INTERNAL_RELEASE_SSH_KEY`。
-3. 在香港服务器执行：
+3. 在香港服务器执行（现有部署使用 sparse checkout，所以先把发布站目录加入）：
 
 ```bash
-cd /opt/adventure-license-src/server/release_site
+cd /opt/adventure-license-src
+git fetch origin
+git sparse-checkout set server/activation_service server/release_site
+git checkout build/internal-0.1.4-from-beta-158
+cd server/release_site
 chmod +x prepare_server.sh
 RELEASE_DEPLOY_PUBLIC_KEY='ssh-ed25519 AAAA...' ./prepare_server.sh
 ```
