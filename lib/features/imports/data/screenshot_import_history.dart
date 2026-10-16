@@ -41,6 +41,15 @@ class ScreenshotImportHistory {
     return raw.whereType<String>().toSet();
   }
 
+  Future<void> replaceAll({
+    required String accountId,
+    required Iterable<String> fingerprints,
+  }) async {
+    final values = fingerprints.where((key) => key.isNotEmpty).toSet();
+    final file = await _file(accountId);
+    await atomicWriteString(file, jsonEncode(values.toList()..sort()));
+  }
+
   Future<void> markImported({
     required String accountId,
     required Iterable<String> fingerprints,
