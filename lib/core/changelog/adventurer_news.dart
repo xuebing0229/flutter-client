@@ -173,6 +173,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '测试版更新检查修复',
     description: '检查更新优先读取 GitHub Releases 的实时最新版本，不再因为 latest/download 跳转短暂滞后而把刚发布的新测试版误判成旧版本；Android 与 Windows 都保留静态清单作为备用。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 152,
+    title: 'UI 风格按参考稿重新对齐',
+    description: '重新按提供的 UI/UX HTML 参考逐项校准风格。玻璃取消组件内部的大块气泡高光，改回低透明玻璃底、细边、轻量背景色场和真实模糊；搜索框按浮雕、粗边、几何、复古、荧光、拼贴、黑白、黏土与玻璃分别使用参考中的圆角、边框、底色和内凹或发光关系，不再套统一外壳。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

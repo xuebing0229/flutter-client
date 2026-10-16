@@ -290,6 +290,16 @@ class ResponsiveCardActionButton extends StatelessWidget {
 
         final uiStyle = GuildStyleTheme.of(context);
         final colors = Theme.of(context).colorScheme;
+        final styledForeground = switch (uiStyle.style) {
+          AppUiStyle.relief ||
+          AppUiStyle.minimal ||
+          AppUiStyle.retroLight ||
+          AppUiStyle.retroDark ||
+          AppUiStyle.fluorescent => colors.primary,
+          AppUiStyle.monochrome => uiStyle.background,
+          AppUiStyle.glass => uiStyle.foreground,
+          _ => colors.onPrimary,
+        };
         final button = FilledButton.tonal(
           onPressed: onPressed,
           style: FilledButton.styleFrom(
@@ -301,7 +311,7 @@ class ResponsiveCardActionButton extends StatelessWidget {
             backgroundColor:
                 uiStyle.isClassic ? null : Colors.transparent,
             foregroundColor:
-                uiStyle.isClassic ? null : colors.onPrimary,
+                uiStyle.isClassic ? null : styledForeground,
             elevation: uiStyle.isClassic ? null : 0,
             shadowColor:
                 uiStyle.isClassic ? null : Colors.transparent,
