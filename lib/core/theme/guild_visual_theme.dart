@@ -214,7 +214,10 @@ abstract final class GuildVisualTheme {
     AppThemeSemanticColors? semanticColors,
   }) {
     if (style == AppUiStyle.classic) {
-      return _buildClassic(baseColors);
+      return _buildClassic(
+        baseColors,
+        semanticColors: semanticColors,
+      );
     }
 
     final resolved = _resolve(
@@ -541,16 +544,20 @@ abstract final class GuildVisualTheme {
     );
   }
 
-  static ThemeData _buildClassic(ColorScheme colors) {
+  static ThemeData _buildClassic(
+    ColorScheme colors, {
+    AppThemeSemanticColors? semanticColors,
+  }) {
     final dark = colors.brightness == Brightness.dark;
-    final outline =
+    final outline = semanticColors?.border ??
         colors.outlineVariant.withValues(alpha: dark ? 0.66 : 0.72);
     final innerOutline =
         colors.primary.withValues(alpha: dark ? 0.20 : 0.15);
-    final raisedSurface = Color.alphaBlend(
-      colors.primary.withValues(alpha: dark ? 0.035 : 0.018),
-      colors.surface,
-    );
+    final raisedSurface = semanticColors?.surface ??
+        Color.alphaBlend(
+          colors.primary.withValues(alpha: dark ? 0.035 : 0.018),
+          colors.surface,
+        );
     final selectedSurface = Color.alphaBlend(
       colors.primary.withValues(alpha: dark ? 0.18 : 0.11),
       colors.surfaceContainer,
@@ -561,16 +568,18 @@ abstract final class GuildVisualTheme {
     );
     final tokens = GuildStyleTheme(
       style: AppUiStyle.classic,
-      background: Color.alphaBlend(
-        colors.primary.withValues(alpha: dark ? 0.025 : 0.018),
-        colors.surface,
-      ),
+      background: semanticColors?.background ??
+          Color.alphaBlend(
+            colors.primary.withValues(alpha: dark ? 0.025 : 0.018),
+            colors.surface,
+          ),
       surface: raisedSurface,
-      surfaceAlt: colors.surfaceContainer,
-      foreground: colors.onSurface,
-      mutedForeground: colors.onSurfaceVariant,
-      ink: colors.onSurface,
-      accent2: colors.secondary,
+      surfaceAlt: semanticColors?.surfaceAlt ?? colors.surfaceContainer,
+      foreground: semanticColors?.foreground ?? colors.onSurface,
+      mutedForeground:
+          semanticColors?.mutedForeground ?? colors.onSurfaceVariant,
+      ink: semanticColors?.foreground ?? colors.onSurface,
+      accent2: semanticColors?.accent ?? colors.secondary,
       accent3: colors.tertiary,
       borderColor: outline,
       borderWidth: 1,
@@ -601,11 +610,12 @@ abstract final class GuildVisualTheme {
       highlightColor: colors.primary.withValues(alpha: 0.07),
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: colors.surface,
+        backgroundColor: semanticColors?.surface ?? colors.surface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colors.surfaceContainer,
+        backgroundColor:
+            semanticColors?.surfaceAlt ?? colors.surfaceContainer,
         indicatorColor: selectedSurface,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
