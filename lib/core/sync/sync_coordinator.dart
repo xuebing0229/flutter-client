@@ -124,6 +124,7 @@ String syncFieldLabel(String field) {
     'archivedAt' => '归档时间',
     'themeMode' => '主题模式',
     'themePaletteId' => '主题色',
+    'customThemePalettes' => '自定义主题色方案',
     'uiStyle' => 'UI风格',
     'uiTexture' => 'UI风格',
     'features' => '功能开关',
