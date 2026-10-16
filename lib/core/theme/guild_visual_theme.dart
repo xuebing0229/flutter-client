@@ -94,6 +94,23 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
         },
       );
 
+  BorderRadius get inputBorderRadius => BorderRadius.circular(
+        switch (style) {
+          AppUiStyle.classic => 18.0,
+          AppUiStyle.relief => 12.0,
+          AppUiStyle.minimal => 0.0,
+          AppUiStyle.bold => 0.0,
+          AppUiStyle.geometric => 0.0,
+          AppUiStyle.retroLight => 4.0,
+          AppUiStyle.retroDark => 4.0,
+          AppUiStyle.fluorescent => 1.0,
+          AppUiStyle.collage => 0.0,
+          AppUiStyle.monochrome => 0.0,
+          AppUiStyle.clay => 20.0,
+          AppUiStyle.glass => 12.0,
+        },
+      );
+
   BoxDecoration decoration({
     GuildSurfaceRole role = GuildSurfaceRole.content,
     BorderRadius? borderRadius,
@@ -995,7 +1012,7 @@ abstract final class GuildVisualTheme {
       );
     }
     return OutlineInputBorder(
-      borderRadius: tokens.surfaceBorderRadius,
+      borderRadius: tokens.inputBorderRadius,
       borderSide: BorderSide(
         color: tokens.borderColor,
         width: tokens.borderWidth,
@@ -1015,13 +1032,13 @@ abstract final class GuildVisualTheme {
     if (tokens.style == AppUiStyle.relief ||
         tokens.style == AppUiStyle.clay) {
       return OutlineInputBorder(
-        borderRadius: tokens.surfaceBorderRadius,
+        borderRadius: tokens.inputBorderRadius,
         borderSide: BorderSide.none,
       );
     }
     if (tokens.style == AppUiStyle.glass) {
       return OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: tokens.inputBorderRadius,
         borderSide: BorderSide(
           color: primary.withValues(alpha: 0.35),
           width: 1,
@@ -1029,7 +1046,7 @@ abstract final class GuildVisualTheme {
       );
     }
     return OutlineInputBorder(
-      borderRadius: tokens.surfaceBorderRadius,
+      borderRadius: tokens.inputBorderRadius,
       borderSide: BorderSide(
         color: primary,
         width: tokens.borderWidth <= 0 ? 1.5 : tokens.borderWidth,
