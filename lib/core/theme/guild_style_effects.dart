@@ -224,7 +224,18 @@ class GuildSurfaceEffect extends StatelessWidget {
         );
       case AppUiStyle.collage:
         return Border.all(
-          color: foreground,
+          color: _inset ? borderColor : foreground,
+          width: math.max(borderWidth, 2),
+        );
+      case AppUiStyle.monochrome:
+        if (_inset) {
+          return Border.all(
+            color: foreground.withValues(alpha: 0.62),
+            width: 1,
+          );
+        }
+        return Border.all(
+          color: borderColor,
           width: math.max(borderWidth, 2),
         );
       default:
