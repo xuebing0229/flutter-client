@@ -86,6 +86,14 @@ android {
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
             }
+            // Internal builds intentionally use the non-Beta signing identity.
+            // This keeps them cryptographically distinct from test/Beta APKs.
+            create("internalRelease") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -102,6 +110,12 @@ android {
             buildConfigField("int", "SYNCTHING_API_PORT", "8384")
             signingConfig = signingConfigs.findByName("stableRelease")
         }
+        create("internal") {
+            dimension = "channel"
+            applicationIdSuffix = ".internal"
+            buildConfigField("int", "SYNCTHING_API_PORT", "8387")
+            signingConfig = signingConfigs.findByName("internalRelease")
+        }
         create("issuer") {
             dimension = "channel"
             applicationIdSuffix = ".issuer"
@@ -114,6 +128,7 @@ android {
     sourceSets {
         getByName("beta").jniLibs.srcDirs("src/sync/jniLibs")
         getByName("stable").jniLibs.srcDirs("src/sync/jniLibs")
+        getByName("internal").jniLibs.srcDirs("src/sync/jniLibs")
     }
 
     packaging {
