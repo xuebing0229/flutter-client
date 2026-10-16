@@ -208,7 +208,7 @@ class GuildSurfaceEffect extends StatelessWidget {
       case AppUiStyle.fluorescent:
         return Border.all(
           color: primary.withValues(alpha: 0.42),
-          width: math.max(borderWidth, 1),
+          width: math.max(borderWidth, 1.0),
         );
       case AppUiStyle.retroDark:
         return Border.all(
@@ -424,6 +424,7 @@ class _SurfaceFinishPainter extends CustomPainter {
         } else {
           _paintSoftTopHighlight(canvas, rrect, 0.12);
         }
+        break;
       case AppUiStyle.minimal:
         if (role == GuildEffectRole.content) {
           canvas.drawLine(
@@ -434,18 +435,25 @@ class _SurfaceFinishPainter extends CustomPainter {
               ..strokeWidth = 1.2,
           );
         }
+        break;
       case AppUiStyle.bold:
         _paintCornerNotches(canvas, rect, foreground, 3);
+        break;
       case AppUiStyle.geometric:
         _paintGeometricAccent(canvas, rect);
+        break;
       case AppUiStyle.retroLight:
         _paintHairline(canvas, rect, accent2.withValues(alpha: 0.22));
+        break;
       case AppUiStyle.retroDark:
         _paintHairline(canvas, rect, accent2.withValues(alpha: 0.58));
+        break;
       case AppUiStyle.fluorescent:
         _paintNeonInnerGlow(canvas, rrect);
+        break;
       case AppUiStyle.collage:
         _paintCollageMarks(canvas, rect);
+        break;
       case AppUiStyle.monochrome:
         break;
       case AppUiStyle.clay:
@@ -460,8 +468,10 @@ class _SurfaceFinishPainter extends CustomPainter {
         } else {
           _paintSoftTopHighlight(canvas, rrect, 0.18);
         }
+        break;
       case AppUiStyle.glass:
         _paintGlassHighlights(canvas, rect, rrect);
+        break;
       case AppUiStyle.classic:
         break;
     }
@@ -769,16 +779,22 @@ class _BackdropPainter extends CustomPainter {
         break;
       case AppUiStyle.geometric:
         _paintGeometricBackdrop(canvas, rect);
+        break;
       case AppUiStyle.retroLight:
         _paintRetroLight(canvas, rect);
+        break;
       case AppUiStyle.retroDark:
         _paintRetroDark(canvas, rect);
+        break;
       case AppUiStyle.fluorescent:
         _paintAcid(canvas, rect);
+        break;
       case AppUiStyle.collage:
         _paintCollage(canvas, rect);
+        break;
       case AppUiStyle.glass:
         _paintGlass(canvas, rect);
+        break;
     }
   }
 
