@@ -87,10 +87,10 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
           AppUiStyle.retroLight => 4.0,
           AppUiStyle.retroDark => 4.0,
           AppUiStyle.fluorescent => 1.0,
-          AppUiStyle.collage => 2.0,
+          AppUiStyle.collage => 0.0,
           AppUiStyle.monochrome => 0.0,
-          AppUiStyle.clay => 14.0,
-          AppUiStyle.glass => 14.0,
+          AppUiStyle.clay => 20.0,
+          AppUiStyle.glass => 12.0,
         },
       );
 
@@ -777,10 +777,8 @@ abstract final class GuildVisualTheme {
         borderWidth = 3;
         radius = 0;
         cardRadius = 0;
-        shadows = <BoxShadow>[
-          BoxShadow(color: ink, offset: const Offset(3, 3)),
-        ];
-        chromeShadows = shadows;
+        shadows = const <BoxShadow>[];
+        chromeShadows = const <BoxShadow>[];
       case AppUiStyle.retroLight:
         background = const Color(0xFFF5F0E8);
         surface = const Color(0xFFEDE7DB);
@@ -792,10 +790,8 @@ abstract final class GuildVisualTheme {
         borderWidth = 2;
         radius = 8;
         cardRadius = 8;
-        shadows = <BoxShadow>[
-          BoxShadow(color: accent2, offset: const Offset(3, 3)),
-        ];
-        chromeShadows = shadows;
+        shadows = const <BoxShadow>[];
+        chromeShadows = const <BoxShadow>[];
       case AppUiStyle.retroDark:
         background = _mix(const Color(0xFF0D0221), primary, 0.06);
         surface = Colors.black.withValues(alpha: 0.58);
@@ -863,11 +859,11 @@ abstract final class GuildVisualTheme {
         borderWidth = 2;
         radius = 0;
         cardRadius = 0;
-        shadows = <BoxShadow>[
+        shadows = const <BoxShadow>[];
+        chromeShadows = <BoxShadow>[
           BoxShadow(color: primary, offset: const Offset(6, 6)),
           BoxShadow(color: accent2, offset: const Offset(-3, -3)),
         ];
-        chromeShadows = shadows;
       case AppUiStyle.monochrome:
         background =
             dark ? const Color(0xFF171717) : const Color(0xFFE5E5E5);
@@ -1059,11 +1055,11 @@ abstract final class GuildVisualTheme {
       AppUiStyle.relief => 12,
       AppUiStyle.minimal => 0,
       AppUiStyle.bold => 0,
-      AppUiStyle.geometric => 0,
+      AppUiStyle.geometric => 2,
       AppUiStyle.retroLight => 4,
       AppUiStyle.retroDark => 4,
       AppUiStyle.fluorescent => 1,
-      AppUiStyle.collage => 5,
+      AppUiStyle.collage => 0,
       AppUiStyle.monochrome => 0,
       AppUiStyle.clay => 20,
       AppUiStyle.glass => 12,
