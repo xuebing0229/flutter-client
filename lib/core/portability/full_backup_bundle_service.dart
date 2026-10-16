@@ -381,27 +381,7 @@ class FullBackupBundleService {
         segments.skip(2).every(
           (segment) =>
               segment.isNotEmpty &&
-              RegExp(r'^[A-Za-z0-9._-]+
-    if (!_isSafeArchivePath(value)) return false;
-    final segments = value.split('/');
-    return segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
-        segments.skip(2).every(
-          (segment) =>
-              segment.isNotEmpty &&
               RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
-        );
-  }
-
-  static String _joinRelative(String root, String relativePath) {
-    return <String>[
-      root,
-      ...relativePath.split('/'),
-    ].join(Platform.pathSeparator);
-  }
-}
-).hasMatch(segment),
         );
   }
 
