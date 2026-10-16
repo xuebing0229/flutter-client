@@ -310,32 +310,46 @@ void main() {
   testWidgets('styled search field has only the outer style shell', (
     tester,
   ) async {
-    final controller = TextEditingController();
-    addTearDown(controller.dispose);
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.glass),
-        home: Scaffold(
-          body: CollectionSearchField(
-            controller: controller,
-            query: '',
-            hintText: '搜索',
-            onChanged: (_) {},
-            onClear: () {},
+    for (final appStyle in <AppUiStyle>[
+      AppUiStyle.clay,
+      AppUiStyle.glass,
+    ]) {
+      final controller = TextEditingController();
+      await tester.pumpWidget(
+        MaterialApp(
+          themeAnimationDuration: Duration.zero,
+          theme: GuildVisualTheme.build(scheme, style: appStyle),
+          home: Scaffold(
+            body: CollectionSearchField(
+              controller: controller,
+              query: '',
+              hintText: '搜索',
+              onChanged: (_) {},
+              onClear: () {},
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.byType(TextField));
-    await tester.pump();
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
 
-    final textField = tester.widget<TextField>(find.byType(TextField));
-    final focused = textField.decoration?.focusedBorder;
-    expect(focused, isA<OutlineInputBorder>());
-    expect((focused! as OutlineInputBorder).borderSide, BorderSide.none);
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(
+        textField.decoration?.filled,
+        isFalse,
+        reason: '${appStyle.label} search must not paint an inner fill box',
+      );
+      expect(textField.decoration?.border, InputBorder.none);
+      expect(textField.decoration?.enabledBorder, InputBorder.none);
+      expect(textField.decoration?.focusedBorder, InputBorder.none);
+      expect(find.byType(GuildSurfaceEffect), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+    }
   });
 
 
