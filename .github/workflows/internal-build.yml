@@ -100,6 +100,7 @@ jobs:
             --build-number="$INTERNAL_ANDROID_VERSION_CODE" \
             --dart-define=APP_CHANNEL=internal \
             --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
+            --dart-define=INTERNAL_RELEASE_BUILD="$INTERNAL_RELEASE_BUILD" \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-internal-release.apk app-internal.apk
 
