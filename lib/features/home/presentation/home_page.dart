@@ -736,10 +736,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     final paletteId = settings['themePaletteId'];
-    if (paletteId is String && widget.themeStore.containsPaletteId(paletteId)) {
-      await widget.themeStore.setPaletteId(paletteId);
+    if (paletteId is String) {
+      if (widget.themeStore.containsPaletteId(paletteId)) {
+        await widget.themeStore.setPaletteId(paletteId);
+      } else if (paletteId.startsWith('custom:')) {
+        // A UI preference must never make otherwise valid work data
+        // unreadable. Build 154 could persist a selected custom palette ID
+        // into workspace settings without embedding the custom palette itself.
+        // If that old preset is unavailable, keep/fall back to a valid local
+        // palette and continue restoring orders/products normally.
+        await widget.themeStore.setPaletteId(
+          AppThemePalettes.guildOriginal.id,
+        );
+      } else {
+        await widget.themeStore.setPaletteId(
+          AppThemePalettes.guildOriginal.id,
+        );
+      }
     } else if (paletteId != null) {
-      throw const FormatException('同步主题色无效。');
+      await widget.themeStore.setPaletteId(
+        AppThemePalettes.guildOriginal.id,
+      );
     }
 
     final styleId = settings['uiStyle'];
