@@ -118,7 +118,7 @@ class _SettingsPageState extends State<SettingsPage>
       notice: AdventurerNewsNotice(
         previousBuild: 0,
         currentBuild: build,
-        entries: newsBetweenBuilds(0, build),
+        entries: newsBetweenCurrentChannelBuilds(0, build),
       ),
     );
   }
