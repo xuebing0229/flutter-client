@@ -134,11 +134,22 @@ class PortableSyncWorkspaceValidator {
           if (materialized != null) return false;
         } else {
           if (materialized == null) return false;
-          final comparable = record.kind == SyncEntityKind.settings &&
-                  !local.containsKey('features') &&
-                  materialized.containsKey('features')
-              ? (<String, dynamic>{...materialized}..remove('features'))
-              : materialized;
+          var comparable = materialized;
+          if (record.kind == SyncEntityKind.settings) {
+            comparable = <String, dynamic>{...materialized};
+            // These fields are retained only for backward compatibility with
+            // older builds. They must not make an otherwise identical modern
+            // workspace fail full-backup consistency checks forever.
+            if (!local.containsKey('features') &&
+                comparable.containsKey('features')) {
+              comparable.remove('features');
+            }
+            if (local.containsKey('uiStyle') &&
+                !local.containsKey('uiTexture') &&
+                comparable.containsKey('uiTexture')) {
+              comparable.remove('uiTexture');
+            }
+          }
           if (!syncJsonEquals(local, comparable)) {
             return false;
           }
