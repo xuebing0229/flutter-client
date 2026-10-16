@@ -213,6 +213,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '首次加入握手修复',
     description: '修复原电脑已登录、新手机首次加入时可能出现“设备已连接但账号数据始终不传”的问题。首次加入现在会确认临时账号目录已经真正双向共享后才开始传输，并在账号包送达、正式同步关系建立、最终确认完成后再结束临时通道；若目录未共享、被暂停或同步报错，会直接提示具体卡点，不再一直转圈。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 160,
+    title: '完整备份导出修复',
+    description: '修复旧账号升级到新版 UI 风格后，历史同步记录仍保留旧 uiTexture 字段，导致完整备份连续校验失败并提示“导出快照暂时无法稳定”的问题。新版会自动清理已经被 uiStyle 取代的旧字段，同时兼容旧备份中的历史设置，不再因为这类已废弃设置阻止导出。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
