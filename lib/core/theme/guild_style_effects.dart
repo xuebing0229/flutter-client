@@ -638,8 +638,11 @@ class _SurfaceFinishPainter extends CustomPainter {
   }
 
   void _paintGlassHighlights(Canvas canvas, Rect rect, RRect rrect) {
+    final lightGlass = background.computeLuminance() > 0.6;
     final baseBorder = Paint()
-      ..color = Colors.white.withValues(alpha: 0.20)
+      ..color = lightGlass
+          ? foreground.withValues(alpha: 0.14)
+          : Colors.white.withValues(alpha: 0.20)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.drawRRect(rrect.deflate(0.5), baseBorder);
@@ -655,7 +658,9 @@ class _SurfaceFinishPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..strokeCap = StrokeCap.round;
     final bottomEdge = Paint()
-      ..color = Colors.white.withValues(alpha: 0.10)
+      ..color = lightGlass
+          ? foreground.withValues(alpha: 0.10)
+          : Colors.white.withValues(alpha: 0.10)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0
       ..strokeCap = StrokeCap.round;
