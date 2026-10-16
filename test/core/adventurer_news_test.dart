@@ -139,4 +139,25 @@ void main() {
     );
   });
 
+  test('内测见闻按独立 0.1.x 版本记录', () {
+    final picked = newsBetweenBuilds(
+      3,
+      4,
+      catalog: internalAdventurerNewsCatalog,
+    );
+    expect(picked, isNotEmpty);
+    expect(picked.every((entry) => entry.displayVersion == '0.1.3'), isTrue);
+    expect(
+      picked.map((entry) => entry.title),
+      contains('新设备加入与主题恢复修复'),
+    );
+  });
+
+  test('内测历史保留 0.1.0 到 0.1.3 的版本标签', () {
+    expect(
+      internalAdventurerNewsCatalog.map((entry) => entry.displayVersion).toSet(),
+      containsAll(<String>{'0.1.0', '0.1.1', '0.1.2', '0.1.3'}),
+    );
+  });
+
 }
