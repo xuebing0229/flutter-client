@@ -679,51 +679,43 @@ abstract final class GuildVisualTheme {
       case AppUiStyle.classic:
         throw StateError('Classic style is resolved by _buildClassic.');
       case AppUiStyle.relief:
-        background = dark
-            ? _mix(const Color(0xFF202630), primary, 0.05)
-            : _mix(const Color(0xFFE0E5EC), primary, 0.025);
+        background = _mix(const Color(0xFFE0E5EC), primary, 0.018);
         surface = background;
-        surfaceAlt = dark
-            ? _mix(background, Colors.black, 0.09)
-            : _mix(background, Colors.white, 0.18);
-        foreground = dark ? const Color(0xFFE3E8F0) : const Color(0xFF5A6E86);
-        muted = dark ? const Color(0xFF9AA9BA) : const Color(0xFF8FA3BD);
+        surfaceAlt = _mix(background, Colors.white, 0.06);
+        foreground = const Color(0xFF5A6E86);
+        muted = const Color(0xFF8FA3BD);
         ink = foreground;
         border = Colors.transparent;
         borderWidth = 0;
         radius = 16;
         cardRadius = 18;
-        final lightShadow = dark
-            ? Colors.white.withValues(alpha: 0.07)
-            : Colors.white.withValues(alpha: 0.90);
-        final darkShadow = dark
-            ? Colors.black.withValues(alpha: 0.45)
-            : const Color(0xFFA3B1C6).withValues(alpha: 0.78);
+        final lightShadow = Colors.white.withValues(alpha: 0.94);
+        final darkShadow = const Color(0xFFA3B1C6).withValues(alpha: 0.82);
         shadows = <BoxShadow>[
           BoxShadow(color: darkShadow, offset: const Offset(6, 6), blurRadius: 12),
           BoxShadow(color: lightShadow, offset: const Offset(-6, -6), blurRadius: 12),
         ];
         chromeShadows = shadows;
       case AppUiStyle.minimal:
-        background = dark ? const Color(0xFF121212) : const Color(0xFFF7F7F7);
+        background = const Color(0xFFF7F7F7);
         surface = background;
-        surfaceAlt = dark ? const Color(0xFF1A1A1A) : const Color(0xFFFFFFFF);
-        foreground = dark ? const Color(0xFFECECEC) : const Color(0xFF1A1A1A);
-        muted = dark ? const Color(0xFF999999) : const Color(0xFF888888);
+        surfaceAlt = const Color(0xFFFFFFFF);
+        foreground = const Color(0xFF1A1A1A);
+        muted = const Color(0xFF888888);
         ink = foreground;
-        border = dark ? const Color(0xFF383838) : const Color(0xFFE2E2E2);
+        border = const Color(0xFFE2E2E2);
         borderWidth = 1;
         radius = 0;
         cardRadius = 0;
         shadows = const <BoxShadow>[];
         chromeShadows = const <BoxShadow>[];
       case AppUiStyle.bold:
-        background = dark ? const Color(0xFF181818) : const Color(0xFFFFFDF7);
-        surface = dark ? const Color(0xFF202020) : const Color(0xFFFFFFFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.12 : 0.08);
-        foreground = dark ? const Color(0xFFF7F7F7) : const Color(0xFF1A1A2E);
-        muted = dark ? const Color(0xFFB0B0B0) : const Color(0xFF555555);
-        ink = dark ? const Color(0xFFF4F4F4) : const Color(0xFF000000);
+        background = const Color(0xFFFFFDF7);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(surface, primary, 0.08);
+        foreground = const Color(0xFF1A1A2E);
+        muted = const Color(0xFF555555);
+        ink = const Color(0xFF000000);
         border = ink;
         borderWidth = 3;
         radius = 0;
@@ -733,12 +725,12 @@ abstract final class GuildVisualTheme {
         ];
         chromeShadows = shadows;
       case AppUiStyle.geometric:
-        background = dark ? const Color(0xFF191814) : const Color(0xFFF0EAD6);
-        surface = dark ? const Color(0xFF24221C) : const Color(0xFFFFFFFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.10 : 0.06);
-        foreground = dark ? const Color(0xFFF5F0E4) : const Color(0xFF1A1A1A);
-        muted = dark ? const Color(0xFFB0AA9B) : const Color(0xFF666666);
-        ink = dark ? const Color(0xFFF5F0E4) : const Color(0xFF000000);
+        background = const Color(0xFFF0EAD6);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(surface, primary, 0.06);
+        foreground = const Color(0xFF1A1A1A);
+        muted = const Color(0xFF666666);
+        ink = const Color(0xFF000000);
         border = ink;
         borderWidth = 3;
         radius = 0;
@@ -795,27 +787,27 @@ abstract final class GuildVisualTheme {
         ];
         chromeShadows = shadows;
       case AppUiStyle.collage:
-        background = dark ? const Color(0xFF1A1815) : const Color(0xFFFFFCF5);
-        surface = dark ? const Color(0xFF25211E) : const Color(0xFFFFFFFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.15 : 0.10);
-        foreground = dark ? const Color(0xFFF7F1E8) : const Color(0xFF1A1A1A);
-        muted = dark ? const Color(0xFFC1B8AD) : const Color(0xFF666666);
+        background = const Color(0xFFF8F5F0);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(const Color(0xFFE0DCD5), primary, 0.05);
+        foreground = const Color(0xFF1A1A1A);
+        muted = const Color(0xFF888888);
         ink = foreground;
-        border = foreground;
-        borderWidth = 2.5;
-        radius = 6;
-        cardRadius = 8;
+        border = const Color(0xFFE0DCD5);
+        borderWidth = 2;
+        radius = 3;
+        cardRadius = 0;
         shadows = <BoxShadow>[
           BoxShadow(color: primary, offset: const Offset(6, 6)),
           BoxShadow(color: accent2, offset: const Offset(-3, -3)),
         ];
         chromeShadows = shadows;
       case AppUiStyle.monochrome:
-        background = dark ? const Color(0xFF171717) : const Color(0xFFE5E5E5);
-        surface = dark ? const Color(0xFF222222) : const Color(0xFFE5E5E5);
-        surfaceAlt = dark ? const Color(0xFF303030) : const Color(0xFFD4D4D4);
-        foreground = dark ? const Color(0xFFE5E5E5) : const Color(0xFF2D2D2D);
-        muted = dark ? const Color(0xFF999999) : const Color(0xFF666666);
+        background = const Color(0xFFE5E5E5);
+        surface = const Color(0xFFD4D4D4);
+        surfaceAlt = const Color(0xFFE5E5E5);
+        foreground = const Color(0xFF2D2D2D);
+        muted = const Color(0xFF666666);
         ink = foreground;
         border = foreground;
         borderWidth = 2;
@@ -824,11 +816,11 @@ abstract final class GuildVisualTheme {
         shadows = const <BoxShadow>[];
         chromeShadows = const <BoxShadow>[];
       case AppUiStyle.clay:
-        background = dark ? const Color(0xFF1C2130) : const Color(0xFFF0F4FF);
-        surface = dark ? const Color(0xFF262D40) : const Color(0xFFF8FAFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.14 : 0.08);
-        foreground = dark ? const Color(0xFFF0F2FF) : const Color(0xFF3D3D5C);
-        muted = dark ? const Color(0xFFA9ADC0) : const Color(0xFF8E8EA0);
+        background = const Color(0xFFF0F4FF);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(const Color(0xFFE8ECF5), primary, 0.04);
+        foreground = const Color(0xFF3D3D5C);
+        muted = const Color(0xFF8E8EA0);
         ink = foreground;
         border = Colors.transparent;
         borderWidth = 0;
@@ -836,29 +828,38 @@ abstract final class GuildVisualTheme {
         cardRadius = 22;
         shadows = <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             offset: const Offset(4, 6),
           ),
         ];
         chromeShadows = shadows;
       case AppUiStyle.glass:
-        background = _mix(const Color(0xFF0E0E1A), primary, 0.07);
-        surface = _mix(const Color(0xFF171725), primary, 0.08);
-        surfaceAlt = _mix(const Color(0xFF202034), primary, 0.12);
-        foreground = const Color(0xFFE8E8F0);
-        muted = const Color(0xFF9898B5);
+        background = _mix(const Color(0xFF0E0E1A), primary, 0.08);
+        surface = _mix(const Color(0xFF11131A), primary, 0.07);
+        surfaceAlt = _mix(const Color(0xFF171B24), primary, 0.09);
+        foreground = const Color(0xFFFFFFFF);
+        muted = Colors.white.withValues(alpha: 0.60);
         ink = foreground;
-        border = Colors.white.withValues(alpha: 0.16);
+        border = Colors.white.withValues(alpha: 0.34);
         borderWidth = 1;
-        radius = 16;
-        cardRadius = 16;
+        radius = 20;
+        cardRadius = 18;
         shadows = <BoxShadow>[
-          BoxShadow(color: primary.withValues(alpha: 0.18), blurRadius: 18),
-          BoxShadow(color: accent2.withValues(alpha: 0.10), blurRadius: 30),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            offset: const Offset(0, 4),
+            blurRadius: 16,
+          ),
         ];
-        chromeShadows = shadows;
-        glassBlur = 18;
-        glassOpacity = 0.68;
+        chromeShadows = <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.24),
+            offset: const Offset(0, 8),
+            blurRadius: 28,
+          ),
+        ];
+        glassBlur = 24;
+        glassOpacity = 0.30;
     }
 
     final colors = base.copyWith(
