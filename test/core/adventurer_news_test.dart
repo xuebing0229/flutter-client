@@ -124,4 +124,10 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['十二种 UI 风格']);
   });
 
+
+  test('149 包含 UI 风格质感重做见闻', () {
+    final picked = newsBetweenBuilds(148, 149);
+    expect(picked.map((e) => e.title).toList(), ['UI 风格质感重做']);
+  });
+
 }

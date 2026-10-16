@@ -158,6 +158,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '十二种 UI 风格',
     description: '外观里的“UI质感”升级为“UI风格”，新增浮雕、极简、粗边、几何、复古浅色、复古深色、荧光、拼贴、黑白、黏土和玻璃，共十二种风格可选。每种风格会同时改变卡片、按钮、输入框、导航、弹窗、进度与背景等共享组件，并继续使用你当前选择的 UI 主题色；经典风格保持原版界面。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 149,
+    title: 'UI 风格质感重做',
+    description: '按示范文档中的原始组件效果重新制作 UI 风格：浮雕补回内凹明暗层，粗边恢复硬边与硬阴影，复古深色加入扫描线、网格与暗角，荧光加入点阵和发光层，拼贴改用示范中的浅色反设计版本，黏土加强厚圆角和偏移阴影，玻璃改为水滴边框、多层高光和真实背景模糊。主题色继续作为主强调色，经典界面保持不变。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(

@@ -161,13 +161,6 @@ class SummaryCardSurface extends StatelessWidget {
           width: 3,
           child: ColoredBox(color: primary),
         ),
-      AppUiStyle.collage => Positioned(
-          left: 0,
-          top: 8,
-          bottom: 8,
-          width: 5,
-          child: ColoredBox(color: primary),
-        ),
       _ => null,
     };
   }
@@ -328,7 +321,9 @@ class ResponsiveCardActionButton extends StatelessWidget {
             ? roomyInset
             : tightInset;
 
-        return FilledButton.tonal(
+        final uiStyle = GuildStyleTheme.of(context);
+        final colors = Theme.of(context).colorScheme;
+        final button = FilledButton.tonal(
           onPressed: onPressed,
           style: FilledButton.styleFrom(
             padding: EdgeInsets.symmetric(
@@ -336,6 +331,21 @@ class ResponsiveCardActionButton extends StatelessWidget {
               vertical: 10,
             ),
             minimumSize: const Size(0, 40),
+            backgroundColor:
+                uiStyle.isClassic ? null : Colors.transparent,
+            foregroundColor:
+                uiStyle.isClassic ? null : colors.onPrimary,
+            elevation: uiStyle.isClassic ? null : 0,
+            shadowColor:
+                uiStyle.isClassic ? null : Colors.transparent,
+            surfaceTintColor:
+                uiStyle.isClassic ? null : Colors.transparent,
+            side: uiStyle.isClassic ? null : BorderSide.none,
+            shape: uiStyle.isClassic
+                ? null
+                : RoundedRectangleBorder(
+                    borderRadius: uiStyle.buttonBorderRadius,
+                  ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -348,6 +358,16 @@ class ResponsiveCardActionButton extends StatelessWidget {
               Text(label, maxLines: 1, softWrap: false),
             ],
           ),
+        );
+
+        if (uiStyle.isClassic) return button;
+
+        return GuildStyledSurface(
+          role: GuildSurfaceRole.emphasized,
+          borderRadius: uiStyle.buttonBorderRadius,
+          backdropAvailable: uiStyle.isGlass,
+          backgroundColor: colors.primary,
+          child: button,
         );
       },
     );

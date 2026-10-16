@@ -1,8 +1,7 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
 import 'app_ui_style.dart';
+import 'guild_style_effects.dart';
 
 enum GuildSurfaceRole { content, chrome, inset, emphasized }
 
@@ -74,29 +73,26 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
     );
   }
 
-  BorderRadius get surfaceBorderRadius {
-    return switch (style) {
-      AppUiStyle.collage => const BorderRadius.only(
-          topLeft: Radius.circular(2),
-          topRight: Radius.circular(20),
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(2),
-        ),
-      _ => BorderRadius.circular(radius),
-    };
-  }
+  BorderRadius get surfaceBorderRadius => BorderRadius.circular(radius);
 
-  BorderRadius get cardBorderRadius {
-    return switch (style) {
-      AppUiStyle.collage => const BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(24),
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(4),
-        ),
-      _ => BorderRadius.circular(cardRadius),
-    };
-  }
+  BorderRadius get cardBorderRadius => BorderRadius.circular(cardRadius);
+
+  BorderRadius get buttonBorderRadius => BorderRadius.circular(
+        switch (style) {
+          AppUiStyle.classic => 12.0,
+          AppUiStyle.relief => 12.0,
+          AppUiStyle.minimal => 0.0,
+          AppUiStyle.bold => 0.0,
+          AppUiStyle.geometric => 2.0,
+          AppUiStyle.retroLight => 4.0,
+          AppUiStyle.retroDark => 4.0,
+          AppUiStyle.fluorescent => 1.0,
+          AppUiStyle.collage => 2.0,
+          AppUiStyle.monochrome => 0.0,
+          AppUiStyle.clay => 14.0,
+          AppUiStyle.glass => 14.0,
+        },
+      );
 
   BoxDecoration decoration({
     GuildSurfaceRole role = GuildSurfaceRole.content,
@@ -305,10 +301,12 @@ abstract final class GuildVisualTheme {
         shape: squareOrRounded,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: tokens.surface,
+        backgroundColor: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.72)
+            : tokens.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        shadowColor: Colors.transparent,
+        elevation: _overlayElevation(style),
+        shadowColor: _overlayShadow(style, tokens, colors),
         shape: squareOrRounded,
         titleTextStyle: TextStyle(
           color: tokens.foreground,
@@ -317,18 +315,24 @@ abstract final class GuildVisualTheme {
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: tokens.surface,
+        color: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.78)
+            : tokens.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        shadowColor: Colors.transparent,
+        elevation: _overlayElevation(style),
+        shadowColor: _overlayShadow(style, tokens, colors),
         shape: squareOrRounded,
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: tokens.surface,
-        modalBackgroundColor: tokens.surface,
+        backgroundColor: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.76)
+            : tokens.surface,
+        modalBackgroundColor: style == AppUiStyle.glass
+            ? tokens.surface.withValues(alpha: 0.76)
+            : tokens.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        modalElevation: 0,
+        elevation: _overlayElevation(style),
+        modalElevation: _overlayElevation(style),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(tokens.cardRadius),
@@ -342,9 +346,7 @@ abstract final class GuildVisualTheme {
           foregroundColor: WidgetStatePropertyAll(onPrimary),
           elevation: WidgetStatePropertyAll(_buttonElevation(style)),
           shadowColor: WidgetStatePropertyAll(
-            style == AppUiStyle.relief || style == AppUiStyle.clay
-                ? Colors.black.withValues(alpha: 0.22)
-                : Colors.transparent,
+            _buttonShadow(style, tokens, colors),
           ),
           surfaceTintColor:
               const WidgetStatePropertyAll(Colors.transparent),
@@ -357,9 +359,7 @@ abstract final class GuildVisualTheme {
           foregroundColor: WidgetStatePropertyAll(tokens.foreground),
           elevation: WidgetStatePropertyAll(_buttonElevation(style)),
           shadowColor: WidgetStatePropertyAll(
-            style == AppUiStyle.relief || style == AppUiStyle.clay
-                ? Colors.black.withValues(alpha: 0.22)
-                : Colors.transparent,
+            _buttonShadow(style, tokens, colors),
           ),
           surfaceTintColor:
               const WidgetStatePropertyAll(Colors.transparent),
@@ -503,6 +503,7 @@ abstract final class GuildVisualTheme {
       textTheme: _textThemeFor(
         tokens,
         ThemeData(colorScheme: colors, useMaterial3: true).textTheme,
+        colors.primary,
       ),
     );
   }
@@ -680,51 +681,43 @@ abstract final class GuildVisualTheme {
       case AppUiStyle.classic:
         throw StateError('Classic style is resolved by _buildClassic.');
       case AppUiStyle.relief:
-        background = dark
-            ? _mix(const Color(0xFF202630), primary, 0.05)
-            : _mix(const Color(0xFFE0E5EC), primary, 0.025);
+        background = _mix(const Color(0xFFE0E5EC), primary, 0.018);
         surface = background;
-        surfaceAlt = dark
-            ? _mix(background, Colors.black, 0.09)
-            : _mix(background, Colors.white, 0.18);
-        foreground = dark ? const Color(0xFFE3E8F0) : const Color(0xFF5A6E86);
-        muted = dark ? const Color(0xFF9AA9BA) : const Color(0xFF8FA3BD);
+        surfaceAlt = _mix(background, Colors.white, 0.06);
+        foreground = const Color(0xFF5A6E86);
+        muted = const Color(0xFF8FA3BD);
         ink = foreground;
         border = Colors.transparent;
         borderWidth = 0;
         radius = 16;
         cardRadius = 18;
-        final lightShadow = dark
-            ? Colors.white.withValues(alpha: 0.07)
-            : Colors.white.withValues(alpha: 0.90);
-        final darkShadow = dark
-            ? Colors.black.withValues(alpha: 0.45)
-            : const Color(0xFFA3B1C6).withValues(alpha: 0.78);
+        final lightShadow = Colors.white.withValues(alpha: 0.94);
+        final darkShadow = const Color(0xFFA3B1C6).withValues(alpha: 0.82);
         shadows = <BoxShadow>[
           BoxShadow(color: darkShadow, offset: const Offset(6, 6), blurRadius: 12),
           BoxShadow(color: lightShadow, offset: const Offset(-6, -6), blurRadius: 12),
         ];
         chromeShadows = shadows;
       case AppUiStyle.minimal:
-        background = dark ? const Color(0xFF121212) : const Color(0xFFF7F7F7);
+        background = const Color(0xFFF7F7F7);
         surface = background;
-        surfaceAlt = dark ? const Color(0xFF1A1A1A) : const Color(0xFFFFFFFF);
-        foreground = dark ? const Color(0xFFECECEC) : const Color(0xFF1A1A1A);
-        muted = dark ? const Color(0xFF999999) : const Color(0xFF888888);
+        surfaceAlt = const Color(0xFFFFFFFF);
+        foreground = const Color(0xFF1A1A1A);
+        muted = const Color(0xFF888888);
         ink = foreground;
-        border = dark ? const Color(0xFF383838) : const Color(0xFFE2E2E2);
+        border = const Color(0xFFE2E2E2);
         borderWidth = 1;
         radius = 0;
         cardRadius = 0;
         shadows = const <BoxShadow>[];
         chromeShadows = const <BoxShadow>[];
       case AppUiStyle.bold:
-        background = dark ? const Color(0xFF181818) : const Color(0xFFFFFDF7);
-        surface = dark ? const Color(0xFF202020) : const Color(0xFFFFFFFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.12 : 0.08);
-        foreground = dark ? const Color(0xFFF7F7F7) : const Color(0xFF1A1A2E);
-        muted = dark ? const Color(0xFFB0B0B0) : const Color(0xFF555555);
-        ink = dark ? const Color(0xFFF4F4F4) : const Color(0xFF000000);
+        background = const Color(0xFFFFFDF7);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(surface, primary, 0.08);
+        foreground = const Color(0xFF1A1A2E);
+        muted = const Color(0xFF555555);
+        ink = const Color(0xFF000000);
         border = ink;
         borderWidth = 3;
         radius = 0;
@@ -734,12 +727,12 @@ abstract final class GuildVisualTheme {
         ];
         chromeShadows = shadows;
       case AppUiStyle.geometric:
-        background = dark ? const Color(0xFF191814) : const Color(0xFFF0EAD6);
-        surface = dark ? const Color(0xFF24221C) : const Color(0xFFFFFFFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.10 : 0.06);
-        foreground = dark ? const Color(0xFFF5F0E4) : const Color(0xFF1A1A1A);
-        muted = dark ? const Color(0xFFB0AA9B) : const Color(0xFF666666);
-        ink = dark ? const Color(0xFFF5F0E4) : const Color(0xFF000000);
+        background = const Color(0xFFF0EAD6);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(surface, primary, 0.06);
+        foreground = const Color(0xFF1A1A1A);
+        muted = const Color(0xFF666666);
+        ink = const Color(0xFF000000);
         border = ink;
         borderWidth = 3;
         radius = 0;
@@ -796,27 +789,27 @@ abstract final class GuildVisualTheme {
         ];
         chromeShadows = shadows;
       case AppUiStyle.collage:
-        background = dark ? const Color(0xFF1A1815) : const Color(0xFFFFFCF5);
-        surface = dark ? const Color(0xFF25211E) : const Color(0xFFFFFFFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.15 : 0.10);
-        foreground = dark ? const Color(0xFFF7F1E8) : const Color(0xFF1A1A1A);
-        muted = dark ? const Color(0xFFC1B8AD) : const Color(0xFF666666);
+        background = const Color(0xFFF8F5F0);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(const Color(0xFFE0DCD5), primary, 0.05);
+        foreground = const Color(0xFF1A1A1A);
+        muted = const Color(0xFF888888);
         ink = foreground;
-        border = foreground;
-        borderWidth = 2.5;
-        radius = 6;
-        cardRadius = 8;
+        border = const Color(0xFFE0DCD5);
+        borderWidth = 2;
+        radius = 0;
+        cardRadius = 0;
         shadows = <BoxShadow>[
           BoxShadow(color: primary, offset: const Offset(6, 6)),
           BoxShadow(color: accent2, offset: const Offset(-3, -3)),
         ];
         chromeShadows = shadows;
       case AppUiStyle.monochrome:
-        background = dark ? const Color(0xFF171717) : const Color(0xFFE5E5E5);
-        surface = dark ? const Color(0xFF222222) : const Color(0xFFE5E5E5);
-        surfaceAlt = dark ? const Color(0xFF303030) : const Color(0xFFD4D4D4);
-        foreground = dark ? const Color(0xFFE5E5E5) : const Color(0xFF2D2D2D);
-        muted = dark ? const Color(0xFF999999) : const Color(0xFF666666);
+        background = const Color(0xFFE5E5E5);
+        surface = const Color(0xFFD4D4D4);
+        surfaceAlt = const Color(0xFFE5E5E5);
+        foreground = const Color(0xFF2D2D2D);
+        muted = const Color(0xFF666666);
         ink = foreground;
         border = foreground;
         borderWidth = 2;
@@ -825,11 +818,11 @@ abstract final class GuildVisualTheme {
         shadows = const <BoxShadow>[];
         chromeShadows = const <BoxShadow>[];
       case AppUiStyle.clay:
-        background = dark ? const Color(0xFF1C2130) : const Color(0xFFF0F4FF);
-        surface = dark ? const Color(0xFF262D40) : const Color(0xFFF8FAFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.14 : 0.08);
-        foreground = dark ? const Color(0xFFF0F2FF) : const Color(0xFF3D3D5C);
-        muted = dark ? const Color(0xFFA9ADC0) : const Color(0xFF8E8EA0);
+        background = const Color(0xFFF0F4FF);
+        surface = const Color(0xFFFFFFFF);
+        surfaceAlt = _mix(const Color(0xFFE8ECF5), primary, 0.04);
+        foreground = const Color(0xFF3D3D5C);
+        muted = const Color(0xFF8E8EA0);
         ink = foreground;
         border = Colors.transparent;
         borderWidth = 0;
@@ -837,29 +830,38 @@ abstract final class GuildVisualTheme {
         cardRadius = 22;
         shadows = <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             offset: const Offset(4, 6),
           ),
         ];
         chromeShadows = shadows;
       case AppUiStyle.glass:
-        background = _mix(const Color(0xFF0E0E1A), primary, 0.07);
-        surface = _mix(const Color(0xFF171725), primary, 0.08);
-        surfaceAlt = _mix(const Color(0xFF202034), primary, 0.12);
-        foreground = const Color(0xFFE8E8F0);
-        muted = const Color(0xFF9898B5);
+        background = _mix(const Color(0xFF0E0E1A), primary, 0.08);
+        surface = _mix(const Color(0xFF11131A), primary, 0.07);
+        surfaceAlt = _mix(const Color(0xFF171B24), primary, 0.09);
+        foreground = const Color(0xFFFFFFFF);
+        muted = Colors.white.withValues(alpha: 0.60);
         ink = foreground;
-        border = Colors.white.withValues(alpha: 0.16);
+        border = Colors.white.withValues(alpha: 0.34);
         borderWidth = 1;
-        radius = 16;
-        cardRadius = 16;
+        radius = 20;
+        cardRadius = 18;
         shadows = <BoxShadow>[
-          BoxShadow(color: primary.withValues(alpha: 0.18), blurRadius: 18),
-          BoxShadow(color: accent2.withValues(alpha: 0.10), blurRadius: 30),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            offset: const Offset(0, 4),
+            blurRadius: 16,
+          ),
         ];
-        chromeShadows = shadows;
-        glassBlur = 18;
-        glassOpacity = 0.68;
+        chromeShadows = <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.24),
+            offset: const Offset(0, 8),
+            blurRadius: 28,
+          ),
+        ];
+        glassBlur = 24;
+        glassOpacity = 0.30;
     }
 
     final colors = base.copyWith(
@@ -975,19 +977,94 @@ abstract final class GuildVisualTheme {
 
   static double _buttonElevation(AppUiStyle style) {
     return switch (style) {
-      AppUiStyle.relief => 4,
-      AppUiStyle.clay => 4,
+      AppUiStyle.relief => 5,
+      AppUiStyle.bold => 4,
+      AppUiStyle.geometric => 2,
+      AppUiStyle.collage => 3,
+      AppUiStyle.clay => 5,
+      AppUiStyle.glass => 2,
       _ => 0,
+    };
+  }
+
+  static double _overlayElevation(AppUiStyle style) {
+    return switch (style) {
+      AppUiStyle.relief => 6,
+      AppUiStyle.bold => 4,
+      AppUiStyle.geometric => 3,
+      AppUiStyle.retroDark => 5,
+      AppUiStyle.fluorescent => 5,
+      AppUiStyle.collage => 4,
+      AppUiStyle.clay => 6,
+      AppUiStyle.glass => 8,
+      _ => 0,
+    };
+  }
+
+  static Color _buttonShadow(
+    AppUiStyle style,
+    GuildStyleTheme tokens,
+    ColorScheme colors,
+  ) {
+    return switch (style) {
+      AppUiStyle.relief => const Color(0xFFA3B1C6),
+      AppUiStyle.bold => tokens.ink,
+      AppUiStyle.geometric => tokens.ink,
+      AppUiStyle.retroDark => tokens.accent2.withValues(alpha: 0.56),
+      AppUiStyle.fluorescent => colors.primary.withValues(alpha: 0.64),
+      AppUiStyle.collage => colors.primary,
+      AppUiStyle.clay => Colors.black.withValues(alpha: 0.22),
+      AppUiStyle.glass => Colors.black.withValues(alpha: 0.24),
+      _ => Colors.transparent,
+    };
+  }
+
+  static Color _overlayShadow(
+    AppUiStyle style,
+    GuildStyleTheme tokens,
+    ColorScheme colors,
+  ) {
+    return switch (style) {
+      AppUiStyle.retroDark => tokens.accent2.withValues(alpha: 0.42),
+      AppUiStyle.fluorescent => colors.primary.withValues(alpha: 0.44),
+      AppUiStyle.collage => colors.primary.withValues(alpha: 0.50),
+      AppUiStyle.glass => Colors.black.withValues(alpha: 0.34),
+      _ => Colors.black.withValues(alpha: 0.22),
     };
   }
 
   static TextTheme _textThemeFor(
     GuildStyleTheme tokens,
     TextTheme base,
+    Color primary,
   ) {
+    final shadows = switch (tokens.style) {
+      AppUiStyle.retroDark => <Shadow>[
+          Shadow(
+            color: tokens.accent2.withValues(alpha: 0.48),
+            blurRadius: 7,
+          ),
+        ],
+      AppUiStyle.fluorescent => <Shadow>[
+          Shadow(
+            color: primary.withValues(alpha: 0.52),
+            blurRadius: 7,
+          ),
+        ],
+      AppUiStyle.glass => <Shadow>[
+          Shadow(
+            color: Colors.black.withValues(alpha: 0.30),
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+          ),
+        ],
+      _ => const <Shadow>[],
+    };
+
     TextStyle? color(TextStyle? style, {bool muted = false}) =>
         style?.copyWith(
           color: muted ? tokens.mutedForeground : tokens.foreground,
+          shadows: shadows,
         );
     return base.copyWith(
       displayLarge: color(base.displayLarge),
@@ -1030,31 +1107,37 @@ class GuildStyledSurface extends StatelessWidget {
     final tokens = GuildStyleTheme.of(context);
     if (tokens.isClassic) return child;
 
-    Widget surface = DecoratedBox(
-      decoration: tokens.decoration(
-        role: role,
-        borderRadius: borderRadius,
-        backgroundColor: backgroundColor,
-      ),
+    final colors = Theme.of(context).colorScheme;
+    final resolvedRadius = borderRadius ??
+        (role == GuildSurfaceRole.content
+            ? tokens.cardBorderRadius
+            : tokens.surfaceBorderRadius);
+
+    return GuildSurfaceEffect(
+      style: tokens.style,
+      role: switch (role) {
+        GuildSurfaceRole.content => GuildEffectRole.content,
+        GuildSurfaceRole.chrome => GuildEffectRole.chrome,
+        GuildSurfaceRole.inset => GuildEffectRole.inset,
+        GuildSurfaceRole.emphasized => GuildEffectRole.emphasized,
+      },
+      primary: colors.primary,
+      accent2: tokens.accent2,
+      accent3: tokens.accent3,
+      background: tokens.background,
+      surface: backgroundColor ?? tokens.surface,
+      surfaceAlt: tokens.surfaceAlt,
+      foreground: tokens.foreground,
+      borderColor: tokens.borderColor,
+      borderWidth: tokens.borderWidth,
+      borderRadius: resolvedRadius,
+      shadows: role == GuildSurfaceRole.chrome
+          ? tokens.chromeShadows
+          : tokens.shadows,
+      glassBlur: tokens.glassBlur,
+      glassOpacity: tokens.glassOpacity,
+      backdropAvailable: backdropAvailable,
       child: child,
-    );
-
-    if (tokens.isGlass && backdropAvailable && tokens.glassBlur > 0) {
-      surface = BackdropFilter(
-        filter: ui.ImageFilter.blur(
-          sigmaX: tokens.glassBlur,
-          sigmaY: tokens.glassBlur,
-        ),
-        child: surface,
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: borderRadius ??
-          (role == GuildSurfaceRole.content
-              ? tokens.cardBorderRadius
-              : tokens.surfaceBorderRadius),
-      child: surface,
     );
   }
 }
@@ -1070,7 +1153,7 @@ class GuildStyleBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = GuildStyleTheme.of(context);
-    final primary = Theme.of(context).colorScheme.primary;
+    final colors = Theme.of(context).colorScheme;
     if (tokens.isClassic) {
       return DecoratedBox(
         decoration: BoxDecoration(
@@ -1079,7 +1162,7 @@ class GuildStyleBackdrop extends StatelessWidget {
             end: Alignment.bottomLeft,
             colors: <Color>[
               Color.alphaBlend(
-                primary.withValues(alpha: 0.045),
+                colors.primary.withValues(alpha: 0.045),
                 Theme.of(context).scaffoldBackgroundColor,
               ),
               Theme.of(context).scaffoldBackgroundColor,
@@ -1090,59 +1173,12 @@ class GuildStyleBackdrop extends StatelessWidget {
       );
     }
 
-    final gradient = switch (tokens.style) {
-      AppUiStyle.retroLight => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            _mix(tokens.background, primary, 0.035),
-            tokens.background,
-          ],
-        ),
-      AppUiStyle.retroDark => RadialGradient(
-          center: const Alignment(-0.65, -0.75),
-          radius: 1.45,
-          colors: <Color>[
-            primary.withValues(alpha: 0.13),
-            tokens.background,
-          ],
-        ),
-      AppUiStyle.fluorescent => RadialGradient(
-          center: const Alignment(-0.75, -0.85),
-          radius: 1.55,
-          colors: <Color>[
-            primary.withValues(alpha: 0.12),
-            tokens.background,
-          ],
-        ),
-      AppUiStyle.glass => RadialGradient(
-          center: const Alignment(-0.55, -0.75),
-          radius: 1.35,
-          colors: <Color>[
-            primary.withValues(alpha: 0.18),
-            tokens.accent2.withValues(alpha: 0.07),
-            tokens.background,
-          ],
-          stops: const <double>[0, 0.46, 1],
-        ),
-      AppUiStyle.collage => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            tokens.accent2.withValues(alpha: 0.07),
-            tokens.background,
-            primary.withValues(alpha: 0.06),
-          ],
-        ),
-      _ => LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[tokens.background, tokens.background],
-        ),
-    };
-
-    return DecoratedBox(
-      decoration: BoxDecoration(gradient: gradient),
+    return GuildBackdropEffect(
+      style: tokens.style,
+      primary: colors.primary,
+      accent2: tokens.accent2,
+      accent3: tokens.accent3,
+      background: tokens.background,
       child: child,
     );
   }
