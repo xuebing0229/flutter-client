@@ -1,3 +1,17 @@
+// Reference mapping is intentionally locked to the HTML files supplied in
+// "14种经典的 UI/UX 设计风格". Do not reinterpret these names into a generic
+// design-system preset:
+// relief       -> neumorphism-components.html
+// minimal      -> minimalism-components.html
+// bold         -> neo-brutalism-components.html
+// geometric    -> bauhaus-components.html
+// retroLight   -> retrofuturism-components-light.html
+// retroDark    -> retrofuturism-components.html
+// fluorescent  -> acid-graphics-components(.light).html
+// collage      -> anti-design-components-lite.html
+// monochrome   -> brutalism-components.html
+// clay         -> claymorphism-components.html
+// glass        -> liquid-glass-components(.light).html
 enum AppUiStyle {
   classic(id: 'classic', label: '经典'),
   relief(id: 'relief', label: '浮雕'),
