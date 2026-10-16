@@ -588,6 +588,7 @@ class _SurfaceFinishPainter extends CustomPainter {
         rect.centerLeft,
         rect.centerRight,
         <Color>[Colors.transparent, color, Colors.transparent],
+        const <double>[0, 0.5, 1],
       );
     canvas.drawRect(Rect.fromLTWH(rect.left, rect.top, rect.width, 1), paint);
   }
@@ -619,6 +620,7 @@ class _SurfaceFinishPainter extends CustomPainter {
           primary.withValues(alpha: 0.28),
           Colors.transparent,
         ],
+        const <double>[0, 0.34, 0.66, 1],
       );
     canvas.drawRect(Rect.fromLTWH(rect.left, rect.top, rect.width, 1), line);
     canvas.restore();
@@ -757,6 +759,7 @@ class _SurfaceFinishPainter extends CustomPainter {
           Colors.transparent,
           accent2.withValues(alpha: 0.035),
         ],
+        const <double>[0, 0.52, 1],
       );
     canvas.drawRect(rect, colorSheen);
     canvas.restore();
