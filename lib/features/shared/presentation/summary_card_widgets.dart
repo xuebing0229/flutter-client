@@ -161,13 +161,6 @@ class SummaryCardSurface extends StatelessWidget {
           width: 3,
           child: ColoredBox(color: primary),
         ),
-      AppUiStyle.collage => Positioned(
-          left: 0,
-          top: 8,
-          bottom: 8,
-          width: 5,
-          child: ColoredBox(color: primary),
-        ),
       _ => null,
     };
   }
