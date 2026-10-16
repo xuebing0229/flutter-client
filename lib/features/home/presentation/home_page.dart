@@ -1748,11 +1748,9 @@ class _ForegroundSyncProgressPopup extends StatelessWidget {
         ? '正在同步到${deviceName.isEmpty ? '另一台设备' : '「$deviceName」'}'
         : '正在接收另一台设备的数据';
 
-    return Material(
-      elevation: 8,
-      color: colors.surface,
-      shadowColor: Colors.black26,
-      borderRadius: BorderRadius.circular(16),
+    return GuildContentPanel(
+      role: GuildSurfaceRole.chrome,
+      classicRadius: 16,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 13, 16, 13),
         child: Row(
