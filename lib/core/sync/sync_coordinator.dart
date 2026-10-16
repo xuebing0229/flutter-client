@@ -1311,6 +1311,9 @@ class SyncCoordinator extends ChangeNotifier {
           records: recordsByKind[kind]!,
         );
       }
+      await _removeSupersededLegacySettings(
+        recordsByKind[SyncEntityKind.settings]!,
+      );
     }
 
     _applyingRemote = true;
@@ -1667,13 +1670,17 @@ class SyncCoordinator extends ChangeNotifier {
   Map<String, dynamic> _normalizeMaterializedSettings(
     Map<String, dynamic> settings,
   ) {
-    final hasFieldLevelFeatures = settings.keys.any(
+    final normalized = <String, dynamic>{...settings};
+    final hasFieldLevelFeatures = normalized.keys.any(
       (key) => key.startsWith('feature.'),
     );
-    if (!hasFieldLevelFeatures || !settings.containsKey('features')) {
-      return settings;
+    if (hasFieldLevelFeatures) {
+      normalized.remove('features');
     }
-    return <String, dynamic>{...settings}..remove('features');
+    if (normalized.containsKey('uiStyle')) {
+      normalized.remove('uiTexture');
+    }
+    return normalized;
   }
 
   Future<void> _backfillMissingRecordFields({
@@ -1710,6 +1717,32 @@ class SyncCoordinator extends ChangeNotifier {
       await _recordStore.write(accountId: accountId, record: migrated);
       records[entry.key] = migrated;
     }
+  }
+
+  Future<void> _removeSupersededLegacySettings(
+    Map<String, SyncRecord> records,
+  ) async {
+    final record = records[settingsRecordId];
+    if (record == null || !record.fields.containsKey('uiStyle')) return;
+    if (!record.fields.containsKey('uiTexture') &&
+        !record.conflicts.containsKey('uiTexture')) {
+      return;
+    }
+
+    final fields = <String, SyncFieldValue>{...record.fields}
+      ..remove('uiTexture');
+    final conflicts = <String, SyncConflict>{...record.conflicts}
+      ..remove('uiTexture');
+    final migrated = SyncRecord(
+      accountId: record.accountId,
+      kind: record.kind,
+      id: record.id,
+      fields: Map<String, SyncFieldValue>.unmodifiable(fields),
+      operations: record.operations,
+      conflicts: Map<String, SyncConflict>.unmodifiable(conflicts),
+    );
+    await _recordStore.write(accountId: accountId, record: migrated);
+    records[settingsRecordId] = migrated;
   }
 
   Future<void> _migrateLegacyFeatureSettings(
