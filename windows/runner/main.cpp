@@ -8,21 +8,17 @@
 namespace {
 
 constexpr const wchar_t kSingleInstanceMutexName[] =
-    L"Local\\AdventurersGuildFlutterClient";
+    L"Local\\AdventurersGuildInternalFlutterClient";
 constexpr const wchar_t kWindowClassName[] =
-    L"FLUTTER_RUNNER_WIN32_WINDOW";
+    L"ADVENTURERS_GUILD_INTERNAL_WIN32_WINDOW";
 constexpr const wchar_t kWindowTitle[] =
     L"\u5192\u9669\u8005\u516c\u4f1a";
 
 HWND FindExistingInstanceWindow() {
-  // Current builds use the Flutter runner class and a stable title. Keeping
-  // the title fallback also catches an already-running older build that did
-  // not yet participate in the mutex protocol.
-  HWND existing = ::FindWindowW(kWindowClassName, kWindowTitle);
-  if (existing != nullptr) {
-    return existing;
-  }
-  return ::FindWindowW(nullptr, kWindowTitle);
+  // Internal/Test/Stable share the same visible title. Only match this
+  // channel's hidden window class so one installed channel never steals
+  // another channel's launch.
+  return ::FindWindowW(kWindowClassName, kWindowTitle);
 }
 
 bool RestoreExistingInstance() {
