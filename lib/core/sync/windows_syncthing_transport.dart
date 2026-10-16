@@ -12,11 +12,11 @@ class WindowsSyncthingTransport {
   static final WindowsSyncthingTransport instance =
       WindowsSyncthingTransport._();
 
-  // 8384 is Syncthing's public default GUI/API port. Older app builds also
-  // used it directly, which means a user-installed Syncthing (or a stale app
-  // process) can occupy the same port and make our embedded core look like it
-  // "timed out". Keep it only for legacy-process detection; new installs pick
-  // an app-private free loopback port and persist it.
+  // 8384 is Syncthing's public default GUI/API port. Older app builds used it
+  // directly. New builds must never keep using that legacy channel: if the
+  // saved transport still points at 8384, startup migrates the same Syncthing
+  // profile to an app-private loopback port. The profile directory is kept, so
+  // the Syncthing device identity and paired-folder configuration survive.
   static const int _legacyApiPort = 8384;
   static const String _stateFileName = 'embedded-syncthing-windows.json';
 
@@ -576,7 +576,7 @@ class WindowsSyncthingTransport {
   Future<void> _startAndWaitUntilReady(File binary, String apiKey) async {
     if (await _ping(apiKey)) return;
 
-    var port = await _ensureApiPort(apiKey);
+    var port = await _ensureApiPort();
 
     // If a previous app-owned Syncthing survived an update/crash but no
     // longer answers with our current API key, it can keep both the profile
@@ -651,7 +651,7 @@ class WindowsSyncthingTransport {
   }
 
   Future<bool> _ping(String apiKey) async {
-    final port = await _ensureApiPort(apiKey);
+    final port = await _ensureApiPort();
     return _pingAt(apiKey, port);
   }
 
@@ -669,14 +669,14 @@ class WindowsSyncthingTransport {
     }
   }
 
-  Future<int> _ensureApiPort(String apiKey) async {
+  Future<int> _ensureApiPort() async {
     final cached = _resolvedApiPort;
     if (cached != null) return cached;
 
     final resolving = _resolvingPort;
     if (resolving != null) return resolving;
 
-    final future = _resolveApiPort(apiKey);
+    final future = _resolveApiPort();
     _resolvingPort = future;
     try {
       return await future;
@@ -685,21 +685,23 @@ class WindowsSyncthingTransport {
     }
   }
 
-  Future<int> _resolveApiPort(String apiKey) async {
+  Future<int> _resolveApiPort() async {
     final state = await _readState();
     final saved = state['apiPort'];
-    if (saved is int && saved >= 1024 && saved <= 65535) {
+    if (saved is int &&
+        saved >= 1024 &&
+        saved <= 65535 &&
+        saved != _legacyApiPort) {
       _resolvedApiPort = saved;
       return saved;
     }
 
-    // Existing installs before this fix used 8384. If the old embedded core is
-    // still healthy, keep talking to it instead of spawning a second process.
-    if (await _pingAt(apiKey, _legacyApiPort)) {
-      await _persistApiPort(_legacyApiPort);
-      return _legacyApiPort;
-    }
-
+    // Builds before 158 could persist 8384 and keep an old app-owned Syncthing
+    // alive there forever. Reusing it bypasses the stale-process cleanup below,
+    // so the app can repeatedly repair the old channel instead of bringing up
+    // the current private one. Always migrate legacy/unknown state to a fresh
+    // private port; _startAndWaitUntilReady then stops only our bundled stale
+    // process and restarts the SAME profile on this port.
     return _rotateApiPort();
   }
 
@@ -835,7 +837,7 @@ class WindowsSyncthingTransport {
     required String apiKey,
     String? body,
   }) async {
-    final port = await _ensureApiPort(apiKey);
+    final port = await _ensureApiPort();
     return _requestAt(
       method,
       path,
