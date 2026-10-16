@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../build/build_channel.dart';
 import '../storage/atomic_file.dart';
 
 /// Each feature is recorded once, against the FIRST build where it ships.
@@ -13,11 +14,15 @@ class AdventurerNewsEntry {
     required this.introducedBuild,
     required this.title,
     required this.description,
+    this.versionLabel,
   });
 
   final int introducedBuild;
   final String title;
   final String description;
+  final String? versionLabel;
+
+  String get displayVersion => versionLabel ?? introducedBuild.toString();
 }
 
 /// Append a block when its feature ships; don't rewrite older entries.
@@ -200,6 +205,70 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
   ),
 ];
 
+/// Internal releases have their own user-facing version line. The numeric key
+/// is only a monotonic local sequence; Beta source builds remain diagnostics.
+const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
+  AdventurerNewsEntry(
+    introducedBuild: 1,
+    versionLabel: '0.1.0',
+    title: '首个内测版',
+    description: '建立独立内测发布线：Android 与 Windows 可以和测试版并存，使用独立应用身份与签名；内测版不提供应用内自助更新，版本号按正常版本独立递增。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 2,
+    versionLabel: '0.1.1',
+    title: '新设备加入状态修复',
+    description: '修复首次扫码加入新设备时，设备已经建立连接却仍被误判为等待确认超时的问题；连接成功后会继续进入账号传输流程。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 3,
+    versionLabel: '0.1.2',
+    title: '应用名称统一',
+    description: '内测渠道仍保持独立安装身份，但手机应用名、Windows 窗口与快捷方式统一显示为“冒险者公会”，不再把“内测版”写进应用名称。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 4,
+    versionLabel: '0.1.3',
+    title: 'UI 风格与自定义配色',
+    description: '外观新增十二种 UI 风格，并持续按参考稿修正浅深色、搜索框、按钮、卡片与玻璃质感；主题色支持自定义浅色/深色方案、分享图片、二维码、文件和分享码导入导出。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 4,
+    versionLabel: '0.1.3',
+    title: '备份与同步覆盖补齐',
+    description: '自定义主题方案纳入完整备份与设备同步；完整备份同时补齐截图导入重复检测历史，以及桌宠预设、A/B 美术、气泡图片、位置和缩放等本机自定义内容。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 4,
+    versionLabel: '0.1.3',
+    title: '新设备加入与主题恢复修复',
+    description: '无效的旧自定义主题 ID 现在只会回退到原版主题，不再影响排单和成品读取；同时修复新设备已连接原设备后账号数据仍长期不传输的问题，并为异常卡住的配对流程提供明确提示。',
+  ),
+];
+
+String internalAdventurerNewsVersion(int build) {
+  for (final entry in internalAdventurerNewsCatalog.reversed) {
+    if (entry.introducedBuild == build && entry.versionLabel != null) {
+      return entry.versionLabel!;
+    }
+  }
+  return build <= 0 ? '旧内测版' : '内测版 $build';
+}
+
+String adventurerNewsVersionLabel(int build) =>
+    isInternalBuild ? internalAdventurerNewsVersion(build) : build.toString();
+
+List<AdventurerNewsEntry> newsBetweenCurrentChannelBuilds(
+  int previousBuild,
+  int currentBuild,
+) =>
+    newsBetweenBuilds(
+      previousBuild,
+      currentBuild,
+      catalog:
+          isInternalBuild ? internalAdventurerNewsCatalog : adventurerNewsCatalog,
+    );
+
 List<AdventurerNewsEntry> newsBetweenBuilds(
   int previousBuild,
   int currentBuild, {
@@ -225,6 +294,9 @@ class AdventurerNewsNotice {
   final int previousBuild;
   final int currentBuild;
   final List<AdventurerNewsEntry> entries;
+
+  String get previousVersionLabel => adventurerNewsVersionLabel(previousBuild);
+  String get currentVersionLabel => adventurerNewsVersionLabel(currentBuild);
 }
 
 /// Local INSTALLATION-level acknowledgement (NOT account data / sync data).
@@ -241,8 +313,21 @@ class AdventurerNewsStore {
   }
 
   Future<int> installedBuild() async {
+    if (isInternalBuild && internalReleaseBuild > 0) {
+      return internalReleaseBuild;
+    }
     final info = await PackageInfo.fromPlatform();
     return int.tryParse(info.buildNumber) ?? 0;
+  }
+
+  int _normalizeStoredBuild(int value) {
+    if (!isInternalBuild || value < 100) return value;
+
+    // Internal 0.1.0 previously stored source Beta 144; 0.1.1/0.1.2 stored
+    // source Beta 145. Convert that legacy acknowledgement to the independent
+    // Internal release sequence so upgrading to 0.1.3 still shows its news.
+    if (value <= 144) return 1;
+    return 3;
   }
 
   Future<int?> _readLastSeen() async {
@@ -250,7 +335,7 @@ class AdventurerNewsStore {
     if (!await file.exists()) return null;
     // Corrupt files must not accidentally mark a newer version as read.
     final value = int.tryParse((await file.readAsString()).trim());
-    return value != null && value >= 0 ? value : null;
+    return value != null && value >= 0 ? _normalizeStoredBuild(value) : null;
   }
 
   Future<void> _writeLastSeen(int build) async {
@@ -268,9 +353,12 @@ class AdventurerNewsStore {
   /// build numbers cannot be recovered retroactively.
   Future<void> initialize({required bool hasExistingAccounts}) async {
     if (await _readLastSeen() != null) return;
+    final currentBuild = await installedBuild();
     final initialBuild = hasExistingAccounts
-        ? 105
-        : await installedBuild();
+        ? isInternalBuild
+            ? (currentBuild > 0 ? currentBuild - 1 : 0)
+            : 105
+        : currentBuild;
     await _writeLastSeen(initialBuild);
   }
 
@@ -281,7 +369,7 @@ class AdventurerNewsStore {
     return AdventurerNewsNotice(
       previousBuild: previousBuild,
       currentBuild: currentBuild,
-      entries: newsBetweenBuilds(previousBuild, currentBuild),
+      entries: newsBetweenCurrentChannelBuilds(previousBuild, currentBuild),
     );
   }
 
