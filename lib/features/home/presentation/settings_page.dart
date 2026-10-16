@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
+import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/portability/app_backup_data.dart';
@@ -16,6 +17,7 @@ import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/portability/full_backup_bundle_service.dart';
 import '../../focus/state/focus_store.dart';
+import '../../imports/data/screenshot_import_history.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/state/order_store.dart';
@@ -32,6 +34,7 @@ class SettingsPage extends StatefulWidget {
     this.focusStore,
     required this.themeStore,
     required this.featureStore,
+    required this.desktopPetSettings,
     required this.accountStore,
     required this.syncCoordinator,
     required this.onApplyWorkspaceSettings,
@@ -45,6 +48,7 @@ class SettingsPage extends StatefulWidget {
   final FocusStore? focusStore;
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
+  final DesktopPetSettings desktopPetSettings;
   final AccountStore accountStore;
   final SyncCoordinator syncCoordinator;
   final Future<void> Function(Map<String, dynamic> settings)
@@ -62,6 +66,8 @@ class _SettingsPageState extends State<SettingsPage>
       const DataPortabilityFileBridge();
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
+  final ScreenshotImportHistory _screenshotImportHistory =
+      const ScreenshotImportHistory();
 
   bool _reminderBusy = false;
   Map<String, dynamic> _reminderDiagnostics = const <String, dynamic>{};
@@ -404,6 +410,9 @@ class _SettingsPageState extends State<SettingsPage>
       }
 
       final snapshot = await widget.syncCoordinator.exportPortableWorkspace();
+      final screenshotHistory =
+          await _screenshotImportHistory.read(accountId: accountId);
+      final desktopPetBackup = await widget.desktopPetSettings.exportForBackup();
       final backup = AppBackupData(
         exportedAt: snapshot.exportedAt,
         orders: snapshot.orders,
@@ -412,7 +421,12 @@ class _SettingsPageState extends State<SettingsPage>
         focusSessions: snapshot.focusSessions,
         accountSyncState: snapshot.accountSyncState,
         syncRecords: snapshot.syncRecords,
-        settings: snapshot.settings,
+        settings: <String, dynamic>{
+          ...snapshot.settings,
+          'screenshotImportHistory':
+              screenshotHistory.toList(growable: false)..sort(),
+          'desktopPetBackup': desktopPetBackup.manifest,
+        },
       );
 
       final saved = await FullBackupBundleService(
@@ -421,6 +435,7 @@ class _SettingsPageState extends State<SettingsPage>
         accountId: accountId,
         backup: backup,
         fileName: _backupFileName(DateTime.now()),
+        bundledLocalFiles: desktopPetBackup.files,
       );
 
       if (!mounted) return;
@@ -531,6 +546,30 @@ class _SettingsPageState extends State<SettingsPage>
 
       if (backup.accountSyncState != null) {
         await widget.accountStore.mergeSyncedState(backup.accountSyncState!);
+      }
+
+      final screenshotHistory = backup.settings['screenshotImportHistory'];
+      if (screenshotHistory != null) {
+        if (screenshotHistory is! List ||
+            screenshotHistory.any((item) => item is! String)) {
+          throw const FormatException('截图导入历史格式无效。');
+        }
+        await _screenshotImportHistory.replaceAll(
+          accountId: localAccountId ?? incomingAccount!.accountId,
+          fingerprints: screenshotHistory.cast<String>(),
+        );
+      }
+
+      final desktopPetBackup = backup.settings['desktopPetBackup'];
+      if (desktopPetBackup != null) {
+        final extractedRoot = importedBundle.extractedDirectory;
+        if (extractedRoot == null) {
+          throw const FormatException('桌宠备份缺少随包美术文件。');
+        }
+        await widget.desktopPetSettings.restoreFromBackup(
+          rawManifest: desktopPetBackup,
+          extractedRoot: extractedRoot,
+        );
       }
 
       _showMessage(
@@ -691,7 +730,7 @@ class _SettingsPageState extends State<SettingsPage>
                   leading: const Icon(Icons.upload_file_rounded),
                   title: const Text('导出完整备份'),
                   subtitle: const Text(
-                    '包含工作数据、UI 设置、账号设备记录、完整同步历史和参考图原文件',
+                    '包含工作数据、UI 设置、账号设备记录、完整同步历史、参考图、截图重复检测历史和桌宠自定义美术',
                   ),
                   trailing: _backupBusy
                       ? const SizedBox.square(
