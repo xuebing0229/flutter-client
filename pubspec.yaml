@@ -1,7 +1,7 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+159
+version: 0.0.1+160
 # beta-retry: windows-pairing-startup
 
 environment:
