@@ -193,6 +193,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '配色编辑更顺手',
     description: '预设主题色名称改得更简洁直观；高级自定义调色中，深色配色新增“一键套用浅色配色”，会完整复制浅色模式的 8 项颜色，复制后仍可继续单独调整深色模式。自定义主题方案会进入完整备份与设备同步；完整备份还补齐截图导入重复检测历史，以及桌宠预设、A/B 美术、气泡图片、位置和缩放等本机自定义内容，恢复后不会丢失这些配置。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 156,
+    title: '新设备加入与主题恢复修复',
+    description: '修复旧版本留下无效自定义主题 ID 时可能把整个本地工作区误判为读取失败的问题，找不到主题时只回退到原版，不再影响排单和成品数据；同时修复新设备已经连接原设备后账号数据仍长期不传输的问题，临时配对目录会在建立、确认和等待期间主动重新扫描，并在异常卡住时给出明确提示。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
