@@ -198,6 +198,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新设备加入与主题恢复修复',
     description: '修复旧版本留下无效自定义主题 ID 时可能把整个本地工作区误判为读取失败的问题，找不到主题时只回退到原版，不再影响排单和成品数据；同时修复新设备已经连接原设备后账号数据仍长期不传输的问题，临时配对目录会在建立、确认和等待期间主动重新扫描，并在异常卡住时给出明确提示。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 157,
+    title: 'Windows 新设备加入修复',
+    description: '重新排查 Windows 新设备在生成回应码之前卡住的问题：旧实现固定占用 Syncthing 默认的 8384 端口，又把同步核心作为无日志后台进程启动，端口冲突、旧进程残留或首次启动变慢都会被误报成同一个“启动超时”。现在改为应用专用动态端口，兼容旧版 8384 实例，启动前只清理属于冒险者公会的残留同步进程，并记录同步核心启动日志；首次启动等待窗口也放宽到 60 秒，失败时会给出更具体原因。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
