@@ -198,6 +198,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新设备加入与主题恢复修复',
     description: '修复旧版本留下无效自定义主题 ID 时可能把整个本地工作区误判为读取失败的问题，找不到主题时只回退到原版，不再影响排单和成品数据；同时修复新设备已经连接原设备后账号数据仍长期不传输的问题，临时配对目录会在建立、确认和等待期间主动重新扫描，并在异常卡住时给出明确提示。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 157,
+    title: 'Windows 卸载流程完善',
+    description: 'Windows 卸载时会先关闭冒险者公会、桌宠和内置同步核心，再明确询问是否保留本机个人数据；选择彻底删除会清理账号、排单、成品、同步记录、桌宠素材、截图导入记录和设置。更新缓存只清理公会自己管理的 updates 目录，不再递归删除整个下载目录，用户导出的备份和图片不会被碰。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
