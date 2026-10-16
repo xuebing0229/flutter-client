@@ -95,87 +95,105 @@ class GuildSurfaceEffect extends StatelessWidget {
   }
 
   BoxDecoration _surfaceDecoration() {
+    final lightGlass = foreground.computeLuminance() < 0.35;
+    final glassFill = lightGlass
+        ? Colors.white.withValues(
+            alpha: _inset
+                ? 0.50
+                : role == GuildEffectRole.chrome
+                    ? 0.60
+                    : 0.55,
+          )
+        : Colors.white.withValues(
+            alpha: _inset
+                ? 0.05
+                : role == GuildEffectRole.chrome
+                    ? 0.06
+                    : 0.04,
+          );
+
     final gradient = switch (style) {
       AppUiStyle.relief => LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: _inset
               ? <Color>[
-                  _mix(surfaceAlt, Colors.black, 0.04),
-                  surfaceAlt,
-                  _mix(surfaceAlt, Colors.white, 0.05),
+                  _mix(surface, Colors.black, 0.04),
+                  surface,
+                  _mix(surface, Colors.white, 0.05),
                 ]
               : <Color>[
                   _mix(surface, Colors.white, 0.025),
                   surface,
                 ],
         ),
-      AppUiStyle.retroLight => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            _mix(surface, primary, 0.025),
-            surface,
-            _mix(surface, accent2, 0.018),
-          ],
-        ),
-      AppUiStyle.retroDark => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            _mix(surface, primary, 0.10),
-            surface,
-            _mix(surface, accent2, 0.06),
-          ],
-        ),
-      AppUiStyle.fluorescent => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            primary.withValues(alpha: 0.025),
-            surface,
-          ],
-        ),
-      AppUiStyle.collage => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            _mix(surface, accent2, 0.025),
-            surface,
-            _mix(surface, primary, 0.025),
-          ],
-        ),
-      AppUiStyle.clay => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            _mix(surface, Colors.white, 0.075),
-            surface,
-            _mix(surface, primary, 0.025),
-          ],
-        ),
-      AppUiStyle.glass => RadialGradient(
-          center: const Alignment(-0.2, -1.0),
-          radius: 1.45,
-          colors: <Color>[
-            Colors.white.withValues(alpha: 0.13),
-            Colors.white.withValues(alpha: 0.04),
-            primary.withValues(alpha: 0.045),
-            surface.withValues(alpha: glassOpacity),
-          ],
-          stops: const <double>[0, 0.25, 0.58, 1],
-        ),
+      AppUiStyle.retroLight => _inset
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                _mix(surface, primary, 0.025),
+                surface,
+                _mix(surface, accent2, 0.018),
+              ],
+            ),
+      AppUiStyle.retroDark => _inset
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                _mix(surface, primary, 0.10),
+                surface,
+                _mix(surface, accent2, 0.06),
+              ],
+            ),
+      AppUiStyle.fluorescent => _inset
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                primary.withValues(alpha: 0.025),
+                surface,
+              ],
+            ),
+      AppUiStyle.collage => _inset
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                _mix(surface, accent2, 0.025),
+                surface,
+                _mix(surface, primary, 0.025),
+              ],
+            ),
+      AppUiStyle.clay => _inset
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                _mix(surface, Colors.white, 0.075),
+                surface,
+                _mix(surface, primary, 0.025),
+              ],
+            ),
+      // The supplied Liquid Glass reference uses a uniform translucent glass
+      // fill. The moving colour is in the page backdrop / border glow, not a
+      // large radial "bubble" painted inside every component.
+      AppUiStyle.glass => null,
       _ => null,
     };
 
-    final color = gradient == null
-        ? (_inset ? surfaceAlt : surface)
-        : null;
-
     return BoxDecoration(
-      color: style == AppUiStyle.glass && gradient == null
-          ? surface.withValues(alpha: glassOpacity)
-          : color,
+      color: style == AppUiStyle.glass
+          ? glassFill
+          : gradient == null
+              ? surface
+              : null,
       gradient: gradient,
       borderRadius: borderRadius,
       border: _baseBorder(),
@@ -187,10 +205,13 @@ class GuildSurfaceEffect extends StatelessWidget {
       case AppUiStyle.relief:
         return null;
       case AppUiStyle.glass:
-        // Liquid Glass uses asymmetric bright/dark edges. Flutter's
-        // BoxDecoration cannot combine a non-uniform Border with a radius, so
-        // the document-faithful edge treatment is painted in CustomPainter.
-        return null;
+        final lightGlass = foreground.computeLuminance() < 0.35;
+        return Border.all(
+          color: lightGlass
+              ? primary.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.10),
+          width: 1,
+        );
       case AppUiStyle.fluorescent:
         return Border.all(
           color: primary.withValues(alpha: 0.42),
@@ -276,17 +297,25 @@ class GuildSurfaceEffect extends StatelessWidget {
             blurRadius: 0,
           ),
         ],
-      AppUiStyle.glass => <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            offset: const Offset(0, 4),
-            blurRadius: 16,
-          ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.05),
-            spreadRadius: 1,
-          ),
-        ],
+      AppUiStyle.glass => foreground.computeLuminance() < 0.35
+          ? <BoxShadow>[
+              BoxShadow(
+                color: primary.withValues(alpha: 0.08),
+                offset: const Offset(0, 4),
+                blurRadius: 16,
+              ),
+            ]
+          : <BoxShadow>[
+              BoxShadow(
+                color: primary.withValues(alpha: 0.16),
+                blurRadius: 10,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                offset: const Offset(0, 4),
+                blurRadius: 14,
+              ),
+            ],
       _ => shadows,
     };
   }
@@ -397,9 +426,12 @@ class _SurfaceFinishPainter extends CustomPainter {
     final rect = Offset.zero & size;
     final rrect = borderRadius.toRRect(rect);
 
-    switch (style) {
-      case AppUiStyle.relief:
-        if (role == GuildEffectRole.inset) {
+    // Inputs are their own component in the reference files. They should not
+    // inherit the decorative corner marks / collage bars / card highlights
+    // used by content panels.
+    if (role == GuildEffectRole.inset) {
+      switch (style) {
+        case AppUiStyle.relief:
           _paintInsetBevel(
             canvas,
             rrect,
@@ -407,9 +439,36 @@ class _SurfaceFinishPainter extends CustomPainter {
             light: Colors.white.withValues(alpha: 0.86),
             width: 6,
           );
-        } else {
-          _paintSoftTopHighlight(canvas, rrect, 0.12);
-        }
+          break;
+        case AppUiStyle.clay:
+          _paintInsetBevel(
+            canvas,
+            rrect,
+            dark: Colors.black.withValues(alpha: 0.14),
+            light: Colors.white.withValues(alpha: 0.26),
+            width: 4,
+          );
+          break;
+        case AppUiStyle.fluorescent:
+          _paintNeonInnerGlow(canvas, rrect);
+          break;
+        case AppUiStyle.classic:
+        case AppUiStyle.minimal:
+        case AppUiStyle.bold:
+        case AppUiStyle.geometric:
+        case AppUiStyle.retroLight:
+        case AppUiStyle.retroDark:
+        case AppUiStyle.collage:
+        case AppUiStyle.monochrome:
+        case AppUiStyle.glass:
+          break;
+      }
+      return;
+    }
+
+    switch (style) {
+      case AppUiStyle.relief:
+        _paintSoftTopHighlight(canvas, rrect, 0.12);
         break;
       case AppUiStyle.minimal:
         break;
@@ -434,17 +493,7 @@ class _SurfaceFinishPainter extends CustomPainter {
       case AppUiStyle.monochrome:
         break;
       case AppUiStyle.clay:
-        if (role == GuildEffectRole.inset) {
-          _paintInsetBevel(
-            canvas,
-            rrect,
-            dark: Colors.black.withValues(alpha: 0.14),
-            light: Colors.white.withValues(alpha: 0.56),
-            width: 5,
-          );
-        } else {
-          _paintSoftTopHighlight(canvas, rrect, 0.18);
-        }
+        _paintSoftTopHighlight(canvas, rrect, 0.18);
         break;
       case AppUiStyle.glass:
         _paintGlassHighlights(canvas, rect, rrect);
@@ -639,126 +688,39 @@ class _SurfaceFinishPainter extends CustomPainter {
 
   void _paintGlassHighlights(Canvas canvas, Rect rect, RRect rrect) {
     final lightGlass = foreground.computeLuminance() < 0.35;
-    final baseBorder = Paint()
-      ..color = lightGlass
-          ? foreground.withValues(alpha: 0.14)
-          : Colors.white.withValues(alpha: 0.20)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    canvas.drawRRect(rrect.deflate(0.5), baseBorder);
+    canvas.save();
+    canvas.clipRRect(rrect);
 
-    final topEdge = Paint()
-      ..color = Colors.white.withValues(alpha: 0.50)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1
-      ..strokeCap = StrokeCap.round;
-    final leftEdge = Paint()
-      ..color = Colors.white.withValues(alpha: 0.40)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..strokeCap = StrokeCap.round;
-    final bottomEdge = Paint()
-      ..color = lightGlass
-          ? foreground.withValues(alpha: 0.10)
-          : Colors.white.withValues(alpha: 0.10)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..strokeCap = StrokeCap.round;
+    // Liquid Glass reference: a restrained surface sheen, not a bright oval
+    // floating inside the component.
+    final sheen = Paint()
+      ..shader = ui.Gradient.linear(
+        rect.topLeft,
+        rect.bottomRight,
+        <Color>[
+          Colors.white.withValues(alpha: lightGlass ? 0.12 : 0.055),
+          Colors.white.withValues(alpha: lightGlass ? 0.035 : 0.018),
+          Colors.transparent,
+        ],
+        const <double>[0, 0.34, 0.72],
+      );
+    canvas.drawRect(rect, sheen);
+    canvas.restore();
 
     final radius = math.min(
       borderRadius.topLeft.x,
       math.min(rect.width, rect.height) / 2,
     );
+    final topEdge = Paint()
+      ..color = Colors.white.withValues(alpha: lightGlass ? 0.30 : 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.75
+      ..strokeCap = StrokeCap.round;
     canvas.drawLine(
-      Offset(rect.left + radius, rect.top + 0.6),
-      Offset(rect.right - radius, rect.top + 0.6),
+      Offset(rect.left + radius, rect.top + 0.5),
+      Offset(rect.right - radius, rect.top + 0.5),
       topEdge,
     );
-    canvas.drawLine(
-      Offset(rect.left + 0.6, rect.top + radius),
-      Offset(rect.left + 0.6, rect.bottom - radius),
-      leftEdge,
-    );
-    canvas.drawLine(
-      Offset(rect.left + radius, rect.bottom - 0.6),
-      Offset(rect.right - radius, rect.bottom - 0.6),
-      bottomEdge,
-    );
-
-    canvas.save();
-    canvas.clipRRect(rrect);
-
-    final topGlow = Paint()
-      ..shader = ui.Gradient.radial(
-        Offset(rect.left + rect.width * 0.28, rect.top + rect.height * 0.10),
-        rect.width * 0.36,
-        <Color>[
-          Colors.white.withValues(alpha: 0.34),
-          Colors.white.withValues(alpha: 0.10),
-          Colors.transparent,
-        ],
-        const <double>[0, 0.42, 1],
-      );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(
-          rect.left + rect.width * 0.26,
-          rect.top + rect.height * 0.10,
-        ),
-        width: rect.width * 0.40,
-        height: rect.height * 0.34,
-      ),
-      topGlow,
-    );
-
-    final lowerGlow = Paint()
-      ..shader = ui.Gradient.radial(
-        Offset(rect.right - rect.width * 0.17, rect.bottom - rect.height * 0.10),
-        rect.width * 0.22,
-        <Color>[
-          Colors.white.withValues(alpha: 0.09),
-          Colors.transparent,
-        ],
-      );
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(
-          rect.right - rect.width * 0.14,
-          rect.bottom - rect.height * 0.10,
-        ),
-        width: rect.width * 0.26,
-        height: rect.height * 0.20,
-      ),
-      lowerGlow,
-    );
-
-    final innerTop = Paint()
-      ..color = Colors.white.withValues(alpha: 0.28)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    final topPath = Path()
-      ..moveTo(rect.left + rect.width * 0.10, rect.top + 2)
-      ..quadraticBezierTo(
-        rect.center.dx,
-        rect.top - 1,
-        rect.right - rect.width * 0.12,
-        rect.top + 3,
-      );
-    canvas.drawPath(topPath, innerTop);
-
-    final colorSheen = Paint()
-      ..shader = ui.Gradient.linear(
-        rect.topLeft,
-        rect.bottomRight,
-        <Color>[
-          primary.withValues(alpha: 0.04),
-          Colors.transparent,
-          accent2.withValues(alpha: 0.035),
-        ],
-        const <double>[0, 0.52, 1],
-      );
-    canvas.drawRect(rect, colorSheen);
-    canvas.restore();
   }
 
   @override
@@ -957,25 +919,27 @@ class _BackdropPainter extends CustomPainter {
 
   void _paintGlass(Canvas canvas, Rect rect) {
     final shift = math.sin(phase * math.pi * 2) * rect.width * 0.08;
+
+    // Match liquid-glass-components(.light).html: the page backdrop carries
+    // only very low-opacity colour fields (6% / 5% / 4%). The component
+    // surfaces remain readable and translucent instead of looking bubbled.
     final p1 = Paint()
       ..shader = ui.Gradient.radial(
-        Offset(rect.width * 0.30 + shift, rect.height * 0.10),
+        Offset(rect.width * 0.30 + shift, rect.height * 0.20),
         rect.width * 0.72,
         <Color>[
-          primary.withValues(alpha: 0.22),
           primary.withValues(alpha: 0.06),
           Colors.transparent,
         ],
-        const <double>[0, 0.42, 1],
       );
     canvas.drawRect(rect, p1);
 
     final p2 = Paint()
       ..shader = ui.Gradient.radial(
-        Offset(rect.width * 0.78 - shift * 0.45, rect.height * 0.76),
+        Offset(rect.width * 0.70 - shift * 0.45, rect.height * 0.80),
         rect.width * 0.58,
         <Color>[
-          accent2.withValues(alpha: 0.13),
+          accent2.withValues(alpha: 0.05),
           Colors.transparent,
         ],
       );
@@ -983,10 +947,10 @@ class _BackdropPainter extends CustomPainter {
 
     final p3 = Paint()
       ..shader = ui.Gradient.radial(
-        Offset(rect.width * 0.50, rect.height * 0.48),
+        Offset(rect.width * 0.50, rect.height * 0.50),
         rect.width * 0.68,
         <Color>[
-          accent3.withValues(alpha: 0.07),
+          accent3.withValues(alpha: 0.04),
           Colors.transparent,
         ],
       );
