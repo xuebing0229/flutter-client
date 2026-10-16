@@ -706,6 +706,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'id': SyncCoordinator.settingsRecordId,
       'themeMode': widget.themeStore.mode.name,
       'themePaletteId': widget.themeStore.paletteId,
+      'customThemePalettes': widget.themeStore.exportCustomPalettes(),
       'uiStyle': widget.themeStore.style.id,
       for (final entry in features.entries)
         '$_featureSettingPrefix${entry.key}': entry.value,
@@ -729,8 +730,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await widget.themeStore.setMode(mode);
     }
 
+    if (settings.containsKey('customThemePalettes')) {
+      await widget.themeStore.replaceCustomPalettesFromJson(
+        settings['customThemePalettes'],
+      );
+    }
+
     final paletteId = settings['themePaletteId'];
-    if (paletteId is String && AppThemePalettes.containsId(paletteId)) {
+    if (paletteId is String && widget.themeStore.containsPaletteId(paletteId)) {
       await widget.themeStore.setPaletteId(paletteId);
     } else if (paletteId != null) {
       throw const FormatException('同步主题色无效。');
