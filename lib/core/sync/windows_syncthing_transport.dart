@@ -134,6 +134,8 @@ class WindowsSyncthingTransport {
       }
 
       String? folderState;
+      final remoteFolderStates = <String, String>{};
+      final folderErrors = <String>[];
       Map<String, dynamic>? syncProgress;
       if (folderId.isNotEmpty) {
         final encodedFolder = Uri.encodeQueryComponent(folderId);
@@ -179,6 +181,22 @@ class WindowsSyncthingTransport {
           });
         }
 
+        final errorBody = await _requestOptional(
+          'GET',
+          '/rest/folder/errors?folder=$encodedFolder',
+          apiKey: apiKey,
+        );
+        if (errorBody != null) {
+          final root = _jsonMap(errorBody);
+          final errors = root['errors'];
+          if (errors is List) {
+            for (final item in errors) {
+              final message = _asMap(item)['error']?.toString().trim() ?? '';
+              if (message.isNotEmpty) folderErrors.add(message);
+            }
+          }
+        }
+
         for (final remoteId in connectedDeviceIds) {
           final completionBody = await _requestOptional(
             'GET',
@@ -188,6 +206,10 @@ class WindowsSyncthingTransport {
           );
           if (completionBody == null) continue;
           final completionMap = _jsonMap(completionBody);
+          final remoteState = completionMap['remoteState']?.toString().trim();
+          if (remoteState != null && remoteState.isNotEmpty) {
+            remoteFolderStates[remoteId] = remoteState;
+          }
           final rawCompletion = completionMap['completion'];
           if (rawCompletion is! num) continue;
 
@@ -234,6 +256,8 @@ class WindowsSyncthingTransport {
         'connectedDeviceIds': connectedDeviceIds,
         'configuredDevices': configuredDevices,
         'folderState': folderState,
+        'remoteFolderStates': remoteFolderStates,
+        'folderErrors': folderErrors,
         'syncProgress': syncProgress,
       };
     } catch (error) {

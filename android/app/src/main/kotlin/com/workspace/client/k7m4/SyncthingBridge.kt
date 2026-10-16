@@ -246,6 +246,8 @@ class SyncthingBridge(
         }
 
         var folderState: String? = null
+        val remoteFolderStates = linkedMapOf<String, String>()
+        val folderErrors = mutableListOf<String>()
         var syncProgress: Map<String, Any?>? = null
         if (folderId.isNotBlank()) {
             val encodedFolder = URLEncoder.encode(folderId, Charsets.UTF_8.name())
@@ -294,6 +296,25 @@ class SyncthingBridge(
                 )
             }
 
+            runCatching {
+                JSONObject(
+                    request(
+                        "GET",
+                        "/rest/folder/errors?folder=$encodedFolder",
+                    ),
+                )
+            }.getOrNull()
+                ?.optJSONArray("errors")
+                ?.let { errors ->
+                    for (index in 0 until errors.length()) {
+                        val message = errors.optJSONObject(index)
+                            ?.optString("error")
+                            .orEmpty()
+                            .trim()
+                        if (message.isNotBlank()) folderErrors += message
+                    }
+                }
+
             for (remoteId in connectedDeviceIds) {
                 val completion = runCatching {
                     JSONObject(
@@ -304,6 +325,11 @@ class SyncthingBridge(
                         ),
                     )
                 }.getOrNull() ?: continue
+
+                val remoteState = completion.optString("remoteState").trim()
+                if (remoteState.isNotEmpty()) {
+                    remoteFolderStates[remoteId] = remoteState
+                }
 
                 val rawCompletion = completion.optDouble("completion", Double.NaN)
                 if (rawCompletion.isNaN()) continue
@@ -339,6 +365,8 @@ class SyncthingBridge(
             "connectedDeviceIds" to connectedDeviceIds,
             "configuredDevices" to configuredDevices,
             "folderState" to folderState,
+            "remoteFolderStates" to remoteFolderStates,
+            "folderErrors" to folderErrors,
             "syncProgress" to syncProgress,
         )
     }

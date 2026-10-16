@@ -39,6 +39,8 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   bool _receiverConfirmed = false;
   bool _responseBusy = false;
   bool _pairingBusy = false;
+  bool _pollBusy = false;
+  bool _finalizingPermanentPeer = false;
 
   @override
   void initState() {
@@ -61,10 +63,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       final payload = await widget.buildTransferPackage();
       final server = await SyncthingAccountTransferServer.start(
         payload: payload,
-        onTransferred: () {
-          if (!mounted) return;
-          setState(() => _transferred = true);
-        },
       );
       if (!mounted) {
         await server.close();
@@ -72,12 +70,8 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       }
       setState(() => _server = server);
       _pollTimer?.cancel();
-      _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-        if (!mounted) return;
-        await server.poll();
-        if (mounted && server.transferred != _transferred) {
-          setState(() => _transferred = server.transferred);
-        }
+      _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        unawaited(_pollServer(server));
       });
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -93,6 +87,8 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       _error = null;
       _transferred = false;
       _receiverConfirmed = false;
+      _pollBusy = false;
+      _finalizingPermanentPeer = false;
       _responseCodeController.clear();
     });
     await _start();
@@ -153,15 +149,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       final response = AccountTransferResponseCode.decode(source);
       await server.acceptResponse(response);
 
-      // The response is authenticated by the one-time bootstrap key, so the
-      // permanent account folder can be shared with the same transport now.
-      // After the new device logs in its app-device identity will arrive
-      // through the normal account-state sync.
-      await widget.syncCoordinator.bootstrapPeerTransport(
-        deviceId: response.receiverDeviceId,
-        name: response.receiverName,
-      );
-
       if (!mounted) return;
       setState(() {
         _receiverConfirmed = true;
@@ -174,6 +161,62 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       if (mounted) _message('确认新设备失败：$error');
     } finally {
       if (mounted) setState(() => _responseBusy = false);
+    }
+  }
+
+  Future<void> _pollServer(SyncthingAccountTransferServer server) async {
+    if (_pollBusy || !mounted || !identical(_server, server)) return;
+    _pollBusy = true;
+    try {
+      await server.poll();
+      if (server.receiverFinished &&
+          !server.transferred &&
+          !_finalizingPermanentPeer) {
+        await _finalizePermanentPeer(server);
+      }
+      if (mounted &&
+          identical(_server, server) &&
+          server.transferred != _transferred) {
+        setState(() => _transferred = server.transferred);
+      }
+    } catch (error) {
+      if (mounted && identical(_server, server)) {
+        setState(() => _error = '完成设备加入失败：$error');
+      }
+    } finally {
+      _pollBusy = false;
+    }
+  }
+
+  Future<void> _finalizePermanentPeer(
+    SyncthingAccountTransferServer server,
+  ) async {
+    final deviceId = server.acceptedReceiverDeviceId;
+    final deviceName = server.acceptedReceiverName;
+    if (deviceId == null || deviceName == null) {
+      throw StateError('新设备身份尚未确认。');
+    }
+
+    _finalizingPermanentPeer = true;
+    try {
+      // Only after the receiver proves it actually received transfer.json do
+      // we share the permanent account folder. Then return transfer.ack so the
+      // new device knows both bootstrap transfer and permanent pairing are
+      // safely committed before it tears down the temporary folder.
+      await widget.syncCoordinator.bootstrapPeerTransport(
+        deviceId: deviceId,
+        name: deviceName,
+      );
+      await server.completeTransfer();
+      if (mounted && identical(_server, server)) {
+        setState(() {
+          _error = null;
+          _transferred = true;
+        });
+        _message('账号信息与正式同步通道都已确认，新设备可以继续登录。');
+      }
+    } finally {
+      _finalizingPermanentPeer = false;
     }
   }
 

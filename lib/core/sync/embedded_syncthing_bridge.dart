@@ -15,6 +15,8 @@ class EmbeddedSyncthingStatus {
     this.connectedDeviceIds = const <String>[],
     this.configuredDevices = const <Map<String, dynamic>>[],
     this.folderState,
+    this.remoteFolderStates = const <String, String>{},
+    this.folderErrors = const <String>[],
     this.syncProgress,
     this.error,
   });
@@ -26,6 +28,16 @@ class EmbeddedSyncthingStatus {
   final List<String> connectedDeviceIds;
   final List<Map<String, dynamic>> configuredDevices;
   final String? folderState;
+
+  /// Folder-level handshake state reported by each connected peer.
+  ///
+  /// Syncthing reports "valid" only after the remote device has accepted and
+  /// shares this exact folder back. Device connectivity alone is not enough.
+  final Map<String, String> remoteFolderStates;
+
+  /// Runtime scan/pull errors for this exact folder.
+  final List<String> folderErrors;
+
   final Map<String, dynamic>? syncProgress;
   final String? error;
 
@@ -51,6 +63,18 @@ class EmbeddedSyncthingStatus {
       ],
       configuredDevices: mapList(map['configuredDevices']),
       folderState: map['folderState'] as String?,
+      remoteFolderStates: map['remoteFolderStates'] is Map
+          ? <String, String>{
+              for (final entry in (map['remoteFolderStates'] as Map).entries)
+                if (entry.key is String && entry.value is String)
+                  entry.key as String: entry.value as String,
+            }
+          : const <String, String>{},
+      folderErrors: [
+        if (map['folderErrors'] is List)
+          for (final item in map['folderErrors'] as List)
+            if (item is String && item.trim().isNotEmpty) item.trim(),
+      ],
       syncProgress: map['syncProgress'] is Map
           ? (map['syncProgress'] as Map).map(
               (key, value) => MapEntry(key.toString(), value),
