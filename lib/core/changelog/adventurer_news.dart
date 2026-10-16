@@ -188,6 +188,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '自定义 UI 配色',
     description: 'UI主题色新增自定义调色。基础模式只选主主题色即可自动生成浅色和深色配色；高级模式可分别调整主色、辅助强调色、背景、卡片、次级表面、主文字、说明文字与边框颜色，并通过实时预览确认效果。自定义方案可以命名、保存、编辑、复制、删除和一键切换；还可生成带配色预览与二维码的分享图片、导出 .agtheme 配色文件或复制分享码。其他用户可以直接扫码、从相册选择分享图、导入文件或粘贴分享码，并在确认预览后保存使用；导入不会改变对方当前的 UI 风格。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 155,
+    title: '配色编辑更顺手',
+    description: '预设主题色名称改得更简洁直观；高级自定义调色中，深色配色新增“一键套用浅色配色”，会完整复制浅色模式的 8 项颜色，复制后仍可继续单独调整深色模式。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
