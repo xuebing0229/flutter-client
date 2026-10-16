@@ -182,6 +182,47 @@ void main() {
     expect(tokens.foreground.computeLuminance(), lessThan(0.20));
   });
 
+  test('glass and fluorescent typography stay globally sharp', () {
+    for (final brightness in Brightness.values) {
+      final scheme = ColorScheme.fromSeed(
+        seedColor: Colors.teal,
+        brightness: brightness,
+      );
+      for (final appStyle in <AppUiStyle>[
+        AppUiStyle.glass,
+        AppUiStyle.fluorescent,
+      ]) {
+        final textTheme =
+            GuildVisualTheme.build(scheme, style: appStyle).textTheme;
+        final styles = <TextStyle?>[
+          textTheme.displayLarge,
+          textTheme.displayMedium,
+          textTheme.displaySmall,
+          textTheme.headlineLarge,
+          textTheme.headlineMedium,
+          textTheme.headlineSmall,
+          textTheme.titleLarge,
+          textTheme.titleMedium,
+          textTheme.titleSmall,
+          textTheme.bodyLarge,
+          textTheme.bodyMedium,
+          textTheme.bodySmall,
+          textTheme.labelLarge,
+          textTheme.labelMedium,
+          textTheme.labelSmall,
+        ];
+        for (final textStyle in styles) {
+          expect(
+            textStyle?.shadows ?? const <Shadow>[],
+            isEmpty,
+            reason:
+                '${appStyle.label} must not blur every text style globally',
+          );
+        }
+      }
+    }
+  });
+
   test('document reference input radii are locked per style', () {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
     const expected = <AppUiStyle, double>{
