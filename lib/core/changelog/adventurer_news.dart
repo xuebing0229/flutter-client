@@ -213,6 +213,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '首次加入握手修复',
     description: '修复原电脑已登录、新手机首次加入时可能出现“设备已连接但账号数据始终不传”的问题。首次加入现在会确认临时账号目录已经真正双向共享后才开始传输，并在账号包送达、正式同步关系建立、最终确认完成后再结束临时通道；若目录未共享、被暂停或同步报错，会直接提示具体卡点，不再一直转圈。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 160,
+    title: '完整备份导出修复',
+    description: '修复完整备份偶发或持续提示“导出快照暂时无法稳定”的问题。导出时会先补齐缺失的同步记录，并直接使用刚刚完成合并与校验的同一份同步历史，不再二次读取目录制造新的快照竞态；若工作数据确实仍在变化，也会给出更具体的失败原因。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
