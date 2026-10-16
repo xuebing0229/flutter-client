@@ -218,6 +218,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '完整备份导出修复',
     description: '修复旧账号升级到新版 UI 风格后，历史同步记录仍保留旧 uiTexture 字段，以及旧同步历史缺记录或导出时二次读取造成快照不一致，导致完整备份提示“导出快照暂时无法稳定”的问题。新版会自动补齐并清理历史设置，并从同一份已经合并完成的同步快照生成备份。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 162,
+    title: 'Windows 同步通道迁移修复',
+    description: '修复旧版 Windows 曾固定使用 8384 同步端口后，新版仍可能继续接管旧同步核心，导致设备看似已连接却反复修复旧通道、工作数据迟迟不同步的问题。升级后会保留原同步身份和配对配置，只把旧同步核心自动迁移到冒险者公会自己的专用动态端口。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
