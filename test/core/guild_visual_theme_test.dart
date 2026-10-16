@@ -115,9 +115,14 @@ void main() {
     expect(bold.borderWidth, greaterThanOrEqualTo(3));
     expect(bold.cardRadius, 0);
     expect(clay.cardRadius, greaterThanOrEqualTo(20));
-    expect(glass.glassBlur, greaterThanOrEqualTo(24));
-    expect(glass.glassOpacity, greaterThan(0.4));
-    expect(darkGlass.glassOpacity, lessThanOrEqualTo(0.35));
+    expect(glass.glassBlur, 16);
+    expect(glass.glassOpacity, 0.55);
+    expect(glass.radius, 16);
+    expect(glass.cardRadius, 16);
+    expect(glass.background, const Color(0xFFF0EFF5));
+    expect(darkGlass.glassBlur, 12);
+    expect(darkGlass.glassOpacity, 0.04);
+    expect(darkGlass.background, const Color(0xFF0E0E1A));
   });
 
   test('UI styles follow app brightness except named retro variants', () {
@@ -175,6 +180,82 @@ void main() {
     expect(tokens.background.computeLuminance(), greaterThan(0.75));
     expect(tokens.surface.computeLuminance(), greaterThan(0.80));
     expect(tokens.foreground.computeLuminance(), lessThan(0.20));
+  });
+
+  test('document reference input radii are locked per style', () {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    const expected = <AppUiStyle, double>{
+      AppUiStyle.relief: 12,
+      AppUiStyle.minimal: 0,
+      AppUiStyle.bold: 0,
+      AppUiStyle.geometric: 0,
+      AppUiStyle.retroLight: 4,
+      AppUiStyle.retroDark: 4,
+      AppUiStyle.fluorescent: 1,
+      AppUiStyle.collage: 0,
+      AppUiStyle.monochrome: 0,
+      AppUiStyle.clay: 20,
+      AppUiStyle.glass: 12,
+    };
+
+    for (final entry in expected.entries) {
+      final tokens = GuildVisualTheme.build(
+        scheme,
+        style: entry.key,
+      ).extension<GuildStyleTheme>()!;
+      expect(
+        tokens.inputBorderRadius.topLeft.x,
+        entry.value,
+        reason: '${entry.key.label} search/input radius must match reference',
+      );
+    }
+  });
+
+  testWidgets('styled search shells use reference component geometry', (
+    tester,
+  ) async {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    const expected = <AppUiStyle, double>{
+      AppUiStyle.relief: 12,
+      AppUiStyle.bold: 0,
+      AppUiStyle.geometric: 0,
+      AppUiStyle.retroLight: 4,
+      AppUiStyle.retroDark: 4,
+      AppUiStyle.fluorescent: 1,
+      AppUiStyle.collage: 0,
+      AppUiStyle.monochrome: 0,
+      AppUiStyle.clay: 20,
+      AppUiStyle.glass: 12,
+    };
+
+    for (final entry in expected.entries) {
+      final controller = TextEditingController();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: GuildVisualTheme.build(scheme, style: entry.key),
+          home: Scaffold(
+            body: CollectionSearchField(
+              controller: controller,
+              query: '',
+              hintText: '搜索',
+              onChanged: (_) {},
+              onClear: () {},
+            ),
+          ),
+        ),
+      );
+
+      final effect = tester.widget<GuildSurfaceEffect>(
+        find.byType(GuildSurfaceEffect),
+      );
+      expect(effect.role, GuildEffectRole.inset);
+      expect(
+        effect.borderRadius.topLeft.x,
+        entry.value,
+        reason: '${entry.key.label} search shell must use reference radius',
+      );
+      controller.dispose();
+    }
   });
 
   testWidgets('business cards no longer inject decorative left rails', (
