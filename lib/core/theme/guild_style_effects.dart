@@ -747,42 +747,6 @@ class _SurfaceFinishPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintGlassHighlights(Canvas canvas, Rect rect, RRect rrect) {
-    final lightGlass = foreground.computeLuminance() < 0.35;
-    canvas.save();
-    canvas.clipRRect(rrect);
-
-    // Liquid Glass reference: a restrained surface sheen, not a bright oval
-    // floating inside the component.
-    final sheen = Paint()
-      ..shader = ui.Gradient.linear(
-        rect.topLeft,
-        rect.bottomRight,
-        <Color>[
-          Colors.white.withValues(alpha: lightGlass ? 0.12 : 0.055),
-          Colors.white.withValues(alpha: lightGlass ? 0.035 : 0.018),
-          Colors.transparent,
-        ],
-        const <double>[0, 0.34, 0.72],
-      );
-    canvas.drawRect(rect, sheen);
-    canvas.restore();
-
-    final radius = math.min(
-      borderRadius.topLeft.x,
-      math.min(rect.width, rect.height) / 2,
-    );
-    final topEdge = Paint()
-      ..color = Colors.white.withValues(alpha: lightGlass ? 0.30 : 0.18)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.75
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(rect.left + radius, rect.top + 0.5),
-      Offset(rect.right - radius, rect.top + 0.5),
-      topEdge,
-    );
-  }
 
   @override
   bool shouldRepaint(covariant _SurfaceFinishPainter oldDelegate) {
