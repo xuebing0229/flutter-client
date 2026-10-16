@@ -140,15 +140,7 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
                               color: Theme.of(context).colorScheme.primary,
                               width: 1.2,
                             )
-                          : BorderSide(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.72),
-                              width: style.borderWidth <= 0
-                                  ? 1.4
-                                  : style.borderWidth,
-                            ),
+                          : BorderSide.none,
                     ),
                   ),
                 ),
