@@ -42,11 +42,17 @@ class PortableSyncWorkspaceValidator {
     final containsSettingsRecord = records.any(
       (record) => record['kind'] == SyncEntityKind.settings.name,
     );
+    const backupOnlySettingKeys = <String>{
+      'syncBaselineRecords',
+      'screenshotImportHistory',
+      'desktopPetBackup',
+    };
     final settings = containsSettingsRecord
         ? <String, dynamic>{
             'id': 'app',
             for (final entry in backup.settings.entries)
-              if (entry.key != 'syncBaselineRecords') entry.key: entry.value,
+              if (!backupOnlySettingKeys.contains(entry.key))
+                entry.key: entry.value,
           }
         : null;
 
