@@ -47,12 +47,6 @@
       <strong>冒险者新见闻</strong>
       <pre id="notes" class="muted">正在读取…</pre>
     </section>
-
-    <details>
-      <summary>文件校验信息</summary>
-      <p>Android SHA-256<br><code id="androidSha">—</code></p>
-      <p>Windows SHA-256<br><code id="windowsSha">—</code></p>
-    </details>
   </main>
 
   <script>
@@ -82,14 +76,12 @@
           $('android').href = data.android.download_url;
           $('android').textContent = '下载 Android' +
             (data.android.size_bytes ? ' · ' + prettySize(data.android.size_bytes) : '');
-          $('androidSha').textContent = data.android.sha256 || '—';
         }
         if (data.windows?.installer_url || data.windows?.download_url) {
           $('windows').hidden = false;
           $('windows').href = data.windows.installer_url || data.windows.download_url;
           $('windows').textContent = '下载 Windows' +
             (data.windows.installer_size_bytes ? ' · ' + prettySize(data.windows.installer_size_bytes) : '');
-          $('windowsSha').textContent = data.windows.sha256 || '—';
         }
       })
       .catch(error => {
