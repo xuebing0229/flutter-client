@@ -309,16 +309,23 @@ class SyncthingAccountTransferServer {
       final doneFile = File(
         '${folder.path}${Platform.pathSeparator}transfer.done',
       );
-      await payloadFile.writeAsString(
-        await _encryptTransferPayload(payload, keyBytes),
-        flush: true,
-      );
+
+      // Configure the bootstrap folder before creating the payload. If the
+      // payload already exists before Syncthing starts watching this folder,
+      // some Android runs can keep an empty index until a later rescan. The
+      // receiver then connects successfully but waits forever for transfer.json.
       await bridge.prepareFolder(
         folderId: folderId,
         label: '临时账号加入',
         folderPath: folder.path,
         force: true,
       );
+      await payloadFile.writeAsString(
+        await _encryptTransferPayload(payload, keyBytes),
+        flush: true,
+      );
+      await bridge.requestScanFolder(folderId);
+
       final status = await bridge.statusFolder(folderId);
       final sourceDeviceId = status.deviceId?.trim();
       if (sourceDeviceId == null || sourceDeviceId.length < 20) {
@@ -362,10 +369,23 @@ class SyncthingAccountTransferServer {
       name: response.receiverName,
     );
     _acceptedReceiverDeviceId = response.receiverDeviceId;
+
+    // The payload was intentionally created after folder setup, but force one
+    // more source-side scan after the receiver is shared. This removes a race
+    // where both devices report "connected" while the source still advertises
+    // an empty bootstrap folder.
+    await _bridge.requestScanFolder(descriptor.folderId);
   }
 
   Future<void> poll() async {
     if (_closed || _transferred) return;
+
+    if (_acceptedReceiverDeviceId != null) {
+      // Keep the source index fresh while the confirmation page is open.
+      // The client already rescans its own side every second; without this
+      // source-side rescan a missed initial index could stall indefinitely.
+      await _bridge.requestScanFolder(descriptor.folderId);
+    }
 
     if (await _doneFile.exists()) {
       _transferred = true;
@@ -514,6 +534,7 @@ class SyncthingAccountTransferClientSession {
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
     final connectionDeadline = DateTime.now().add(timeout);
+    DateTime? payloadDeadline;
     var sourceConnected = false;
 
     while (!_closed) {
@@ -522,6 +543,9 @@ class SyncthingAccountTransferClientSession {
       final status = await transferStatus();
       onStatus?.call(status);
       if (status.sourceConnected) {
+        if (!sourceConnected) {
+          payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+        }
         sourceConnected = true;
       }
 
@@ -545,6 +569,16 @@ class SyncthingAccountTransferClientSession {
         throw const FormatException(
           '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
           '并已经扫描或粘贴了这台设备的回应码。',
+        );
+      }
+
+      if (sourceConnected &&
+          payloadDeadline != null &&
+          !DateTime.now().isBefore(payloadDeadline)) {
+        throw const FormatException(
+          '已经连接原设备，但账号数据一直没有传过来。'
+          '请让原设备继续停留在“添加设备”页面并重新尝试；'
+          '如果再次出现，请更新两台设备到最新版本后重新配对。',
         );
       }
 
