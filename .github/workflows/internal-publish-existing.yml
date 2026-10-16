@@ -162,12 +162,16 @@ jobs:
           install -d -m 0700 "$HOME/.ssh"
           printf '%s\n' "$RELEASE_SSH_KEY" > "$HOME/.ssh/internal-release"
           chmod 0600 "$HOME/.ssh/internal-release"
+          ssh-keygen -y -f "$HOME/.ssh/internal-release" >/dev/null
           ssh-keyscan -H "$RELEASE_DEPLOY_HOST" > "$HOME/.ssh/known_hosts"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey \
+            -i "$HOME/.ssh/internal-release" \
+            "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST" true
 
       - name: Upload versioned files and page first
         shell: bash
         run: |
-          SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes"
+          SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
           $SSH "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST" \
             "mkdir -p '$RELEASE_DEPLOY_PATH/internal/$VERSION'"
           rsync -av --chmod=F644,D755 \
@@ -182,7 +186,7 @@ jobs:
       - name: Publish latest manifests last
         shell: bash
         run: |
-          SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes"
+          SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
           rsync -av --chmod=F644 \
             -e "$SSH" \
             site/internal/android-latest.json \
