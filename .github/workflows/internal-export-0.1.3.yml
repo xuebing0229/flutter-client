@@ -1,0 +1,39 @@
+name: Export Internal 0.1.3 Direct Files
+
+on:
+  push:
+    branches:
+      - 'export/internal-0.1.3-files'
+    paths:
+      - '.github/workflows/internal-export-0.1.3.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download completed Internal Windows artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh run download 38882351084 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name internal-windows-package \
+            --dir dist
+
+      - name: Verify direct installer
+        run: |
+          test -f dist/app-windows-internal-setup.exe
+          ls -lh dist/app-windows-internal-setup.exe
+
+      - name: Upload installer only
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-windows-installer-0.1.3
+          path: dist/app-windows-internal-setup.exe
+          retention-days: 30
+          if-no-files-found: error
