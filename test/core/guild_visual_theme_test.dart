@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/core/theme/app_theme_palette.dart';
 import 'package:flutter_app/core/theme/app_ui_style.dart';
+import 'package:flutter_app/core/theme/guild_style_effects.dart';
 import 'package:flutter_app/core/theme/guild_visual_theme.dart';
 import 'package:flutter_app/features/shared/presentation/summary_card_widgets.dart';
 
@@ -106,31 +107,82 @@ void main() {
     expect(bold.borderWidth, greaterThanOrEqualTo(3));
     expect(bold.cardRadius, 0);
     expect(clay.cardRadius, greaterThanOrEqualTo(20));
-    expect(glass.glassBlur, greaterThanOrEqualTo(16));
-    expect(glass.glassOpacity, lessThan(0.8));
+    expect(glass.glassBlur, greaterThanOrEqualTo(24));
+    expect(glass.glassOpacity, lessThanOrEqualTo(0.35));
   });
 
-  test('named retro variants keep their intended light and dark bases', () {
+  test('document presets keep their reference light or dark base', () {
     final lightInput = ColorScheme.fromSeed(seedColor: Colors.teal);
     final darkInput = ColorScheme.fromSeed(
       seedColor: Colors.teal,
       brightness: Brightness.dark,
     );
 
-    expect(
-      GuildVisualTheme.build(
-        darkInput,
-        style: AppUiStyle.retroLight,
-      ).brightness,
-      Brightness.light,
+    for (final style in <AppUiStyle>[
+      AppUiStyle.relief,
+      AppUiStyle.minimal,
+      AppUiStyle.bold,
+      AppUiStyle.geometric,
+      AppUiStyle.retroLight,
+      AppUiStyle.collage,
+      AppUiStyle.monochrome,
+      AppUiStyle.clay,
+    ]) {
+      expect(
+        GuildVisualTheme.build(darkInput, style: style).brightness,
+        Brightness.light,
+        reason: '${style.label} follows the supplied light reference',
+      );
+    }
+
+    for (final style in <AppUiStyle>[
+      AppUiStyle.retroDark,
+      AppUiStyle.fluorescent,
+      AppUiStyle.glass,
+    ]) {
+      expect(
+        GuildVisualTheme.build(lightInput, style: style).brightness,
+        Brightness.dark,
+        reason: '${style.label} follows the supplied dark reference',
+      );
+    }
+  });
+
+  testWidgets('non-classic surfaces use dedicated effect painters', (
+    tester,
+  ) async {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.clay),
+        home: const Scaffold(
+          body: GuildStyledSurface(
+            child: SizedBox(width: 100, height: 50),
+          ),
+        ),
+      ),
     );
-    expect(
-      GuildVisualTheme.build(
-        lightInput,
-        style: AppUiStyle.retroDark,
-      ).brightness,
-      Brightness.dark,
+
+    expect(find.byType(GuildSurfaceEffect), findsOneWidget);
+    expect(find.byType(CustomPaint), findsWidgets);
+  });
+
+  testWidgets('retro dark backdrop uses the dedicated background painter', (
+    tester,
+  ) async {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.retroDark),
+        home: const Scaffold(
+          body: GuildStyleBackdrop(
+            child: SizedBox.expand(),
+          ),
+        ),
+      ),
     );
+
+    expect(find.byType(GuildBackdropEffect), findsOneWidget);
   });
 
   testWidgets('glass surface blurs only when a backdrop is available', (
