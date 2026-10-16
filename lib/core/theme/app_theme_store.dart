@@ -83,11 +83,11 @@ class AppThemeStore extends ChangeNotifier {
       if (await file.exists()) {
         final raw = jsonDecode(await file.readAsString());
         if (raw is List) {
-          final loaded = <AppThemePalette>[
-            for (final item in raw)
-              if (AppThemePalette.fromCustomJson(item) case final palette?)
-                palette,
-          ];
+          final loaded = <AppThemePalette>[];
+          for (final item in raw) {
+            final palette = AppThemePalette.fromCustomJson(item);
+            if (palette != null) loaded.add(palette);
+          }
           _customPalettes
             ..clear()
             ..addAll(loaded);
@@ -232,8 +232,9 @@ class AppThemeStore extends ChangeNotifier {
   }
 
   Future<void> deleteCustomPalette(String id) async {
-    final removed = _customPalettes.removeWhere((item) => item.id == id);
-    if (removed == 0) return;
+    final before = _customPalettes.length;
+    _customPalettes.removeWhere((item) => item.id == id);
+    if (_customPalettes.length == before) return;
 
     final wasSelected = _paletteId == id;
     if (wasSelected) {
