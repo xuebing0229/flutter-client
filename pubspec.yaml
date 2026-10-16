@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+162
-# beta-retry: windows-pairing-startup
+# beta-retry: windows-legacy-sync-channel-migration
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
