@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
+
 import '../portability/data_portability_file_bridge.dart';
 import 'app_theme_palette.dart';
 
@@ -76,11 +78,13 @@ class ThemePaletteTransferCodec {
       throw const FormatException('主题配色内容不完整或已经损坏。');
     }
 
+    final trimmedName = name.trim();
+    final safeName = trimmedName.length > 32
+        ? trimmedName.substring(0, 32)
+        : trimmedName;
+
     return SharedThemePreset(
-      name: name.trim().substring(
-            0,
-            name.trim().length.clamp(1, 32),
-          ),
+      name: safeName,
       seed: Color(seed),
       advanced: advanced,
       light: light,
