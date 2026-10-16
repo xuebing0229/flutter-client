@@ -180,6 +180,24 @@ class _CustomThemeColorPageState extends State<CustomThemeColorPage> {
                 setState(() => _editingBrightness = value.first);
               },
             ),
+            if (_editingBrightness == Brightness.dark) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _applyLightToDark,
+                  icon: const Icon(Icons.copy_all_rounded),
+                  label: const Text('套用浅色配色'),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '把浅色模式当前的 8 项颜色完整复制到深色模式；复制后仍可以继续单独调整深色配色。',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
             const SizedBox(height: 12),
             _ColorSettingTile(
               title: '主主题色',
@@ -300,6 +318,19 @@ class _CustomThemeColorPageState extends State<CustomThemeColorPage> {
           ),
           const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  void _applyLightToDark() {
+    setState(() {
+      _dark = _light;
+      _editingBrightness = Brightness.dark;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已把浅色配色套用到深色模式，可以继续单独调整。'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
