@@ -56,6 +56,7 @@ class FullBackupBundleService {
     required String accountId,
     required AppBackupData backup,
     required String fileName,
+    Map<String, File> bundledLocalFiles = const <String, File>{},
   }) async {
     final syncRoot = await _syncRecordStore.rootDirectory(accountId);
     final assets = await _validatedReferencedAssets(
@@ -83,6 +84,19 @@ class FullBackupBundleService {
         for (final entry in assets.entries) {
           // Images are already compressed in their source formats. Storing
           // them avoids wasting CPU while still streaming them to the archive.
+          await encoder.addFile(
+            entry.value,
+            entry.key,
+            ZipFileEncoder.store,
+          );
+        }
+        for (final entry in bundledLocalFiles.entries) {
+          if (!_isDesktopPetAssetPath(entry.key)) {
+            throw FormatException('完整备份包含不允许的本机文件路径：${entry.key}');
+          }
+          if (!await entry.value.exists()) {
+            throw StateError('完整备份所需的本机文件已经丢失：${entry.key}');
+          }
           await encoder.addFile(
             entry.value,
             entry.key,
@@ -176,13 +190,17 @@ class FullBackupBundleService {
             hasManifest = true;
             continue;
           }
-          if (!_isReferenceAssetPath(name)) {
+          if (_isReferenceAssetPath(name)) {
+            assetEntryPaths.add(name);
+          } else if (!_isDesktopPetAssetPath(name)) {
             throw FormatException('备份中包含未知文件：$name');
           }
-          assetEntryPaths.add(name);
         } else if (name != 'assets' &&
             name != 'assets/' &&
-            !name.startsWith('assets/order-reference-images')) {
+            name != 'desktop-pet' &&
+            name != 'desktop-pet/' &&
+            !name.startsWith('assets/order-reference-images') &&
+            !name.startsWith('desktop-pet/presets')) {
           throw FormatException('备份中包含未知目录：$name');
         }
       }
@@ -352,6 +370,39 @@ class FullBackupBundleService {
         .toList(growable: false);
     if (segments.isEmpty) return false;
     return !segments.any((segment) => segment == '.' || segment == '..');
+  }
+
+  static bool _isDesktopPetAssetPath(String value) {
+    if (!_isSafeArchivePath(value)) return false;
+    final segments = value.split('/');
+    return segments.length == 4 &&
+        segments[0] == 'desktop-pet' &&
+        segments[1] == 'presets' &&
+        segments.skip(2).every(
+          (segment) =>
+              segment.isNotEmpty &&
+              RegExp(r'^[A-Za-z0-9._-]+
+    if (!_isSafeArchivePath(value)) return false;
+    final segments = value.split('/');
+    return segments.length == 4 &&
+        segments[0] == 'assets' &&
+        segments[1] == 'order-reference-images' &&
+        segments.skip(2).every(
+          (segment) =>
+              segment.isNotEmpty &&
+              RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
+        );
+  }
+
+  static String _joinRelative(String root, String relativePath) {
+    return <String>[
+      root,
+      ...relativePath.split('/'),
+    ].join(Platform.pathSeparator);
+  }
+}
+).hasMatch(segment),
+        );
   }
 
   static bool _isReferenceAssetPath(String value) {
