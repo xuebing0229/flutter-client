@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme_palette.dart';
 import 'app_ui_style.dart';
 import 'guild_style_effects.dart';
 
@@ -210,12 +211,17 @@ abstract final class GuildVisualTheme {
   static ThemeData build(
     ColorScheme baseColors, {
     AppUiStyle style = AppUiStyle.classic,
+    AppThemeSemanticColors? semanticColors,
   }) {
     if (style == AppUiStyle.classic) {
       return _buildClassic(baseColors);
     }
 
-    final resolved = _resolve(baseColors, style);
+    final resolved = _resolve(
+      baseColors,
+      style,
+      semanticColors: semanticColors,
+    );
     final colors = resolved.colors;
     final tokens = resolved.tokens;
     final selectedSurface = _mix(tokens.surfaceAlt, colors.primary, 0.20);
@@ -677,19 +683,24 @@ abstract final class GuildVisualTheme {
 
   static _GuildResolvedStyle _resolve(
     ColorScheme base,
-    AppUiStyle style,
-  ) {
+    AppUiStyle style, {
+    AppThemeSemanticColors? semanticColors,
+  }) {
     final brightness = style.forcesLight
         ? Brightness.light
         : style.forcesDark
             ? Brightness.dark
             : base.brightness;
     final dark = brightness == Brightness.dark;
-    final primary = base.primary;
-    final accent2 =
+    final primary = semanticColors?.primary ?? base.primary;
+    final accent2 = semanticColors?.accent ??
         _rotateHue(primary, style == AppUiStyle.geometric ? 120 : 62);
-    final accent3 =
-        _rotateHue(primary, style == AppUiStyle.fluorescent ? 180 : -58);
+    final accent3 = semanticColors == null
+        ? _rotateHue(
+            primary,
+            style == AppUiStyle.fluorescent ? 180 : -58,
+          )
+        : _rotateHue(semanticColors.accent, -54);
 
     late Color background;
     late Color surface;
@@ -954,6 +965,18 @@ abstract final class GuildVisualTheme {
         chromeShadows = shadows;
         glassBlur = dark ? 12 : 16;
         glassOpacity = dark ? 0.04 : 0.55;
+    }
+
+    if (semanticColors != null) {
+      // Custom palettes choose semantic colours while the selected UI style
+      // still owns geometry, blur, shadows and component treatment.
+      background = semanticColors.background;
+      surface = semanticColors.surface;
+      surfaceAlt = semanticColors.surfaceAlt;
+      foreground = semanticColors.foreground;
+      muted = semanticColors.mutedForeground;
+      ink = semanticColors.foreground;
+      border = semanticColors.border;
     }
 
     final colors = base.copyWith(
