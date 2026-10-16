@@ -73,29 +73,9 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
     );
   }
 
-  BorderRadius get surfaceBorderRadius {
-    return switch (style) {
-      AppUiStyle.collage => const BorderRadius.only(
-          topLeft: Radius.circular(2),
-          topRight: Radius.circular(20),
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(2),
-        ),
-      _ => BorderRadius.circular(radius),
-    };
-  }
+  BorderRadius get surfaceBorderRadius => BorderRadius.circular(radius);
 
-  BorderRadius get cardBorderRadius {
-    return switch (style) {
-      AppUiStyle.collage => const BorderRadius.only(
-          topLeft: Radius.circular(0),
-          topRight: Radius.circular(10),
-          bottomLeft: Radius.circular(10),
-          bottomRight: Radius.circular(0),
-        ),
-      _ => BorderRadius.circular(cardRadius),
-    };
-  }
+  BorderRadius get cardBorderRadius => BorderRadius.circular(cardRadius);
 
   BorderRadius get buttonBorderRadius => BorderRadius.circular(
         switch (style) {
@@ -812,7 +792,7 @@ abstract final class GuildVisualTheme {
         ink = foreground;
         border = const Color(0xFFE0DCD5);
         borderWidth = 2;
-        radius = 3;
+        radius = 0;
         cardRadius = 0;
         shadows = <BoxShadow>[
           BoxShadow(color: primary, offset: const Offset(6, 6)),
