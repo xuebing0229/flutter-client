@@ -239,6 +239,16 @@ class DesktopPetPreset {
   }
 }
 
+class DesktopPetBackupExport {
+  const DesktopPetBackupExport({
+    required this.manifest,
+    required this.files,
+  });
+
+  final Map<String, dynamic> manifest;
+  final Map<String, File> files;
+}
+
 class DesktopPetSettings extends ChangeNotifier {
   DesktopPetSettings();
 
@@ -505,6 +515,237 @@ class DesktopPetSettings extends ChangeNotifier {
     } catch (_) {
       // The desktop pet is optional. A bad config must not affect work data.
     }
+  }
+
+  Future<DesktopPetBackupExport> exportForBackup() async {
+    await load();
+    final files = <String, File>{};
+
+    Future<String?> registerAsset({
+      required DesktopPetPreset preset,
+      required String slot,
+      required String? rawPath,
+    }) async {
+      if (rawPath == null || rawPath.trim().isEmpty) return null;
+      final source = File(rawPath);
+      if (!await source.exists()) {
+        throw StateError('桌宠预设“${preset.name}”的图片文件已丢失，完整备份已取消。');
+      }
+
+      final lower = source.path.toLowerCase();
+      final extension = lower.endsWith('.jpeg')
+          ? '.jpeg'
+          : lower.endsWith('.jpg')
+              ? '.jpg'
+              : '.png';
+      final safePresetId = preset.id.replaceAll(
+        RegExp(r'[^A-Za-z0-9._-]'),
+        '_',
+      );
+      final relative =
+          'desktop-pet/presets/$safePresetId/$slot$extension';
+      files[relative] = source;
+      return relative;
+    }
+
+    final presetPayloads = <Map<String, dynamic>>[];
+    for (final preset in _presets) {
+      final imageA = await registerAsset(
+        preset: preset,
+        slot: 'imageA',
+        rawPath: preset.imageA,
+      );
+      final imageB = await registerAsset(
+        preset: preset,
+        slot: 'imageB',
+        rawPath: preset.imageB,
+      );
+      final bubbleImage = await registerAsset(
+        preset: preset,
+        slot: 'bubbleImage',
+        rawPath: preset.bubbleImage,
+      );
+      presetPayloads.add(<String, dynamic>{
+        ...preset.toJson(),
+        'imageA': imageA,
+        'imageB': imageB,
+        'bubbleImage': bubbleImage,
+      });
+    }
+
+    return DesktopPetBackupExport(
+      manifest: <String, dynamic>{
+        'schema': 1,
+        'selectedPresetId': _selectedPresetId,
+        'bubbleContentMode': _bubbleContentMode.name,
+        'textMode': _textMode.name,
+        'bubblePosition': _bubblePosition.name,
+        'bubbleStyle': _bubbleStyle.name,
+        'petScale': _petScale,
+        'bubbleTextScale': _bubbleTextScale,
+        'bubbleImageScale': _bubbleImageScale,
+        'focusClockScale': _focusClockScale,
+        'customText': _customText,
+        'currentOrderId': _currentOrderId,
+        'presets': presetPayloads,
+      },
+      files: files,
+    );
+  }
+
+  Future<void> restoreFromBackup({
+    required Object? rawManifest,
+    required Directory extractedRoot,
+  }) async {
+    if (rawManifest is! Map) {
+      throw const FormatException('桌宠备份设置格式无效。');
+    }
+    if (rawManifest['schema'] != 1) {
+      throw const FormatException('不支持的桌宠备份版本。');
+    }
+
+    final rawPresets = rawManifest['presets'];
+    if (rawPresets is! List) {
+      throw const FormatException('桌宠备份缺少预设列表。');
+    }
+
+    final root = await _rootDirectory();
+    final restored = <DesktopPetPreset>[];
+
+    Future<String?> restoreAsset({
+      required String presetId,
+      required String presetName,
+      required String slot,
+      required Object? rawPath,
+    }) async {
+      if (rawPath == null) return null;
+      if (rawPath is! String ||
+          !rawPath.startsWith('desktop-pet/presets/')) {
+        throw FormatException('桌宠预设“$presetName”的图片路径无效。');
+      }
+      final segments = rawPath.split('/');
+      if (segments.length != 4 ||
+          segments.any((segment) => segment.isEmpty || segment == '..')) {
+        throw FormatException('桌宠预设“$presetName”的图片路径无效。');
+      }
+
+      final source = File(
+        <String>[
+          extractedRoot.path,
+          ...segments,
+        ].join(Platform.pathSeparator),
+      );
+      if (!await source.exists()) {
+        throw FormatException('桌宠预设“$presetName”缺少 $slot 图片。');
+      }
+
+      final safePresetId = presetId.replaceAll(
+        RegExp(r'[^A-Za-z0-9._-]'),
+        '_',
+      );
+      final folder = Directory(
+        '${root.path}${Platform.pathSeparator}presets'
+        '${Platform.pathSeparator}$safePresetId',
+      );
+      await folder.create(recursive: true);
+      final fileName = segments.last;
+      final destination = File(
+        '${folder.path}${Platform.pathSeparator}'
+        '${DateTime.now().microsecondsSinceEpoch}-$fileName',
+      );
+      await source.copy(destination.path);
+      return destination.path;
+    }
+
+    for (final raw in rawPresets) {
+      if (raw is! Map) {
+        throw const FormatException('桌宠备份包含无效预设。');
+      }
+      final id = raw['id'];
+      final name = raw['name'];
+      if (id is! String || id.isEmpty || name is! String) {
+        throw const FormatException('桌宠备份包含无效预设。');
+      }
+      final imageA = await restoreAsset(
+        presetId: id,
+        presetName: name,
+        slot: 'A',
+        rawPath: raw['imageA'],
+      );
+      final imageB = await restoreAsset(
+        presetId: id,
+        presetName: name,
+        slot: 'B',
+        rawPath: raw['imageB'],
+      );
+      final bubbleImage = await restoreAsset(
+        presetId: id,
+        presetName: name,
+        slot: '气泡',
+        rawPath: raw['bubbleImage'],
+      );
+
+      final normalized = <String, dynamic>{
+        for (final entry in raw.entries) entry.key.toString(): entry.value,
+        'imageA': imageA,
+        'imageB': imageB,
+        'bubbleImage': bubbleImage,
+      };
+      final preset = DesktopPetPreset.fromJson(normalized);
+      if (preset == null) {
+        throw const FormatException('桌宠备份包含无法读取的预设。');
+      }
+      restored.add(preset);
+    }
+
+    _presets
+      ..clear()
+      ..addAll(restored);
+    final selected = rawManifest['selectedPresetId'];
+    _selectedPresetId = selected is String &&
+            _presets.any((preset) => preset.id == selected)
+        ? selected
+        : (_presets.isEmpty ? null : _presets.first.id);
+
+    _bubbleContentMode =
+        rawManifest['bubbleContentMode'] == DesktopPetBubbleContentMode.image.name
+            ? DesktopPetBubbleContentMode.image
+            : DesktopPetBubbleContentMode.text;
+    _textMode = rawManifest['textMode'] == DesktopPetTextMode.custom.name
+        ? DesktopPetTextMode.custom
+        : DesktopPetTextMode.currentOrder;
+    _bubblePosition =
+        rawManifest['bubblePosition'] == DesktopPetBubblePosition.side.name
+            ? DesktopPetBubblePosition.side
+            : DesktopPetBubblePosition.above;
+    _bubbleStyle =
+        rawManifest['bubbleStyle'] == DesktopPetBubbleStyle.thought.name
+            ? DesktopPetBubbleStyle.thought
+            : DesktopPetBubbleStyle.speech;
+    _petScale = ((rawManifest['petScale'] as num?)?.toDouble() ?? 1)
+        .clamp(0.5, 1.8)
+        .toDouble();
+    _bubbleTextScale =
+        ((rawManifest['bubbleTextScale'] as num?)?.toDouble() ?? 1)
+            .clamp(0.65, 1.8)
+            .toDouble();
+    _bubbleImageScale =
+        ((rawManifest['bubbleImageScale'] as num?)?.toDouble() ?? 1)
+            .clamp(0.5, 2.0)
+            .toDouble();
+    _focusClockScale =
+        ((rawManifest['focusClockScale'] as num?)?.toDouble() ?? 1)
+            .clamp(0.65, 1.8)
+            .toDouble();
+    _customText =
+        rawManifest['customText'] is String ? rawManifest['customText'] as String : '';
+    _currentOrderId = rawManifest['currentOrderId'] is String
+        ? rawManifest['currentOrderId'] as String
+        : null;
+    _pendingAssetDeletes.clear();
+    _loaded = true;
+    await _persist();
+    notifyListeners();
   }
 
   Future<DesktopPetPreset> createPreset(String rawName) async {
