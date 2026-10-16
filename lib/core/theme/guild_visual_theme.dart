@@ -1214,6 +1214,47 @@ class GuildStyledSurface extends StatelessWidget {
   }
 }
 
+class GuildContentPanel extends StatelessWidget {
+  const GuildContentPanel({
+    required this.child,
+    this.role = GuildSurfaceRole.content,
+    this.classicRadius = 18,
+    this.backgroundColor,
+    this.backdropAvailable,
+    super.key,
+  });
+
+  final Widget child;
+  final GuildSurfaceRole role;
+  final double classicRadius;
+  final Color? backgroundColor;
+  final bool? backdropAvailable;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = GuildStyleTheme.of(context);
+    final radius = style.isClassic
+        ? BorderRadius.circular(classicRadius)
+        : role == GuildSurfaceRole.content
+            ? style.cardBorderRadius
+            : style.surfaceBorderRadius;
+    final color = backgroundColor ?? Theme.of(context).colorScheme.surface;
+
+    return GuildStyledSurface(
+      role: role,
+      borderRadius: radius,
+      backgroundColor: color,
+      backdropAvailable: backdropAvailable ?? style.isGlass,
+      child: Material(
+        color: style.isClassic ? color : Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        borderRadius: radius,
+        child: child,
+      ),
+    );
+  }
+}
+
 class GuildStyleBackdrop extends StatelessWidget {
   const GuildStyleBackdrop({
     required this.child,
