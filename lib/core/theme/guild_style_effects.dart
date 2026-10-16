@@ -61,6 +61,7 @@ class GuildSurfaceEffect extends StatelessWidget {
         primary: primary,
         accent2: accent2,
         accent3: accent3,
+        background: background,
         foreground: foreground,
         borderRadius: borderRadius,
       ),
@@ -214,7 +215,7 @@ class GuildSurfaceEffect extends StatelessWidget {
         );
       case AppUiStyle.fluorescent:
         return Border.all(
-          color: primary.withValues(alpha: 0.42),
+          color: borderColor,
           width: math.max(borderWidth, 1.0),
         );
       case AppUiStyle.retroDark:
@@ -270,16 +271,18 @@ class GuildSurfaceEffect extends StatelessWidget {
             blurRadius: 24,
           ),
         ],
-      AppUiStyle.fluorescent => <BoxShadow>[
-          BoxShadow(
-            color: primary.withValues(alpha: 0.34),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: primary.withValues(alpha: 0.12),
-            blurRadius: 30,
-          ),
-        ],
+      AppUiStyle.fluorescent => background.computeLuminance() < 0.35
+          ? <BoxShadow>[
+              BoxShadow(
+                color: primary.withValues(alpha: 0.30),
+                blurRadius: 12,
+              ),
+              BoxShadow(
+                color: primary.withValues(alpha: 0.12),
+                blurRadius: 30,
+              ),
+            ]
+          : const <BoxShadow>[],
       // Anti-Design Lite uses flat white component rows. Reserve the
       // coloured offset shadow for larger chrome / frame-like surfaces.
       AppUiStyle.collage => role == GuildEffectRole.chrome
@@ -414,6 +417,7 @@ class _SurfaceFinishPainter extends CustomPainter {
     required this.primary,
     required this.accent2,
     required this.accent3,
+    required this.background,
     required this.foreground,
     required this.borderRadius,
   });
@@ -423,6 +427,7 @@ class _SurfaceFinishPainter extends CustomPainter {
   final Color primary;
   final Color accent2;
   final Color accent3;
+  final Color background;
   final Color foreground;
   final BorderRadius borderRadius;
 
@@ -456,7 +461,9 @@ class _SurfaceFinishPainter extends CustomPainter {
           );
           break;
         case AppUiStyle.fluorescent:
-          _paintNeonInnerGlow(canvas, rrect);
+          if (background.computeLuminance() < 0.35) {
+            _paintNeonInnerGlow(canvas, rrect);
+          }
           break;
         case AppUiStyle.classic:
         case AppUiStyle.minimal:
@@ -491,7 +498,9 @@ class _SurfaceFinishPainter extends CustomPainter {
         _paintHairline(canvas, rect, accent2.withValues(alpha: 0.58));
         break;
       case AppUiStyle.fluorescent:
-        _paintNeonInnerGlow(canvas, rrect);
+        if (background.computeLuminance() < 0.35) {
+          _paintNeonInnerGlow(canvas, rrect);
+        }
         break;
       case AppUiStyle.collage:
         _paintCollageMarks(canvas, rect);
