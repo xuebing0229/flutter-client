@@ -1,19 +1,28 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../build/build_channel.dart';
 import 'beta_update_installer.dart';
 
 class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
   const AndroidBetaUpdateInstaller();
 
   static const MethodChannel _channel = MethodChannel('app.beta_update');
-  static const String _userAgent = 'artist-queue-android-beta-updater';
+  static const String _userAgent = 'adventurers-guild-android-updater';
+  static final Uri _internalManifestUri = Uri.parse(
+    'https://license.apixb.top/releases/internal/android-latest.json',
+  );
 
   @override
   Future<Map<String, dynamic>> fetchLatestManifest() async {
+    if (isInternalBuild) {
+      return _fetchInternalManifest();
+    }
+
     final raw = await _channel.invokeMethod<Map<Object?, Object?>>(
       'fetchLatestManifest',
     );
@@ -25,6 +34,37 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     return raw.map(
       (key, value) => MapEntry(key.toString(), value),
     );
+  }
+
+  Future<Map<String, dynamic>> _fetchInternalManifest() async {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(_internalManifestUri);
+      request.followRedirects = true;
+      request.headers
+        ..set(HttpHeaders.userAgentHeader, _userAgent)
+        ..set(HttpHeaders.acceptHeader, 'application/json')
+        ..set(HttpHeaders.cacheControlHeader, 'no-cache');
+
+      final response = await request.close();
+      final body = await utf8.decoder.bind(response).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw HttpException(
+          '更新地址返回 HTTP ${response.statusCode}',
+          uri: _internalManifestUri,
+        );
+      }
+
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) {
+        throw const FormatException('更新信息不是 JSON 对象。');
+      }
+      return decoded.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+    } finally {
+      client.close(force: true);
+    }
   }
 
   Future<Directory> _updateDirectory() async {
@@ -66,7 +106,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File) continue;
       final name = entity.path.split(Platform.pathSeparator).last.toLowerCase();
-      if (!name.startsWith('app-beta-')) continue;
+      if (!(name.startsWith('app-beta-') || name.startsWith('app-internal-'))) continue;
       if (!(name.endsWith('.apk') || name.endsWith('.apk.part'))) continue;
       if (name == keepApk || name == keepPart) continue;
       try {
@@ -149,8 +189,12 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     int? expectedSizeBytes,
     String? expectedSha256,
   }) async {
-    if (uri.scheme != 'https' || uri.host.toLowerCase() != 'github.com') {
-      throw const FormatException('Android Beta 只能从 GitHub Releases 下载。');
+    final host = uri.host.toLowerCase();
+    final trustedHost = isInternalBuild
+        ? host == 'license.apixb.top'
+        : host == 'github.com';
+    if (uri.scheme != 'https' || !trustedHost) {
+      throw const FormatException('更新包下载地址不受信任。');
     }
 
     final baseName = _safeBaseName(fileName);
