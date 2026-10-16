@@ -262,26 +262,34 @@ class SyncthingAccountTransferServer {
     required Directory folder,
     required File payloadFile,
     required File doneFile,
+    required File ackFile,
     void Function()? onTransferred,
   }) : _bridge = bridge,
        _folder = folder,
        _payloadFile = payloadFile,
        _doneFile = doneFile,
+       _ackFile = ackFile,
        _onTransferred = onTransferred;
 
   final EmbeddedSyncthingBridge _bridge;
   final Directory _folder;
   final File _payloadFile;
   final File _doneFile;
+  final File _ackFile;
   final void Function()? _onTransferred;
 
   final AccountTransferDescriptor descriptor;
 
   bool _closed = false;
+  bool _receiverFinished = false;
   bool _transferred = false;
   String? _acceptedReceiverDeviceId;
+  String? _acceptedReceiverName;
 
+  bool get receiverFinished => _receiverFinished;
   bool get transferred => _transferred;
+  String? get acceptedReceiverDeviceId => _acceptedReceiverDeviceId;
+  String? get acceptedReceiverName => _acceptedReceiverName;
 
   static Future<SyncthingAccountTransferServer> start({
     required String payload,
@@ -308,6 +316,9 @@ class SyncthingAccountTransferServer {
       );
       final doneFile = File(
         '${folder.path}${Platform.pathSeparator}transfer.done',
+      );
+      final ackFile = File(
+        '${folder.path}${Platform.pathSeparator}transfer.ack',
       );
 
       // Configure the bootstrap folder before creating the payload. If the
@@ -342,6 +353,7 @@ class SyncthingAccountTransferServer {
         folder: folder,
         payloadFile: payloadFile,
         doneFile: doneFile,
+        ackFile: ackFile,
         onTransferred: onTransferred,
       );
     } catch (_) {
@@ -363,34 +375,95 @@ class SyncthingAccountTransferServer {
       throw const FormatException('当前二维码已经确认了另一台新设备，请重新生成二维码。');
     }
 
-    await _bridge.pairFolder(
-      folderId: descriptor.folderId,
-      deviceId: response.receiverDeviceId,
-      name: response.receiverName,
-    );
     _acceptedReceiverDeviceId = response.receiverDeviceId;
+    _acceptedReceiverName = response.receiverName;
 
-    // The payload was intentionally created after folder setup, but force one
-    // more source-side scan after the receiver is shared. This removes a race
-    // where both devices report "connected" while the source still advertises
-    // an empty bootstrap folder.
-    await _bridge.requestScanFolder(descriptor.folderId);
+    // Device-level connectivity is not enough. Wait until Syncthing confirms
+    // that the receiver shares THIS bootstrap folder back (remoteState=valid).
+    final deadline = DateTime.now().add(const Duration(seconds: 45));
+    String? lastRemoteState;
+    String? lastFolderError;
+    while (!_closed && DateTime.now().isBefore(deadline)) {
+      await _bridge.pairFolder(
+        folderId: descriptor.folderId,
+        deviceId: response.receiverDeviceId,
+        name: response.receiverName,
+      );
+      await _bridge.setFolderPaused(
+        folderId: descriptor.folderId,
+        paused: false,
+      );
+      await _bridge.requestScanFolder(descriptor.folderId);
+
+      final status = await _bridge.statusFolder(descriptor.folderId);
+      lastRemoteState =
+          status.remoteFolderStates[response.receiverDeviceId]?.trim();
+      if (status.folderErrors.isNotEmpty) {
+        lastFolderError = status.folderErrors.first;
+      }
+
+      final connected = status.connectedDeviceIds.contains(
+        response.receiverDeviceId,
+      );
+      if (connected && lastRemoteState == 'valid') {
+        await _bridge.requestScanFolder(descriptor.folderId);
+        return;
+      }
+
+      if (lastRemoteState == 'paused') {
+        throw const FormatException(
+          '新设备已经连接，但临时账号同步目录在对端处于暂停状态。'
+          '请让新设备保持在“确认新设备”页面后重新尝试。',
+        );
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 750));
+    }
+
+    if (_closed) {
+      throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
+    }
+    if (lastFolderError != null && lastFolderError!.isNotEmpty) {
+      throw FormatException('临时账号同步目录建立失败：$lastFolderError');
+    }
+    if (lastRemoteState == 'notSharing') {
+      throw const FormatException(
+        '两台设备已经连接，但新设备没有真正共享临时账号目录。'
+        '请让新设备保持在“确认新设备”页面并重新生成配对。',
+      );
+    }
+    throw FormatException(
+      '临时账号同步目录没有完成握手'
+      '${lastRemoteState == null || lastRemoteState!.isEmpty ? '' : '（状态：$lastRemoteState）'}。'
+      '请让两台设备都保持当前页面后重试。',
+    );
   }
 
   Future<void> poll() async {
     if (_closed || _transferred) return;
 
     if (_acceptedReceiverDeviceId != null) {
-      // Keep the source index fresh while the confirmation page is open.
-      // The client already rescans its own side every second; without this
-      // source-side rescan a missed initial index could stall indefinitely.
       await _bridge.requestScanFolder(descriptor.folderId);
     }
 
-    if (await _doneFile.exists()) {
-      _transferred = true;
-      _onTransferred?.call();
+    if (!_receiverFinished && await _doneFile.exists()) {
+      _receiverFinished = true;
     }
+  }
+
+  Future<void> completeTransfer() async {
+    if (_closed || _transferred) return;
+    if (!_receiverFinished) {
+      throw StateError('新设备尚未确认收到账号数据。');
+    }
+    if (_acceptedReceiverDeviceId == null) {
+      throw StateError('新设备身份尚未确认。');
+    }
+
+    await _ackFile.writeAsString('ack', flush: true);
+    await _bridge.requestScanFolder(descriptor.folderId);
+    _transferred = true;
+    _onTransferred?.call();
   }
 
   Future<void> close() async {
@@ -402,6 +475,7 @@ class SyncthingAccountTransferServer {
       try {
         if (await _payloadFile.exists()) await _payloadFile.delete();
         if (await _doneFile.exists()) await _doneFile.delete();
+        if (await _ackFile.exists()) await _ackFile.delete();
         if (await _folder.exists()) await _folder.delete(recursive: true);
       } catch (_) {}
     }
@@ -431,6 +505,9 @@ class SyncthingAccountTransferClient {
       );
       final doneFile = File(
         '${folder.path}${Platform.pathSeparator}transfer.done',
+      );
+      final ackFile = File(
+        '${folder.path}${Platform.pathSeparator}transfer.ack',
       );
 
       await bridge.prepareFolder(
@@ -465,6 +542,7 @@ class SyncthingAccountTransferClient {
         folder: folder,
         payloadFile: payloadFile,
         doneFile: doneFile,
+        ackFile: ackFile,
       );
     } catch (_) {
       await _cleanupBootstrapFolder(bridge, descriptor.folderId, folder);
@@ -488,7 +566,10 @@ Future<void> _cleanupBootstrapFolder(
 
 typedef AccountTransferStatus = ({
   bool sourceConnected,
+  bool folderReady,
+  String? remoteFolderState,
   String? folderState,
+  List<String> folderErrors,
   Map<String, dynamic>? progress,
 });
 
@@ -500,10 +581,12 @@ class SyncthingAccountTransferClientSession {
     required Directory folder,
     required File payloadFile,
     required File doneFile,
+    required File ackFile,
   }) : _bridge = bridge,
        _folder = folder,
        _payloadFile = payloadFile,
-       _doneFile = doneFile;
+       _doneFile = doneFile,
+       _ackFile = ackFile;
 
   final AccountTransferDescriptor descriptor;
   final AccountTransferResponseCode response;
@@ -511,16 +594,23 @@ class SyncthingAccountTransferClientSession {
   final Directory _folder;
   final File _payloadFile;
   final File _doneFile;
+  final File _ackFile;
 
   bool _closed = false;
 
   Future<AccountTransferStatus> transferStatus() async {
     final status = await _bridge.statusFolder(descriptor.folderId);
+    final sourceConnected = status.connectedDeviceIds.contains(
+      descriptor.sourceDeviceId,
+    );
+    final remoteFolderState =
+        status.remoteFolderStates[descriptor.sourceDeviceId]?.trim();
     return (
-      sourceConnected: status.connectedDeviceIds.contains(
-        descriptor.sourceDeviceId,
-      ),
+      sourceConnected: sourceConnected,
+      folderReady: sourceConnected && remoteFolderState == 'valid',
+      remoteFolderState: remoteFolderState,
       folderState: status.folderState,
+      folderErrors: status.folderErrors,
       progress: status.syncProgress,
     );
   }
@@ -534,19 +624,53 @@ class SyncthingAccountTransferClientSession {
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
     final connectionDeadline = DateTime.now().add(timeout);
+    DateTime? folderHandshakeDeadline;
     DateTime? payloadDeadline;
     var sourceConnected = false;
+    var folderReady = false;
+    var repairTick = 0;
 
     while (!_closed) {
       await _bridge.requestScanFolder(descriptor.folderId);
 
-      final status = await transferStatus();
+      var status = await transferStatus();
       onStatus?.call(status);
-      if (status.sourceConnected) {
-        if (!sourceConnected) {
+
+      if (status.sourceConnected && !sourceConnected) {
+        sourceConnected = true;
+        folderHandshakeDeadline = DateTime.now().add(
+          const Duration(seconds: 45),
+        );
+      }
+
+      if (status.folderReady && !folderReady) {
+        folderReady = true;
+        payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+      }
+
+      if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
+        await _bridge.pairFolder(
+          folderId: descriptor.folderId,
+          deviceId: descriptor.sourceDeviceId,
+          name: '原设备',
+        );
+        await _bridge.setFolderPaused(
+          folderId: descriptor.folderId,
+          paused: false,
+        );
+        await _bridge.requestScanFolder(descriptor.folderId);
+        status = await transferStatus();
+        onStatus?.call(status);
+        if (status.folderReady) {
+          folderReady = true;
           payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
         }
-        sourceConnected = true;
+      }
+
+      if (status.folderErrors.isNotEmpty) {
+        throw FormatException(
+          '临时账号目录同步失败：${status.folderErrors.first}',
+        );
       }
 
       if (await _payloadFile.exists()) {
@@ -555,15 +679,25 @@ class SyncthingAccountTransferClientSession {
           encrypted,
           descriptor.encryptionKey,
         );
+
         await _doneFile.writeAsString('done', flush: true);
         await _bridge.requestScanFolder(descriptor.folderId);
-        return clear;
+
+        final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
+        while (!_closed && DateTime.now().isBefore(ackDeadline)) {
+          await _bridge.requestScanFolder(descriptor.folderId);
+          if (await _ackFile.exists()) return clear;
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+        if (_closed) {
+          throw const FormatException('设备加入已取消。');
+        }
+        throw const FormatException(
+          '账号数据已经收到，但原设备没有完成最终确认。'
+          '请让原设备继续停留在“添加设备”页面后重试。',
+        );
       }
 
-      // The five-minute limit is only for waiting for the original device to
-      // confirm and establish the bootstrap connection. Once Syncthing reports
-      // the source device connected, confirmation has already succeeded; keep
-      // waiting for the account payload instead of misreporting a timeout.
       if (!sourceConnected &&
           !DateTime.now().isBefore(connectionDeadline)) {
         throw const FormatException(
@@ -573,12 +707,34 @@ class SyncthingAccountTransferClientSession {
       }
 
       if (sourceConnected &&
+          !folderReady &&
+          folderHandshakeDeadline != null &&
+          !DateTime.now().isBefore(folderHandshakeDeadline)) {
+        final state = status.remoteFolderState;
+        if (state == 'paused') {
+          throw const FormatException(
+            '已经连接原设备，但临时账号同步目录在原设备上处于暂停状态。'
+            '请让原设备重新打开“添加设备”后再试。',
+          );
+        }
+        if (state == 'notSharing') {
+          throw const FormatException(
+            '已经连接原设备，但原设备没有真正共享临时账号目录。'
+            '请让原设备保持在“添加设备”页面并重新确认回应码。',
+          );
+        }
+        throw FormatException(
+          '已经连接原设备，但临时账号目录没有完成同步握手'
+          '${state == null || state.isEmpty ? '' : '（状态：$state）'}。',
+        );
+      }
+
+      if (folderReady &&
           payloadDeadline != null &&
           !DateTime.now().isBefore(payloadDeadline)) {
         throw const FormatException(
-          '已经连接原设备，但账号数据一直没有传过来。'
-          '请让原设备继续停留在“添加设备”页面并重新尝试；'
-          '如果再次出现，请更新两台设备到最新版本后重新配对。',
+          '临时账号同步目录已经对接成功，但账号数据仍没有传过来。'
+          '请让原设备继续停留在“添加设备”页面后重试。',
         );
       }
 
