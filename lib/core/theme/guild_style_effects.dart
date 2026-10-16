@@ -613,7 +613,7 @@ class _SurfaceFinishPainter extends CustomPainter {
     final paint = Paint()
       ..shader = ui.Gradient.radial(
         rect.center,
-        rect.longestSide * 0.65,
+        math.max(rect.width, rect.height) * 0.65,
         <Color>[
           Colors.transparent,
           primary.withValues(alpha: 0.025),
@@ -850,7 +850,7 @@ class _BackdropPainter extends CustomPainter {
     final vignette = Paint()
       ..shader = ui.Gradient.radial(
         rect.center,
-        rect.longestSide * 0.62,
+        math.max(rect.width, rect.height) * 0.62,
         <Color>[
           Colors.transparent,
           Colors.black.withValues(alpha: 0.46),
