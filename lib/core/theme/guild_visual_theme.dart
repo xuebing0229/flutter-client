@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme_palette.dart';
 import 'app_ui_style.dart';
 import 'guild_style_effects.dart';
 
@@ -210,12 +211,20 @@ abstract final class GuildVisualTheme {
   static ThemeData build(
     ColorScheme baseColors, {
     AppUiStyle style = AppUiStyle.classic,
+    AppThemeSemanticColors? semanticColors,
   }) {
     if (style == AppUiStyle.classic) {
-      return _buildClassic(baseColors);
+      return _buildClassic(
+        baseColors,
+        semanticColors: semanticColors,
+      );
     }
 
-    final resolved = _resolve(baseColors, style);
+    final resolved = _resolve(
+      baseColors,
+      style,
+      semanticColors: semanticColors,
+    );
     final colors = resolved.colors;
     final tokens = resolved.tokens;
     final selectedSurface = _mix(tokens.surfaceAlt, colors.primary, 0.20);
@@ -531,21 +540,24 @@ abstract final class GuildVisualTheme {
       textTheme: _textThemeFor(
         tokens,
         ThemeData(colorScheme: colors, useMaterial3: true).textTheme,
-        colors.primary,
       ),
     );
   }
 
-  static ThemeData _buildClassic(ColorScheme colors) {
+  static ThemeData _buildClassic(
+    ColorScheme colors, {
+    AppThemeSemanticColors? semanticColors,
+  }) {
     final dark = colors.brightness == Brightness.dark;
-    final outline =
+    final outline = semanticColors?.border ??
         colors.outlineVariant.withValues(alpha: dark ? 0.66 : 0.72);
     final innerOutline =
         colors.primary.withValues(alpha: dark ? 0.20 : 0.15);
-    final raisedSurface = Color.alphaBlend(
-      colors.primary.withValues(alpha: dark ? 0.035 : 0.018),
-      colors.surface,
-    );
+    final raisedSurface = semanticColors?.surface ??
+        Color.alphaBlend(
+          colors.primary.withValues(alpha: dark ? 0.035 : 0.018),
+          colors.surface,
+        );
     final selectedSurface = Color.alphaBlend(
       colors.primary.withValues(alpha: dark ? 0.18 : 0.11),
       colors.surfaceContainer,
@@ -556,16 +568,18 @@ abstract final class GuildVisualTheme {
     );
     final tokens = GuildStyleTheme(
       style: AppUiStyle.classic,
-      background: Color.alphaBlend(
-        colors.primary.withValues(alpha: dark ? 0.025 : 0.018),
-        colors.surface,
-      ),
+      background: semanticColors?.background ??
+          Color.alphaBlend(
+            colors.primary.withValues(alpha: dark ? 0.025 : 0.018),
+            colors.surface,
+          ),
       surface: raisedSurface,
-      surfaceAlt: colors.surfaceContainer,
-      foreground: colors.onSurface,
-      mutedForeground: colors.onSurfaceVariant,
-      ink: colors.onSurface,
-      accent2: colors.secondary,
+      surfaceAlt: semanticColors?.surfaceAlt ?? colors.surfaceContainer,
+      foreground: semanticColors?.foreground ?? colors.onSurface,
+      mutedForeground:
+          semanticColors?.mutedForeground ?? colors.onSurfaceVariant,
+      ink: semanticColors?.foreground ?? colors.onSurface,
+      accent2: semanticColors?.accent ?? colors.secondary,
       accent3: colors.tertiary,
       borderColor: outline,
       borderWidth: 1,
@@ -596,11 +610,12 @@ abstract final class GuildVisualTheme {
       highlightColor: colors.primary.withValues(alpha: 0.07),
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: colors.surface,
+        backgroundColor: semanticColors?.surface ?? colors.surface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colors.surfaceContainer,
+        backgroundColor:
+            semanticColors?.surfaceAlt ?? colors.surfaceContainer,
         indicatorColor: selectedSurface,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
@@ -678,19 +693,24 @@ abstract final class GuildVisualTheme {
 
   static _GuildResolvedStyle _resolve(
     ColorScheme base,
-    AppUiStyle style,
-  ) {
+    AppUiStyle style, {
+    AppThemeSemanticColors? semanticColors,
+  }) {
     final brightness = style.forcesLight
         ? Brightness.light
         : style.forcesDark
             ? Brightness.dark
             : base.brightness;
     final dark = brightness == Brightness.dark;
-    final primary = base.primary;
-    final accent2 =
+    final primary = semanticColors?.primary ?? base.primary;
+    final accent2 = semanticColors?.accent ??
         _rotateHue(primary, style == AppUiStyle.geometric ? 120 : 62);
-    final accent3 =
-        _rotateHue(primary, style == AppUiStyle.fluorescent ? 180 : -58);
+    final accent3 = semanticColors == null
+        ? _rotateHue(
+            primary,
+            style == AppUiStyle.fluorescent ? 180 : -58,
+          )
+        : _rotateHue(semanticColors.accent, -54);
 
     late Color background;
     late Color surface;
@@ -955,6 +975,18 @@ abstract final class GuildVisualTheme {
         chromeShadows = shadows;
         glassBlur = dark ? 12 : 16;
         glassOpacity = dark ? 0.04 : 0.55;
+    }
+
+    if (semanticColors != null) {
+      // Custom palettes choose semantic colours while the selected UI style
+      // still owns geometry, blur, shadows and component treatment.
+      background = semanticColors.background;
+      surface = semanticColors.surface;
+      surfaceAlt = semanticColors.surfaceAlt;
+      foreground = semanticColors.foreground;
+      muted = semanticColors.mutedForeground;
+      ink = semanticColors.foreground;
+      border = semanticColors.border;
     }
 
     final colors = base.copyWith(
@@ -1224,7 +1256,6 @@ abstract final class GuildVisualTheme {
   static TextTheme _textThemeFor(
     GuildStyleTheme tokens,
     TextTheme base,
-    Color primary,
   ) {
     final shadows = switch (tokens.style) {
       AppUiStyle.retroDark => <Shadow>[
@@ -1233,19 +1264,10 @@ abstract final class GuildVisualTheme {
             blurRadius: 7,
           ),
         ],
-      AppUiStyle.fluorescent => <Shadow>[
-          Shadow(
-            color: primary.withValues(alpha: 0.52),
-            blurRadius: 7,
-          ),
-        ],
-      AppUiStyle.glass => <Shadow>[
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.30),
-            offset: const Offset(0, 1),
-            blurRadius: 2,
-          ),
-        ],
+      // Liquid Glass keeps typography crisp; blur belongs behind the glass.
+      // Acid Graphics only glows selected accent labels/controls in the
+      // supplied reference, not the entire app text hierarchy.
+      AppUiStyle.fluorescent || AppUiStyle.glass => const <Shadow>[],
       _ => const <Shadow>[],
     };
 

@@ -265,6 +265,37 @@ class DataPortabilityFileBridge {
     return fileName.substring(dot + 1).toLowerCase();
   }
 
+  Future<PickedBackupFile?> pickThemePresetFile() async {
+    if (Platform.isWindows) {
+      const typeGroup = XTypeGroup(
+        label: '冒险者公会主题配色',
+        extensions: <String>['agtheme', 'json'],
+      );
+      final file = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[typeGroup],
+      );
+      if (file == null) return null;
+      return PickedBackupFile(path: file.path, name: file.name);
+    }
+
+    if (!Platform.isAndroid) {
+      throw UnsupportedError('当前平台暂未接入主题配色文件选择器。');
+    }
+
+    // Android's existing document picker intentionally accepts any MIME type;
+    // theme import performs its own schema validation after selection.
+    final raw = await _channel.invokeMethod<Object?>('pickBackupFile');
+    if (raw == null) return null;
+    if (raw is! Map || raw['path'] is! String || raw['name'] is! String) {
+      throw const FormatException('系统返回的主题配色文件信息无效。');
+    }
+    return PickedBackupFile(
+      path: raw['path'] as String,
+      name: raw['name'] as String,
+      temporary: true,
+    );
+  }
+
   Future<String?> pickQrImage() async {
     if (Platform.isWindows) {
       const typeGroup = XTypeGroup(

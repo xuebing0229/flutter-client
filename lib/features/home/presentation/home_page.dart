@@ -706,6 +706,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'id': SyncCoordinator.settingsRecordId,
       'themeMode': widget.themeStore.mode.name,
       'themePaletteId': widget.themeStore.paletteId,
+      'customThemePalettes': widget.themeStore.exportCustomPalettes(),
       'uiStyle': widget.themeStore.style.id,
       for (final entry in features.entries)
         '$_featureSettingPrefix${entry.key}': entry.value,
@@ -729,11 +730,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await widget.themeStore.setMode(mode);
     }
 
+    if (settings.containsKey('customThemePalettes')) {
+      await widget.themeStore.replaceCustomPalettesFromJson(
+        settings['customThemePalettes'],
+      );
+    }
+
     final paletteId = settings['themePaletteId'];
-    if (paletteId is String && AppThemePalettes.containsId(paletteId)) {
-      await widget.themeStore.setPaletteId(paletteId);
+    if (paletteId is String) {
+      if (widget.themeStore.containsPaletteId(paletteId)) {
+        await widget.themeStore.setPaletteId(paletteId);
+      } else if (paletteId.startsWith('custom:')) {
+        // A UI preference must never make otherwise valid work data
+        // unreadable. Build 154 could persist a selected custom palette ID
+        // into workspace settings without embedding the custom palette itself.
+        // If that old preset is unavailable, keep/fall back to a valid local
+        // palette and continue restoring orders/products normally.
+        await widget.themeStore.setPaletteId(
+          AppThemePalettes.guildOriginal.id,
+        );
+      } else {
+        await widget.themeStore.setPaletteId(
+          AppThemePalettes.guildOriginal.id,
+        );
+      }
     } else if (paletteId != null) {
-      throw const FormatException('同步主题色无效。');
+      await widget.themeStore.setPaletteId(
+        AppThemePalettes.guildOriginal.id,
+      );
     }
 
     final styleId = settings['uiStyle'];
@@ -1332,6 +1356,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         focusStore: _focusStore,
         themeStore: widget.themeStore,
         featureStore: widget.featureStore,
+        desktopPetSettings: _desktopPetService.settings,
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
         onApplyWorkspaceSettings: _applySyncSettings,

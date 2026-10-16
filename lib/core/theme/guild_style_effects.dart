@@ -71,10 +71,16 @@ class GuildSurfaceEffect extends StatelessWidget {
     inner = DecoratedBox(decoration: decoration, child: inner);
 
     if (style == AppUiStyle.glass && backdropAvailable && glassBlur > 0) {
+      // The supplied Liquid Glass reference does not blur every component at
+      // the same strength: panels use 12/16px while controls and inputs use
+      // 8px. Keep content itself sharp; only the backdrop is filtered.
+      final effectiveBlur = _inset || role == GuildEffectRole.emphasized
+          ? math.min(glassBlur, 8.0)
+          : glassBlur;
       inner = BackdropFilter(
         filter: ui.ImageFilter.blur(
-          sigmaX: glassBlur,
-          sigmaY: glassBlur,
+          sigmaX: effectiveBlur,
+          sigmaY: effectiveBlur,
         ),
         child: inner,
       );
@@ -316,16 +322,34 @@ class GuildSurfaceEffect extends StatelessWidget {
               ),
             ],
       AppUiStyle.fluorescent => background.computeLuminance() < 0.35
-          ? <BoxShadow>[
-              BoxShadow(
-                color: primary.withValues(alpha: 0.30),
-                blurRadius: 12,
-              ),
-              BoxShadow(
-                color: primary.withValues(alpha: 0.12),
-                blurRadius: 30,
-              ),
-            ]
+          ? switch (role) {
+              // acid-graphics-components.html:
+              // rows are only 0 0 8px / 5%, while the outer frame carries
+              // the broader 20px + 60px glow. Do not halo every panel.
+              GuildEffectRole.content => <BoxShadow>[
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                  ),
+                ],
+              GuildEffectRole.chrome => <BoxShadow>[
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.15),
+                    blurRadius: 20,
+                  ),
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.05),
+                    blurRadius: 60,
+                  ),
+                ],
+              GuildEffectRole.emphasized => <BoxShadow>[
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.30),
+                    blurRadius: 8,
+                  ),
+                ],
+              GuildEffectRole.inset => const <BoxShadow>[],
+            }
           : const <BoxShadow>[],
       // Anti-Design Lite uses flat white component rows. Reserve the
       // coloured offset shadow for larger chrome / frame-like surfaces.
@@ -350,25 +374,22 @@ class GuildSurfaceEffect extends StatelessWidget {
             blurRadius: 0,
           ),
         ],
-      AppUiStyle.glass => foreground.computeLuminance() < 0.35
-          ? <BoxShadow>[
-              BoxShadow(
-                color: primary.withValues(alpha: 0.08),
-                offset: const Offset(0, 4),
-                blurRadius: 16,
-              ),
-            ]
-          : <BoxShadow>[
-              BoxShadow(
-                color: primary.withValues(alpha: 0.16),
-                blurRadius: 10,
-              ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                offset: const Offset(0, 4),
-                blurRadius: 14,
-              ),
-            ],
+      AppUiStyle.glass => role == GuildEffectRole.emphasized
+          ? const <BoxShadow>[]
+          : foreground.computeLuminance() < 0.35
+              ? <BoxShadow>[
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.08),
+                    offset: const Offset(0, 4),
+                    blurRadius: 16,
+                  ),
+                ]
+              : <BoxShadow>[
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.20),
+                    blurRadius: 8,
+                  ),
+                ],
       _ => shadows,
     };
   }
@@ -555,7 +576,9 @@ class _SurfaceFinishPainter extends CustomPainter {
         _paintSoftTopHighlight(canvas, rrect, 0.18);
         break;
       case AppUiStyle.glass:
-        _paintGlassHighlights(canvas, rect, rrect);
+        // The supplied Liquid Glass components use translucent fill +
+        // backdrop blur + a thin border. They do not place a permanent
+        // milky highlight over every component.
         break;
       case AppUiStyle.classic:
         break;
@@ -569,50 +592,29 @@ class _SurfaceFinishPainter extends CustomPainter {
     required Color light,
     required double width,
   }) {
-    final rect = rrect.outerRect;
-    final topLeft = Paint()
-      ..shader = ui.Gradient.linear(
-        rect.topLeft,
-        rect.bottomRight,
-        <Color>[dark, Colors.transparent, Colors.transparent],
-        const <double>[0, 0.42, 1],
-      );
+    // Keep the inset effect on the same rounded geometry as the field.
+    // Horizontal/vertical edge strips read as a rectangular inner box inside
+    // a rounded outer shell, which is especially obvious on search fields.
+    final offset = width * 0.55;
+    final strokeWidth = width * 1.05;
+
+    final darkPaint = Paint()
+      ..color = dark
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, width * 0.28);
+    final lightPaint = Paint()
+      ..color = light
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, width * 0.28);
+
     canvas.save();
     canvas.clipRRect(rrect);
-    canvas.drawRect(
-      Rect.fromLTWH(rect.left, rect.top, rect.width, width),
-      topLeft,
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(rect.left, rect.top, width, rect.height),
-      topLeft,
-    );
-
-    final bottomRight = Paint()
-      ..shader = ui.Gradient.linear(
-        rect.bottomRight,
-        rect.topLeft,
-        <Color>[light, Colors.transparent, Colors.transparent],
-        const <double>[0, 0.42, 1],
-      );
-    canvas.drawRect(
-      Rect.fromLTWH(
-        rect.left,
-        rect.bottom - width,
-        rect.width,
-        width,
-      ),
-      bottomRight,
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(
-        rect.right - width,
-        rect.top,
-        width,
-        rect.height,
-      ),
-      bottomRight,
-    );
+    // Positive shift leaves the top/left portion visible inside the clip.
+    canvas.drawRRect(rrect.shift(Offset(offset, offset)), darkPaint);
+    // Negative shift leaves the bottom/right portion visible inside the clip.
+    canvas.drawRRect(rrect.shift(Offset(-offset, -offset)), lightPaint);
     canvas.restore();
   }
 
@@ -745,42 +747,6 @@ class _SurfaceFinishPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintGlassHighlights(Canvas canvas, Rect rect, RRect rrect) {
-    final lightGlass = foreground.computeLuminance() < 0.35;
-    canvas.save();
-    canvas.clipRRect(rrect);
-
-    // Liquid Glass reference: a restrained surface sheen, not a bright oval
-    // floating inside the component.
-    final sheen = Paint()
-      ..shader = ui.Gradient.linear(
-        rect.topLeft,
-        rect.bottomRight,
-        <Color>[
-          Colors.white.withValues(alpha: lightGlass ? 0.12 : 0.055),
-          Colors.white.withValues(alpha: lightGlass ? 0.035 : 0.018),
-          Colors.transparent,
-        ],
-        const <double>[0, 0.34, 0.72],
-      );
-    canvas.drawRect(rect, sheen);
-    canvas.restore();
-
-    final radius = math.min(
-      borderRadius.topLeft.x,
-      math.min(rect.width, rect.height) / 2,
-    );
-    final topEdge = Paint()
-      ..color = Colors.white.withValues(alpha: lightGlass ? 0.30 : 0.18)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.75
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(rect.left + radius, rect.top + 0.5),
-      Offset(rect.right - radius, rect.top + 0.5),
-      topEdge,
-    );
-  }
 
   @override
   bool shouldRepaint(covariant _SurfaceFinishPainter oldDelegate) {
@@ -909,8 +875,14 @@ class _BackdropPainter extends CustomPainter {
   }
 
   void _paintAcid(Canvas canvas, Rect rect) {
+    final dark = background.computeLuminance() < 0.35;
+
+    // Both supplied Acid Graphics references use a 20px dot grid. The light
+    // variant uses neutral black dots; the dark variant uses faint green.
     final dot = Paint()
-      ..color = primary.withValues(alpha: 0.065)
+      ..color = dark
+          ? primary.withValues(alpha: 0.05)
+          : Colors.black.withValues(alpha: 0.04)
       ..style = PaintingStyle.fill;
     const step = 20.0;
     for (double y = 10; y < rect.height; y += step) {
@@ -919,37 +891,40 @@ class _BackdropPainter extends CustomPainter {
       }
     }
 
-    final corner = Paint()
-      ..color = primary.withValues(alpha: 0.72)
-      ..strokeWidth = 2
+    // Match the reference scan-line opacity instead of adding a broad radial
+    // glow, which made the whole screen look out of focus.
+    final scan = Paint()
+      ..color = dark
+          ? primary.withValues(alpha: 0.009)
+          : Colors.black.withValues(alpha: 0.0075)
+      ..strokeWidth = 1;
+    for (double y = 2; y < rect.height; y += 3) {
+      canvas.drawLine(Offset(0, y), Offset(rect.width, y), scan);
+    }
+
+    final topLeft = Paint()
+      ..color = primary.withValues(alpha: dark ? 0.72 : 1.0)
+      ..strokeWidth = dark ? 2 : 3
+      ..style = PaintingStyle.stroke;
+    final bottomRight = Paint()
+      ..color = (dark ? primary : accent2).withValues(
+        alpha: dark ? 0.72 : 1.0,
+      )
+      ..strokeWidth = dark ? 2 : 3
       ..style = PaintingStyle.stroke;
     const d = 42.0;
-    canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(d, 0), corner);
-    canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(0, d), corner);
+    canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(d, 0), topLeft);
+    canvas.drawLine(rect.topLeft, rect.topLeft + const Offset(0, d), topLeft);
     canvas.drawLine(
       rect.bottomRight,
       rect.bottomRight - const Offset(d, 0),
-      corner,
+      bottomRight,
     );
     canvas.drawLine(
       rect.bottomRight,
       rect.bottomRight - const Offset(0, d),
-      corner,
+      bottomRight,
     );
-
-    final glow = Paint()
-      ..shader = ui.Gradient.radial(
-        Offset(
-          rect.width * (0.18 + 0.06 * math.sin(phase * math.pi * 2)),
-          rect.height * 0.12,
-        ),
-        rect.width * 0.72,
-        <Color>[
-          primary.withValues(alpha: 0.08),
-          Colors.transparent,
-        ],
-      );
-    canvas.drawRect(rect, glow);
   }
 
   void _paintCollage(Canvas canvas, Rect rect) {

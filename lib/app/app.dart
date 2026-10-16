@@ -250,11 +250,47 @@ class _AppState extends State<App> {
         colors.length > 2 ? colors.last : primary;
 
     final dark = brightness == Brightness.dark;
+    final semantic = palette.semanticColorsFor(brightness);
 
     final base = ColorScheme.fromSeed(
       seedColor: dark ? palette.effectiveDarkSeed : palette.lightSeed,
       brightness: brightness,
     );
+
+    if (semantic != null) {
+      final tertiary = Color.lerp(
+            semantic.primary,
+            semantic.accent,
+            0.55,
+          ) ??
+          semantic.accent;
+      return base.copyWith(
+        primary: semantic.primary,
+        onPrimary: _onColor(semantic.primary),
+        primaryContainer: semantic.surfaceAlt,
+        onPrimaryContainer: semantic.foreground,
+        secondary: semantic.accent,
+        onSecondary: _onColor(semantic.accent),
+        secondaryContainer: semantic.surfaceAlt,
+        onSecondaryContainer: semantic.foreground,
+        tertiary: tertiary,
+        onTertiary: _onColor(tertiary),
+        tertiaryContainer: semantic.surfaceAlt,
+        onTertiaryContainer: semantic.foreground,
+        surface: semantic.surface,
+        onSurface: semantic.foreground,
+        surfaceContainerLowest: semantic.background,
+        surfaceContainerLow: semantic.surface,
+        surfaceContainer: semantic.surfaceAlt,
+        surfaceContainerHigh: semantic.surfaceAlt,
+        surfaceContainerHighest: semantic.surfaceAlt,
+        onSurfaceVariant: semantic.mutedForeground,
+        outline: semantic.border,
+        outlineVariant: semantic.border,
+        inversePrimary: semantic.primary,
+        surfaceTint: Colors.transparent,
+      );
+    }
 
     return base.copyWith(
       primary: primary,
@@ -280,15 +316,23 @@ class _AppState extends State<App> {
     );
   }
 
-  ThemeData _lightTheme() => GuildVisualTheme.build(
-        _paletteScheme(Brightness.light),
-        style: _themeStore.style,
-      );
+  ThemeData _lightTheme() {
+    final palette = _themeStore.palette;
+    return GuildVisualTheme.build(
+      _paletteScheme(Brightness.light),
+      style: _themeStore.style,
+      semanticColors: palette.semanticColorsFor(Brightness.light),
+    );
+  }
 
-  ThemeData _darkTheme() => GuildVisualTheme.build(
-        _paletteScheme(Brightness.dark),
-        style: _themeStore.style,
-      );
+  ThemeData _darkTheme() {
+    final palette = _themeStore.palette;
+    return GuildVisualTheme.build(
+      _paletteScheme(Brightness.dark),
+      style: _themeStore.style,
+      semanticColors: palette.semanticColorsFor(Brightness.dark),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

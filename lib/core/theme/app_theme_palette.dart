@@ -1,5 +1,126 @@
 import 'package:flutter/material.dart';
 
+class AppThemeSemanticColors {
+  const AppThemeSemanticColors({
+    required this.primary,
+    required this.accent,
+    required this.background,
+    required this.surface,
+    required this.surfaceAlt,
+    required this.foreground,
+    required this.mutedForeground,
+    required this.border,
+  });
+
+  final Color primary;
+  final Color accent;
+  final Color background;
+  final Color surface;
+  final Color surfaceAlt;
+  final Color foreground;
+  final Color mutedForeground;
+  final Color border;
+
+  factory AppThemeSemanticColors.fromSeed(
+    Color seed,
+    Brightness brightness,
+  ) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+    );
+    return AppThemeSemanticColors(
+      primary: scheme.primary,
+      accent: scheme.secondary,
+      background: scheme.surface,
+      surface: scheme.surfaceContainerLow,
+      surfaceAlt: scheme.surfaceContainer,
+      foreground: scheme.onSurface,
+      mutedForeground: scheme.onSurfaceVariant,
+      border: scheme.outlineVariant,
+    );
+  }
+
+  AppThemeSemanticColors copyWith({
+    Color? primary,
+    Color? accent,
+    Color? background,
+    Color? surface,
+    Color? surfaceAlt,
+    Color? foreground,
+    Color? mutedForeground,
+    Color? border,
+  }) {
+    return AppThemeSemanticColors(
+      primary: primary ?? this.primary,
+      accent: accent ?? this.accent,
+      background: background ?? this.background,
+      surface: surface ?? this.surface,
+      surfaceAlt: surfaceAlt ?? this.surfaceAlt,
+      foreground: foreground ?? this.foreground,
+      mutedForeground: mutedForeground ?? this.mutedForeground,
+      border: border ?? this.border,
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'primary': primary.toARGB32(),
+        'accent': accent.toARGB32(),
+        'background': background.toARGB32(),
+        'surface': surface.toARGB32(),
+        'surfaceAlt': surfaceAlt.toARGB32(),
+        'foreground': foreground.toARGB32(),
+        'mutedForeground': mutedForeground.toARGB32(),
+        'border': border.toARGB32(),
+      };
+
+  static AppThemeSemanticColors? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    Color? color(String key) {
+      final value = raw[key];
+      return value is int ? Color(value) : null;
+    }
+
+    final primary = color('primary');
+    final accent = color('accent');
+    final background = color('background');
+    final surface = color('surface');
+    final surfaceAlt = color('surfaceAlt');
+    final foreground = color('foreground');
+    final mutedForeground = color('mutedForeground');
+    final border = color('border');
+    if (primary == null ||
+        accent == null ||
+        background == null ||
+        surface == null ||
+        surfaceAlt == null ||
+        foreground == null ||
+        mutedForeground == null ||
+        border == null) {
+      return null;
+    }
+
+    return AppThemeSemanticColors(
+      primary: primary,
+      accent: accent,
+      background: background,
+      surface: surface,
+      surfaceAlt: surfaceAlt,
+      foreground: foreground,
+      mutedForeground: mutedForeground,
+      border: border,
+    );
+  }
+
+  List<Color> get previewColors => <Color>[
+        primary,
+        accent,
+        background,
+        surface,
+        foreground,
+      ];
+}
+
 class AppThemePalette {
   const AppThemePalette({
     required this.id,
@@ -7,6 +128,9 @@ class AppThemePalette {
     required this.lightSeed,
     required this.previewColors,
     this.darkSeed,
+    this.lightSemanticColors,
+    this.darkSemanticColors,
+    this.customAdvanced = false,
   });
 
   final String id;
@@ -14,14 +138,89 @@ class AppThemePalette {
   final Color lightSeed;
   final Color? darkSeed;
   final List<Color> previewColors;
+  final AppThemeSemanticColors? lightSemanticColors;
+  final AppThemeSemanticColors? darkSemanticColors;
+  final bool customAdvanced;
 
   Color get effectiveDarkSeed => darkSeed ?? lightSeed;
+  bool get isCustom => id.startsWith('custom:');
+
+  AppThemeSemanticColors? semanticColorsFor(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? darkSemanticColors
+          : lightSemanticColors;
+
+  Map<String, dynamic> toCustomJson() {
+    if (!isCustom ||
+        lightSemanticColors == null ||
+        darkSemanticColors == null) {
+      throw StateError('Only complete custom palettes can be serialized.');
+    }
+    return <String, dynamic>{
+      'id': id,
+      'name': name,
+      'lightSeed': lightSeed.toARGB32(),
+      'darkSeed': effectiveDarkSeed.toARGB32(),
+      'customAdvanced': customAdvanced,
+      'light': lightSemanticColors!.toJson(),
+      'dark': darkSemanticColors!.toJson(),
+    };
+  }
+
+  static AppThemePalette? fromCustomJson(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final name = raw['name'];
+    final lightSeed = raw['lightSeed'];
+    final darkSeed = raw['darkSeed'];
+    final light = AppThemeSemanticColors.fromJson(raw['light']);
+    final dark = AppThemeSemanticColors.fromJson(raw['dark']);
+    if (id is! String ||
+        !id.startsWith('custom:') ||
+        name is! String ||
+        lightSeed is! int ||
+        light == null ||
+        dark == null) {
+      return null;
+    }
+    final resolvedDarkSeed = darkSeed is int ? Color(darkSeed) : Color(lightSeed);
+    return AppThemePalette(
+      id: id,
+      name: name.trim().isEmpty ? '自定义配色' : name.trim(),
+      lightSeed: Color(lightSeed),
+      darkSeed: resolvedDarkSeed,
+      previewColors: light.previewColors,
+      lightSemanticColors: light,
+      darkSemanticColors: dark,
+      customAdvanced: raw['customAdvanced'] == true,
+    );
+  }
+
+  static AppThemePalette custom({
+    required String id,
+    required String name,
+    required Color seed,
+    required AppThemeSemanticColors light,
+    required AppThemeSemanticColors dark,
+    required bool advanced,
+  }) {
+    return AppThemePalette(
+      id: id.startsWith('custom:') ? id : 'custom:$id',
+      name: name.trim().isEmpty ? '自定义配色' : name.trim(),
+      lightSeed: seed,
+      darkSeed: seed,
+      previewColors: light.previewColors,
+      lightSemanticColors: light,
+      darkSemanticColors: dark,
+      customAdvanced: advanced,
+    );
+  }
 }
 
 abstract final class AppThemePalettes {
   static const guildOriginal = AppThemePalette(
     id: 'guildOriginal',
-    name: '公会原色',
+    name: '原版',
     lightSeed: Color(0xFF6C7A6B),
     darkSeed: Color(0xFF90A58E),
     previewColors: <Color>[
@@ -33,7 +232,7 @@ abstract final class AppThemePalettes {
 
   static const tavernBell = AppThemePalette(
     id: 'tavernBell',
-    name: '酒馆晚钟',
+    name: '酒红金',
     lightSeed: Color(0xFF6C1A21),
     previewColors: <Color>[
       Color(0xFF6C1A21),
@@ -46,7 +245,7 @@ abstract final class AppThemePalettes {
 
   static const clearSkyDew = AppThemePalette(
     id: 'clearSkyDew',
-    name: '晴空晨露',
+    name: '晴空蓝',
     lightSeed: Color(0xFF0097D0),
     previewColors: <Color>[
       Color(0xFF0097D0),
@@ -59,7 +258,7 @@ abstract final class AppThemePalettes {
 
   static const lateAutumnPost = AppThemePalette(
     id: 'lateAutumnPost',
-    name: '晚秋驿站',
+    name: '杏橙',
     lightSeed: Color(0xFFE4A273),
     previewColors: <Color>[
       Color(0xFF96B9B9),
@@ -72,7 +271,7 @@ abstract final class AppThemePalettes {
 
   static const rainbowCrystal = AppThemePalette(
     id: 'rainbowCrystal',
-    name: '虹晶幻境',
+    name: '雾紫',
     lightSeed: Color(0xFF9F99D1),
     previewColors: <Color>[
       Color(0xFF9F99D1),
@@ -85,7 +284,7 @@ abstract final class AppThemePalettes {
 
   static const deepBlueVow = AppThemePalette(
     id: 'deepBlueVow',
-    name: '深蓝誓约',
+    name: '深蓝',
     lightSeed: Color(0xFF2A5D85),
     previewColors: <Color>[
       Color(0xFF091831),
@@ -98,7 +297,7 @@ abstract final class AppThemePalettes {
 
   static const meadCampfire = AppThemePalette(
     id: 'meadCampfire',
-    name: '蜜酒篝火',
+    name: '焦糖橙',
     lightSeed: Color(0xFFB97621),
     previewColors: <Color>[
       Color(0xFF372111),
@@ -111,7 +310,7 @@ abstract final class AppThemePalettes {
 
   static const amberTreasure = AppThemePalette(
     id: 'amberTreasure',
-    name: '琥珀瑰宝',
+    name: '琥珀黄',
     lightSeed: Color(0xFFD48205),
     previewColors: <Color>[
       Color(0xFF442604),
@@ -124,7 +323,7 @@ abstract final class AppThemePalettes {
 
   static const cherryPotion = AppThemePalette(
     id: 'cherryPotion',
-    name: '樱桃药剂',
+    name: '樱桃红',
     lightSeed: Color(0xFFFF2446),
     previewColors: <Color>[
       Color(0xFFFF2446),
@@ -137,7 +336,7 @@ abstract final class AppThemePalettes {
 
   static const emeraldValley = AppThemePalette(
     id: 'emeraldValley',
-    name: '翠风溪谷',
+    name: '墨绿蓝',
     lightSeed: Color(0xFF03695E),
     previewColors: <Color>[
       Color(0xFF03695E),
@@ -150,7 +349,7 @@ abstract final class AppThemePalettes {
 
   static const roseCamp = AppThemePalette(
     id: 'roseCamp',
-    name: '蔷薇营地',
+    name: '豆沙粉',
     lightSeed: Color(0xFF9B5E61),
     previewColors: <Color>[
       Color(0xFF9B5E61),
@@ -163,7 +362,7 @@ abstract final class AppThemePalettes {
 
   static const tidalSecret = AppThemePalette(
     id: 'tidalSecret',
-    name: '潮汐秘境',
+    name: '青绿色',
     lightSeed: Color(0xFF006863),
     previewColors: <Color>[
       Color(0xFF006863),
@@ -176,7 +375,7 @@ abstract final class AppThemePalettes {
 
   static const flowerMarket = AppThemePalette(
     id: 'flowerMarket',
-    name: '花冠集市',
+    name: '奶油黄',
     lightSeed: Color(0xFFF9CF01),
     previewColors: <Color>[
       Color(0xFFF9CF01),
@@ -189,7 +388,7 @@ abstract final class AppThemePalettes {
 
   static const lemonMorning = AppThemePalette(
     id: 'lemonMorning',
-    name: '柠光晨信',
+    name: '浅黄蓝',
     lightSeed: Color(0xFFF9D77C),
     previewColors: <Color>[
       Color(0xFFF9D77C),
@@ -199,7 +398,7 @@ abstract final class AppThemePalettes {
 
   static const peachWhisper = AppThemePalette(
     id: 'peachWhisper',
-    name: '桃雾密语',
+    name: '粉蓝',
     lightSeed: Color(0xFFF2B6B6),
     previewColors: <Color>[
       Color(0xFFF2B6B6),
@@ -209,7 +408,7 @@ abstract final class AppThemePalettes {
 
   static const mintFountain = AppThemePalette(
     id: 'mintFountain',
-    name: '薄荷泉庭',
+    name: '薄荷蓝',
     lightSeed: Color(0xFFA9D8B7),
     previewColors: <Color>[
       Color(0xFFA9D8B7),
@@ -219,7 +418,7 @@ abstract final class AppThemePalettes {
 
   static const creamScroll = AppThemePalette(
     id: 'creamScroll',
-    name: '奶油卷轴',
+    name: '奶油灰',
     lightSeed: Color(0xFFFBE2A2),
     previewColors: <Color>[
       Color(0xFFFBE2A2),

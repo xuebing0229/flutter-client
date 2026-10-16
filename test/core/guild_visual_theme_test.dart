@@ -182,6 +182,47 @@ void main() {
     expect(tokens.foreground.computeLuminance(), lessThan(0.20));
   });
 
+  test('glass and fluorescent typography stay globally sharp', () {
+    for (final brightness in Brightness.values) {
+      final scheme = ColorScheme.fromSeed(
+        seedColor: Colors.teal,
+        brightness: brightness,
+      );
+      for (final appStyle in <AppUiStyle>[
+        AppUiStyle.glass,
+        AppUiStyle.fluorescent,
+      ]) {
+        final textTheme =
+            GuildVisualTheme.build(scheme, style: appStyle).textTheme;
+        final styles = <TextStyle?>[
+          textTheme.displayLarge,
+          textTheme.displayMedium,
+          textTheme.displaySmall,
+          textTheme.headlineLarge,
+          textTheme.headlineMedium,
+          textTheme.headlineSmall,
+          textTheme.titleLarge,
+          textTheme.titleMedium,
+          textTheme.titleSmall,
+          textTheme.bodyLarge,
+          textTheme.bodyMedium,
+          textTheme.bodySmall,
+          textTheme.labelLarge,
+          textTheme.labelMedium,
+          textTheme.labelSmall,
+        ];
+        for (final textStyle in styles) {
+          expect(
+            textStyle?.shadows ?? const <Shadow>[],
+            isEmpty,
+            reason:
+                '${appStyle.label} must not blur every text style globally',
+          );
+        }
+      }
+    }
+  });
+
   test('document reference input radii are locked per style', () {
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
     const expected = <AppUiStyle, double>{
@@ -310,32 +351,46 @@ void main() {
   testWidgets('styled search field has only the outer style shell', (
     tester,
   ) async {
-    final controller = TextEditingController();
-    addTearDown(controller.dispose);
     final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.glass),
-        home: Scaffold(
-          body: CollectionSearchField(
-            controller: controller,
-            query: '',
-            hintText: '搜索',
-            onChanged: (_) {},
-            onClear: () {},
+    for (final appStyle in <AppUiStyle>[
+      AppUiStyle.clay,
+      AppUiStyle.glass,
+    ]) {
+      final controller = TextEditingController();
+      await tester.pumpWidget(
+        MaterialApp(
+          themeAnimationDuration: Duration.zero,
+          theme: GuildVisualTheme.build(scheme, style: appStyle),
+          home: Scaffold(
+            body: CollectionSearchField(
+              controller: controller,
+              query: '',
+              hintText: '搜索',
+              onChanged: (_) {},
+              onClear: () {},
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.byType(TextField));
-    await tester.pump();
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
 
-    final textField = tester.widget<TextField>(find.byType(TextField));
-    final focused = textField.decoration?.focusedBorder;
-    expect(focused, isA<OutlineInputBorder>());
-    expect((focused! as OutlineInputBorder).borderSide, BorderSide.none);
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(
+        textField.decoration?.filled,
+        isFalse,
+        reason: '${appStyle.label} search must not paint an inner fill box',
+      );
+      expect(textField.decoration?.border, InputBorder.none);
+      expect(textField.decoration?.enabledBorder, InputBorder.none);
+      expect(textField.decoration?.focusedBorder, InputBorder.none);
+      expect(find.byType(GuildSurfaceEffect), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+    }
   });
 
 
