@@ -352,9 +352,18 @@ class SyncCoordinator extends ChangeNotifier {
           await Future<void>.delayed(const Duration(milliseconds: 120));
         }
 
-        for (var attempt = 0; attempt < 5; attempt++) {
+        String? lastSnapshotFailure;
+        for (var attempt = 0; attempt < 8; attempt++) {
           await _flushLocalChanges();
-          await _reconcileFromSyncDirectory(seedMissing: false);
+
+          // A complete backup must be able to repair an older/incomplete sync
+          // history before exporting it. Using seedMissing=false here made the
+          // retry loop impossible to recover when the local workspace already
+          // contained an entity that had never been written into portable
+          // history (for example after an older-version migration). Every retry
+          // then compared the same incomplete history with the same valid local
+          // data and ended in "导出快照暂时无法稳定".
+          await _reconcileFromSyncDirectory(seedMissing: true);
 
           final state = accountStore.syncSnapshot;
           if (state == null ||
@@ -385,7 +394,11 @@ class SyncCoordinator extends ChangeNotifier {
               syncJsonEquals(presetFields, _capturePresets()) &&
               syncJsonEquals(focusFields, _captureFocusSessions()) &&
               syncJsonEquals(settings, captureSettings());
-          if (!storesUnchanged) continue;
+          if (!storesUnchanged) {
+            lastSnapshotFailure = '导出期间工作数据仍在变化';
+            await Future<void>.delayed(const Duration(milliseconds: 40));
+            continue;
+          }
 
           if (!PortableSyncWorkspaceValidator.recordsMatchWorkspace(
             accountId: accountId,
@@ -397,9 +410,12 @@ class SyncCoordinator extends ChangeNotifier {
             settings: settings,
             mergeEngine: _mergeEngine,
           )) {
-            // A local canonicalization can still finish between two reads.
-            // Reconcile that result and retry without treating harmless account
-            // activity timestamps as workspace mutations.
+            // This is usually an older portable-history gap rather than live
+            // user activity. Re-seed once more and give file writes a brief
+            // chance to settle before the next coherent snapshot attempt.
+            lastSnapshotFailure = '同步历史尚未补齐到当前工作数据';
+            await _reconcileFromSyncDirectory(seedMissing: true);
+            await Future<void>.delayed(const Duration(milliseconds: 60));
             continue;
           }
 
@@ -422,7 +438,11 @@ class SyncCoordinator extends ChangeNotifier {
           );
         }
 
-        throw StateError('导出快照暂时无法稳定，请稍后再试。');
+        throw StateError(
+          lastSnapshotFailure == null
+              ? '导出快照暂时无法稳定，请稍后再试。'
+              : '导出快照暂时无法稳定：$lastSnapshotFailure，请稍后再试。',
+        );
       } finally {
         if (pausedTransportForExport) {
           try {
