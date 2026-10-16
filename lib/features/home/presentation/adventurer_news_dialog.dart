@@ -41,7 +41,7 @@ Future<bool> showAdventurerNewsDialog(
                       Text(
                         history
                             ? '公会历次更新记录'
-                            : '${notice.previousBuild} → ${notice.currentBuild} · 本次更新内容',
+                            : '${notice.previousVersionLabel} → ${notice.currentVersionLabel} · 本次更新内容',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
@@ -105,7 +105,7 @@ class _NewsEntry extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'v${entry.introducedBuild}',
+                'v${entry.displayVersion}',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: colors.onSurfaceVariant.withValues(alpha: 0.75),
                 ),
