@@ -1,7 +1,9 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+158
+version: 0.1.4
+# Internal release 0.1.4 promoted from test build 158.
+# Internal numeric update sequence is 5; CI injects it as build number.
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
