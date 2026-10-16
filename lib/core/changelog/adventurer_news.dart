@@ -208,6 +208,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 新设备加入修复',
     description: '重新排查 Windows 新设备在生成回应码之前卡住的问题：旧实现固定占用 Syncthing 默认的 8384 端口，又把同步核心作为无日志后台进程启动，端口冲突、旧进程残留或首次启动变慢都会被误报成同一个“启动超时”。现在改为应用专用动态端口，兼容旧版 8384 实例，启动前只清理属于冒险者公会的残留同步进程，并记录同步核心启动日志；首次启动等待窗口也放宽到 60 秒，失败时会给出更具体原因。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 159,
+    title: '首次加入握手修复',
+    description: '修复原电脑已登录、新手机首次加入时可能出现“设备已连接但账号数据始终不传”的问题。首次加入现在会确认临时账号目录已经真正双向共享后才开始传输，并在账号包送达、正式同步关系建立、最终确认完成后再结束临时通道；若目录未共享、被暂停或同步报错，会直接提示具体卡点，不再一直转圈。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
