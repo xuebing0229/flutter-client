@@ -1,0 +1,133 @@
+import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+
+import '../../../core/theme/theme_palette_transfer.dart';
+
+class ThemeShareScanPage extends StatefulWidget {
+  const ThemeShareScanPage({super.key});
+
+  @override
+  State<ThemeShareScanPage> createState() => _ThemeShareScanPageState();
+}
+
+class _ThemeShareScanPageState extends State<ThemeShareScanPage> {
+  static const _transfer = ThemePaletteTransferService();
+
+  final MobileScannerController _controller = MobileScannerController(
+    formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
+  );
+
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onDetect(BarcodeCapture capture) async {
+    if (_busy) return;
+
+    String? raw;
+    for (final barcode in capture.barcodes) {
+      final value = barcode.rawValue?.trim();
+      if (value != null && value.isNotEmpty) {
+        raw = value;
+        break;
+      }
+    }
+    if (raw == null) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    await _controller.stop();
+
+    try {
+      _transfer.decode(raw);
+      if (!mounted) return;
+      Navigator.of(context).pop(raw);
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.message);
+      await _controller.start();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = '二维码识别失败：$error');
+      await _controller.start();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('扫描配色二维码')),
+      body: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                MobileScanner(
+                  controller: _controller,
+                  onDetect: _onDetect,
+                ),
+                Center(
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 250,
+                      height: 250,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white, width: 3),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_busy)
+                  const ColoredBox(
+                    color: Colors.black54,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            color: colors.surface,
+            child: Column(
+              children: [
+                const Text(
+                  '扫描冒险者公会主题分享图里的二维码',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '识别后会先展示配色预览，不会直接覆盖你正在使用的方案。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.error),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
