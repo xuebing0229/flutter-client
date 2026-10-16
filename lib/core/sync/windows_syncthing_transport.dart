@@ -12,7 +12,7 @@ class WindowsSyncthingTransport {
   static final WindowsSyncthingTransport instance =
       WindowsSyncthingTransport._();
 
-  static const int _apiPort = 8384;
+  static const int _apiPort = 8387;
   static const String _stateFileName = 'embedded-syncthing-windows.json';
 
   Future<void>? _starting;
