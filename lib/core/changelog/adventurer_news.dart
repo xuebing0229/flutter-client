@@ -191,7 +191,7 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
   AdventurerNewsEntry(
     introducedBuild: 155,
     title: '配色编辑更顺手',
-    description: '预设主题色名称改得更简洁直观；高级自定义调色中，深色配色新增“一键套用浅色配色”，会完整复制浅色模式的 8 项颜色，复制后仍可继续单独调整深色模式。',
+    description: '预设主题色名称改得更简洁直观；高级自定义调色中，深色配色新增“一键套用浅色配色”，会完整复制浅色模式的 8 项颜色，复制后仍可继续单独调整深色模式。自定义主题方案也会进入完整备份与设备同步，恢复或换设备时不会只剩一个失效的主题 ID。',
   ),
 ];
 
