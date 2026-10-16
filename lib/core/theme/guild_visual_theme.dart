@@ -88,14 +88,31 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
   BorderRadius get cardBorderRadius {
     return switch (style) {
       AppUiStyle.collage => const BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(24),
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(4),
+          topLeft: Radius.circular(0),
+          topRight: Radius.circular(10),
+          bottomLeft: Radius.circular(10),
+          bottomRight: Radius.circular(0),
         ),
       _ => BorderRadius.circular(cardRadius),
     };
   }
+
+  BorderRadius get buttonBorderRadius => BorderRadius.circular(
+        switch (style) {
+          AppUiStyle.classic => 12.0,
+          AppUiStyle.relief => 12.0,
+          AppUiStyle.minimal => 0.0,
+          AppUiStyle.bold => 0.0,
+          AppUiStyle.geometric => 2.0,
+          AppUiStyle.retroLight => 4.0,
+          AppUiStyle.retroDark => 4.0,
+          AppUiStyle.fluorescent => 1.0,
+          AppUiStyle.collage => 2.0,
+          AppUiStyle.monochrome => 0.0,
+          AppUiStyle.clay => 14.0,
+          AppUiStyle.glass => 14.0,
+        },
+      );
 
   BoxDecoration decoration({
     GuildSurfaceRole role = GuildSurfaceRole.content,
