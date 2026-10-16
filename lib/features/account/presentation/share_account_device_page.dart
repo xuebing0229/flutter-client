@@ -413,9 +413,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      '只用于两台已经登录同一账号、但正式同步关系需要补配的情况。'
-                      '两台设备都打开“添加设备”页，各自扫描一次对方的二维码，'
-                      '两边都提示已添加后即可恢复正式同步；首次加入不需要走这里。',
+                      '只用于两台已经登录同一账号、但正式同步关系需要补配的情况。首次加入不需要走这里。',
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
                     const SizedBox(height: 12),
