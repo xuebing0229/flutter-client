@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/guild_visual_theme.dart';
 import 'layout_spacing.dart';
 
 class CollectionBulkItem {
@@ -85,59 +86,74 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                  blurStyle: BlurStyle.inner,
-                ),
-              ],
-            ),
-            child: TextField(
-              controller: widget.controller,
-              focusNode: _focusNode,
-              onChanged: widget.onChanged,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _focusNode.unfocus(),
-              decoration: InputDecoration(
-                hintText: widget.hintText,
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: searching
-                    ? IconButton(
-                        tooltip: '退出搜索',
-                        onPressed: _exitSearch,
-                        icon: const Icon(Icons.close_rounded),
-                      )
-                    : null,
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outlineVariant
-                        .withValues(alpha: 0.48),
-                    width: 0.7,
+          Builder(
+            builder: (context) {
+              final style = GuildStyleTheme.of(context);
+              final radius = style.isClassic
+                  ? BorderRadius.circular(18)
+                  : style.surfaceBorderRadius;
+              return GuildStyledSurface(
+                role: GuildSurfaceRole.inset,
+                borderRadius: radius,
+                backdropAvailable: style.isGlass,
+                backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  onChanged: widget.onChanged,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _focusNode.unfocus(),
+                  decoration: InputDecoration(
+                    hintText: widget.hintText,
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: searching
+                        ? IconButton(
+                            tooltip: '退出搜索',
+                            onPressed: _exitSearch,
+                            icon: const Icon(Icons.close_rounded),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: style.isClassic
+                        ? Theme.of(context).colorScheme.surfaceContainerLow
+                        : Colors.transparent,
+                    border: OutlineInputBorder(
+                      borderRadius: radius,
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: radius,
+                      borderSide: style.isClassic
+                          ? BorderSide(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant
+                                  .withValues(alpha: 0.48),
+                              width: 0.7,
+                            )
+                          : BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: radius,
+                      borderSide: style.isClassic
+                          ? BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 1.2,
+                            )
+                          : BorderSide(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.72),
+                              width: style.borderWidth <= 0
+                                  ? 1.4
+                                  : style.borderWidth,
+                            ),
+                    ),
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 1.2,
-                  ),
-                ),
-              ),
-            ),
+              );
+            },
           ),
           if (showFilters) ...[
             const SizedBox(height: 8),
