@@ -345,6 +345,7 @@ class AppToolMenu extends StatelessWidget {
               focusStore: focusStore,
               themeStore: themeStore,
               featureStore: featureStore,
+              desktopPetSettings: desktopPetSettings,
               accountStore: accountStore,
               syncCoordinator: syncCoordinator,
               onApplyWorkspaceSettings: onApplyWorkspaceSettings,
