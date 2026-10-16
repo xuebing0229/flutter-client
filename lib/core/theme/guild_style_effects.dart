@@ -412,15 +412,6 @@ class _SurfaceFinishPainter extends CustomPainter {
         }
         break;
       case AppUiStyle.minimal:
-        if (role == GuildEffectRole.content) {
-          canvas.drawLine(
-            Offset(0.5, size.height * 0.22),
-            Offset(0.5, size.height * 0.78),
-            Paint()
-              ..color = foreground.withValues(alpha: 0.78)
-              ..strokeWidth = 1.2,
-          );
-        }
         break;
       case AppUiStyle.bold:
         _paintCornerNotches(canvas, rect, foreground, 3);
@@ -564,9 +555,9 @@ class _SurfaceFinishPainter extends CustomPainter {
 
   void _paintGeometricAccent(Canvas canvas, Rect rect) {
     final paint = Paint()..style = PaintingStyle.fill;
-    paint.color = primary;
+    paint.color = primary.withValues(alpha: 0.82);
     canvas.drawRect(
-      Rect.fromLTWH(rect.left, rect.top, 5, rect.height),
+      Rect.fromLTWH(rect.left + 10, rect.top + 8, 16, 4),
       paint,
     );
     paint.color = accent2.withValues(alpha: 0.82);
@@ -647,8 +638,11 @@ class _SurfaceFinishPainter extends CustomPainter {
   }
 
   void _paintGlassHighlights(Canvas canvas, Rect rect, RRect rrect) {
+    final lightGlass = foreground.computeLuminance() < 0.35;
     final baseBorder = Paint()
-      ..color = Colors.white.withValues(alpha: 0.20)
+      ..color = lightGlass
+          ? foreground.withValues(alpha: 0.14)
+          : Colors.white.withValues(alpha: 0.20)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.drawRRect(rrect.deflate(0.5), baseBorder);
@@ -664,7 +658,9 @@ class _SurfaceFinishPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..strokeCap = StrokeCap.round;
     final bottomEdge = Paint()
-      ..color = Colors.white.withValues(alpha: 0.10)
+      ..color = lightGlass
+          ? foreground.withValues(alpha: 0.10)
+          : Colors.white.withValues(alpha: 0.10)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0
       ..strokeCap = StrokeCap.round;

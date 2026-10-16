@@ -130,4 +130,13 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['UI 风格质感重做']);
   });
 
+
+  test('150 包含 UI 风格明暗与组件统一修复见闻', () {
+    final picked = newsBetweenBuilds(149, 150);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['UI 风格明暗与组件统一修复'],
+    );
+  });
+
 }

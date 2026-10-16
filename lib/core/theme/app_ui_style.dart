@@ -22,19 +22,10 @@ enum AppUiStyle {
 
   bool get isClassic => this == AppUiStyle.classic;
   bool get isGlass => this == AppUiStyle.glass;
-  bool get forcesLight =>
-      this == AppUiStyle.relief ||
-      this == AppUiStyle.minimal ||
-      this == AppUiStyle.bold ||
-      this == AppUiStyle.geometric ||
-      this == AppUiStyle.retroLight ||
-      this == AppUiStyle.collage ||
-      this == AppUiStyle.monochrome ||
-      this == AppUiStyle.clay;
-  bool get forcesDark =>
-      this == AppUiStyle.retroDark ||
-      this == AppUiStyle.fluorescent ||
-      this == AppUiStyle.glass;
+  // UI style and light/dark mode are independent. Only the two presets that
+  // explicitly name their brightness keep a fixed base.
+  bool get forcesLight => this == AppUiStyle.retroLight;
+  bool get forcesDark => this == AppUiStyle.retroDark;
 
   static AppUiStyle byId(String? id) {
     for (final value in AppUiStyle.values) {

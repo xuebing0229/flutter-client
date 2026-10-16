@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_ui_style.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import 'layout_spacing.dart';
 
@@ -89,21 +90,14 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
           Builder(
             builder: (context) {
               final style = GuildStyleTheme.of(context);
-              final radius = style.isClassic
-                  ? BorderRadius.circular(18)
-                  : style.surfaceBorderRadius;
-              return GuildStyledSurface(
-                role: GuildSurfaceRole.inset,
-                borderRadius: radius,
-                backdropAvailable: style.isGlass,
-                backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
-                child: TextField(
-                  controller: widget.controller,
-                  focusNode: _focusNode,
-                  onChanged: widget.onChanged,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => _focusNode.unfocus(),
-                  decoration: InputDecoration(
+              final colors = Theme.of(context).colorScheme;
+
+              InputDecoration decoration({
+                required BorderRadius radius,
+                required bool minimal,
+              }) {
+                if (minimal) {
+                  return InputDecoration(
                     hintText: widget.hintText,
                     prefixIcon: const Icon(Icons.search_rounded),
                     suffixIcon: searching
@@ -113,45 +107,88 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
                             icon: const Icon(Icons.close_rounded),
                           )
                         : null,
-                    filled: true,
-                    fillColor: style.isClassic
-                        ? Theme.of(context).colorScheme.surfaceContainerLow
-                        : Colors.transparent,
-                    border: OutlineInputBorder(
-                      borderRadius: radius,
-                      borderSide: BorderSide.none,
+                    filled: false,
+                    border: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: style.borderColor,
+                        width: 1,
+                      ),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: radius,
-                      borderSide: style.isClassic
-                          ? BorderSide(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outlineVariant
-                                  .withValues(alpha: 0.48),
-                              width: 0.7,
-                            )
-                          : BorderSide.none,
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: style.borderColor,
+                        width: 1,
+                      ),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: radius,
-                      borderSide: style.isClassic
-                          ? BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 1.2,
-                            )
-                          : BorderSide(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.72),
-                              width: style.borderWidth <= 0
-                                  ? 1.4
-                                  : style.borderWidth,
-                            ),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: colors.primary,
+                        width: 1.4,
+                      ),
                     ),
+                  );
+                }
+
+                return InputDecoration(
+                  hintText: widget.hintText,
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: searching
+                      ? IconButton(
+                          tooltip: '退出搜索',
+                          onPressed: _exitSearch,
+                          icon: const Icon(Icons.close_rounded),
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: style.isClassic
+                      ? colors.surfaceContainerLow
+                      : Colors.transparent,
+                  border: OutlineInputBorder(
+                    borderRadius: radius,
+                    borderSide: BorderSide.none,
                   ),
-                ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: radius,
+                    borderSide: style.isClassic
+                        ? BorderSide(
+                            color: colors.outlineVariant.withValues(alpha: 0.48),
+                            width: 0.7,
+                          )
+                        : BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: radius,
+                    borderSide: style.isClassic
+                        ? BorderSide(
+                            color: colors.primary,
+                            width: 1.2,
+                          )
+                        : BorderSide.none,
+                  ),
+                );
+              }
+
+              final minimal = style.style == AppUiStyle.minimal;
+              final radius = style.isClassic
+                  ? BorderRadius.circular(18)
+                  : style.surfaceBorderRadius;
+              final field = TextField(
+                controller: widget.controller,
+                focusNode: _focusNode,
+                onChanged: widget.onChanged,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _focusNode.unfocus(),
+                decoration: decoration(radius: radius, minimal: minimal),
+              );
+
+              if (minimal) return field;
+
+              return GuildStyledSurface(
+                role: GuildSurfaceRole.inset,
+                borderRadius: radius,
+                backdropAvailable: style.isGlass,
+                backgroundColor: colors.surfaceContainerLow,
+                child: field,
               );
             },
           ),

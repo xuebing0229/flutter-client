@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/sync/sync_models.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 
 class DeviceSyncPage extends StatefulWidget {
   const DeviceSyncPage({
@@ -498,9 +499,7 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(18),
+    return GuildContentPanel(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
         child: Column(

@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 import '../../../core/account/account_models.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import 'avatar_crop_page.dart';
@@ -53,9 +54,7 @@ class AccountPage extends StatelessWidget {
               const SizedBox(height: 12),
               _CredentialCard(store: store),
               const SizedBox(height: 14),
-              Material(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(18),
+              GuildContentPanel(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
                   child: Column(
@@ -110,9 +109,7 @@ class AccountPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              Material(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(18),
+              GuildContentPanel(
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 18,
@@ -461,9 +458,7 @@ class _CredentialCardState extends State<_CredentialCard> {
     final accountName = widget.store.accountName ?? '';
     final password = widget.store.accountPassword;
 
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(18),
+    return GuildContentPanel(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
         child: Column(
@@ -664,9 +659,7 @@ class _AccountCardState extends State<_AccountCard> {
     final colors = Theme.of(context).colorScheme;
     final avatar = widget.store.accountAvatarBytes;
 
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(18),
+    return GuildContentPanel(
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(
