@@ -232,6 +232,7 @@ void main() {
       final controller = TextEditingController();
       await tester.pumpWidget(
         MaterialApp(
+          themeAnimationDuration: Duration.zero,
           theme: GuildVisualTheme.build(scheme, style: entry.key),
           home: Scaffold(
             body: CollectionSearchField(
@@ -254,6 +255,7 @@ void main() {
         entry.value,
         reason: '${entry.key.label} search shell must use reference radius',
       );
+      await tester.pumpWidget(const SizedBox.shrink());
       controller.dispose();
     }
   });
