@@ -197,6 +197,33 @@ void main() {
     expect(find.byType(Positioned), findsNothing);
   });
 
+  testWidgets('minimal search uses underline instead of a boxed shell', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildVisualTheme.build(scheme, style: AppUiStyle.minimal),
+        home: Scaffold(
+          body: CollectionSearchField(
+            controller: controller,
+            query: '',
+            hintText: '搜索',
+            onChanged: (_) {},
+            onClear: () {},
+          ),
+        ),
+      ),
+    );
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.decoration?.enabledBorder, isA<UnderlineInputBorder>());
+    expect(find.byType(GuildSurfaceEffect), findsNothing);
+  });
+
   testWidgets('styled search field has only the outer style shell', (
     tester,
   ) async {
