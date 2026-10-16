@@ -1003,7 +1003,7 @@ abstract final class GuildVisualTheme {
     }
     if (tokens.borderWidth <= 0) {
       return OutlineInputBorder(
-        borderRadius: BorderRadius.circular(tokens.radius),
+        borderRadius: tokens.inputBorderRadius,
         borderSide: BorderSide.none,
       );
     }
