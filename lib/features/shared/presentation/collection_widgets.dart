@@ -129,6 +129,28 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
                   );
                 }
 
+                if (!style.isClassic) {
+                  // Non-classic search fields are a single styled surface.
+                  // Do not paint a second TextField box inside the outer shell:
+                  // rounded shell + inner rectangle is exactly the mismatch we
+                  // want to avoid.
+                  return InputDecoration(
+                    hintText: widget.hintText,
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: searching
+                        ? IconButton(
+                            tooltip: '退出搜索',
+                            onPressed: _exitSearch,
+                            icon: const Icon(Icons.close_rounded),
+                          )
+                        : null,
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  );
+                }
+
                 return InputDecoration(
                   hintText: widget.hintText,
                   prefixIcon: const Icon(Icons.search_rounded),
@@ -140,30 +162,24 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
                         )
                       : null,
                   filled: true,
-                  fillColor: style.isClassic
-                      ? colors.surfaceContainerLow
-                      : Colors.transparent,
+                  fillColor: colors.surfaceContainerLow,
                   border: OutlineInputBorder(
                     borderRadius: radius,
                     borderSide: BorderSide.none,
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: radius,
-                    borderSide: style.isClassic
-                        ? BorderSide(
-                            color: colors.outlineVariant.withValues(alpha: 0.48),
-                            width: 0.7,
-                          )
-                        : BorderSide.none,
+                    borderSide: BorderSide(
+                      color: colors.outlineVariant.withValues(alpha: 0.48),
+                      width: 0.7,
+                    ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: radius,
-                    borderSide: style.isClassic
-                        ? BorderSide(
-                            color: colors.primary,
-                            width: 1.2,
-                          )
-                        : BorderSide.none,
+                    borderSide: BorderSide(
+                      color: colors.primary,
+                      width: 1.2,
+                    ),
                   ),
                 );
               }

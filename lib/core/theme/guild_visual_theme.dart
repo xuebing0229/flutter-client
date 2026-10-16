@@ -531,7 +531,6 @@ abstract final class GuildVisualTheme {
       textTheme: _textThemeFor(
         tokens,
         ThemeData(colorScheme: colors, useMaterial3: true).textTheme,
-        colors.primary,
       ),
     );
   }
@@ -1224,7 +1223,6 @@ abstract final class GuildVisualTheme {
   static TextTheme _textThemeFor(
     GuildStyleTheme tokens,
     TextTheme base,
-    Color primary,
   ) {
     final shadows = switch (tokens.style) {
       AppUiStyle.retroDark => <Shadow>[
@@ -1233,19 +1231,10 @@ abstract final class GuildVisualTheme {
             blurRadius: 7,
           ),
         ],
-      AppUiStyle.fluorescent => <Shadow>[
-          Shadow(
-            color: primary.withValues(alpha: 0.52),
-            blurRadius: 7,
-          ),
-        ],
-      AppUiStyle.glass => <Shadow>[
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.30),
-            offset: const Offset(0, 1),
-            blurRadius: 2,
-          ),
-        ],
+      // Liquid Glass keeps typography crisp; blur belongs behind the glass.
+      // Acid Graphics only glows selected accent labels/controls in the
+      // supplied reference, not the entire app text hierarchy.
+      AppUiStyle.fluorescent || AppUiStyle.glass => const <Shadow>[],
       _ => const <Shadow>[],
     };
 

@@ -178,6 +178,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'UI 风格按参考稿重新对齐',
     description: '重新按提供的 UI/UX HTML 参考逐项校准风格。玻璃取消组件内部的大块气泡高光，改回低透明玻璃底、细边、轻量背景色场和真实模糊；搜索框按浮雕、粗边、几何、复古、荧光、拼贴、黑白、黏土与玻璃分别使用参考中的圆角、边框、底色和内凹或发光关系，不再套统一外壳。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 153,
+    title: 'UI 风格清晰度与搜索框修复',
+    description: '修复搜索框圆角外壳里又出现矩形内框的问题，改为每种非经典风格只保留一层完整搜索表面；玻璃取消全局文字阴影和额外乳白高光，输入与按钮按参考降低背景模糊强度；荧光取消整页雾化和全局文字发光，恢复清晰的点阵、扫描线与局部霓虹强调。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
