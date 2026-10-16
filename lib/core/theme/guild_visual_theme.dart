@@ -727,7 +727,9 @@ abstract final class GuildVisualTheme {
         muted = dark ? const Color(0xFF999999) : const Color(0xFF888888);
         ink = foreground;
         border = dark ? const Color(0xFF383838) : const Color(0xFFE2E2E2);
-        borderWidth = 1;
+        // Minimal surfaces stay flat; input underlines and dividers use the
+        // border color directly instead of drawing a box around every panel.
+        borderWidth = 0;
         radius = 0;
         cardRadius = 0;
         shadows = const <BoxShadow>[];
