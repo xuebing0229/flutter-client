@@ -97,21 +97,39 @@ class GuildSurfaceEffect extends StatelessWidget {
 
   BoxDecoration _surfaceDecoration() {
     final lightGlass = foreground.computeLuminance() < 0.35;
-    final glassFill = lightGlass
-        ? Colors.white.withValues(
-            alpha: _inset
-                ? 0.50
-                : role == GuildEffectRole.chrome
-                    ? 0.60
-                    : 0.55,
-          )
-        : Colors.white.withValues(
-            alpha: _inset
-                ? 0.05
-                : role == GuildEffectRole.chrome
-                    ? 0.06
-                    : 0.04,
-          );
+    final emphasized = role == GuildEffectRole.emphasized;
+    final glassFill = emphasized
+        ? primary.withValues(alpha: lightGlass ? 0.15 : 0.25)
+        : lightGlass
+            ? Colors.white.withValues(
+                alpha: _inset
+                    ? 0.50
+                    : role == GuildEffectRole.chrome
+                        ? 0.60
+                        : 0.55,
+              )
+            : Colors.white.withValues(
+                alpha: _inset
+                    ? 0.05
+                    : role == GuildEffectRole.chrome
+                        ? 0.06
+                        : 0.04,
+              );
+
+    final effectiveSurface = switch (style) {
+      // The reference primary neumorphic button keeps the same base material
+      // and changes only its foreground accent.
+      AppUiStyle.relief when emphasized => background,
+      // Minimal / retro / acid primary controls are outline-or-text controls,
+      // not solid theme-colour blocks.
+      AppUiStyle.minimal when emphasized => Colors.transparent,
+      AppUiStyle.retroLight when emphasized => Colors.transparent,
+      AppUiStyle.retroDark when emphasized => Colors.transparent,
+      AppUiStyle.fluorescent when emphasized => Colors.transparent,
+      // Brutalism primary is black/white rather than the app accent.
+      AppUiStyle.monochrome when emphasized => foreground,
+      _ => surface,
+    };
 
     final gradient = switch (style) {
       AppUiStyle.relief => LinearGradient(
@@ -119,56 +137,56 @@ class GuildSurfaceEffect extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: _inset
               ? <Color>[
-                  _mix(surface, Colors.black, 0.04),
-                  surface,
-                  _mix(surface, Colors.white, 0.05),
+                  _mix(effectiveSurface, Colors.black, 0.04),
+                  effectiveSurface,
+                  _mix(effectiveSurface, Colors.white, 0.05),
                 ]
               : <Color>[
-                  _mix(surface, Colors.white, 0.025),
-                  surface,
+                  _mix(effectiveSurface, Colors.white, 0.025),
+                  effectiveSurface,
                 ],
         ),
-      AppUiStyle.retroLight => _inset
+      AppUiStyle.retroLight => emphasized || _inset
           ? null
           : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: <Color>[
-                _mix(surface, primary, 0.025),
-                surface,
-                _mix(surface, accent2, 0.018),
+                _mix(effectiveSurface, primary, 0.025),
+                effectiveSurface,
+                _mix(effectiveSurface, accent2, 0.018),
               ],
             ),
-      AppUiStyle.retroDark => _inset
+      AppUiStyle.retroDark => emphasized || _inset
           ? null
           : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: <Color>[
-                _mix(surface, primary, 0.10),
-                surface,
-                _mix(surface, accent2, 0.06),
+                _mix(effectiveSurface, primary, 0.10),
+                effectiveSurface,
+                _mix(effectiveSurface, accent2, 0.06),
               ],
             ),
-      AppUiStyle.fluorescent => _inset
+      AppUiStyle.fluorescent => emphasized || _inset
           ? null
           : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: <Color>[
                 primary.withValues(alpha: 0.025),
-                surface,
+                effectiveSurface,
               ],
             ),
-      AppUiStyle.collage => _inset
+      AppUiStyle.collage => emphasized || _inset
           ? null
           : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: <Color>[
-                _mix(surface, accent2, 0.025),
-                surface,
-                _mix(surface, primary, 0.025),
+                _mix(effectiveSurface, accent2, 0.025),
+                effectiveSurface,
+                _mix(effectiveSurface, primary, 0.025),
               ],
             ),
       AppUiStyle.clay => _inset
@@ -177,14 +195,13 @@ class GuildSurfaceEffect extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: <Color>[
-                _mix(surface, Colors.white, 0.075),
-                surface,
-                _mix(surface, primary, 0.025),
+                _mix(effectiveSurface, Colors.white, 0.075),
+                effectiveSurface,
+                _mix(effectiveSurface, primary, 0.025),
               ],
             ),
-      // The supplied Liquid Glass reference uses a uniform translucent glass
-      // fill. The moving colour is in the page backdrop / border glow, not a
-      // large radial "bubble" painted inside every component.
+      // Liquid Glass uses a uniform translucent glass fill. The moving colour
+      // belongs to the page backdrop and the primary control tint.
       AppUiStyle.glass => null,
       _ => null,
     };
@@ -193,7 +210,7 @@ class GuildSurfaceEffect extends StatelessWidget {
       color: style == AppUiStyle.glass
           ? glassFill
           : gradient == null
-              ? surface
+              ? effectiveSurface
               : null,
       gradient: gradient,
       borderRadius: borderRadius,
@@ -202,30 +219,46 @@ class GuildSurfaceEffect extends StatelessWidget {
   }
 
   Border? _baseBorder() {
+    final emphasized = role == GuildEffectRole.emphasized;
     switch (style) {
       case AppUiStyle.relief:
+      case AppUiStyle.minimal:
+      case AppUiStyle.clay:
         return null;
       case AppUiStyle.glass:
         final lightGlass = foreground.computeLuminance() < 0.35;
         return Border.all(
-          color: lightGlass
-              ? primary.withValues(alpha: 0.12)
-              : Colors.white.withValues(alpha: 0.10),
+          color: emphasized
+              ? primary.withValues(alpha: lightGlass ? 0.25 : 0.35)
+              : lightGlass
+                  ? primary.withValues(alpha: 0.12)
+                  : Colors.white.withValues(alpha: 0.10),
           width: 1,
         );
       case AppUiStyle.fluorescent:
         return Border.all(
-          color: borderColor,
+          color: emphasized ? primary : borderColor,
           width: math.max(borderWidth, 1.0),
         );
       case AppUiStyle.retroDark:
         return Border.all(
-          color: accent2.withValues(alpha: 0.28),
+          color: emphasized
+              ? primary.withValues(alpha: 0.85)
+              : accent2.withValues(alpha: 0.28),
           width: math.max(borderWidth, 1),
+        );
+      case AppUiStyle.retroLight:
+        return Border.all(
+          color: emphasized ? primary : borderColor,
+          width: math.max(borderWidth, 2),
         );
       case AppUiStyle.collage:
         return Border.all(
-          color: _inset ? borderColor : foreground,
+          color: emphasized
+              ? primary
+              : _inset
+                  ? borderColor
+                  : foreground,
           width: math.max(borderWidth, 2),
         );
       case AppUiStyle.monochrome:
@@ -236,8 +269,8 @@ class GuildSurfaceEffect extends StatelessWidget {
           );
         }
         return Border.all(
-          color: borderColor,
-          width: math.max(borderWidth, 2),
+          color: foreground,
+          width: emphasized ? 1 : math.max(borderWidth, 2),
         );
       default:
         if (borderWidth <= 0) return null;
@@ -261,16 +294,27 @@ class GuildSurfaceEffect extends StatelessWidget {
       // shadow on every panel.
       AppUiStyle.geometric => const <BoxShadow>[],
       AppUiStyle.retroLight => const <BoxShadow>[],
-      AppUiStyle.retroDark => <BoxShadow>[
-          BoxShadow(
-            color: accent2.withValues(alpha: 0.34),
-            blurRadius: 11,
-          ),
-          BoxShadow(
-            color: primary.withValues(alpha: 0.18),
-            blurRadius: 24,
-          ),
-        ],
+      AppUiStyle.retroDark => role == GuildEffectRole.emphasized
+          ? <BoxShadow>[
+              BoxShadow(
+                color: primary.withValues(alpha: 0.42),
+                blurRadius: 10,
+              ),
+              BoxShadow(
+                color: primary.withValues(alpha: 0.22),
+                blurRadius: 20,
+              ),
+            ]
+          : <BoxShadow>[
+              BoxShadow(
+                color: accent2.withValues(alpha: 0.34),
+                blurRadius: 11,
+              ),
+              BoxShadow(
+                color: primary.withValues(alpha: 0.18),
+                blurRadius: 24,
+              ),
+            ],
       AppUiStyle.fluorescent => background.computeLuminance() < 0.35
           ? <BoxShadow>[
               BoxShadow(
