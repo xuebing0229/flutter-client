@@ -187,24 +187,10 @@ class GuildSurfaceEffect extends StatelessWidget {
       case AppUiStyle.relief:
         return null;
       case AppUiStyle.glass:
-        return Border(
-          top: BorderSide(
-            color: Colors.white.withValues(alpha: 0.50),
-            width: 1.1,
-          ),
-          left: BorderSide(
-            color: Colors.white.withValues(alpha: 0.42),
-            width: 1.0,
-          ),
-          right: BorderSide(
-            color: Colors.white.withValues(alpha: 0.22),
-            width: 1.0,
-          ),
-          bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.16),
-            width: 1.0,
-          ),
-        );
+        // Liquid Glass uses asymmetric bright/dark edges. Flutter's
+        // BoxDecoration cannot combine a non-uniform Border with a radius, so
+        // the document-faithful edge treatment is painted in CustomPainter.
+        return null;
       case AppUiStyle.fluorescent:
         return Border.all(
           color: primary.withValues(alpha: 0.42),
@@ -659,6 +645,48 @@ class _SurfaceFinishPainter extends CustomPainter {
   }
 
   void _paintGlassHighlights(Canvas canvas, Rect rect, RRect rrect) {
+    final baseBorder = Paint()
+      ..color = Colors.white.withValues(alpha: 0.20)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawRRect(rrect.deflate(0.5), baseBorder);
+
+    final topEdge = Paint()
+      ..color = Colors.white.withValues(alpha: 0.50)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..strokeCap = StrokeCap.round;
+    final leftEdge = Paint()
+      ..color = Colors.white.withValues(alpha: 0.40)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..strokeCap = StrokeCap.round;
+    final bottomEdge = Paint()
+      ..color = Colors.white.withValues(alpha: 0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..strokeCap = StrokeCap.round;
+
+    final radius = math.min(
+      borderRadius.topLeft.x,
+      math.min(rect.width, rect.height) / 2,
+    );
+    canvas.drawLine(
+      Offset(rect.left + radius, rect.top + 0.6),
+      Offset(rect.right - radius, rect.top + 0.6),
+      topEdge,
+    );
+    canvas.drawLine(
+      Offset(rect.left + 0.6, rect.top + radius),
+      Offset(rect.left + 0.6, rect.bottom - radius),
+      leftEdge,
+    );
+    canvas.drawLine(
+      Offset(rect.left + radius, rect.bottom - 0.6),
+      Offset(rect.right - radius, rect.bottom - 0.6),
+      bottomEdge,
+    );
+
     canvas.save();
     canvas.clipRRect(rrect);
 
