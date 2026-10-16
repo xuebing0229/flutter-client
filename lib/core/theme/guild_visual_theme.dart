@@ -86,7 +86,7 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
           AppUiStyle.geometric => 2.0,
           AppUiStyle.retroLight => 4.0,
           AppUiStyle.retroDark => 4.0,
-          AppUiStyle.fluorescent => 1.0,
+          AppUiStyle.fluorescent => radius,
           AppUiStyle.collage => 0.0,
           AppUiStyle.monochrome => 0.0,
           AppUiStyle.clay => 20.0,
@@ -103,7 +103,7 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
           AppUiStyle.geometric => 0.0,
           AppUiStyle.retroLight => 4.0,
           AppUiStyle.retroDark => 4.0,
-          AppUiStyle.fluorescent => 1.0,
+          AppUiStyle.fluorescent => radius,
           AppUiStyle.collage => 0.0,
           AppUiStyle.monochrome => 0.0,
           AppUiStyle.clay => 20.0,
@@ -815,34 +815,38 @@ abstract final class GuildVisualTheme {
         ];
         chromeShadows = shadows;
       case AppUiStyle.fluorescent:
-        background = dark
-            ? const Color(0xFF0D0D0D)
-            : _mix(const Color(0xFFF5F8F1), primary, 0.018);
-        surface = dark
-            ? const Color(0xFF0A0A0A)
-            : const Color(0xFFFFFFFF);
-        surfaceAlt = _mix(surface, primary, dark ? 0.12 : 0.055);
-        foreground = dark
-            ? _mix(const Color(0xFFFFFFFF), primary, 0.28)
-            : const Color(0xFF20251F);
+        // Acid Graphics has deliberately different light/dark component
+        // geometry in the supplied references.
+        background =
+            dark ? const Color(0xFF0D0D0D) : const Color(0xFFF2F0EB);
+        surface =
+            dark ? const Color(0xFF0A0A0A) : const Color(0xFFFFFFFF);
+        surfaceAlt = dark
+            ? _mix(surface, primary, 0.10)
+            : const Color(0xFFFAFAF7);
+        foreground = dark ? primary : const Color(0xFF1A1A1A);
         muted = dark
-            ? _mix(const Color(0xFFAAAAAA), primary, 0.20)
-            : const Color(0xFF6C736A);
+            ? _mix(primary, Colors.white, 0.35)
+            : const Color(0xFF666666);
         ink = foreground;
-        border = primary.withValues(alpha: dark ? 0.58 : 0.44);
-        borderWidth = 1;
-        radius = 1;
-        cardRadius = 1;
-        shadows = <BoxShadow>[
-          BoxShadow(
-            color: primary.withValues(alpha: dark ? 0.34 : 0.18),
-            blurRadius: dark ? 16 : 10,
-          ),
-          BoxShadow(
-            color: accent3.withValues(alpha: dark ? 0.16 : 0.08),
-            blurRadius: dark ? 30 : 18,
-          ),
-        ];
+        border = dark
+            ? primary.withValues(alpha: 0.40)
+            : const Color(0xFFD4D0C8);
+        borderWidth = dark ? 1 : 2;
+        radius = dark ? 1 : 0;
+        cardRadius = radius;
+        shadows = dark
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: primary.withValues(alpha: 0.30),
+                  blurRadius: 12,
+                ),
+                BoxShadow(
+                  color: accent3.withValues(alpha: 0.12),
+                  blurRadius: 30,
+                ),
+              ]
+            : const <BoxShadow>[];
         chromeShadows = shadows;
       case AppUiStyle.collage:
         background =
@@ -1058,7 +1062,7 @@ abstract final class GuildVisualTheme {
       AppUiStyle.geometric => 2,
       AppUiStyle.retroLight => 4,
       AppUiStyle.retroDark => 4,
-      AppUiStyle.fluorescent => 1,
+      AppUiStyle.fluorescent => fallback,
       AppUiStyle.collage => 0,
       AppUiStyle.monochrome => 0,
       AppUiStyle.clay => 20,
