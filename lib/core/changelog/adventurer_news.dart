@@ -168,6 +168,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'UI 风格明暗与组件统一修复',
     description: 'UI风格不再擅自切换浅色或深色：除“复古浅色 / 复古深色”外，其余风格都跟随当前明暗模式，浅色玻璃恢复乳白清透效果。修复搜索栏内外双重边框、业务卡片左侧无意义竖线，以及账号、专注、设备同步等页面仍残留固定白色硬矩形的问题。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 151,
+    title: '测试版更新检查修复',
+    description: '检查更新优先读取 GitHub Releases 的实时最新版本，不再因为 latest/download 跳转短暂滞后而把刚发布的新测试版误判成旧版本；Android 与 Windows 都保留静态清单作为备用。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
