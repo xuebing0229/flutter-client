@@ -152,6 +152,67 @@ void main() {
     }
   });
 
+  test('full backup carries whitelisted desktop pet art', () async {
+    final petImage = File('${temporary.path}/pet-a.png');
+    final bytes = <int>[7, 6, 5, 4, 3, 2, 1];
+    await petImage.writeAsBytes(bytes, flush: true);
+
+    final backup = AppBackupData(
+      exportedAt: DateTime.utc(2026, 10, 16, 6),
+      orders: const <QueueOrder>[],
+      products: const <FinishedProduct>[],
+      nodePresets: const <NodePreset>[preset],
+      syncRecords: const <Map<String, dynamic>>[],
+      settings: const <String, dynamic>{
+        'desktopPetBackup': <String, dynamic>{
+          'schema': 1,
+          'selectedPresetId': 'pet-1',
+          'presets': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 'pet-1',
+              'name': '团子',
+              'imageA': 'desktop-pet/presets/pet-1/imageA.png',
+            },
+          ],
+        },
+      },
+    );
+    final service = FullBackupBundleService(
+      syncRecordStore: _TemporaryRecordStore(syncRoot),
+      fileBridge: _CapturingFileBridge(exportedFile),
+    );
+
+    expect(
+      await service.exportFullBackup(
+        accountId: 'account',
+        backup: backup,
+        fileName: 'backup.zip',
+        bundledLocalFiles: <String, File>{
+          'desktop-pet/presets/pet-1/imageA.png': petImage,
+        },
+      ),
+      isTrue,
+    );
+
+    final imported = await service.readBackupFile(
+      exportedFile,
+      displayName: 'backup.zip',
+    );
+    try {
+      final restored = File(
+        '${imported.extractedDirectory!.path}/'
+        'desktop-pet/presets/pet-1/imageA.png',
+      );
+      expect(await restored.readAsBytes(), bytes);
+      expect(
+        imported.backup.settings['desktopPetBackup'],
+        isA<Map>(),
+      );
+    } finally {
+      await imported.dispose();
+    }
+  });
+
   test('full backup refuses to silently omit an unsynced image', () async {
     final service = FullBackupBundleService(
       syncRecordStore: _TemporaryRecordStore(syncRoot),
