@@ -116,6 +116,7 @@ class AccountEntryPage extends StatelessWidget {
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => ExistingAccountJoinPage(
+                          store: store,
                           onAdoptBackup: onAdoptBackup,
                         ),
                       ),
