@@ -36,19 +36,14 @@ class SummaryCardSurface extends StatelessWidget {
           borderRadius: radius,
           onTap: onTap,
           onLongPress: onLongPress,
-          child: Stack(
-            children: [
-              if (_accentBar(context, style) case final accent?) accent,
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  compact ? 12 : 18,
-                  compact ? 12 : 16,
-                  compact ? 12 : 18,
-                  compact ? 12 : 16,
-                ),
-                child: child,
-              ),
-            ],
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 12 : 18,
+              compact ? 12 : 16,
+              compact ? 12 : 18,
+              compact ? 12 : 16,
+            ),
+            child: child,
           ),
         ),
       ),
@@ -137,34 +132,7 @@ class SummaryCardSurface extends StatelessWidget {
     );
   }
 
-  Widget? _accentBar(BuildContext context, GuildStyleTheme style) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return switch (style.style) {
-      AppUiStyle.minimal => Positioned(
-          left: 0,
-          top: 12,
-          bottom: 12,
-          width: 2,
-          child: ColoredBox(color: style.foreground),
-        ),
-      AppUiStyle.geometric => Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 5,
-          child: ColoredBox(color: primary),
-        ),
-      AppUiStyle.retroLight => Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 3,
-          child: ColoredBox(color: primary),
-        ),
-      _ => null,
-    };
-  }
-}
+
 
 class SummaryTag extends StatelessWidget {
   const SummaryTag({
