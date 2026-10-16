@@ -39,10 +39,10 @@
 - 复古浅色 → `retrofuturism-components-light.html`
 - 复古深色 → `retrofuturism-components.html`
 - 荧光 → `acid-graphics-components.html`
-- 拼贴 → `anti-design-components.html`
+- 拼贴 → `oleObject7.html`（Anti-Design Lite，用户截图中的浅色版本）
 - 黑白 → `brutalism-components.html`
 - 黏土 → `claymorphism-components.html`
-- 玻璃 → `liquid-glass-components.html`
+- 玻璃 → `oleObject3.html`（Liquid Glass 水滴边框效果，用户截图对应版本）
 
 经典保持冒险者公会现有 UI，不改变现有布局、图标和操作。
 
@@ -116,7 +116,7 @@
 
 ### 玻璃
 
-参考文档：深色背景；半透明表面；约 16–18px 模糊；细亮边；主题色参与多层渐变和 glow；允许示范图中的高光效果。
+参考文档中的“水滴边框效果”：真实背景上使用 24–30px 级局部模糊、多层径向渐变、顶部与左侧更亮而底部/右侧更暗的双色边、内侧高光线、水滴表面椭圆高光与轻微暗边。主题色只进入局部折色/强调，不把玻璃本体染成实色。
 
 ## 不允许
 
@@ -125,3 +125,16 @@
 - 不要用英文风格名出现在设置页。
 - 不要因为风格切换改变排单业务布局、功能入口、字段或数据。
 - 不要覆盖用户选中的 UI 主题色。
+
+
+## 148 视觉偏差复盘
+
+148 只把文档风格压缩成通用 ThemeData / BoxDecoration token，导致质感不足。后续实现必须遵守：
+
+- 浮雕：外凸和内凹必须分开渲染；输入/轨道必须有 inset 明暗边。
+- 粗边：硬边与硬偏移阴影是两层独立结构，不能用普通 Material elevation 替代。
+- 复古深色：必须包含 CRT 扫描线、60px 级网格与暗角。
+- 荧光：必须包含点阵背景、内外 glow 和局部高亮线。
+- 拼贴：以 Anti-Design Lite 为准，保留轻微旋转、彩色偏移阴影和不规则几何细节，不使用早期极端 Anti-Design 文件。
+- 黏土：必须使用厚圆角、无模糊偏移阴影和内凹轨道。
+- 玻璃：以 Liquid Glass 水滴边框 HTML 为准，必须有非对称亮边、多层径向高光、真实 BackdropFilter 与内侧高光弧线。
