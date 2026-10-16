@@ -134,10 +134,11 @@ class PortableSyncWorkspaceValidator {
           if (materialized != null) return false;
         } else {
           if (materialized == null) return false;
-          final comparable = record.kind == SyncEntityKind.settings &&
-                  !local.containsKey('features') &&
-                  materialized.containsKey('features')
-              ? (<String, dynamic>{...materialized}..remove('features'))
+          final comparable = record.kind == SyncEntityKind.settings
+              ? _normalizeComparableSettings(
+                  local: local,
+                  materialized: materialized,
+                )
               : materialized;
           if (!syncJsonEquals(local, comparable)) {
             return false;
@@ -154,4 +155,28 @@ class PortableSyncWorkspaceValidator {
     }
     return true;
   }
+}
+
+
+Map<String, dynamic> _normalizeComparableSettings({
+  required Map<String, dynamic> local,
+  required Map<String, dynamic> materialized,
+}) {
+  var needsCopy = false;
+  final removeLegacyFeatures =
+      !local.containsKey('features') &&
+      materialized.containsKey('features') &&
+      local.keys.any((key) => key.startsWith('feature.'));
+  final removeLegacyTexture =
+      !local.containsKey('uiTexture') &&
+      local['uiStyle'] is String &&
+      materialized.containsKey('uiTexture');
+
+  needsCopy = removeLegacyFeatures || removeLegacyTexture;
+  if (!needsCopy) return materialized;
+
+  final comparable = <String, dynamic>{...materialized};
+  if (removeLegacyFeatures) comparable.remove('features');
+  if (removeLegacyTexture) comparable.remove('uiTexture');
+  return comparable;
 }

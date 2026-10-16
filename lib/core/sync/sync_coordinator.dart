@@ -1670,10 +1670,21 @@ class SyncCoordinator extends ChangeNotifier {
     final hasFieldLevelFeatures = settings.keys.any(
       (key) => key.startsWith('feature.'),
     );
-    if (!hasFieldLevelFeatures || !settings.containsKey('features')) {
+    final hasCurrentUiStyle = settings['uiStyle'] is String;
+
+    final removeLegacyFeatures =
+        hasFieldLevelFeatures && settings.containsKey('features');
+    final removeLegacyTexture =
+        hasCurrentUiStyle && settings.containsKey('uiTexture');
+
+    if (!removeLegacyFeatures && !removeLegacyTexture) {
       return settings;
     }
-    return <String, dynamic>{...settings}..remove('features');
+
+    final normalized = <String, dynamic>{...settings};
+    if (removeLegacyFeatures) normalized.remove('features');
+    if (removeLegacyTexture) normalized.remove('uiTexture');
+    return normalized;
   }
 
   Future<void> _backfillMissingRecordFields({

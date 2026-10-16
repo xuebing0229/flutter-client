@@ -38,6 +38,37 @@ void main() {
     expect(matches, isTrue);
   });
 
+  test('migrated UI style ignores retained legacy uiTexture field', () {
+    final record = SyncRecord.bootstrap(
+      kind: SyncEntityKind.settings,
+      id: 'app',
+      values: const <String, dynamic>{
+        'id': 'app',
+        'themeMode': 'system',
+        'themePaletteId': 'guild-original',
+        'uiStyle': 'classic',
+        'uiTexture': 'frosted',
+      },
+      deviceId: 'phone',
+    ).copyWith(accountId: 'account-1');
+
+    final matches = PortableSyncWorkspaceValidator.recordsMatchWorkspace(
+      accountId: 'account-1',
+      records: <Map<String, dynamic>>[record.toJson()],
+      orders: const <String, Map<String, dynamic>>{},
+      products: const <String, Map<String, dynamic>>{},
+      presets: const <String, Map<String, dynamic>>{},
+      settings: const <String, dynamic>{
+        'id': 'app',
+        'themeMode': 'system',
+        'themePaletteId': 'guild-original',
+        'uiStyle': 'classic',
+      },
+    );
+
+    expect(matches, isTrue);
+  });
+
   test('backup-only settings do not invalidate portable sync history', () {
     final record = SyncRecord.bootstrap(
       kind: SyncEntityKind.settings,
