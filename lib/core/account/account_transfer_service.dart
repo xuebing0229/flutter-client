@@ -423,7 +423,7 @@ class SyncthingAccountTransferServer {
     if (_closed) {
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
-    if (lastFolderError != null && lastFolderError!.isNotEmpty) {
+    if (lastFolderError != null && lastFolderError.isNotEmpty) {
       throw FormatException('临时账号同步目录建立失败：$lastFolderError');
     }
     if (lastRemoteState == 'notSharing') {
@@ -434,7 +434,7 @@ class SyncthingAccountTransferServer {
     }
     throw FormatException(
       '临时账号同步目录没有完成握手'
-      '${lastRemoteState == null || lastRemoteState!.isEmpty ? '' : '（状态：$lastRemoteState）'}。'
+      '${lastRemoteState == null || lastRemoteState.isEmpty ? '' : '（状态：$lastRemoteState）'}。'
       '请让两台设备都保持当前页面后重试。',
     );
   }
