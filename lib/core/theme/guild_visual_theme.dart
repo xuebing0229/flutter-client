@@ -89,7 +89,7 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
           AppUiStyle.fluorescent => radius,
           AppUiStyle.collage => 0.0,
           AppUiStyle.monochrome => 0.0,
-          AppUiStyle.clay => 20.0,
+          AppUiStyle.clay => 999.0,
           AppUiStyle.glass => 12.0,
         },
       );
@@ -725,7 +725,7 @@ abstract final class GuildVisualTheme {
         border = Colors.transparent;
         borderWidth = 0;
         radius = 16;
-        cardRadius = 18;
+        cardRadius = 16;
         final lightShadow = dark
             ? Colors.white.withValues(alpha: 0.07)
             : Colors.white.withValues(alpha: 0.94);
@@ -916,7 +916,7 @@ abstract final class GuildVisualTheme {
         border = Colors.transparent;
         borderWidth = 0;
         radius = 20;
-        cardRadius = 22;
+        cardRadius = 24;
         shadows = <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: dark ? 0.34 : 0.15),
@@ -1157,7 +1157,7 @@ abstract final class GuildVisualTheme {
       AppUiStyle.fluorescent => fallback,
       AppUiStyle.collage => 0,
       AppUiStyle.monochrome => 0,
-      AppUiStyle.clay => 20,
+      AppUiStyle.clay => 999,
       AppUiStyle.glass => 12,
       AppUiStyle.classic => fallback,
     };
