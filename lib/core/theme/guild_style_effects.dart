@@ -255,20 +255,11 @@ class GuildSurfaceEffect extends StatelessWidget {
             blurRadius: 0,
           ),
         ],
-      AppUiStyle.geometric => <BoxShadow>[
-          BoxShadow(
-            color: foreground.withValues(alpha: 0.90),
-            offset: const Offset(3, 3),
-            blurRadius: 0,
-          ),
-        ],
-      AppUiStyle.retroLight => <BoxShadow>[
-          BoxShadow(
-            color: borderColor.withValues(alpha: 0.32),
-            offset: const Offset(2, 2),
-            blurRadius: 0,
-          ),
-        ],
+      // Bauhaus and the light retro reference keep their component rows
+      // flat. Their character comes from hard borders / geometry, not a drop
+      // shadow on every panel.
+      AppUiStyle.geometric => const <BoxShadow>[],
+      AppUiStyle.retroLight => const <BoxShadow>[],
       AppUiStyle.retroDark => <BoxShadow>[
           BoxShadow(
             color: accent2.withValues(alpha: 0.34),
@@ -289,18 +280,22 @@ class GuildSurfaceEffect extends StatelessWidget {
             blurRadius: 30,
           ),
         ],
-      AppUiStyle.collage => <BoxShadow>[
-          BoxShadow(
-            color: primary,
-            offset: const Offset(6, 6),
-            blurRadius: 0,
-          ),
-          BoxShadow(
-            color: accent2,
-            offset: const Offset(-3, -3),
-            blurRadius: 0,
-          ),
-        ],
+      // Anti-Design Lite uses flat white component rows. Reserve the
+      // coloured offset shadow for larger chrome / frame-like surfaces.
+      AppUiStyle.collage => role == GuildEffectRole.chrome
+          ? <BoxShadow>[
+              BoxShadow(
+                color: primary,
+                offset: const Offset(6, 6),
+                blurRadius: 0,
+              ),
+              BoxShadow(
+                color: accent2,
+                offset: const Offset(-3, -3),
+                blurRadius: 0,
+              ),
+            ]
+          : const <BoxShadow>[],
       AppUiStyle.clay => <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.16),
