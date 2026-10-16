@@ -183,6 +183,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'UI 风格清晰度与搜索框修复',
     description: '修复搜索框圆角外壳里又出现矩形内框的问题，改为每种非经典风格只保留一层完整搜索表面；玻璃取消全局文字阴影和额外乳白高光，输入与按钮按参考降低背景模糊强度；荧光取消整页雾化和全局文字发光，恢复清晰的点阵、扫描线与局部霓虹强调。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 154,
+    title: '自定义 UI 配色',
+    description: 'UI主题色新增自定义调色。基础模式只选主主题色即可自动生成浅色和深色配色；高级模式可分别调整主色、辅助强调色、背景、卡片、次级表面、主文字、说明文字与边框颜色，并通过实时预览确认效果。自定义方案可以命名、保存、编辑、复制、删除和一键切换，继续与当前 UI 风格组合使用。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
