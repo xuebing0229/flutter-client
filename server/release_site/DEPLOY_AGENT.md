@@ -59,22 +59,11 @@ rm -f /root/adventure-release-ci/id_ed25519
 
 如果服务器没有可用的 GitHub 登录，不要擅自登录或修改其它凭据。把“无法写 GitHub Secret”作为唯一未完成项报告，并把私钥文件保留为 0600，等待主人处理。
 
-## 5. 重新触发内测 0.1.4 发布
+## 5. 发布动作
 
-如果 `gh` 可用，给分支做一次空提交即可触发现有发布工作流：
+服务器准备和 GitHub Secret 完成后，不要再改业务代码。报告给主人“服务器和 Secret 已准备好”。
 
-```bash
-cd /opt/adventure-license-src
-git checkout build/internal-0.1.4-from-beta-158
-git commit --allow-empty -m 'ci: publish internal 0.1.4 to release site'
-git push origin build/internal-0.1.4-from-beta-158
-```
-
-注意：现有工作流只监听 `pubspec.yaml` 和 `.github/workflows/internal-build.yml` 路径，空提交不会触发。因此更稳妥的方式是直接在 GitHub Actions 中重新运行 “Build and Publish Internal” run 38894726371，或者用已认证的 GitHub CLI：
-
-```bash
-gh run rerun 38894726371 --repo xuebing0229/flutter-client
-```
+当前已经成功构建过内测 0.1.4，GitHub Actions run 为 `38894726371`，其中 publish job 为 `116956806192`。主人可以让 ChatGPT 只重跑这个 publish job，不需要重新构建 Android/Windows；同一轮构建产物仍保留在 Actions artifacts 中。
 
 ## 6. 最终验收
 
