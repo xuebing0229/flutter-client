@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
+import '../../../core/theme/theme_palette_transfer.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import 'custom_theme_color_page.dart';
 
@@ -11,6 +13,8 @@ class ThemeColorPage extends StatelessWidget {
     this.onBack,
     super.key,
   });
+
+  static const _transfer = ThemePaletteTransferService();
 
   final AppThemeStore store;
   final VoidCallback? onBack;
@@ -30,6 +34,13 @@ class ThemeColorPage extends StatelessWidget {
           'UI主题色',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            tooltip: '导入配色',
+            onPressed: () => _showImportOptions(context),
+            icon: const Icon(Icons.file_download_outlined),
+          ),
+        ],
       ),
       body: AnimatedBuilder(
         animation: store,
@@ -73,6 +84,8 @@ class ThemeColorPage extends StatelessWidget {
                             ),
                             forceCopy: true,
                           );
+                        } else if (value == 'share') {
+                          _showShareOptions(context, palette);
                         } else if (value == 'delete') {
                           _deletePalette(context, palette);
                         }
@@ -85,6 +98,10 @@ class ThemeColorPage extends StatelessWidget {
                         PopupMenuItem(
                           value: 'copy',
                           child: Text('复制为新方案'),
+                        ),
+                        PopupMenuItem(
+                          value: 'share',
+                          child: Text('分享配色'),
                         ),
                         PopupMenuItem(
                           value: 'delete',
@@ -139,6 +156,197 @@ class ThemeColorPage extends StatelessWidget {
     );
   }
 
+  Future<void> _showShareOptions(
+    BuildContext context,
+    AppThemePalette palette,
+  ) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: const Text('导出配色文件'),
+              subtitle: const Text('生成 .agtheme 文件，发给别人后可以直接导入'),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.content_copy_rounded),
+              title: const Text('复制分享码'),
+              subtitle: const Text('适合直接粘贴到聊天里，对方在公会里粘贴导入'),
+              onTap: () => Navigator.of(sheetContext).pop('code'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !context.mounted) return;
+
+    try {
+      if (action == 'file') {
+        final saved = await _transfer.exportPalette(palette);
+        if (!context.mounted) return;
+        if (saved) {
+          _showMessage(context, '配色文件已经导出，可以直接发给其他冒险者。');
+        }
+      } else if (action == 'code') {
+        await Clipboard.setData(
+          ClipboardData(text: _transfer.shareCode(palette)),
+        );
+        if (!context.mounted) return;
+        _showMessage(context, '配色分享码已经复制。');
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      _showError(context, error);
+    }
+  }
+
+  Future<void> _showImportOptions(BuildContext context) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: const Text('从配色文件导入'),
+              subtitle: const Text('选择别人发来的 .agtheme 文件'),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.content_paste_rounded),
+              title: const Text('粘贴分享码'),
+              subtitle: const Text('粘贴以 AGTHEME1: 开头的配色分享码'),
+              onTap: () => Navigator.of(sheetContext).pop('code'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !context.mounted) return;
+
+    try {
+      SharedThemePreset? preset;
+      if (action == 'file') {
+        preset = await _transfer.importFromFile();
+      } else {
+        final raw = await _askShareCode(context);
+        if (raw == null || raw.trim().isEmpty) return;
+        preset = _transfer.decode(raw);
+      }
+
+      if (preset == null || !context.mounted) return;
+      await _confirmImport(context, preset);
+    } catch (error) {
+      if (!context.mounted) return;
+      _showError(context, error);
+    }
+  }
+
+  Future<String?> _askShareCode(BuildContext context) async {
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!context.mounted) return null;
+    final initial = clipboard?.text?.trim() ?? '';
+    final controller = TextEditingController(
+      text: initial.startsWith(ThemePaletteTransferCodec.sharePrefix)
+          ? initial
+          : '',
+    );
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('粘贴配色分享码'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 7,
+          decoration: const InputDecoration(
+            hintText: 'AGTHEME1:……',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('识别'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _confirmImport(
+    BuildContext context,
+    SharedThemePreset preset,
+  ) async {
+    final preview = preset.toPalette();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('导入这套主题色？'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              preset.name,
+              style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            ThemePalettePreview(
+              palette: preview,
+              width: 180,
+              height: 48,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '只会导入颜色方案，不会改变你的 UI 风格；导入后会保存到“我的配色”并立即使用。',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('导入并使用'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await store.saveCustomPalette(
+      name: preset.name,
+      seed: preset.seed,
+      light: preset.light,
+      dark: preset.dark,
+      advanced: preset.advanced,
+      select: true,
+    );
+    if (!context.mounted) return;
+    _showMessage(context, '“${preset.name}”已经导入并启用。');
+  }
+
   Future<void> _deletePalette(
     BuildContext context,
     AppThemePalette palette,
@@ -163,6 +371,22 @@ class ThemeColorPage extends StatelessWidget {
     if (confirmed == true) {
       await store.deleteCustomPalette(palette.id);
     }
+  }
+
+  void _showMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _showError(BuildContext context, Object error) {
+    final message = switch (error) {
+      FormatException(:final message) => message,
+      _ => '配色分享操作失败：$error',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 }
 
