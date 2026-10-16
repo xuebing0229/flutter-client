@@ -1339,6 +1339,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         focusStore: _focusStore,
         themeStore: widget.themeStore,
         featureStore: widget.featureStore,
+        desktopPetSettings: _desktopPetService.settings,
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
         onApplyWorkspaceSettings: _applySyncSettings,
