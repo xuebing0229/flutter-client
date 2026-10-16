@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: internal-build
@@ -23,6 +24,20 @@ env:
   INTERNAL_RELEASE_BUILD: '4'
 
 jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Internal build run pointer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=pending \
+            -f target_url="$RUN_URL" \
+            -f description="Internal build run ${GITHUB_RUN_ID}" \
+            -f context="internal-build"
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -237,3 +252,28 @@ jobs:
             app-windows-internal-setup.exe
           retention-days: 30
           if-no-files-found: error
+
+
+  finalize:
+    if: always()
+    needs:
+      - announce
+      - check
+      - android
+      - windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Internal build result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STATE=failure
+          if [[ "${{ needs.check.result }}" == "success" && "${{ needs.android.result }}" == "success" && "${{ needs.windows.result }}" == "success" ]]; then
+            STATE=success
+          fi
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="$STATE" \
+            -f target_url="$RUN_URL" \
+            -f description="Internal build run ${GITHUB_RUN_ID}" \
+            -f context="internal-build"
