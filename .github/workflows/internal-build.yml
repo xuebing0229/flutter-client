@@ -1,0 +1,238 @@
+name: Build Internal
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'build/internal-*'
+    paths:
+      - pubspec.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: internal-build
+  cancel-in-progress: true
+
+env:
+  RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
+  ACTIVATION_API_BASE_URL: https://license.apixb.top
+  INTERNAL_ANDROID_VERSION_CODE: '4'
+  INTERNAL_SOURCE_BUILD: '156'
+  INTERNAL_RELEASE_BUILD: '4'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run full Flutter test suite
+        run: flutter test
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java with Gradle cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Set up Go for embedded Syncthing
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.2'
+          cache: true
+
+      - name: Cache embedded Syncthing binaries
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/sync/jniLibs
+          key: embedded-syncthing-v2.1.5-2ca95cf149810411-${{ runner.os }}-android
+
+      - name: Build embedded Syncthing core
+        env:
+          SYNCTHING_VERSION: v2.1.5
+        run: bash tool/build_syncthing_android.sh
+
+      - name: Restore non-Beta signing bundle
+        run: |
+          test -n "$RELEASE_SIGNING_BUNDLE_BASE64"
+          BUNDLE="$RUNNER_TEMP/internal-signing-bundle.zip"
+          printf '%s' "$RELEASE_SIGNING_BUNDLE_BASE64" | base64 --decode > "$BUNDLE"
+          unzip -q "$BUNDLE" -d android
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Bundle verified PP-OCRv6 Small models
+        run: python3 tool/fetch_official_ppocrv6_models.py
+
+      - name: Build signed Internal APK
+        run: |
+          flutter build apk \
+            --release \
+            --flavor internal \
+            --build-number="$INTERNAL_ANDROID_VERSION_CODE" \
+            --dart-define=APP_CHANNEL=internal \
+            --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
+          cp build/app/outputs/flutter-apk/app-internal-release.apk app-internal.apk
+
+      - name: Verify Internal APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app-internal.apk
+
+      - name: Upload Android Internal package
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-android-package
+          path: app-internal.apk
+          retention-days: 30
+          if-no-files-found: error
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Enable Windows desktop
+        shell: pwsh
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows Internal
+        shell: pwsh
+        run: flutter build windows --release --dart-define=APP_CHANNEL=internal --dart-define="INTERNAL_SOURCE_BUILD=$env:INTERNAL_SOURCE_BUILD" --dart-define="INTERNAL_RELEASE_BUILD=$env:INTERNAL_RELEASE_BUILD" --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
+
+      - name: Build VPet desktop companion
+        shell: pwsh
+        run: |
+          $output = "build/windows/x64/runner/Release/desktop_pet"
+          dotnet publish "windows/desktop_pet/AdventurersGuild.DesktopPet.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o $output
+          if (-not (Test-Path (Join-Path $output "AdventurersGuild.DesktopPet.exe"))) {
+            throw "Desktop pet host was not created."
+          }
+
+      - name: Bundle embedded Syncthing core
+        shell: pwsh
+        run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.5
+
+      - name: Cache official PaddleOCR Windows runtime
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ag-official-paddleocr
+          key: official-paddleocr-windows-dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf-paddle3.2.1-opencv4.12.0-v1
+
+      - name: Bundle official PaddleOCR C++ screenshot recognition
+        shell: pwsh
+        run: ./tool/bundle_windows_official_paddleocr.ps1
+
+      - name: Bundle current Windows icon
+        shell: pwsh
+        run: |
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = ($versionLine -split ':', 2)[1].Trim()
+          $releaseDir = "build/windows/x64/runner/Release"
+          $sourceIcon = "windows/runner/resources/app_icon.ico"
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon.ico") -Force
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon_$version.ico") -Force
+          Copy-Item -LiteralPath "windows/installer/refresh_app_shortcuts.ps1" -Destination $releaseDir -Force
+
+      - name: Package Windows Internal
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "build/windows/x64/runner/Release/*" `
+            -DestinationPath "app-windows-internal.zip" `
+            -Force
+
+      - name: Build Windows Internal installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = ($versionLine -split ':', 2)[1].Trim()
+
+          & $iscc `
+            "/DMyAppVersion=$version" `
+            "/O$PWD" `
+            "/Fapp-windows-internal-setup" `
+            "windows\installer\adventurers_guild_internal.iss"
+
+          if (-not (Test-Path "app-windows-internal-setup.exe")) {
+            throw "Windows Internal installer was not created."
+          }
+
+      - name: Upload Windows Internal package
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-windows-package
+          path: |
+            app-windows-internal.zip
+            app-windows-internal-setup.exe
+          retention-days: 30
+          if-no-files-found: error
