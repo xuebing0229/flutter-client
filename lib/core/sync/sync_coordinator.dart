@@ -259,6 +259,18 @@ class SyncCoordinator extends ChangeNotifier {
     };
   }
 
+  List<Map<String, dynamic>> _portableRecordsFromCurrentBaseline() {
+    final result = <Map<String, dynamic>>[];
+    for (final kind in SyncEntityKind.values) {
+      final records = _lastFlushedRecords[kind]!;
+      final ids = records.keys.toList()..sort();
+      for (final id in ids) {
+        result.add(Map<String, dynamic>.from(records[id]!.toJson()));
+      }
+    }
+    return result;
+  }
+
   void restoreSyncBaseline(Object? raw) {
     if (_initialized || _disposed || raw is! Map) return;
 
@@ -352,9 +364,15 @@ class SyncCoordinator extends ChangeNotifier {
           await Future<void>.delayed(const Duration(milliseconds: 120));
         }
 
+        var lastInstability = '同步历史与当前工作区不一致';
         for (var attempt = 0; attempt < 5; attempt++) {
           await _flushLocalChanges();
-          await _reconcileFromSyncDirectory(seedMissing: false);
+
+          // Export is also a safe repair point for older/local-only workspaces.
+          // If a local entity exists but its portable sync record is missing,
+          // seed that record now instead of retrying the same impossible
+          // validation five times.
+          await _reconcileFromSyncDirectory(seedMissing: true);
 
           final state = accountStore.syncSnapshot;
           if (state == null ||
@@ -375,9 +393,14 @@ class SyncCoordinator extends ChangeNotifier {
           ];
           final focusSessions = <FocusSession>[...focusStore.sessions];
 
-          final records = await _recordStore.exportPortableRecords(
-            accountId: accountId,
-          );
+          // _reconcileFromSyncDirectory already read, merged, canonicalized,
+          // migrated and (when safe) compacted the sync directory, then stored
+          // that exact authoritative record set in _lastFlushedRecords.
+          // Re-reading the directory here used to create a second snapshot
+          // boundary: stale peer variants or a canonicalization write could
+          // make the second read differ from the workspace we just applied,
+          // causing healthy backups to fail forever as "无法稳定".
+          final records = _portableRecordsFromCurrentBaseline();
 
           final storesUnchanged =
               syncJsonEquals(orderFields, _captureOrders()) &&
@@ -385,7 +408,11 @@ class SyncCoordinator extends ChangeNotifier {
               syncJsonEquals(presetFields, _capturePresets()) &&
               syncJsonEquals(focusFields, _captureFocusSessions()) &&
               syncJsonEquals(settings, captureSettings());
-          if (!storesUnchanged) continue;
+          if (!storesUnchanged) {
+            lastInstability = '本地工作数据在导出期间持续变化';
+            await Future<void>.delayed(const Duration(milliseconds: 40));
+            continue;
+          }
 
           if (!PortableSyncWorkspaceValidator.recordsMatchWorkspace(
             accountId: accountId,
@@ -397,9 +424,8 @@ class SyncCoordinator extends ChangeNotifier {
             settings: settings,
             mergeEngine: _mergeEngine,
           )) {
-            // A local canonicalization can still finish between two reads.
-            // Reconcile that result and retry without treating harmless account
-            // activity timestamps as workspace mutations.
+            lastInstability = '同步历史与当前工作区仍不一致';
+            await Future<void>.delayed(const Duration(milliseconds: 40));
             continue;
           }
 
@@ -422,7 +448,7 @@ class SyncCoordinator extends ChangeNotifier {
           );
         }
 
-        throw StateError('导出快照暂时无法稳定，请稍后再试。');
+        throw StateError('$lastInstability，已停止导出以避免生成不完整备份。');
       } finally {
         if (pausedTransportForExport) {
           try {
