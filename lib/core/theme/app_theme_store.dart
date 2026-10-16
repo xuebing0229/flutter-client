@@ -23,6 +23,12 @@ class AppThemeStore extends ChangeNotifier {
   AppThemePalette get palette =>
       _paletteById(_paletteId) ?? AppThemePalettes.guildOriginal;
 
+  bool containsPaletteId(String id) => _paletteById(id) != null;
+
+  List<Map<String, dynamic>> exportCustomPalettes() => <Map<String, dynamic>>[
+        for (final palette in _customPalettes) palette.toCustomJson(),
+      ];
+
   AppThemePalette? _paletteById(String id) {
     for (final palette in _customPalettes) {
       if (palette.id == id) return palette;
@@ -229,6 +235,44 @@ class AppThemeStore extends ChangeNotifier {
     _persistTail = operation;
     await operation;
     return palette;
+  }
+
+  Future<void> replaceCustomPalettesFromJson(Object? raw) async {
+    if (raw is! List) {
+      throw const FormatException('自定义主题色设置格式无效。');
+    }
+
+    final next = <AppThemePalette>[];
+    final ids = <String>{};
+    for (final item in raw) {
+      final palette = AppThemePalette.fromCustomJson(item);
+      if (palette == null) {
+        throw const FormatException('自定义主题色内容不完整或已经损坏。');
+      }
+      if (!ids.add(palette.id)) {
+        throw FormatException('自定义主题色包含重复 ID：${palette.id}');
+      }
+      next.add(palette);
+    }
+
+    _customPalettes
+      ..clear()
+      ..addAll(next);
+    if (_paletteId.startsWith('custom:') && _paletteById(_paletteId) == null) {
+      _paletteId = AppThemePalettes.guildOriginal.id;
+    }
+    notifyListeners();
+
+    final operation = _persistTail.then<void>((_) async {
+      await _persistCustomPalettes();
+      try {
+        final file = await _paletteFile();
+        await file.parent.create(recursive: true);
+        await file.writeAsString(_paletteId, flush: true);
+      } catch (_) {}
+    });
+    _persistTail = operation;
+    await operation;
   }
 
   Future<void> deleteCustomPalette(String id) async {
