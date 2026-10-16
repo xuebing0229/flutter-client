@@ -171,7 +171,28 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
               final minimal = style.style == AppUiStyle.minimal;
               final radius = style.isClassic
                   ? BorderRadius.circular(18)
-                  : style.surfaceBorderRadius;
+                  : style.inputBorderRadius;
+              final inputSurface = switch (style.style) {
+                AppUiStyle.classic => colors.surfaceContainerLow,
+                AppUiStyle.relief => style.background,
+                AppUiStyle.minimal => style.background,
+                AppUiStyle.bold => style.surface,
+                AppUiStyle.geometric => style.surface,
+                AppUiStyle.retroLight => Colors.white,
+                AppUiStyle.retroDark =>
+                  Colors.black.withValues(alpha: 0.40),
+                AppUiStyle.fluorescent =>
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Color.alphaBlend(
+                          colors.primary.withValues(alpha: 0.03),
+                          style.surface,
+                        )
+                      : style.surface,
+                AppUiStyle.collage => style.surface,
+                AppUiStyle.monochrome => style.surfaceAlt,
+                AppUiStyle.clay => style.background,
+                AppUiStyle.glass => style.surface,
+              };
               final field = TextField(
                 controller: widget.controller,
                 focusNode: _focusNode,
@@ -187,7 +208,7 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
                 role: GuildSurfaceRole.inset,
                 borderRadius: radius,
                 backdropAvailable: style.isGlass,
-                backgroundColor: colors.surfaceContainerLow,
+                backgroundColor: inputSurface,
                 child: field,
               );
             },
