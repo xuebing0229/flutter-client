@@ -531,7 +531,6 @@ abstract final class GuildVisualTheme {
       textTheme: _textThemeFor(
         tokens,
         ThemeData(colorScheme: colors, useMaterial3: true).textTheme,
-        colors.primary,
       ),
     );
   }
@@ -1224,7 +1223,6 @@ abstract final class GuildVisualTheme {
   static TextTheme _textThemeFor(
     GuildStyleTheme tokens,
     TextTheme base,
-    Color primary,
   ) {
     final shadows = switch (tokens.style) {
       AppUiStyle.retroDark => <Shadow>[
