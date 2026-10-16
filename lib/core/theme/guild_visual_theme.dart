@@ -235,6 +235,9 @@ abstract final class GuildVisualTheme {
       borderRadius: BorderRadius.circular(_buttonRadius(style, tokens.radius)),
       side: buttonSide,
     );
+    final filledBackground = _filledButtonBackground(style, tokens, colors);
+    final filledForeground = _filledButtonForeground(style, tokens, colors);
+    final filledSide = _filledButtonSide(style, tokens, colors);
 
     return ThemeData(
       useMaterial3: true,
@@ -256,7 +259,11 @@ abstract final class GuildVisualTheme {
         backgroundColor: style == AppUiStyle.glass
             ? tokens.surface.withValues(alpha: tokens.glassOpacity)
             : tokens.surface,
-        indicatorColor: selectedSurface,
+        indicatorColor: style == AppUiStyle.glass
+            ? colors.primary.withValues(
+                alpha: colors.brightness == Brightness.dark ? 0.18 : 0.15,
+              )
+            : selectedSurface,
         indicatorShape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(
             style == AppUiStyle.clay || style == AppUiStyle.relief
@@ -349,8 +356,9 @@ abstract final class GuildVisualTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
-          backgroundColor: WidgetStatePropertyAll(colors.primary),
-          foregroundColor: WidgetStatePropertyAll(onPrimary),
+          backgroundColor: WidgetStatePropertyAll(filledBackground),
+          foregroundColor: WidgetStatePropertyAll(filledForeground),
+          side: WidgetStatePropertyAll(filledSide),
           elevation: WidgetStatePropertyAll(_buttonElevation(style)),
           shadowColor: WidgetStatePropertyAll(
             _buttonShadow(style, tokens, colors),
@@ -397,14 +405,21 @@ abstract final class GuildVisualTheme {
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: colors.primary,
-        foregroundColor: onPrimary,
-        elevation: _buttonElevation(style),
-        shape: style == AppUiStyle.bold ||
-                style == AppUiStyle.geometric ||
-                style == AppUiStyle.monochrome
-            ? squareOrRounded
-            : null,
+        backgroundColor:
+            style == AppUiStyle.glass ? filledBackground : colors.primary,
+        foregroundColor:
+            style == AppUiStyle.glass ? filledForeground : onPrimary,
+        elevation: style == AppUiStyle.glass ? 0 : _buttonElevation(style),
+        shape: style == AppUiStyle.glass
+            ? RoundedRectangleBorder(
+                borderRadius: tokens.buttonBorderRadius,
+                side: filledSide,
+              )
+            : style == AppUiStyle.bold ||
+                    style == AppUiStyle.geometric ||
+                    style == AppUiStyle.monochrome
+                ? squareOrRounded
+                : null,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: style != AppUiStyle.minimal,
@@ -1054,6 +1069,83 @@ abstract final class GuildVisualTheme {
     );
   }
 
+  static Color _filledButtonBackground(
+    AppUiStyle style,
+    GuildStyleTheme tokens,
+    ColorScheme colors,
+  ) {
+    return switch (style) {
+      AppUiStyle.relief => tokens.background,
+      AppUiStyle.minimal => Colors.transparent,
+      AppUiStyle.retroLight ||
+      AppUiStyle.retroDark ||
+      AppUiStyle.fluorescent => Colors.transparent,
+      AppUiStyle.monochrome => tokens.foreground,
+      AppUiStyle.glass => colors.primary.withValues(
+          alpha: colors.brightness == Brightness.dark ? 0.25 : 0.15,
+        ),
+      _ => colors.primary,
+    };
+  }
+
+  static Color _filledButtonForeground(
+    AppUiStyle style,
+    GuildStyleTheme tokens,
+    ColorScheme colors,
+  ) {
+    return switch (style) {
+      AppUiStyle.relief ||
+      AppUiStyle.minimal ||
+      AppUiStyle.retroLight ||
+      AppUiStyle.retroDark ||
+      AppUiStyle.fluorescent => colors.primary,
+      AppUiStyle.monochrome => tokens.background,
+      AppUiStyle.glass => tokens.foreground,
+      _ => _contrast(colors.primary),
+    };
+  }
+
+  static BorderSide _filledButtonSide(
+    AppUiStyle style,
+    GuildStyleTheme tokens,
+    ColorScheme colors,
+  ) {
+    return switch (style) {
+      AppUiStyle.bold ||
+      AppUiStyle.geometric => BorderSide(
+          color: tokens.borderColor,
+          width: tokens.borderWidth,
+        ),
+      AppUiStyle.retroLight => BorderSide(
+          color: colors.primary,
+          width: 2,
+        ),
+      AppUiStyle.retroDark => BorderSide(
+          color: colors.primary.withValues(alpha: 0.85),
+          width: 1,
+        ),
+      AppUiStyle.fluorescent => BorderSide(
+          color: colors.primary,
+          width: tokens.borderWidth,
+        ),
+      AppUiStyle.collage => BorderSide(
+          color: colors.primary,
+          width: 2,
+        ),
+      AppUiStyle.monochrome => BorderSide(
+          color: tokens.foreground,
+          width: 1,
+        ),
+      AppUiStyle.glass => BorderSide(
+          color: colors.primary.withValues(
+            alpha: colors.brightness == Brightness.dark ? 0.35 : 0.25,
+          ),
+          width: 1,
+        ),
+      _ => BorderSide.none,
+    };
+  }
+
   static double _buttonRadius(AppUiStyle style, double fallback) {
     return switch (style) {
       AppUiStyle.relief => 12,
@@ -1075,10 +1167,10 @@ abstract final class GuildVisualTheme {
     return switch (style) {
       AppUiStyle.relief => 5,
       AppUiStyle.bold => 4,
-      AppUiStyle.geometric => 2,
-      AppUiStyle.collage => 3,
+      AppUiStyle.geometric => 0,
+      AppUiStyle.collage => 0,
       AppUiStyle.clay => 5,
-      AppUiStyle.glass => 2,
+      AppUiStyle.glass => 0,
       _ => 0,
     };
   }
