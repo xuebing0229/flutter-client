@@ -638,7 +638,7 @@ class _SurfaceFinishPainter extends CustomPainter {
   }
 
   void _paintGlassHighlights(Canvas canvas, Rect rect, RRect rrect) {
-    final lightGlass = background.computeLuminance() > 0.6;
+    final lightGlass = foreground.computeLuminance() < 0.35;
     final baseBorder = Paint()
       ..color = lightGlass
           ? foreground.withValues(alpha: 0.14)
