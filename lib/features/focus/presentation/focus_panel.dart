@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/desktop_pet/desktop_pet_service.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../domain/focus_session.dart';
@@ -540,9 +541,7 @@ class _FocusPanelState extends State<FocusPanel> {
     final active = widget.focusStore.activeSession;
     final colors = Theme.of(context).colorScheme;
 
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(18),
+    return GuildContentPanel(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
         child: Column(
@@ -618,9 +617,7 @@ class _FocusPanelState extends State<FocusPanel> {
     final sessions = _filteredSessions;
     final groups = _groups;
 
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(18),
+    return GuildContentPanel(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
         child: Column(
@@ -857,51 +854,59 @@ class _FocusTargetCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: colors.outlineVariant),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    for (final detail in details) ...[
-                      const SizedBox(height: 4),
+    final style = GuildStyleTheme.of(context);
+    final radius = style.isClassic
+        ? BorderRadius.circular(14)
+        : style.surfaceBorderRadius;
+
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.inset,
+      borderRadius: radius,
+      backgroundColor: colors.surfaceContainerLow,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic ? colors.surfaceContainerLow : Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        detail,
+                        title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                            ),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
+                      for (final detail in details) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          detail,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded),
-            ],
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
           ),
         ),
       ),
