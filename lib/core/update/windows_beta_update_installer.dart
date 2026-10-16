@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../build/build_channel.dart';
 import 'beta_update_installer.dart';
 import 'windows_self_update_launcher.dart';
 
@@ -16,10 +17,17 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
   static final Uri _releaseApiUri = Uri.parse(
     'https://api.github.com/repos/xuebing0229/release-files/releases/latest',
   );
-  static const String _userAgent = 'artist-queue-windows-beta-updater';
+  static final Uri _internalManifestUri = Uri.parse(
+    'https://license.apixb.top/releases/internal/windows-latest.json',
+  );
+  static const String _userAgent = 'adventurers-guild-windows-updater';
 
   @override
   Future<Map<String, dynamic>> fetchLatestManifest() async {
+    if (isInternalBuild) {
+      return _fetchInternalManifest();
+    }
+
     try {
       // The Releases API reflects a newly published build immediately, while
       // the /releases/latest/download redirect may briefly keep pointing at
@@ -33,6 +41,22 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     final normalized = _normalizeStaticManifest(json);
     if (normalized != null) return normalized;
     throw const FormatException('无法读取最新 Beta 更新信息。');
+  }
+
+  Future<Map<String, dynamic>> _fetchInternalManifest() async {
+    final json = await _fetchJson(_internalManifestUri);
+    if (json['schema'] != 1 ||
+        json['published'] != true ||
+        json['channel'] != 'internal' ||
+        json['version'] is! String ||
+        (json['version'] as String).isEmpty ||
+        json['build'] is! int ||
+        (json['build'] as int) < 0 ||
+        json['download_url'] is! String ||
+        (json['download_url'] as String).isEmpty) {
+      throw const FormatException('无法读取最新内测版更新信息。');
+    }
+    return json;
   }
 
   Map<String, dynamic>? _normalizeStaticManifest(
@@ -196,7 +220,7 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
 
       try {
         if (entity is File &&
-            name.startsWith('app-beta-') &&
+            (name.startsWith('app-beta-') || name.startsWith('app-internal-')) &&
             (name.endsWith('.zip') || name.endsWith('.zip.part')) &&
             name != keepZip &&
             name != keepPart) {
@@ -280,8 +304,12 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     int? expectedSizeBytes,
     String? expectedSha256,
   }) async {
-    if (uri.scheme != 'https' || uri.host.toLowerCase() != 'github.com') {
-      throw const FormatException('Windows Beta 只能从 GitHub Releases 下载。');
+    final host = uri.host.toLowerCase();
+    final allowedHost = isInternalBuild
+        ? host == 'license.apixb.top'
+        : host == 'github.com';
+    if (uri.scheme != 'https' || !allowedHost) {
+      throw const FormatException('更新包下载地址不受信任。');
     }
 
     final downloads = await getDownloadsDirectory();
