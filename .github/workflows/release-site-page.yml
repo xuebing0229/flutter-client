@@ -1,0 +1,57 @@
+name: Deploy Internal Release Page
+
+on:
+  push:
+    branches:
+      - 'build/internal-*'
+      - internal
+    paths:
+      - 'server/release_site/index.html'
+      - '.github/workflows/release-site-page.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_DEPLOY_HOST: license.apixb.top
+  RELEASE_DEPLOY_USER: adventure-release
+  RELEASE_DEPLOY_PATH: /srv/adventure-releases
+  RELEASE_SSH_KEY: ${{ secrets.INTERNAL_RELEASE_SSH_KEY }}
+
+jobs:
+  deploy-page:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          test -n "$RELEASE_SSH_KEY"
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$RELEASE_SSH_KEY" > "$HOME/.ssh/internal-release"
+          chmod 0600 "$HOME/.ssh/internal-release"
+          ssh-keygen -y -f "$HOME/.ssh/internal-release" >/dev/null
+          ssh-keyscan -H "$RELEASE_DEPLOY_HOST" > "$HOME/.ssh/known_hosts"
+
+      - name: Upload page
+        shell: bash
+        run: |
+          scp \
+            -i "$HOME/.ssh/internal-release" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o PreferredAuthentications=publickey \
+            server/release_site/index.html \
+            "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/index.html"
+
+      - name: Verify page
+        shell: bash
+        run: |
+          body="$(curl --fail --show-error --silent --retry 5 --retry-delay 2 https://license.apixb.top/releases/)"
+          grep -q '冒险者公会' <<<"$body"
+          if grep -q '文件校验信息' <<<"$body"; then
+            echo "Checksum section still visible on human page." >&2
+            exit 1
+          fi
