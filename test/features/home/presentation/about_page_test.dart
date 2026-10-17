@@ -14,11 +14,8 @@ void main() {
     expect(find.text('版本 0.0.1 (167)'), findsOneWidget);
     expect(find.text('Syncthing'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('VPet-Simulator.Core'),
-      220,
-      scrollable: find.byType(ListView),
-    );
+    await tester.drag(find.byType(ListView), const Offset(0, -320));
+    await tester.pumpAndSettle();
 
     expect(find.text('VPet-Simulator.Core'), findsOneWidget);
     expect(find.textContaining('Apache License 2.0'), findsWidgets);
