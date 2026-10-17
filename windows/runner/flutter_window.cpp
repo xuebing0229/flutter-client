@@ -1,12 +1,14 @@
 #include "flutter_window.h"
 
 #include <shellapi.h>
+#include <shobjidl.h>
 
 #include <cwchar>
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "utils.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -34,6 +36,104 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  windows_file_picker_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "app.windows_file_picker",
+          &flutter::StandardMethodCodec::GetInstance());
+  windows_file_picker_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() != "pickBackupFile") {
+          result->NotImplemented();
+          return;
+        }
+
+        IFileOpenDialog* dialog = nullptr;
+        HRESULT hr = ::CoCreateInstance(
+            CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(&dialog));
+        if (FAILED(hr) || dialog == nullptr) {
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Could not create the Windows file picker.",
+              flutter::EncodableValue(static_cast<int64_t>(hr)));
+          return;
+        }
+
+        FILEOPENDIALOGOPTIONS options = 0;
+        hr = dialog->GetOptions(&options);
+        if (SUCCEEDED(hr)) {
+          hr = dialog->SetOptions(
+              options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST |
+              FOS_PATHMUSTEXIST);
+        }
+
+        const COMDLG_FILTERSPEC filters[] = {
+            {L"Adventure Guild backup", L"*.json;*.zip"}};
+        if (SUCCEEDED(hr)) {
+          hr = dialog->SetFileTypes(1, filters);
+        }
+
+        if (SUCCEEDED(hr)) {
+          hr = dialog->Show(GetHandle());
+        }
+        if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+          dialog->Release();
+          result->Success();
+          return;
+        }
+        if (FAILED(hr)) {
+          dialog->Release();
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Windows could not open the selected backup file.",
+              flutter::EncodableValue(static_cast<int64_t>(hr)));
+          return;
+        }
+
+        IShellItem* item = nullptr;
+        hr = dialog->GetResult(&item);
+        if (FAILED(hr) || item == nullptr) {
+          dialog->Release();
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Windows did not return the selected backup file.",
+              flutter::EncodableValue(static_cast<int64_t>(hr)));
+          return;
+        }
+
+        wchar_t* wide_path = nullptr;
+        hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
+        item->Release();
+        dialog->Release();
+
+        if (FAILED(hr) || wide_path == nullptr) {
+          if (wide_path != nullptr) {
+            ::CoTaskMemFree(wide_path);
+          }
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "The selected item does not expose a filesystem path.",
+              flutter::EncodableValue(static_cast<int64_t>(hr)));
+          return;
+        }
+
+        const std::string path = Utf8FromUtf16(wide_path);
+        ::CoTaskMemFree(wide_path);
+        if (path.empty()) {
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Windows returned an empty filesystem path.",
+              nullptr);
+          return;
+        }
+
+        result->Success(flutter::EncodableValue(path));
+      });
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   taskbar_created_message_ = ::RegisterWindowMessageW(L"TaskbarCreated");
@@ -53,6 +153,8 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   RemoveTrayIcon();
+
+  windows_file_picker_channel_.reset();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
