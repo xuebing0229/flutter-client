@@ -320,11 +320,19 @@ class _SyncTransferProgress extends StatelessWidget {
         : 0;
     final deviceName = progress['deviceName']?.toString().trim() ?? '';
     final direction = progress['direction']?.toString();
+    final remoteState = progress['remoteState']?.toString().trim();
+    final repairingHandshake =
+        remoteState == 'notSharing' || remoteState == 'paused';
+    final peerLabel = deviceName.isEmpty ? '另一台设备' : '「$deviceName」';
     final completed = completion >= 99.95 && needBytes <= 0;
-    final title = completed
+    final title = repairingHandshake
+        ? remoteState == 'paused'
+            ? '$peerLabel 同步目录已暂停，正在恢复'
+            : '$peerLabel 已连接，正在确认双向共享目录'
+        : completed
         ? '数据已同步'
         : direction == 'sending'
-        ? '正在同步到${deviceName.isEmpty ? '另一台设备' : '「$deviceName」'}'
+        ? '正在同步到$peerLabel'
         : '本机正在接收数据';
     final percentText = completion >= 99.95
         ? '100%'
@@ -355,7 +363,9 @@ class _SyncTransferProgress extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          LinearProgressIndicator(value: completion / 100),
+          LinearProgressIndicator(
+            value: repairingHandshake ? null : completion / 100,
+          ),
           if (globalBytes > 0) ...[
             const SizedBox(height: 8),
             Text(
