@@ -32,6 +32,8 @@ class DataPortabilityFileBridge {
 
   static const MethodChannel _channel =
       MethodChannel('app.data_portability');
+  static const MethodChannel _windowsPickerChannel =
+      MethodChannel('app.windows_file_picker');
 
   bool get isSupported => Platform.isAndroid || Platform.isWindows;
 
@@ -108,15 +110,9 @@ class DataPortabilityFileBridge {
     }
 
     if (Platform.isWindows) {
-      const typeGroup = XTypeGroup(
-        label: 'JSON backup',
-        extensions: <String>['json'],
-      );
-      final file = await openFile(
-        acceptedTypeGroups: const <XTypeGroup>[typeGroup],
-      );
-      if (file == null) return null;
-      return file.readAsString();
+      final path = await _pickWindowsBackupPath();
+      if (path == null) return null;
+      return File(path).readAsString();
     }
 
     throw UnsupportedError('当前平台暂未接入系统文件导入。');
@@ -124,15 +120,11 @@ class DataPortabilityFileBridge {
 
   Future<PickedBackupFile?> pickBackupFile() async {
     if (Platform.isWindows) {
-      const typeGroup = XTypeGroup(
-        label: '完整备份',
-        extensions: <String>['zip', 'json'],
-      );
-      final file = await openFile(
-        acceptedTypeGroups: const <XTypeGroup>[typeGroup],
-      );
-      if (file == null) return null;
-      return PickedBackupFile(path: file.path, name: file.name);
+      final path = await _pickWindowsBackupPath();
+      if (path == null) return null;
+      final normalized = path.replaceAll('\\', '/');
+      final name = normalized.split('/').last;
+      return PickedBackupFile(path: path, name: name);
     }
 
     if (!Platform.isAndroid) {
@@ -149,6 +141,17 @@ class DataPortabilityFileBridge {
       name: raw['name'] as String,
       temporary: true,
     );
+  }
+
+  Future<String?> _pickWindowsBackupPath() async {
+    final raw = await _windowsPickerChannel.invokeMethod<Object?>(
+      'pickBackupFile',
+    );
+    if (raw == null) return null;
+    if (raw is! String || raw.trim().isEmpty) {
+      throw const FormatException('Windows 没有返回可读取的备份文件路径。');
+    }
+    return raw;
   }
 
   Future<String?> pickImage() async {
