@@ -243,6 +243,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备解绑传播修复',
     description: '修复设备从本机解绑后，其他设备的“使用中设备”仍可能长期保留旧设备的问题。本机解绑现在沿用原有 revocation tombstone + ACK 协议，并把未送达的解绑状态保存在本机隐藏发件箱；即使其他设备当时不在线，之后只要本 App 再次打开，无论停在登录页还是正在使用其他账号，都会在后台静默继续传递，逐台确认完成后再清理旧同步工作区。退出登录逻辑保持不变。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 167,
+    title: '关于与开源致谢',
+    description: '设置新增“关于冒险者公会”，可查看当前版本以及项目使用的开源组件与许可证信息；补充 Syncthing 与 Windows 桌宠所使用 VPet-Simulator.Core 的来源和致谢说明。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
