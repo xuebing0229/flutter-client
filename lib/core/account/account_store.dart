@@ -707,6 +707,75 @@ class AccountStore extends ChangeNotifier {
     }
   }
 
+  Future<String?> reconcileCurrentDeviceTransportIdentity({
+    required String syncTransportId,
+  }) async {
+    final normalizedTransportId = syncTransportId.trim();
+    if (normalizedTransportId.length < 20) {
+      throw const FormatException('同步设备 ID 格式无效。');
+    }
+
+    final record = _selectedRecord;
+    if (record == null) return null;
+    final currentId = record.currentDeviceId;
+    if (record.syncState.isRevoked(currentId)) return currentId;
+
+    final current = record.syncState.devices[currentId];
+    if (current == null) return currentId;
+
+    final sameTransport = <AccountDevice>[
+      for (final device in record.syncState.activeDevices)
+        if (device.id == currentId ||
+            device.syncTransportId?.trim() == normalizedTransportId)
+          device,
+    ];
+
+    final hasExistingOwner = sameTransport.any(
+      (device) =>
+          device.id != currentId &&
+          device.syncTransportId?.trim() == normalizedTransportId,
+    );
+    if (!hasExistingOwner) return currentId;
+
+    sameTransport.sort((left, right) {
+      final byFirstSeen = left.firstSeenAt.compareTo(right.firstSeenAt);
+      if (byFirstSeen != 0) return byFirstSeen;
+      return left.id.compareTo(right.id);
+    });
+    final canonical = sameTransport.first;
+    final now = DateTime.now().toUtc();
+
+    final devices = <String, AccountDevice>{...record.syncState.devices};
+    devices[canonical.id] = canonical.copyWith(
+      platform: current.platform,
+      lastSeenAt: now,
+      syncTransportId: normalizedTransportId,
+    );
+
+    final revocations = <String, DeviceRevocation>{
+      ...record.syncState.revocations,
+    };
+    for (final duplicate in sameTransport) {
+      if (duplicate.id == canonical.id) continue;
+      revocations.putIfAbsent(
+        duplicate.id,
+        () => DeviceRevocation(deviceId: duplicate.id, revokedAt: now),
+      );
+    }
+
+    _accounts[record.syncState.accountId] = record.copyWith(
+      currentDeviceId: canonical.id,
+      syncState: record.syncState.copyWith(
+        devices: devices,
+        revocations: revocations,
+      ),
+    );
+
+    await _save();
+    notifyListeners();
+    return canonical.id;
+  }
+
   Future<void> bindSyncTransportId({
     required String appDeviceId,
     required String syncTransportId,
