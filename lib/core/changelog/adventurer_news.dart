@@ -223,6 +223,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 同步通道迁移修复',
     description: '修复旧版 Windows 曾固定使用 8384 同步端口后，新版仍可能继续接管旧同步核心，导致设备看似已连接却反复修复旧通道、工作数据迟迟不同步的问题。升级后会保留原同步身份和配对配置，只把旧同步核心自动迁移到冒险者公会自己的专用动态端口。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 163,
+    title: '设备同步卡住修复',
+    description: '修复设备已经连接但同步目录没有完成双向共享时，界面仍长期显示 0% 且不会继续修复的问题。现在会检查真实目录握手状态，自动恢复暂停或未共享的目录，并在进度长时间不变化时主动重新扫描；同步页也会明确区分“正在修复同步通道”和真实文件传输。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
