@@ -43,9 +43,9 @@ class _BetaUpdatePageState extends State<BetaUpdatePage> {
   @override
   Widget build(BuildContext context) {
     if (!_updater.supported) {
-      return const Scaffold(
-        appBar: AppBar(title: Text('拉取更新')),
-        body: Center(child: Text('当前版本不提供测试版拉取更新')),
+      return Scaffold(
+        appBar: AppBar(title: const Text('拉取更新')),
+        body: const Center(child: Text('当前版本不提供测试版拉取更新')),
       );
     }
 
