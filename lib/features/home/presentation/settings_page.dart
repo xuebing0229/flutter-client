@@ -20,6 +20,7 @@ import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
+import 'about_page.dart';
 import 'adventurer_news_dialog.dart';
 import 'reminder_background_guide.dart';
 import 'theme_color_page.dart';
@@ -730,6 +731,28 @@ class _SettingsPageState extends State<SettingsPage>
               subtitle: const Text('回顾已经加入公会的新功能'),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => _showNewsHistory(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _SettingsCard(
+            title: '关于',
+            icon: Icons.info_outline_rounded,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.shield_outlined),
+              title: const Text('关于冒险者公会'),
+              subtitle: const Text('版本信息、开源软件与致谢'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => AppAboutPage(
+                      version: _currentVersion,
+                      buildNumber: _currentBuild,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
           if (updater != null) ...[

@@ -178,6 +178,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'UI 风格按参考稿重新对齐',
     description: '重新按提供的 UI/UX HTML 参考逐项校准风格。玻璃取消组件内部的大块气泡高光，改回低透明玻璃底、细边、轻量背景色场和真实模糊；搜索框按浮雕、粗边、几何、复古、荧光、拼贴、黑白、黏土与玻璃分别使用参考中的圆角、边框、底色和内凹或发光关系，不再套统一外壳。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 167,
+    title: '关于与开源致谢',
+    description: '设置新增“关于冒险者公会”，可查看当前版本以及项目使用的开源组件与许可证信息；补充 Syncthing 与 Windows 桌宠所使用 VPet-Simulator.Core 的来源和致谢说明。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
