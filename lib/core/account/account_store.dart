@@ -23,6 +23,16 @@ class LocalAccountSummary {
   final String accountName;
 }
 
+class LocalDeviceRemovalSnapshot {
+  const LocalDeviceRemovalSnapshot({
+    required this.state,
+    required this.deviceId,
+  });
+
+  final AccountSyncState state;
+  final String deviceId;
+}
+
 class _LocalAccountRecord {
   const _LocalAccountRecord({
     required this.syncState,
@@ -159,6 +169,18 @@ class AccountStore extends ChangeNotifier {
     final record = _accounts[accountId];
     return record != null &&
         !record.syncState.isRevoked(record.currentDeviceId);
+  }
+
+  LocalDeviceRemovalSnapshot? localDeviceRemovalSnapshot(
+    String accountId,
+  ) {
+    final id = requireValidAccountId(accountId);
+    final record = _accounts[id];
+    if (record == null) return null;
+    return LocalDeviceRemovalSnapshot(
+      state: record.syncState,
+      deviceId: record.currentDeviceId,
+    );
   }
 
   List<String> get revokedLocalAccountIds => <String>[
