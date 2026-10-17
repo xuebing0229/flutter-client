@@ -19,6 +19,8 @@ class WindowsSyncthingTransport {
   // the Syncthing device identity and paired-folder configuration survive.
   static const int _legacyApiPort = 8384;
   static const String _stateFileName = 'embedded-syncthing-windows.json';
+  static const Duration _localApiRequestTimeout = Duration(seconds: 8);
+  static const Duration _processStartTimeout = Duration(seconds: 10);
 
   Future<void>? _starting;
   Future<int>? _resolvingPort;
@@ -649,7 +651,7 @@ class WindowsSyncthingTransport {
         'STNORESTART': '1',
         'STNODEFAULTFOLDER': '1',
       },
-    );
+    ).timeout(_processStartTimeout);
   }
 
   Future<bool> _ping(String apiKey) async {
@@ -858,31 +860,35 @@ class WindowsSyncthingTransport {
   }) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
     try {
-      final request = await client.openUrl(
-        method,
-        Uri.parse('http://127.0.0.1:$port$path'),
-      );
-      request.headers
-        ..set('X-API-Key', apiKey)
-        ..set(HttpHeaders.acceptHeader, 'application/json');
-      if (body != null) {
-        request.headers.contentType = ContentType.json;
-        request.write(body);
-      } else if (method == 'POST' || method == 'PUT' || method == 'PATCH') {
-        request.headers.contentType = ContentType.json;
-      }
-
-      final response = await request.close().timeout(
-        const Duration(seconds: 7),
-      );
-      final responseBody = await utf8.decoder.bind(response).join();
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          'Syncthing API HTTP ${response.statusCode}'
-          '${responseBody.isEmpty ? '' : ': $responseBody'}',
+      // Keep every localhost REST call bounded as one transaction. Waiting for
+      // the response body used to be unbounded, so a half-alive/stale Syncthing
+      // process could accept the connection and leave the app spinner waiting
+      // forever before the normal 60-second startup diagnostics could run.
+      return await (() async {
+        final request = await client.openUrl(
+          method,
+          Uri.parse('http://127.0.0.1:$port$path'),
         );
-      }
-      return responseBody;
+        request.headers
+          ..set('X-API-Key', apiKey)
+          ..set(HttpHeaders.acceptHeader, 'application/json');
+        if (body != null) {
+          request.headers.contentType = ContentType.json;
+          request.write(body);
+        } else if (method == 'POST' || method == 'PUT' || method == 'PATCH') {
+          request.headers.contentType = ContentType.json;
+        }
+
+        final response = await request.close();
+        final responseBody = await utf8.decoder.bind(response).join();
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw HttpException(
+            'Syncthing API HTTP ${response.statusCode}'
+            '${responseBody.isEmpty ? '' : ': $responseBody'}',
+          );
+        }
+        return responseBody;
+      })().timeout(_localApiRequestTimeout);
     } finally {
       client.close(force: true);
     }
