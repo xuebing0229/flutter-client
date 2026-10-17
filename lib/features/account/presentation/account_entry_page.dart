@@ -140,8 +140,9 @@ class AccountEntryPage extends StatelessWidget {
         return AlertDialog(
           title: Text('从本机移除“${account.accountName}”？'),
           content: const Text(
-            '会删除这台设备保存的账号记录、工作数据和同步目录，'
-            '不会删除其他设备上的账号或数据。之后可以重新从其他设备加入。',
+            '会立即从这台设备移除这个账号和本地工作数据。'
+            '设备解绑状态会在后台静默同步给其他设备；'
+            '之后重新加入需要从仍在使用的设备扫码，或导入完整数据包。',
           ),
           actions: [
             TextButton(
