@@ -253,14 +253,23 @@ class PendingDeviceRevocationService {
     // status.syncProgress is the lowest completion across this folder's local
     // and connected remote candidates. If that floor is 100%, every connected
     // valid peer has the tombstone and ACK currently present in the folder.
-    if (worstCompletion >= 99.99) {
-      for (final peer in mutablePeers) {
-        final transportId = peer.transportId;
-        if (transportId == null || !connected.contains(transportId)) continue;
-        final remoteState = status.remoteFolderStates[transportId];
-        if (remoteState == null || remoteState == 'valid') {
-          delivered.add(peer.appDeviceId);
-        }
+    for (final peer in mutablePeers) {
+      final transportId = peer.transportId;
+      if (transportId == null || !connected.contains(transportId)) continue;
+      final remoteState = status.remoteFolderStates[transportId];
+
+      // A peer only reports notSharing after it has stopped sharing this
+      // account folder. Under the existing revocation protocol that happens
+      // after it has observed our tombstone and matching ACK, so it is also a
+      // positive delivery signal even if we missed the brief 100% window.
+      if (remoteState == 'notSharing') {
+        delivered.add(peer.appDeviceId);
+        continue;
+      }
+
+      if (worstCompletion >= 99.99 &&
+          (remoteState == null || remoteState == 'valid')) {
+        delivered.add(peer.appDeviceId);
       }
     }
 
