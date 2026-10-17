@@ -233,6 +233,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 同步初始化修复',
     description: '修复 Windows 新设备加入时可能长期停在“正在初始化同步核心”的问题：本地 Syncthing 请求与进程启动都加入完整超时，异常核心不再让界面无限等待；清理旧同步进程也改为只针对当前同步配置目录，避免不同安装渠道因程序路径相同而互相关闭同步核心。保留现有动态端口迁移、目录握手与卡住自动修复。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 165,
+    title: 'Windows 数据包选择修复',
+    description: '修复 Windows 在加入已有账号或导入备份时，明明选中了 JSON 文件却可能拿到空路径并报 PathNotFoundException 的问题。备份选择改为只接受真实文件系统文件，并校验文件必须存在后再读取。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
