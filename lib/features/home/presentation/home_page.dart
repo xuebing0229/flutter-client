@@ -387,6 +387,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       progress['needItems'],
       progress['direction'],
       progress['deviceName'],
+      progress['remoteState'],
     ].join('|');
   }
 
@@ -1769,8 +1770,17 @@ class _ForegroundSyncProgressPopup extends StatelessWidget {
         : '${completion.toStringAsFixed(1)}%';
     final direction = progress['direction']?.toString();
     final deviceName = progress['deviceName']?.toString().trim() ?? '';
-    final subtitle = direction == 'sending'
-        ? '正在同步到${deviceName.isEmpty ? '另一台设备' : '「$deviceName」'}'
+    final remoteState = progress['remoteState']?.toString().trim();
+    final repairingHandshake =
+        remoteState == 'notSharing' || remoteState == 'paused';
+    final peerLabel = deviceName.isEmpty ? '另一台设备' : '「$deviceName」';
+    final title = repairingHandshake ? '正在修复同步通道' : '正在同步 $percent';
+    final subtitle = remoteState == 'paused'
+        ? '$peerLabel 已连接，但同步目录处于暂停状态，正在恢复'
+        : remoteState == 'notSharing'
+        ? '$peerLabel 已连接，正在重新确认双向共享目录'
+        : direction == 'sending'
+        ? '正在同步到$peerLabel'
         : '正在接收另一台设备的数据';
 
     return GuildContentPanel(
@@ -1788,11 +1798,13 @@ class _ForegroundSyncProgressPopup extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '正在同步 $percent',
+                    title,
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 4),
-                  LinearProgressIndicator(value: completion / 100),
+                  LinearProgressIndicator(
+                    value: repairingHandshake ? null : completion / 100,
+                  ),
                   const SizedBox(height: 5),
                   Text(
                     subtitle,

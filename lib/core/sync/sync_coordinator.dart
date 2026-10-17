@@ -217,6 +217,9 @@ class SyncCoordinator extends ChangeNotifier {
   bool _awaitingInitialRemoteWorkspace = false;
   Timer? _changeDebounce;
   Timer? _pollTimer;
+  String? _lastTransferFingerprint;
+  DateTime? _transferLastAdvancedAt;
+  DateTime? _lastTransferRepairAt;
   Future<void> _tail = Future<void>.value();
 
   // Every workspace entity, including UI settings, goes through the same
@@ -1092,11 +1095,11 @@ class SyncCoordinator extends ChangeNotifier {
       }
       expectedRemoteIds.add(remoteTransportId);
     }
-    if (expectedRemoteIds.isEmpty) return;
+    if (expectedRemoteIds.isEmpty) {
+      _resetTransferStallTracking();
+      return;
+    }
 
-    // If the core died, or this paired account never restored its permanent
-    // folder on this launch, bring it back without requiring a tap on this
-    // device's sync page.
     if (!_transportPrepared ||
         !_transportStatus.running ||
         _transportStatus.folderState == null) {
@@ -1109,14 +1112,105 @@ class SyncCoordinator extends ChangeNotifier {
         .whereType<String>()
         .where((id) => id.isNotEmpty)
         .toSet();
-    if (expectedRemoteIds.every(configuredRemoteIds.contains)) return;
+    final connectedExpectedIds = expectedRemoteIds.intersection(
+      _transportStatus.connectedDeviceIds.toSet(),
+    );
 
-    // Syncthing can still be running while the account folder has lost one of
-    // its peer shares (for example after an interrupted migration). Repair the
-    // folder config from the account's signed device state.
-    await _pairKnownTransportPeers(state);
+    // Device connectivity alone is not a completed sync handshake. Syncthing
+    // reports "valid" only when the peer shares this exact account folder back.
+    // The previous repair path returned as soon as the peer existed in config,
+    // which could leave a connected notSharing/paused peer stuck at 0% forever.
+    final brokenFolderHandshake = connectedExpectedIds.where((id) {
+      final remoteState = _transportStatus.remoteFolderStates[id]?.trim();
+      return remoteState == 'notSharing' || remoteState == 'paused';
+    }).toSet();
+
+    final missingConfiguredPeer =
+        !expectedRemoteIds.every(configuredRemoteIds.contains);
+    if (missingConfiguredPeer || brokenFolderHandshake.isNotEmpty) {
+      await _bridge.setAccountFolderPaused(
+        accountId: accountId,
+        paused: false,
+      );
+      await _pairKnownTransportPeers(state);
+      await _bridge.requestScan(accountId: accountId);
+      await _refreshTransportStatus();
+
+      if (brokenFolderHandshake.isNotEmpty) {
+        final stillBroken = brokenFolderHandshake.where((id) {
+          final remoteState = _transportStatus.remoteFolderStates[id]?.trim();
+          return remoteState == 'notSharing' || remoteState == 'paused';
+        });
+        if (stillBroken.isNotEmpty) {
+          _lastError =
+              '设备已经连接，但同步目录尚未完成双向共享，正在自动修复。'
+              '请让另一台设备保持打开。';
+        }
+      }
+      return;
+    }
+
+    await _repairStalledTransferIfNeeded();
+  }
+
+  Future<void> _repairStalledTransferIfNeeded() async {
+    final progress = _transportStatus.syncProgress;
+    if (progress == null) {
+      _resetTransferStallTracking();
+      return;
+    }
+
+    final completion = ((progress['completion'] as num?)?.toDouble() ?? 100)
+        .clamp(0, 100)
+        .toDouble();
+    final needBytes = (progress['needBytes'] as num?)?.toInt() ?? 0;
+    final needItems = (progress['needItems'] as num?)?.toInt() ?? 0;
+    final unfinished = completion < 99.95 || needBytes > 0 || needItems > 0;
+    if (!unfinished) {
+      _resetTransferStallTracking();
+      return;
+    }
+
+    final fingerprint = <Object?>[
+      completion.toStringAsFixed(3),
+      needBytes,
+      needItems,
+      progress['deviceId'],
+      progress['direction'],
+    ].join('|');
+    final now = DateTime.now();
+
+    if (_lastTransferFingerprint != fingerprint) {
+      _lastTransferFingerprint = fingerprint;
+      _transferLastAdvancedAt = now;
+      return;
+    }
+
+    final stalledSince = _transferLastAdvancedAt ??= now;
+    if (now.difference(stalledSince) < const Duration(seconds: 20)) return;
+    final lastRepair = _lastTransferRepairAt;
+    if (lastRepair != null &&
+        now.difference(lastRepair) < const Duration(seconds: 20)) {
+      return;
+    }
+
+    _lastTransferRepairAt = now;
+    await _bridge.setAccountFolderPaused(
+      accountId: accountId,
+      paused: false,
+    );
+    final state = accountStore.syncSnapshot;
+    if (state != null && state.accountId == accountId) {
+      await _pairKnownTransportPeers(state);
+    }
     await _bridge.requestScan(accountId: accountId);
     await _refreshTransportStatus();
+  }
+
+  void _resetTransferStallTracking() {
+    _lastTransferFingerprint = null;
+    _transferLastAdvancedAt = null;
+    _lastTransferRepairAt = null;
   }
 
   Future<void> _refreshTransportStatus() async {
@@ -1124,6 +1218,8 @@ class SyncCoordinator extends ChangeNotifier {
       _transportStatus = await _bridge.status(accountId: accountId);
       if (_transportStatus.error != null) {
         _lastError = _transportStatus.error;
+      } else if (_transportStatus.folderErrors.isNotEmpty) {
+        _lastError = '同步目录错误：${_transportStatus.folderErrors.first}';
       }
 
       final ownTransportId = _transportStatus.deviceId?.trim();

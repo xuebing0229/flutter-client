@@ -344,6 +344,7 @@ class SyncthingBridge(
                     "deviceId" to remoteId,
                     "deviceName" to configuredName.ifBlank { remoteId.take(7) },
                     "direction" to "sending",
+                    "remoteState" to remoteState,
                     "completion" to rawCompletion.coerceIn(0.0, 100.0),
                     "globalBytes" to completion.optLong("globalBytes", 0L),
                     "needBytes" to completion.optLong("needBytes", 0L),
