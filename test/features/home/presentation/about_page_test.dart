@@ -17,7 +17,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('VPet-Simulator.Core'),
       220,
-      scrollable: find.byType(Scrollable),
+      scrollable: find.byType(ListView),
     );
 
     expect(find.text('VPet-Simulator.Core'), findsOneWidget);
