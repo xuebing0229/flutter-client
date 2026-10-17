@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+163
-# beta-retry: stuck-sync-zero-progress
+version: 0.0.1+164
+# beta-retry: windows-sync-bounded-startup
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
