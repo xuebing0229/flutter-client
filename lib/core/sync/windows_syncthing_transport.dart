@@ -586,7 +586,7 @@ class WindowsSyncthingTransport {
     // longer answers with our current API key, it can keep both the profile
     // lock and the old GUI port. Stop only processes that are demonstrably
     // ours (same bundled exe or same private --home directory).
-    await _terminateStaleBundledProcesses(binary);
+    await _terminateStaleBundledProcesses();
     await Future<void>.delayed(const Duration(milliseconds: 250));
 
     // Never compete with another service for a GUI/API port. In particular,
@@ -789,21 +789,21 @@ class WindowsSyncthingTransport {
         : 'Windows 同步核心启动失败：$tail';
   }
 
-  Future<void> _terminateStaleBundledProcesses(File binary) async {
+  Future<void> _terminateStaleBundledProcesses() async {
     if (!Platform.isWindows) return;
     final support = await getApplicationSupportDirectory();
     final configDir = Directory(
       '${support.path}${Platform.pathSeparator}syncthing-config',
     );
     String quote(String value) => value.replaceAll("'", "''");
-    final exe = quote(binary.absolute.path);
     final home = quote(configDir.absolute.path);
     final script =
         "\$ErrorActionPreference='SilentlyContinue';"
         "Get-CimInstance Win32_Process -Filter \"Name='syncthing.exe'\" | "
         "Where-Object { "
-        "\$_.ExecutablePath -eq '$exe' -or "
-        "(\$_.CommandLine -and \$_.CommandLine.Contains('$home'))"
+        "\$_.CommandLine -and "
+        "\$_.CommandLine.IndexOf('$home', "
+        "[StringComparison]::OrdinalIgnoreCase) -ge 0"
         " } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }";
     try {
       await Process.run(
