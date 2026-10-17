@@ -248,6 +248,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '关于与开源致谢',
     description: '设置新增“关于冒险者公会”，可查看当前版本以及项目使用的开源组件与许可证信息；补充 Syncthing 与 Windows 桌宠所使用 VPet-Simulator.Core 的来源和致谢说明。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 170,
+    title: '重复设备记录修复',
+    description: '同一台电脑或手机重复走加入账号流程时，会按底层同步设备身份识别为同一台物理设备，不再每加入一次就新增一条“使用中设备”。已经产生的同机重复记录也会在该设备再次上线并识别到相同同步身份后自动合并，重复记录通过同步解绑标记从其他设备列表中消失。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
