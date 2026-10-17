@@ -243,6 +243,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备解绑传播修复',
     description: '修复设备从本机解绑后，其他设备的“使用中设备”仍可能长期保留旧设备的问题。本机解绑现在沿用原有 revocation tombstone + ACK 协议，并把未送达的解绑状态保存在本机隐藏发件箱；即使其他设备当时不在线，之后只要本 App 再次打开，无论停在登录页还是正在使用其他账号，都会在后台静默继续传递，逐台确认完成后再清理旧同步工作区。退出登录逻辑保持不变。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 167,
+    title: '本地工作区主题容错修复',
+    description: '修复历史或损坏的主题、UI 风格、功能开关设置可能让整个本地工作区被误判为读取失败的问题。界面偏好现在与排单、成品等工作数据隔离处理；即使主题设置异常，也只回退到安全默认样式，不再阻止进入和编辑已有数据。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
