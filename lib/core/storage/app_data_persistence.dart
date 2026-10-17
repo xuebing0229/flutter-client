@@ -123,6 +123,28 @@ class AppDataPersistence {
     );
     return operation;
   }
+  Future<void> deleteAccountDataPreservingSyncWorkspace(
+    String accountId,
+  ) {
+    final operation = (_writeTails[accountId] ?? Future<void>.value())
+        .then<void>((_) => _deleteAccountDataPreservingSyncWorkspace(accountId));
+    _writeTails[accountId] = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return operation;
+  }
+
+  Future<void> deletePreservedSyncWorkspace(String accountId) {
+    final operation = (_writeTails[accountId] ?? Future<void>.value())
+        .then<void>((_) => _deletePreservedSyncWorkspace(accountId));
+    _writeTails[accountId] = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return operation;
+  }
+
 
   Future<void> _writeAccountData(AppBackupData data, String accountId) async {
     final file = await _accountFile(accountId);
@@ -136,6 +158,48 @@ class AppDataPersistence {
     final accountDir = file.parent;
     if (await accountDir.exists()) {
       await accountDir.delete(recursive: true);
+    }
+  }
+  Future<void> _deleteAccountDataPreservingSyncWorkspace(
+    String accountId,
+  ) async {
+    final accountDir = await _accountDirectory(accountId);
+    if (!await accountDir.exists()) return;
+
+    await for (final entity in accountDir.list(followLinks: false)) {
+      final name = entity.path.split(Platform.pathSeparator).last;
+      if (name == 'sync-v1' || name == 'local-device-id.txt') {
+        continue;
+      }
+      try {
+        if (entity is Directory) {
+          await entity.delete(recursive: true);
+        } else if (entity is File) {
+          await entity.delete();
+        } else if (entity is Link) {
+          await entity.delete();
+        }
+      } catch (_) {
+        // The pending revocation sender only needs sync-v1. Any unrelated
+        // locked file can be retried during the final workspace cleanup.
+      }
+    }
+  }
+
+  Future<void> _deletePreservedSyncWorkspace(String accountId) async {
+    final accountDir = await _accountDirectory(accountId);
+    if (!await accountDir.exists()) return;
+
+    await for (final entity in accountDir.list(followLinks: false)) {
+      if (entity is! Directory) continue;
+      final name = entity.path.split(Platform.pathSeparator).last;
+      if (name == 'sync-v1' ||
+          name.startsWith('sync-v1.import-') ||
+          name.startsWith('sync-v1.previous-')) {
+        try {
+          await entity.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   }
 
