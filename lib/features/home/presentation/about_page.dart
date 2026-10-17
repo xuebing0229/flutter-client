@@ -79,15 +79,6 @@ class AppAboutPage extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            '冒险者公会的桌宠使用用户自行导入的 A/B 图片，不分发 VPet 自带角色动画资源。'
-            '对应第三方许可证与声明随项目和相关组件一同保留。',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                  height: 1.45,
-                ),
-          ),
         ],
       ),
     );
