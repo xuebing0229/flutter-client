@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 class AppAboutPage extends StatelessWidget {
   const AppAboutPage({
     required this.version,
-    required this.build,
+    required this.buildNumber,
     super.key,
   });
 
   final String version;
-  final int build;
+  final int buildNumber;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +38,7 @@ class AppAboutPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '版本 $version ($build)',
+                    '版本 $version ($buildNumber)',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
