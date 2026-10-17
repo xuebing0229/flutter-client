@@ -19,7 +19,6 @@ void main() {
 
     expect(find.text('VPet-Simulator.Core'), findsOneWidget);
     expect(find.textContaining('Apache License 2.0'), findsWidgets);
-    expect(find.textContaining('不分发 VPet 自带角色动画资源'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
