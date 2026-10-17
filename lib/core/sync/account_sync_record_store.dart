@@ -79,16 +79,67 @@ class AccountSyncRecordStore {
     required String deviceId,
     required AccountSyncState state,
   }) async {
+    _validateWriter(
+      accountId: accountId,
+      deviceId: deviceId,
+      state: state,
+      allowSelfRevocation: false,
+    );
+    await _writeStateFile(
+      accountId: accountId,
+      deviceId: deviceId,
+      state: state,
+    );
+  }
+
+  /// Writes the one final account-state snapshot used when a device removes
+  /// this account from itself. The snapshot is allowed to revoke its own
+  /// writer ID so other peers can remove that device from "使用中设备".
+  ///
+  /// Normal account-state writes must continue to reject revoked writers.
+  Future<void> writeSelfRevocation({
+    required String accountId,
+    required String deviceId,
+    required AccountSyncState state,
+  }) async {
+    _validateWriter(
+      accountId: accountId,
+      deviceId: deviceId,
+      state: state,
+      allowSelfRevocation: true,
+    );
+    if (!state.isRevoked(deviceId)) {
+      throw const FormatException('设备解绑状态缺少当前设备的解绑记录。');
+    }
+    await _writeStateFile(
+      accountId: accountId,
+      deviceId: deviceId,
+      state: state,
+    );
+  }
+
+  void _validateWriter({
+    required String accountId,
+    required String deviceId,
+    required AccountSyncState state,
+    required bool allowSelfRevocation,
+  }) {
     if (state.accountId != accountId) {
       throw const FormatException('账号同步状态与当前账号不一致。');
     }
     if (!state.devices.containsKey(deviceId)) {
       throw const FormatException('当前同步设备不属于这个账号。');
     }
-    if (state.isRevoked(deviceId)) {
+    if (!allowSelfRevocation && state.isRevoked(deviceId)) {
       throw const FormatException('已解绑设备不能继续写入账号同步状态。');
     }
+  }
 
+  Future<void> _writeStateFile({
+    required String accountId,
+    required String deviceId,
+    required AccountSyncState state,
+  }) async {
     final directory = await _directory(accountId);
     final safeDeviceId = base64Url
         .encode(utf8.encode(deviceId))

@@ -12,6 +12,7 @@ import '../core/storage/app_data_persistence.dart';
 import '../core/sync/account_sync_record_store.dart';
 import '../core/sync/embedded_syncthing_bridge.dart';
 import '../core/sync/portable_sync_workspace_validator.dart';
+import '../core/sync/pending_device_revocation_service.dart';
 import '../core/theme/app_theme_store.dart';
 import '../core/theme/guild_visual_theme.dart';
 import '../features/account/presentation/account_gate.dart';
@@ -27,7 +28,7 @@ class App extends StatefulWidget {
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> {
+class _AppState extends State<App> with WidgetsBindingObserver {
   final AppThemeStore _themeStore = AppThemeStore();
   final AppFeatureStore _featureStore = AppFeatureStore();
   final AccountStore _accountStore = AccountStore();
@@ -40,12 +41,19 @@ class _AppState extends State<App> {
   final GlobalKey<NavigatorState> _navigatorKey =
       GlobalKey<NavigatorState>();
 
+  late final PendingDeviceRevocationService _pendingDeviceRevocations;
+  Timer? _pendingDeviceRevocationTimer;
   String? _sessionAccountId;
   bool _sessionInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pendingDeviceRevocations = PendingDeviceRevocationService(
+      accountSyncStore: _accountSyncRecordStore,
+      persistence: _persistence,
+    );
     _accountStore.addListener(_onAccountSessionChanged);
     unawaited(_initialize());
   }
@@ -73,6 +81,29 @@ class _AppState extends State<App> {
     // Revoked accounts intentionally keep their transport folder until the
     // remote revocation acknowledgement has had a chance to sync. The user can
     // still remove the local account explicitly from the pre-login UI.
+
+    _startPendingDeviceRevocationDelivery();
+  }
+
+  void _startPendingDeviceRevocationDelivery() {
+    unawaited(_flushPendingDeviceRevocations());
+    _pendingDeviceRevocationTimer ??= Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(_flushPendingDeviceRevocations()),
+    );
+  }
+
+  Future<void> _flushPendingDeviceRevocations() {
+    return _pendingDeviceRevocations.flushPending(
+      hasLocalAccount: _accountStore.hasActiveLocalAccount,
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_flushPendingDeviceRevocations());
+    }
   }
 
   void _onAccountSessionChanged() {
@@ -127,21 +158,41 @@ class _AppState extends State<App> {
 
   Future<void> _removeLocalAccount(String accountId) async {
     const syncBridge = EmbeddedSyncthingBridge();
+    final snapshot = _accountStore.localDeviceRemovalSnapshot(accountId);
 
-    // Transport cleanup is best effort. A broken/unavailable sync core must
-    // never trap the user in a saved account they cannot log into.
-    try {
-      await syncBridge.removeAccountFolder(accountId: accountId);
-    } catch (_) {}
+    var pendingDelivery = false;
+    if (snapshot != null) {
+      pendingDelivery =
+          await _pendingDeviceRevocations.stageLocalRemoval(snapshot);
+    }
+
+    // When another device still needs the tombstone, remove the visible local
+    // account immediately but retain its hidden sync workspace as an outbox.
+    // Otherwise the transport folder can be discarded right away.
+    if (!pendingDelivery) {
+      try {
+        await syncBridge.removeAccountFolder(accountId: accountId);
+      } catch (_) {}
+    }
 
     await _accountStore.removeLocalAccountById(
       accountId: accountId,
-      deleteAccountData: _persistence.deleteAccountData,
+      deleteAccountData: pendingDelivery
+          ? _persistence.deleteAccountDataPreservingSyncWorkspace
+          : _persistence.deleteAccountData,
+      retainDeviceIdentity: false,
     );
 
     try {
       await _reminderService.clearAll(accountId: accountId);
     } catch (_) {}
+
+    if (pendingDelivery) {
+      // Never block or notify the user about delivery. The app-level outbox
+      // keeps retrying on the login page, inside another account, and on every
+      // later foreground session until every known peer has received it.
+      unawaited(_flushPendingDeviceRevocations());
+    }
   }
 
   Future<void> _acknowledgeCurrentRevocation() async {
@@ -225,6 +276,8 @@ class _AppState extends State<App> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pendingDeviceRevocationTimer?.cancel();
     _accountStore.removeListener(_onAccountSessionChanged);
     _accountStore.dispose();
     _themeStore.dispose();

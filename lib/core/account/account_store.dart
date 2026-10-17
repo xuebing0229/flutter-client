@@ -23,6 +23,16 @@ class LocalAccountSummary {
   final String accountName;
 }
 
+class LocalDeviceRemovalSnapshot {
+  const LocalDeviceRemovalSnapshot({
+    required this.state,
+    required this.deviceId,
+  });
+
+  final AccountSyncState state;
+  final String deviceId;
+}
+
 class _LocalAccountRecord {
   const _LocalAccountRecord({
     required this.syncState,
@@ -159,6 +169,18 @@ class AccountStore extends ChangeNotifier {
     final record = _accounts[accountId];
     return record != null &&
         !record.syncState.isRevoked(record.currentDeviceId);
+  }
+
+  LocalDeviceRemovalSnapshot? localDeviceRemovalSnapshot(
+    String accountId,
+  ) {
+    final id = requireValidAccountId(accountId);
+    final record = _accounts[id];
+    if (record == null) return null;
+    return LocalDeviceRemovalSnapshot(
+      state: record.syncState,
+      deviceId: record.currentDeviceId,
+    );
   }
 
   List<String> get revokedLocalAccountIds => <String>[
@@ -964,6 +986,7 @@ class AccountStore extends ChangeNotifier {
   Future<void> removeLocalAccountById({
     required String accountId,
     required Future<void> Function(String accountId) deleteAccountData,
+    bool retainDeviceIdentity = true,
   }) async {
     final id = requireValidAccountId(accountId);
     final record = _accounts[id];
@@ -972,12 +995,18 @@ class AccountStore extends ChangeNotifier {
     final retainedDeviceId = record.currentDeviceId;
     await deleteAccountData(id);
 
-    // Keep only the tiny local device marker. If this account is joined again
-    // on the same installation, the existing device identity can be reused
-    // instead of leaving a duplicate active device on the other peers.
     final marker = await _deviceIdentityFile(id);
-    await marker.parent.create(recursive: true);
-    await atomicWriteString(marker, retainedDeviceId);
+    if (retainDeviceIdentity) {
+      // Plain local removal can reuse the same identity. A true device unbind
+      // must pass retainDeviceIdentity=false so a later rejoin cannot reuse an
+      // app-device ID that is permanently covered by a revocation tombstone.
+      await marker.parent.create(recursive: true);
+      await atomicWriteString(marker, retainedDeviceId);
+    } else {
+      try {
+        if (await marker.exists()) await marker.delete();
+      } catch (_) {}
+    }
 
     _accounts.remove(id);
     if (_selectedAccountId == id) {
