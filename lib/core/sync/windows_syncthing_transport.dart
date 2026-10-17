@@ -228,6 +228,7 @@ class WindowsSyncthingTransport {
             'deviceId': remoteId,
             'deviceName': remoteName,
             'direction': 'sending',
+            'remoteState': remoteState,
             'completion': rawCompletion.toDouble().clamp(0, 100),
             'globalBytes':
                 (completionMap['globalBytes'] as num?)?.toInt() ?? 0,
@@ -306,7 +307,8 @@ class WindowsSyncthingTransport {
           'addresses': <String>['dynamic'],
         }),
       );
-    } else if (name.trim().isNotEmpty) {
+    } else if (name.trim().isNotEmpty &&
+        existingDevice['name']?.toString().trim() != name.trim()) {
       existingDevice['name'] = name.trim();
       await _request(
         'PUT',
