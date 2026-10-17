@@ -228,6 +228,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备同步卡住修复',
     description: '修复设备已经连接但同步目录没有完成双向共享时，界面仍长期显示 0% 且不会继续修复的问题。现在会检查真实目录握手状态，自动恢复暂停或未共享的目录，并在进度长时间不变化时主动重新扫描；同步页也会明确区分“正在修复同步通道”和真实文件传输。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 164,
+    title: 'Windows 同步初始化修复',
+    description: '修复 Windows 新设备加入时可能长期停在“正在初始化同步核心”的问题：本地 Syncthing 请求与进程启动都加入完整超时，异常核心不再让界面无限等待；清理旧同步进程也改为只针对当前同步配置目录，避免不同安装渠道因程序路径相同而互相关闭同步核心。保留现有动态端口迁移、目录握手与卡住自动修复。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
