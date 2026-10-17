@@ -43,6 +43,7 @@ import 'feedback_page.dart';
 import 'first_run_guide.dart';
 import 'reminder_background_guide.dart';
 import 'settings_page.dart';
+import 'beta_update_page.dart';
 import 'theme_color_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -1350,6 +1351,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onBeforeSignOut: _prepareForSignOut,
         onRevokeDevice: _syncCoordinator.revokeDevice,
       ),
+      AppToolMenu.updateTool => const BetaUpdatePage(),
       AppToolMenu.settingsTool => SettingsPage(
         orderStore: _orderStore,
         productStore: _productStore,
@@ -1485,6 +1487,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
       AppToolMenu.accountTool => '账号与设备',
+      AppToolMenu.updateTool => '拉取更新',
       AppToolMenu.settingsTool => '设置',
       AppToolMenu.themeColorTool => 'UI主题色',
       _ => current.label,
