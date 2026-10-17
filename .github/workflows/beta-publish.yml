@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: beta-publish
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
