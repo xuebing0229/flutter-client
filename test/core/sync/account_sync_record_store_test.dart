@@ -79,8 +79,8 @@ void main() {
       },
     );
 
-    expect(
-      () => store.write(
+    await expectLater(
+      store.write(
         accountId: 'account',
         deviceId: 'device-a',
         state: state,
@@ -128,8 +128,14 @@ void main() {
     );
     expect(merged, isNotNull);
     expect(merged!.isRevoked('device-a'), isTrue);
-    expect(merged.activeDevices.map((device) => device.id), isNot(contains('device-a')));
-    expect(merged.activeDevices.map((device) => device.id), contains('device-b'));
+    expect(
+      merged.activeDevices.map((device) => device.id),
+      isNot(contains('device-a')),
+    );
+    expect(
+      merged.activeDevices.map((device) => device.id),
+      contains('device-b'),
+    );
 
     final stateDirectory = Directory('${temporary.path}/account-states');
     final files = await stateDirectory
