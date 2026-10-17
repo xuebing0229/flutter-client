@@ -238,6 +238,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 数据包选择修复',
     description: '修复 Windows 在加入已有账号或导入备份时，明明选中了 JSON 文件却可能拿到空路径并报 PathNotFoundException 的问题。备份选择改为只接受真实文件系统文件，并校验文件必须存在后再读取。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 166,
+    title: '设备解绑传播修复',
+    description: '修复设备从本机解绑后，其他设备的“使用中设备”仍可能长期保留旧设备的问题。本机解绑现在沿用原有 revocation tombstone + ACK 协议，并把未送达的解绑状态保存在本机隐藏发件箱；即使其他设备当时不在线，之后只要本 App 再次打开，无论停在登录页还是正在使用其他账号，都会在后台静默继续传递，逐台确认完成后再清理旧同步工作区。退出登录逻辑保持不变。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
