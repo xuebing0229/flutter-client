@@ -187,7 +187,7 @@ class SyncCoordinator extends ChangeNotifier {
        _bridge = bridge;
 
   final String accountId;
-  final String deviceId;
+  String deviceId;
   final String deviceName;
   final AccountStore accountStore;
   final OrderStore orderStore;
@@ -1224,6 +1224,14 @@ class SyncCoordinator extends ChangeNotifier {
 
       final ownTransportId = _transportStatus.deviceId?.trim();
       if (ownTransportId != null && ownTransportId.isNotEmpty) {
+        final canonicalDeviceId =
+            await accountStore.reconcileCurrentDeviceTransportIdentity(
+          syncTransportId: ownTransportId,
+        );
+        if (canonicalDeviceId != null && canonicalDeviceId != deviceId) {
+          deviceId = canonicalDeviceId;
+        }
+
         final currentDevice = accountStore.syncSnapshot?.devices[deviceId];
         if (currentDevice == null) {
           throw StateError('当前设备记录不存在。');
