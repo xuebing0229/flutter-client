@@ -228,6 +228,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备同步卡住修复',
     description: '修复设备已经连接但同步目录没有完成双向共享时，界面仍长期显示 0% 且不会继续修复的问题。现在会检查真实目录握手状态，自动恢复暂停或未共享的目录，并在进度长时间不变化时主动重新扫描；同步页也会明确区分“正在修复同步通道”和真实文件传输。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 164,
+    title: '拉取更新入口恢复',
+    description: '恢复测试版侧边栏中的“拉取更新”独立入口，手机抽屉和 Windows 左侧栏都可以直接查看当前版本、最新测试版、下载进度，并继续使用暂停、续传和自动更新；设置页中的应用更新区域继续保留。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
