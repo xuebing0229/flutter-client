@@ -25,6 +25,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify Beta source lineage
+        shell: bash
+        run: |
+          REQUIRED_BASE="9e8ed11502825e1cc9d4d157f6d477ccbb68f6b0"
+          if ! git merge-base --is-ancestor "$REQUIRED_BASE" HEAD; then
+            echo "::error::This Beta branch does not descend from the verified Beta 166 lineage. Refusing to publish a regression build."
+            exit 1
+          fi
 
       - uses: subosito/flutter-action@v2
         with:
