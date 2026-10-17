@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import '../core/account/account_models.dart';
 import '../core/account/account_store.dart';
 import '../core/changelog/adventurer_news.dart';
 import '../core/features/app_feature_store.dart';
@@ -13,6 +12,7 @@ import '../core/storage/app_data_persistence.dart';
 import '../core/sync/account_sync_record_store.dart';
 import '../core/sync/embedded_syncthing_bridge.dart';
 import '../core/sync/portable_sync_workspace_validator.dart';
+import '../core/sync/pending_device_revocation_service.dart';
 import '../core/theme/app_theme_store.dart';
 import '../core/theme/guild_visual_theme.dart';
 import '../features/account/presentation/account_gate.dart';
@@ -28,7 +28,7 @@ class App extends StatefulWidget {
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> {
+class _AppState extends State<App> with WidgetsBindingObserver {
   final AppThemeStore _themeStore = AppThemeStore();
   final AppFeatureStore _featureStore = AppFeatureStore();
   final AccountStore _accountStore = AccountStore();
@@ -41,12 +41,19 @@ class _AppState extends State<App> {
   final GlobalKey<NavigatorState> _navigatorKey =
       GlobalKey<NavigatorState>();
 
+  late final PendingDeviceRevocationService _pendingDeviceRevocations;
+  Timer? _pendingDeviceRevocationTimer;
   String? _sessionAccountId;
   bool _sessionInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pendingDeviceRevocations = PendingDeviceRevocationService(
+      accountSyncStore: _accountSyncRecordStore,
+      persistence: _persistence,
+    );
     _accountStore.addListener(_onAccountSessionChanged);
     unawaited(_initialize());
   }
@@ -74,6 +81,29 @@ class _AppState extends State<App> {
     // Revoked accounts intentionally keep their transport folder until the
     // remote revocation acknowledgement has had a chance to sync. The user can
     // still remove the local account explicitly from the pre-login UI.
+
+    _startPendingDeviceRevocationDelivery();
+  }
+
+  void _startPendingDeviceRevocationDelivery() {
+    unawaited(_flushPendingDeviceRevocations());
+    _pendingDeviceRevocationTimer ??= Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(_flushPendingDeviceRevocations()),
+    );
+  }
+
+  Future<void> _flushPendingDeviceRevocations() {
+    return _pendingDeviceRevocations.flushPending(
+      hasLocalAccount: _accountStore.hasActiveLocalAccount,
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_flushPendingDeviceRevocations());
+    }
   }
 
   void _onAccountSessionChanged() {
@@ -128,161 +158,40 @@ class _AppState extends State<App> {
 
   Future<void> _removeLocalAccount(String accountId) async {
     const syncBridge = EmbeddedSyncthingBridge();
+    final snapshot = _accountStore.localDeviceRemovalSnapshot(accountId);
 
-    await _publishCurrentDeviceRemoval(
-      accountId: accountId,
-      syncBridge: syncBridge,
-    );
+    var pendingDelivery = false;
+    if (snapshot != null) {
+      pendingDelivery =
+          await _pendingDeviceRevocations.stageLocalRemoval(snapshot);
+    }
 
-    // Only remove the transport folder after the self-unbind tombstone has
-    // been handed to another peer. Local file deletion after this point cannot
-    // turn into a synced delete of the tombstone.
-    try {
-      await syncBridge.removeAccountFolder(accountId: accountId);
-    } catch (_) {}
+    // When another device still needs the tombstone, remove the visible local
+    // account immediately but retain its hidden sync workspace as an outbox.
+    // Otherwise the transport folder can be discarded right away.
+    if (!pendingDelivery) {
+      try {
+        await syncBridge.removeAccountFolder(accountId: accountId);
+      } catch (_) {}
+    }
 
     await _accountStore.removeLocalAccountById(
       accountId: accountId,
-      deleteAccountData: _persistence.deleteAccountData,
+      deleteAccountData: pendingDelivery
+          ? _persistence.deleteAccountDataPreservingSyncWorkspace
+          : _persistence.deleteAccountData,
     );
 
     try {
       await _reminderService.clearAll(accountId: accountId);
     } catch (_) {}
-  }
 
-  Future<void> _publishCurrentDeviceRemoval({
-    required String accountId,
-    required EmbeddedSyncthingBridge syncBridge,
-  }) async {
-    final snapshot = _accountStore.localDeviceRemovalSnapshot(accountId);
-    if (snapshot == null) return;
-
-    final deviceId = snapshot.deviceId;
-    final state = snapshot.state;
-    if (state.isRevoked(deviceId)) {
-      // A remote device already revoked this installation. Its tombstone is
-      // authoritative, so local cleanup does not need to publish another one.
-      return;
+    if (pendingDelivery) {
+      // Never block or notify the user about delivery. The app-level outbox
+      // keeps retrying on the login page, inside another account, and on every
+      // later foreground session until every known peer has received it.
+      unawaited(_flushPendingDeviceRevocations());
     }
-
-    final peers = state.activeDevices
-        .where((device) => device.id != deviceId)
-        .where((device) => (device.syncTransportId?.trim().length ?? 0) >= 20)
-        .toList(growable: false);
-    final hasOtherActiveDevice =
-        state.activeDevices.any((device) => device.id != deviceId);
-
-    // A one-device account has nobody else to notify.
-    if (!hasOtherActiveDevice) return;
-    if (peers.isEmpty) {
-      throw StateError(
-        '其他设备还没有可用的同步身份，暂时不能安全解绑。'
-        '请先让另一台设备完成一次正常同步后再试。',
-      );
-    }
-
-    final syncRoot =
-        await _accountSyncRecordStore.recordStore.rootPath(accountId);
-    final prepared = await syncBridge.prepare(
-      accountId: accountId,
-      folderPath: syncRoot,
-      force: true,
-    );
-    if (!prepared) {
-      throw StateError('当前设备无法启动同步核心，解绑状态还不能发送到其他设备。');
-    }
-
-    for (final peer in peers) {
-      try {
-        await syncBridge.pairDevice(
-          accountId: accountId,
-          deviceId: peer.syncTransportId!.trim(),
-          name: peer.name,
-        );
-      } catch (_) {
-        // Try every known peer. One reachable peer is enough to preserve and
-        // forward the self-unbind tombstone to the rest of the mesh.
-      }
-    }
-
-    await syncBridge.requestScan(accountId: accountId);
-
-    final peerTransportIds = <String>{
-      for (final peer in peers) peer.syncTransportId!.trim(),
-    };
-    final readyPeer = await _waitForReadyRemovalPeer(
-      accountId: accountId,
-      peerTransportIds: peerTransportIds,
-      syncBridge: syncBridge,
-    );
-    if (!readyPeer) {
-      throw StateError(
-        '解绑需要至少一台其他设备在线并完成同步连接。'
-        '请在另一台设备打开冒险者公会并保持同步后重试。',
-      );
-    }
-
-    final revokedAt = DateTime.now().toUtc();
-    final revokedState = state.copyWith(
-      revocations: <String, DeviceRevocation>{
-        ...state.revocations,
-        deviceId: DeviceRevocation(
-          deviceId: deviceId,
-          revokedAt: revokedAt,
-        ),
-      },
-    );
-
-    // This is the device's final authoritative account-state write. The
-    // matching ack lets peers safely unshare its Syncthing identity after
-    // they observe the tombstone.
-    await _accountSyncRecordStore.writeSelfRevocation(
-      accountId: accountId,
-      deviceId: deviceId,
-      state: revokedState,
-    );
-    await _accountSyncRecordStore.writeRevocationAck(
-      accountId: accountId,
-      deviceId: deviceId,
-      revokedAt: revokedAt,
-    );
-    await syncBridge.requestScan(accountId: accountId);
-
-    // Give Syncthing a bounded chance to finish sending the tiny tombstone.
-    // Once it was written after a valid peer handshake it is safe to proceed
-    // even if the final progress probe is briefly unavailable.
-    final deadline = DateTime.now().add(const Duration(seconds: 8));
-    while (DateTime.now().isBefore(deadline)) {
-      final status = await syncBridge.status(accountId: accountId);
-      final connected = status.connectedDeviceIds.any(peerTransportIds.contains);
-      final completion =
-          (status.syncProgress?['completion'] as num?)?.toDouble();
-      if (connected && (completion == null || completion >= 99.99)) {
-        break;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    }
-  }
-
-  Future<bool> _waitForReadyRemovalPeer({
-    required String accountId,
-    required Set<String> peerTransportIds,
-    required EmbeddedSyncthingBridge syncBridge,
-  }) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (DateTime.now().isBefore(deadline)) {
-      final status = await syncBridge.status(accountId: accountId);
-      for (final transportId in status.connectedDeviceIds) {
-        if (!peerTransportIds.contains(transportId)) continue;
-        final remoteState = status.remoteFolderStates[transportId];
-        if (remoteState == null || remoteState == 'valid') {
-          return true;
-        }
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    }
-    return false;
   }
 
   Future<void> _acknowledgeCurrentRevocation() async {
@@ -366,6 +275,8 @@ class _AppState extends State<App> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pendingDeviceRevocationTimer?.cancel();
     _accountStore.removeListener(_onAccountSessionChanged);
     _accountStore.dispose();
     _themeStore.dispose();
