@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+166
-# beta-retry: deferred-self-unbind
+version: 0.0.1+167
+# beta-retry: ui-settings-rescue
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
