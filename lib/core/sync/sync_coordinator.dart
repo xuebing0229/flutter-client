@@ -1219,7 +1219,7 @@ class SyncCoordinator extends ChangeNotifier {
       if (_transportStatus.error != null) {
         _lastError = _transportStatus.error;
       } else if (_transportStatus.folderErrors.isNotEmpty) {
-        _lastError = '同步目录错误：\${_transportStatus.folderErrors.first}';
+        _lastError = '同步目录错误：${_transportStatus.folderErrors.first}';
       }
 
       final ownTransportId = _transportStatus.deviceId?.trim();
