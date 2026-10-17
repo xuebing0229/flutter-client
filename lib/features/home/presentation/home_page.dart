@@ -207,7 +207,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // Theme, feature switches and layout belong to the account workspace.
           // Restore all of them before sync starts so switching accounts cannot
           // leak the previous account's in-memory settings into this one.
-          await _applySyncSettings(backup.settings);
+          await _applySyncSettingsWithoutBlockingWorkspace(backup.settings);
         }
 
         if (backup.accountSyncState != null) {
@@ -717,6 +717,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _productSortModeSettingKey: _productSortMode,
       _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
     };
+  }
+
+  Future<void> _applySyncSettingsWithoutBlockingWorkspace(
+    Map<String, dynamic> settings,
+  ) async {
+    try {
+      await _applySyncSettings(settings);
+    } catch (_) {
+      // UI preferences are optional metadata. A damaged/legacy theme, style,
+      // or feature setting must never make otherwise healthy orders/products
+      // unreadable. Fall back to safe local defaults and keep the workspace
+      // editable; sync can later repopulate valid settings.
+      try {
+        await widget.themeStore.resetToDefaults();
+      } catch (_) {}
+      try {
+        await widget.featureStore.resetToDefaults();
+      } catch (_) {}
+    }
   }
 
   Future<void> _applySyncSettings(Map<String, dynamic> settings) async {
