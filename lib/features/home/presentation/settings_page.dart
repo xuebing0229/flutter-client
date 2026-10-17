@@ -748,7 +748,7 @@ class _SettingsPageState extends State<SettingsPage>
                   MaterialPageRoute<void>(
                     builder: (_) => AppAboutPage(
                       version: _currentVersion,
-                      build: _currentBuild,
+                      buildNumber: _currentBuild,
                     ),
                   ),
                 );
