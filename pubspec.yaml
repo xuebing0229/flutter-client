@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+169
-# beta-169: restore-correct-lineage
+# beta-169 retry: corrected-lineage-guard
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
