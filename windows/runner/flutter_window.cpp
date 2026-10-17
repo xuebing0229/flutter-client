@@ -58,8 +58,7 @@ bool FlutterWindow::OnCreate() {
         if (FAILED(hr) || dialog == nullptr) {
           result->Error(
               "WINDOWS_FILE_PICKER_FAILED",
-              "Could not create the Windows file picker.",
-              flutter::EncodableValue(static_cast<int64_t>(hr)));
+              "Could not create the Windows file picker.");
           return;
         }
 
@@ -89,8 +88,7 @@ bool FlutterWindow::OnCreate() {
           dialog->Release();
           result->Error(
               "WINDOWS_FILE_PICKER_FAILED",
-              "Windows could not open the selected backup file.",
-              flutter::EncodableValue(static_cast<int64_t>(hr)));
+              "Windows could not open the selected backup file.");
           return;
         }
 
@@ -100,8 +98,7 @@ bool FlutterWindow::OnCreate() {
           dialog->Release();
           result->Error(
               "WINDOWS_FILE_PICKER_FAILED",
-              "Windows did not return the selected backup file.",
-              flutter::EncodableValue(static_cast<int64_t>(hr)));
+              "Windows did not return the selected backup file.");
           return;
         }
 
@@ -116,8 +113,7 @@ bool FlutterWindow::OnCreate() {
           }
           result->Error(
               "WINDOWS_FILE_PICKER_FAILED",
-              "The selected item does not expose a filesystem path.",
-              flutter::EncodableValue(static_cast<int64_t>(hr)));
+              "The selected item does not expose a filesystem path.");
           return;
         }
 
@@ -126,8 +122,7 @@ bool FlutterWindow::OnCreate() {
         if (path.empty()) {
           result->Error(
               "WINDOWS_FILE_PICKER_FAILED",
-              "Windows returned an empty filesystem path.",
-              nullptr);
+              "Windows returned an empty filesystem path.");
           return;
         }
 
