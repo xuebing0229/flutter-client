@@ -6,7 +6,7 @@ void main() {
   testWidgets('about page exposes version and open-source credits', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: AppAboutPage(version: '0.0.1', build: 167),
+        home: AppAboutPage(version: '0.0.1', buildNumber: 167),
       ),
     );
 
