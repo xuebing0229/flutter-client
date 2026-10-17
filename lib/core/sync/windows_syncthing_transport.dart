@@ -584,8 +584,9 @@ class WindowsSyncthingTransport {
 
     // If a previous app-owned Syncthing survived an update/crash but no
     // longer answers with our current API key, it can keep both the profile
-    // lock and the old GUI port. Stop only processes that are demonstrably
-    // ours (same bundled exe or same private --home directory).
+    // lock and the old GUI port. Stop only a process using this exact private
+    // --home profile. Executable-path matching is intentionally avoided because
+    // separate app channels can temporarily share an install directory.
     await _terminateStaleBundledProcesses();
     await Future<void>.delayed(const Duration(milliseconds: 250));
 
