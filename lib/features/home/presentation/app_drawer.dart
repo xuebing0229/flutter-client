@@ -7,6 +7,7 @@ import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/update/beta_update_session.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../account/presentation/account_page.dart';
@@ -21,6 +22,7 @@ import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
 import 'feedback_page.dart';
 import 'settings_page.dart';
+import 'beta_update_page.dart';
 
 Future<String> buildAccountTransferPackage(AccountStore accountStore) async {
   final account = accountStore.syncSnapshot;
@@ -129,6 +131,7 @@ class AppToolMenu extends StatelessWidget {
   static const feedbackTool = 'feedback';
   static const accountTool = 'account';
   static const settingsTool = 'settings';
+  static const updateTool = 'update';
   static const themeColorTool = 'themeColor';
   static const desktopPetTool = 'desktopPet';
 
@@ -331,6 +334,17 @@ class AppToolMenu extends StatelessWidget {
             ),
           ),
         ),
+        if (BetaUpdateSession.instance.supported)
+          _item(
+            icon: Icons.system_update_alt_rounded,
+            title: '拉取更新',
+            tool: updateTool,
+            onTap: () => _open(
+              context,
+              updateTool,
+              const BetaUpdatePage(),
+            ),
+          ),
         _item(
           icon: Icons.settings_outlined,
           title: '设置',
