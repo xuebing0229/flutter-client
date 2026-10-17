@@ -180,6 +180,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       deleteAccountData: pendingDelivery
           ? _persistence.deleteAccountDataPreservingSyncWorkspace
           : _persistence.deleteAccountData,
+      retainDeviceIdentity: false,
     );
 
     try {
