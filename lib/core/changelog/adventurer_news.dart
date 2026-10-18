@@ -258,6 +258,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备身份去重继续修复',
     description: '修复旧设备记录缺少稳定安装身份、或 Syncthing 身份曾因同步核心迁移而变化时，170 仍无法识别同一台电脑的问题。新版为每个安装保留独立稳定身份；历史重复记录会按稳定身份优先合并，并对旧版仅有“同名同平台”的遗留记录做一次兼容迁移，之后再次加入不会重复新增设备。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 172,
+    title: '桌宠与导入记录加入账号同步',
+    description: '桌宠预设、A/B 图片、气泡图片、位置缩放和文字等设置现在保存在账号同步工作区，手机即使不显示桌宠也会作为同步中转；电脑重装后重新加入账号可以恢复桌宠资料。截图识别的已导入记录也改为设备间合并同步，避免换机后重复导入。完整备份在手机端同样会带上已同步的桌宠素材。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
