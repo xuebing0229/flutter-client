@@ -20,71 +20,26 @@ AccountDevice _device({
 }
 
 void main() {
-  test('legacy same machine alias can be reclaimed by exact name/platform', () {
+  test('same name and platform are not enough to identify one device', () {
     final current = _device(
       id: 'new',
       name: 'yyt',
       platform: 'windows',
       firstSeenAt: DateTime.utc(2026, 10, 18),
     );
-    final old = _device(
+    final other = _device(
       id: 'old',
       name: 'yyt',
       platform: 'windows',
       firstSeenAt: DateTime.utc(2026, 10, 12),
     );
 
-    expect(
-      isLegacySameInstallationCandidate(current: current, candidate: old),
-      isTrue,
-    );
-  });
-
-  test('legacy alias fallback does not merge a different machine shape', () {
-    final current = _device(
-      id: 'new',
-      name: 'yyt',
-      platform: 'windows',
-      firstSeenAt: DateTime.utc(2026, 10, 18),
-    );
-
-    expect(
-      isLegacySameInstallationCandidate(
-        current: current,
-        candidate: _device(
-          id: 'other-name',
-          name: 'other',
-          platform: 'windows',
-          firstSeenAt: DateTime.utc(2026, 10, 12),
-        ),
-      ),
-      isFalse,
-    );
-    expect(
-      isLegacySameInstallationCandidate(
-        current: current,
-        candidate: _device(
-          id: 'other-platform',
-          name: 'yyt',
-          platform: 'android',
-          firstSeenAt: DateTime.utc(2026, 10, 12),
-        ),
-      ),
-      isFalse,
-    );
-    expect(
-      isLegacySameInstallationCandidate(
-        current: current,
-        candidate: _device(
-          id: 'already-stable',
-          name: 'yyt',
-          platform: 'windows',
-          firstSeenAt: DateTime.utc(2026, 10, 12),
-          installationId: 'installation-identity-123',
-        ),
-      ),
-      isFalse,
-    );
+    expect(current.name, other.name);
+    expect(current.platform, other.platform);
+    expect(current.installationId, isNull);
+    expect(other.installationId, isNull);
+    // Automatic device collapse now requires exact installation or transport
+    // identity inside AccountStore.reconcileCurrentDeviceTransportIdentity.
   });
 
   test('installation identity survives device json round trip', () {
