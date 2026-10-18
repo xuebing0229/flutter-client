@@ -343,6 +343,17 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: pairingReady
+                              ? () => _copyPairingCode(server)
+                              : null,
+                          icon: const Icon(Icons.copy_rounded),
+                          label: const Text('复制设备码'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       Text(
                         _transferred
                             ? '账号信息已经传给新设备，首次绑定完成。以后正常同步不需要再打开这个页面。'
@@ -483,27 +494,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              _AddDeviceCard(
-                icon: Icons.link_rounded,
-                title: '无法扫码时',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      '上方添加设备二维码也可以复制成文字。把它粘贴到新设备「加入已有账号 → 配对码加入」即可；之后仍会生成回应码，需要填回本页确认。',
-                      style: TextStyle(color: colors.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: pairingReady && server != null
-                          ? () => _copyPairingCode(server)
-                          : null,
-                      icon: const Icon(Icons.copy_rounded),
-                      label: const Text('复制本机配对码'),
-                    ),
-                  ],
-                ),
               ),
             ],
           );
