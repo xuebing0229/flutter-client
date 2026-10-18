@@ -10,14 +10,14 @@ class OrderSummaryCardCompactLayout {
     required this.titleHeight,
     required this.clientHeight,
     required this.reserveTagLine,
-    required this.progressHeight,
+    required this.reserveEditableProgress,
     required this.reserveAction,
   });
 
   final double titleHeight;
   final double clientHeight;
   final bool reserveTagLine;
-  final double progressHeight;
+  final bool reserveEditableProgress;
   final bool reserveAction;
 }
 
@@ -223,48 +223,83 @@ class OrderSummaryCard extends StatelessWidget {
               ),
               if (showNodeProgress) ...[
                 SizedBox(height: compact ? 9 : 11),
-                SizedBox(
-                  height: compact ? compactLayout?.progressHeight : null,
-                  child:
-                      onDecreaseNodeProgress != null ||
-                          onIncreaseNodeProgress != null
-                      ? _NodeWorkProgress(
-                          progress: order.currentNodeProgress,
-                          compact: compact,
-                          onDecrease: order.currentNodeProgress <= 0
-                              ? null
-                              : onDecreaseNodeProgress,
-                          onIncrease: order.currentNodeProgress >= 100
-                              ? null
-                              : onIncreaseNodeProgress,
-                        )
-                      : Align(
-                          alignment: Alignment.topCenter,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
-                            child: LinearProgressIndicator(
-                              value: currentNode.progressPercent / 100,
-                              minHeight: compact ? 5 : 6,
-                              backgroundColor:
-                                  colors.surfaceContainerHighest,
-                            ),
+                if (onDecreaseNodeProgress != null ||
+                    onIncreaseNodeProgress != null)
+                  _NodeWorkProgress(
+                    progress: order.currentNodeProgress,
+                    compact: compact,
+                    onDecrease: order.currentNodeProgress <= 0
+                        ? null
+                        : onDecreaseNodeProgress,
+                    onIncrease: order.currentNodeProgress >= 100
+                        ? null
+                        : onIncreaseNodeProgress,
+                  )
+                else if (compact &&
+                    compactLayout?.reserveEditableProgress == true)
+                  Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      IgnorePointer(
+                        child: Opacity(
+                          opacity: 0,
+                          child: _NodeWorkProgress(
+                            progress: 0,
+                            compact: true,
+                            onDecrease: null,
+                            onIncrease: null,
                           ),
                         ),
-                ),
+                      ),
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(
+                            value: currentNode.progressPercent / 100,
+                            minHeight: 5,
+                            backgroundColor:
+                                colors.surfaceContainerHighest,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(99),
+                      child: LinearProgressIndicator(
+                        value: currentNode.progressPercent / 100,
+                        minHeight: compact ? 5 : 6,
+                        backgroundColor: colors.surfaceContainerHighest,
+                      ),
+                    ),
+                  ),
               ],
               if (onConfirmNode != null ||
                   (compact && compactLayout?.reserveAction == true)) ...[
                 SizedBox(height: compact ? 10 : 12),
                 SizedBox(
                   width: double.infinity,
-                  height: compact ? 40 : null,
-                  child: onConfirmNode == null
-                      ? const SizedBox.shrink()
-                      : ResponsiveCardActionButton(
+                  child: onConfirmNode != null
+                      ? ResponsiveCardActionButton(
                           onPressed: onConfirmNode,
                           icon: Icons.check_circle_outline_rounded,
                           label: '确认节点',
                           compact: compact,
+                        )
+                      : IgnorePointer(
+                          child: Opacity(
+                            opacity: 0,
+                            child: ResponsiveCardActionButton(
+                              onPressed: () {},
+                              icon: Icons.check_circle_outline_rounded,
+                              label: '确认节点',
+                              compact: true,
+                            ),
+                          ),
                         ),
                 ),
               ],
@@ -283,7 +318,16 @@ class _CompactTagLine extends StatelessWidget {
   Widget build(BuildContext context) {
     const slotHeight = 25.0;
     if (tags.isEmpty) {
-      return const SizedBox(height: slotHeight);
+      return const SizedBox(
+        height: slotHeight,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Opacity(
+            opacity: 0,
+            child: SummaryTag(text: '#', compact: true),
+          ),
+        ),
+      );
     }
 
     return SizedBox(
