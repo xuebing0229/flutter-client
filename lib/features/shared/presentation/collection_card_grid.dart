@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'layout_spacing.dart';
 
-/// A lazy, content-height card grid that respects the desktop navigation pane.
+/// A lazy card grid that respects the desktop navigation pane.
 ///
-/// Every card takes only the vertical space needed by its actual text and
-/// controls. The next row begins after the tallest card in the current row.
+/// By default cards keep their natural content height. Callers can opt into
+/// equal-height rows when a visually aligned card wall is more appropriate.
 class CollectionCardGrid extends StatelessWidget {
   const CollectionCardGrid({
     required this.itemCount,
