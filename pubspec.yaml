@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+175
-# beta-175: atomic-device-join
+version: 0.0.1+176
+# beta-176: card-grid-and-device-code-ui
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
