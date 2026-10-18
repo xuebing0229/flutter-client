@@ -97,9 +97,23 @@ void main() {
       expect(third.top, fourth.top);
       expect(third.height, fourth.height);
 
-      // The second row contains only short titles, so it must stay shorter
-      // than the first row instead of inheriting a global two-line slot.
-      expect(third.height, lessThan(first.height));
+      // Corresponding client rows line up inside each visual row.
+      Rect clientIconRect(int cardIndex) => tester.getRect(
+            find.descendant(
+              of: cards.at(cardIndex),
+              matching: find.byIcon(Icons.person_outline_rounded),
+            ),
+          );
+      expect(clientIconRect(0).top, clientIconRect(1).top);
+      expect(clientIconRect(2).top, clientIconRect(3).top);
+
+      // Row 2 contains only short titles, so its client row starts sooner than
+      // row 1. This proves title space is computed per row rather than using a
+      // global hard-coded two-line slot. Total card height may still be taller
+      // because later fields (progress/actions) legitimately differ.
+      final firstRowClientOffset = clientIconRect(0).top - first.top;
+      final secondRowClientOffset = clientIconRect(2).top - third.top;
+      expect(secondRowClientOffset, lessThan(firstRowClientOffset));
     },
   );
 
