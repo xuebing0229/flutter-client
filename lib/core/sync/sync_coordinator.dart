@@ -819,6 +819,8 @@ class SyncCoordinator extends ChangeNotifier {
   Future<void> bootstrapPeerTransport({
     required String deviceId,
     required String name,
+    String? appDeviceId,
+    String? platform,
   }) {
     return _enqueue(() async {
       if (_syncPaused) {
@@ -851,14 +853,45 @@ class SyncCoordinator extends ChangeNotifier {
       // tombstone can immediately unshare it again and create an endless
       // "repairing sync channel" loop.
       await _authorizeTransportRejoin(remoteId);
+      var transportShared = false;
       try {
         await _bridge.pairDevice(
           accountId: accountId,
           deviceId: remoteId,
           name: remoteName,
         );
+        transportShared = true;
+
+        final provisionalAppDeviceId = appDeviceId?.trim();
+        final provisionalPlatform = platform?.trim();
+        if (provisionalAppDeviceId != null &&
+            provisionalAppDeviceId.length >= 16 &&
+            provisionalPlatform != null &&
+            provisionalPlatform.isNotEmpty) {
+          await accountStore.bindSyncTransportId(
+            appDeviceId: provisionalAppDeviceId,
+            syncTransportId: remoteId,
+            name: remoteName,
+            platform: provisionalPlatform,
+          );
+          // Commit the new app-device record before the receiver tears down the
+          // bootstrap folder. This removes the old race where a historical
+          // tombstone could unshare the transport before the new device became
+          // visible to the source account.
+          await _syncAccountState();
+          await _bridge.requestScan(accountId: accountId);
+        }
+
         await _refreshTransportStatus();
       } catch (_) {
+        if (transportShared) {
+          try {
+            await _bridge.unshareDevice(
+              accountId: accountId,
+              deviceId: remoteId,
+            );
+          } catch (_) {}
+        }
         await _clearTransportReauthorization(remoteId);
         rethrow;
       }
