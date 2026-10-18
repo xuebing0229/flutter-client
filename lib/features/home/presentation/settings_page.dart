@@ -69,6 +69,7 @@ class _SettingsPageState extends State<SettingsPage>
       const OrderDeadlineReminderService();
   final ScreenshotImportHistory _screenshotImportHistory =
       const ScreenshotImportHistory();
+  late final DesktopPetAccountSync _desktopPetAccountSync;
 
   bool _reminderBusy = false;
   Map<String, dynamic> _reminderDiagnostics = const <String, dynamic>{};
@@ -90,6 +91,9 @@ class _SettingsPageState extends State<SettingsPage>
   @override
   void initState() {
     super.initState();
+    _desktopPetAccountSync = DesktopPetAccountSync(
+      settings: widget.desktopPetSettings,
+    );
     WidgetsBinding.instance.addObserver(this);
     _betaUpdater.addListener(_onBetaUpdateChanged);
     // Update state lives for the whole app process. Always refresh when the
@@ -413,7 +417,11 @@ class _SettingsPageState extends State<SettingsPage>
       final snapshot = await widget.syncCoordinator.exportPortableWorkspace();
       final screenshotHistory =
           await _screenshotImportHistory.read(accountId: accountId);
-      final desktopPetBackup = await widget.desktopPetSettings.exportForBackup();
+      if (Platform.isWindows) {
+        await _desktopPetAccountSync.publish(accountId);
+      }
+      final desktopPetBackup =
+          await _desktopPetAccountSync.exportForFullBackup(accountId);
       final backup = AppBackupData(
         exportedAt: snapshot.exportedAt,
         orders: snapshot.orders,
@@ -567,9 +575,11 @@ class _SettingsPageState extends State<SettingsPage>
         if (extractedRoot == null) {
           throw const FormatException('桌宠备份缺少随包美术文件。');
         }
-        await widget.desktopPetSettings.restoreFromBackup(
+        await _desktopPetAccountSync.restoreFullBackupToAccount(
+          accountId: localAccountId ?? incomingAccount!.accountId,
           rawManifest: desktopPetBackup,
           extractedRoot: extractedRoot,
+          applyLocally: Platform.isWindows,
         );
       }
 
