@@ -761,15 +761,12 @@ class AccountStore extends ChangeNotifier {
       final sameTransport =
           device.syncTransportId?.trim() == normalizedTransportId;
 
-      // Legacy builds did not persist a stable installation ID. When the
-      // current record was created later for the exact same named/platform
-      // device, reclaim that older alias once and attach the stable ID.
-      final legacySameDevice = isLegacySameInstallationCandidate(
-        current: current,
-        candidate: device,
-      );
-
-      if (sameInstallation || sameTransport || legacySameDevice) {
+      // Never infer physical identity from display name/platform. Two genuine
+      // devices can have the same Windows/Android name, and treating that as a
+      // duplicate revokes a freshly joined device before its account state can
+      // reach the existing peers. Exact stable-installation or transport
+      // identity is required for automatic collapse.
+      if (sameInstallation || sameTransport) {
         aliases.add(device);
       }
     }
@@ -1183,17 +1180,6 @@ class AccountStore extends ChangeNotifier {
       await atomicWriteString(marker, record.currentDeviceId);
     }
   }
-}
-
-@visibleForTesting
-bool isLegacySameInstallationCandidate({
-  required AccountDevice current,
-  required AccountDevice candidate,
-}) {
-  return candidate.installationId == null &&
-      candidate.name.trim() == current.name.trim() &&
-      candidate.platform.trim() == current.platform.trim() &&
-      !candidate.firstSeenAt.isAfter(current.firstSeenAt);
 }
 
 String _randomId() => base64UrlEncode(_randomBytes(12)).replaceAll('=', '');
