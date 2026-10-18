@@ -75,6 +75,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       const OrderDeadlineReminderService();
   final InteractionHintStore _hintStore = const InteractionHintStore();
   final DesktopPetService _desktopPetService = DesktopPetService();
+  late final DesktopPetAccountSync _desktopPetAccountSync;
   late final SyncCoordinator _syncCoordinator;
 
   static const _orderCardViewSettingKey = 'orderCardView';
@@ -101,6 +102,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
   Timer? _focusPersistenceHeartbeat;
+  Timer? _desktopPetAccountSyncDebounce;
+  Timer? _desktopPetLegacySeedTimer;
   String? _focusRecoverySessionId;
   DateTime? _focusRecoveryCutoff;
   bool _saving = false;
@@ -113,6 +116,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _newsPromptAttempted = false;
   bool _syncConflictPromptVisible = false;
   bool _syncConflictPromptedUntilClear = false;
+  bool _desktopPetAccountSyncReady = false;
+  bool _applyingSyncedDesktopPet = false;
   Map<String, dynamic>? _syncProgressOverlay;
   String? _syncProgressOverlaySignature;
   AccountSyncState? _accountSyncSnapshot;
@@ -135,6 +140,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         break;
       }
     }
+    _desktopPetAccountSync = DesktopPetAccountSync(
+      settings: _desktopPetService.settings,
+    );
     _syncCoordinator = SyncCoordinator(
       accountId: widget.accountId,
       deviceId: currentDeviceId,
@@ -152,6 +160,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     widget.themeStore.addListener(_onThemeSettingsChanged);
     widget.featureStore.addListener(_onFeatureSettingsChanged);
     widget.accountStore.addListener(_onAccountStoreChanged);
+    if (Platform.isWindows) {
+      _desktopPetService.settings.addListener(_onDesktopPetSettingsChanged);
+    }
     _restoreLocalData();
   }
 
@@ -161,8 +172,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     var bootstrapOnly = false;
     var hasWorkspaceSettings = false;
     var consumedPortableSyncHistory = false;
+    var hadDesktopPetConfigBeforeSync = false;
 
     try {
+      if (Platform.isWindows) {
+        hadDesktopPetConfigBeforeSync =
+            await _desktopPetService.settings.hasLocalConfigFile();
+        await _desktopPetService.settings.load();
+      }
       final backup = await _persistence.load(accountId: widget.accountId);
       isNewAccount = backup == null;
       bootstrapOnly = backup?.settings['bootstrapOnly'] == true;
@@ -236,6 +253,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         seedLocalSettings:
             !bootstrapOnly && (hasWorkspaceSettings || isNewAccount),
       );
+      if (Platform.isWindows) {
+        _applyingSyncedDesktopPet = true;
+        try {
+          // Pull an already-synced desktop-pet workspace first. Never let a
+          // clean/reinstalled PC publish its empty runtime config over the
+          // copy that a phone is relaying.
+          await _desktopPetAccountSync.reconcile(widget.accountId);
+        } finally {
+          _applyingSyncedDesktopPet = false;
+        }
+        _desktopPetAccountSyncReady = true;
+
+        // v171 and earlier kept desktop-pet data only on Windows. Give an
+        // existing remote workspace a short chance to arrive before seeding
+        // this legacy local copy for the first time.
+        if (hadDesktopPetConfigBeforeSync &&
+            _desktopPetService.settings.accountSyncRevision == null) {
+          _desktopPetLegacySeedTimer = Timer(
+            const Duration(seconds: 8),
+            () => unawaited(_reconcileDesktopPetAccountSync(
+              seedLocalIfMissing: true,
+            )),
+          );
+        }
+      }
       if (consumedPortableSyncHistory) {
         // The portable history is a one-time handoff. Persist the materialized
         // workspace again without embedding it, otherwise every launch would
@@ -406,6 +448,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       });
     }
 
+    if (Platform.isWindows && _desktopPetAccountSyncReady) {
+      _scheduleDesktopPetAccountReconcile();
+    }
+
     final conflicts = _syncCoordinator.conflicts;
     if (conflicts.isEmpty) {
       _syncConflictPromptedUntilClear = false;
@@ -429,6 +475,69 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       unawaited(_showSyncConflictPrompt());
     });
+  }
+
+  void _onDesktopPetSettingsChanged() {
+    if (!Platform.isWindows ||
+        !_ready ||
+        !_desktopPetAccountSyncReady ||
+        _applyingSyncedDesktopPet) {
+      return;
+    }
+    _desktopPetLegacySeedTimer?.cancel();
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetAccountSyncDebounce = Timer(
+      const Duration(milliseconds: 450),
+      () => unawaited(_publishDesktopPetAccountSync()),
+    );
+  }
+
+  void _scheduleDesktopPetAccountReconcile() {
+    if (!Platform.isWindows ||
+        !_ready ||
+        !_desktopPetAccountSyncReady ||
+        _applyingSyncedDesktopPet) {
+      return;
+    }
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetAccountSyncDebounce = Timer(
+      const Duration(milliseconds: 500),
+      () => unawaited(_reconcileDesktopPetAccountSync()),
+    );
+  }
+
+  Future<void> _publishDesktopPetAccountSync() async {
+    if (!Platform.isWindows || !_desktopPetAccountSyncReady) return;
+    try {
+      await _desktopPetAccountSync.publish(widget.accountId);
+    } catch (_) {
+      // Desktop-pet account sync is supplementary; the shared workspace keeps
+      // retrying through normal Syncthing scans and future local changes.
+    }
+  }
+
+  Future<void> _reconcileDesktopPetAccountSync({
+    bool seedLocalIfMissing = false,
+  }) async {
+    if (!Platform.isWindows ||
+        !_desktopPetAccountSyncReady ||
+        _applyingSyncedDesktopPet) {
+      return;
+    }
+    _applyingSyncedDesktopPet = true;
+    try {
+      await _desktopPetAccountSync.reconcile(
+        widget.accountId,
+        seedLocalIfMissing: seedLocalIfMissing,
+      );
+      if (_ready && mounted) {
+        await _syncDesktopPet();
+      }
+    } catch (_) {
+      // A half-arrived auxiliary file must never block the main work data.
+    } finally {
+      _applyingSyncedDesktopPet = false;
+    }
   }
 
   Future<void> _showSyncConflictPrompt() async {
@@ -678,8 +787,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             : null,
       );
     } catch (_) {
-      // Desktop pet is optional and local-only. A host/config failure must not
-      // bubble into the main Guild UI zone or interrupt order/focus editing.
+      // Desktop pet is optional. A host/config failure must not bubble into
+      // the main Guild UI zone or interrupt order/focus editing.
     }
   }
 
@@ -1037,6 +1146,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
     _focusPersistenceHeartbeat?.cancel();
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetLegacySeedTimer?.cancel();
+    if (Platform.isWindows) {
+      _desktopPetService.settings.removeListener(_onDesktopPetSettingsChanged);
+    }
     widget.themeStore.removeListener(_onThemeSettingsChanged);
     widget.featureStore.removeListener(_onFeatureSettingsChanged);
     widget.accountStore.removeListener(_onAccountStoreChanged);
