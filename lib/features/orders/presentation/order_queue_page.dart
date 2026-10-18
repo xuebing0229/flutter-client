@@ -1067,6 +1067,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           ? 320
                           : 260,
                       desktopAspectRatio: 1.05,
+                      equalizeRowHeights: true,
                       itemBuilder: (context, index) {
                         final order = orders[index];
                         return OrderSummaryCard(
