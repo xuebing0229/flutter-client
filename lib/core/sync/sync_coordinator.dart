@@ -45,6 +45,18 @@ Future<void> runWorkspaceRestoreTransaction({
   }
 }
 
+@visibleForTesting
+bool shouldRetainRevokedTransportShare({
+  required String transportId,
+  required Set<String> activeTransportIds,
+  required Set<String> reauthorizedTransportIds,
+}) {
+  final id = transportId.trim();
+  return id.isNotEmpty &&
+      (activeTransportIds.contains(id) ||
+          reauthorizedTransportIds.contains(id));
+}
+
 class PortableWorkspaceSnapshot {
   const PortableWorkspaceSnapshot({
     required this.exportedAt,
@@ -1820,8 +1832,11 @@ class SyncCoordinator extends ChangeNotifier {
       // after a revoked device rejoins and receives a new app-device ID.
       // During the short bootstrap window the new app-device record may not
       // have arrived yet, so also honor the persisted explicit rejoin marker.
-      if (activeTransportIds.contains(transportId) ||
-          reauthorizedTransportIds.contains(transportId)) {
+      if (shouldRetainRevokedTransportShare(
+        transportId: transportId,
+        activeTransportIds: activeTransportIds,
+        reauthorizedTransportIds: reauthorizedTransportIds,
+      )) {
         continue;
       }
 
