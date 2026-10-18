@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+179
-# beta-179 retry3: adaptive-card-row-test
+# beta-179 retry4: adaptive-card-sort-independent-test
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
