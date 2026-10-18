@@ -268,7 +268,6 @@ class OrderSummaryCard extends StatelessWidget {
                         ),
                 ),
               ],
-,
         ],
       ),
     );
