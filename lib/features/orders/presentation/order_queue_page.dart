@@ -195,6 +195,80 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     }
   }
 
+  OrderSummaryCardCompactLayout _compactRowLayout({
+    required BuildContext context,
+    required List<QueueOrder> orders,
+    required List<int> rowIndices,
+    required double cardWidth,
+  }) {
+    final theme = Theme.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+    );
+    final clientStyle = theme.textTheme.bodySmall;
+    final innerWidth = (cardWidth - 24).clamp(1.0, double.infinity);
+    final clientWidth = (innerWidth - 23).clamp(1.0, double.infinity);
+
+    double measure(String text, TextStyle? style, double width) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: direction,
+        textScaler: scaler,
+      )..layout(maxWidth: width);
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final rowOrders = <QueueOrder>[
+      for (final index in rowIndices) orders[index],
+    ];
+    final titleHeight = rowOrders
+        .map((order) => measure(order.title, titleStyle, innerWidth))
+        .fold<double>(0, (maxHeight, height) =>
+            height > maxHeight ? height : maxHeight);
+    final clientHeight = widget.featureStore.clientInfo
+        ? rowOrders
+              .map(
+                (order) => measure(
+                  order.clientName.isEmpty ? '未填写' : order.clientName,
+                  clientStyle,
+                  clientWidth,
+                ),
+              )
+              .fold<double>(0, (maxHeight, height) =>
+                  height > maxHeight ? height : maxHeight)
+        : 0.0;
+    final reserveTagLine =
+        widget.featureStore.customTags &&
+        rowOrders.any((order) => order.tags.isNotEmpty);
+    final hasEditableProgress =
+        widget.featureStore.nodeProgress &&
+        rowOrders.any(
+          (order) =>
+              !order.isCompleted &&
+              order.currentNodeId != notStartedNodeId,
+        );
+    final progressHeight = widget.featureStore.nodeProgress
+        ? (hasEditableProgress ? 42.0 : 5.0)
+        : 0.0;
+    final reserveAction = rowOrders.any(
+      (order) =>
+          !order.isCompleted &&
+          order.nodePresetSnapshot.nodes.isNotEmpty,
+    );
+
+    return OrderSummaryCardCompactLayout(
+      titleHeight: titleHeight,
+      clientHeight: clientHeight,
+      reserveTagLine: reserveTagLine,
+      progressHeight: progressHeight,
+      reserveAction: reserveAction,
+    );
+  }
+
   void _openOrder(QueueOrder order) {
     FocusManager.instance.primaryFocus?.unfocus();
     Navigator.of(context).push(
@@ -1068,10 +1142,18 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           : 260,
                       desktopAspectRatio: 1.05,
                       equalizeRowHeights: true,
-                      itemBuilder: (context, index) {
+                      rowItemBuilder:
+                          (context, index, rowIndices, cardWidth) {
                         final order = orders[index];
+                        final compactLayout = _compactRowLayout(
+                          context: context,
+                          orders: orders,
+                          rowIndices: rowIndices,
+                          cardWidth: cardWidth,
+                        );
                         return OrderSummaryCard(
                           order: order,
+                          compactLayout: compactLayout,
                           hasSyncConflict: widget
                               .syncCoordinator
                               .conflictedOrderIds
