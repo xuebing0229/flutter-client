@@ -1330,6 +1330,107 @@ class DesktopPetAccountSync {
     }
   }
 
+  Iterable<String> _manifestAssetPaths(Map raw) sync* {
+    final presets = raw['presets'];
+    if (presets is! List) return;
+    for (final preset in presets) {
+      if (preset is! Map) continue;
+      for (final key in const <String>['imageA', 'imageB', 'bubbleImage']) {
+        final value = preset[key];
+        if (value is String &&
+            value.startsWith('desktop-pet/presets/') &&
+            !value.contains('..')) {
+          yield value;
+        }
+      }
+    }
+  }
+
+  Future<DesktopPetBackupExport> exportForFullBackup(String accountId) {
+    return _enqueue(() async {
+      final manifestFile = await _manifestFile(accountId);
+      if (!await manifestFile.exists()) {
+        return settings.exportForBackup();
+      }
+
+      final raw = jsonDecode(await manifestFile.readAsString());
+      if (raw is! Map || raw['schema'] != 1) {
+        throw const FormatException('同步桌宠设置格式无效。');
+      }
+      final manifest = <String, dynamic>{
+        for (final entry in raw.entries) entry.key.toString(): entry.value,
+      };
+      final root = await _recordStore.rootDirectory(accountId);
+      final files = <String, File>{};
+      for (final relative in _manifestAssetPaths(manifest)) {
+        final file = File(
+          <String>[root.path, ...relative.split('/')].join(Platform.pathSeparator),
+        );
+        if (!await file.exists()) {
+          throw FormatException('同步桌宠素材尚未完整到达：$relative');
+        }
+        files[relative] = file;
+      }
+      return DesktopPetBackupExport(manifest: manifest, files: files);
+    });
+  }
+
+  Future<void> restoreFullBackupToAccount({
+    required String accountId,
+    required Object? rawManifest,
+    required Directory extractedRoot,
+    bool applyLocally = false,
+  }) {
+    return _enqueue(() async {
+      if (rawManifest is! Map || rawManifest['schema'] != 1) {
+        throw const FormatException('桌宠备份设置格式无效。');
+      }
+      final root = await _recordStore.rootDirectory(accountId);
+      final revision = DateTime.now().toUtc();
+      final manifest = <String, dynamic>{
+        for (final entry in rawManifest.entries)
+          entry.key.toString(): entry.value,
+        'syncRevision': revision.toIso8601String(),
+      };
+
+      for (final relative in _manifestAssetPaths(manifest)) {
+        final source = File(
+          <String>[
+            extractedRoot.path,
+            ...relative.split('/'),
+          ].join(Platform.pathSeparator),
+        );
+        if (!await source.exists()) {
+          throw FormatException('桌宠备份缺少素材：$relative');
+        }
+        final destination = File(
+          <String>[root.path, ...relative.split('/')].join(Platform.pathSeparator),
+        );
+        await destination.parent.create(recursive: true);
+        if (source.absolute.path != destination.absolute.path) {
+          await source.copy(destination.path);
+        }
+      }
+
+      await atomicWriteString(
+        await _manifestFile(accountId),
+        const JsonEncoder.withIndent('  ').convert(manifest),
+      );
+
+      if (applyLocally) {
+        await settings.restoreFromBackup(
+          rawManifest: manifest,
+          extractedRoot: root,
+        );
+        await settings.markAccountSyncRevision(revision);
+      }
+
+      try {
+        await _bridge.requestScan(accountId: accountId);
+      } catch (_) {}
+    });
+  }
+
   Future<void> reconcile(
     String accountId, {
     bool seedLocalIfMissing = false,
