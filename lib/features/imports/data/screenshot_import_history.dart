@@ -18,10 +18,12 @@ String screenshotCardFingerprint({
     '${products ? 'products' : 'orders'}|$imageSha256|$cardIndex';
 
 class ScreenshotImportHistory {
-  ScreenshotImportHistory({SyncRecordStore? syncRecordStore})
-      : _syncRecordStore = syncRecordStore ?? SyncRecordStore();
+  const ScreenshotImportHistory({SyncRecordStore? syncRecordStore})
+      : _syncRecordStore = syncRecordStore;
 
-  final SyncRecordStore _syncRecordStore;
+  final SyncRecordStore? _syncRecordStore;
+
+  SyncRecordStore get _store => _syncRecordStore ?? SyncRecordStore();
 
   Future<File> _legacyFile(String accountId) async {
     final dir = await getApplicationSupportDirectory();
@@ -32,7 +34,7 @@ class ScreenshotImportHistory {
   }
 
   Future<Directory> _syncDirectory(String accountId) async {
-    final root = await _syncRecordStore.rootDirectory(accountId);
+    final root = await _store.rootDirectory(accountId);
     return Directory(
       '${root.path}${Platform.pathSeparator}auxiliary'
       '${Platform.pathSeparator}screenshot-import-history-v2',
