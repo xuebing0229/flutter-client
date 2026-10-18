@@ -417,9 +417,6 @@ class _SettingsPageState extends State<SettingsPage>
       final snapshot = await widget.syncCoordinator.exportPortableWorkspace();
       final screenshotHistory =
           await _screenshotImportHistory.read(accountId: accountId);
-      if (Platform.isWindows) {
-        await _desktopPetAccountSync.publish(accountId);
-      }
       final desktopPetBackup =
           await _desktopPetAccountSync.exportForFullBackup(accountId);
       final backup = AppBackupData(
