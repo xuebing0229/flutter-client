@@ -1255,6 +1255,16 @@ class DesktopPetSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> disableRuntimeForAccountExit() async {
+    await load();
+    _enabled = false;
+    _focusStartedAt = null;
+    _currentOrderTitle = null;
+    _currentOrderNode = null;
+    _currentOrderDeadline = null;
+    await _persist();
+  }
+
   Future<void> setRuntimeState({
     required bool enabled,
     required String? currentOrderTitle,
@@ -1749,6 +1759,21 @@ class DesktopPetService {
     await _stopCurrentHost();
   }
 
+  Future<void> stopForAccountExit() async {
+    _requestGeneration++;
+    _enabledRequested = false;
+
+    // The desktop host is a detached process. Killing the Process handle is
+    // best-effort only, so also persist runtime enabled=false. The host watches
+    // config.json and will close itself even if the direct kill races/fails.
+    try {
+      await settings.disableRuntimeForAccountExit();
+    } catch (_) {
+      // Still attempt the direct process stop below.
+    }
+    await _stopCurrentHost();
+  }
+
   Future<void> _stopCurrentHost() async {
     final existing = _stopInFlight;
     if (existing != null) {
@@ -1781,7 +1806,11 @@ class DesktopPetService {
   }
 
   void dispose() {
-    unawaited(stop());
-    settings.dispose();
+    final shutdown = stopForAccountExit();
+    unawaited(
+      shutdown.whenComplete(() {
+        settings.dispose();
+      }),
+    );
   }
 }
