@@ -365,17 +365,22 @@ class DesktopPetSettings extends ChangeNotifier {
     Directory target,
   ) async {
     if (_legacyAccountMigrationChecked) return;
-    _legacyAccountMigrationChecked = true;
 
     final targetConfig = File(
       '${target.path}${Platform.pathSeparator}config.json',
     );
-    if (await targetConfig.exists()) return;
+    if (await targetConfig.exists()) {
+      _legacyAccountMigrationChecked = true;
+      return;
+    }
 
     final legacyConfig = File(
       '${legacyRoot.path}${Platform.pathSeparator}config.json',
     );
-    if (!await legacyConfig.exists()) return;
+    if (!await legacyConfig.exists()) {
+      _legacyAccountMigrationChecked = true;
+      return;
+    }
 
     await target.create(recursive: true);
     final legacyPresets = Directory(
@@ -438,6 +443,7 @@ class DesktopPetSettings extends ChangeNotifier {
       targetConfig,
       const JsonEncoder.withIndent('  ').convert(normalized),
     );
+    _legacyAccountMigrationChecked = true;
 
     // Only after the account-scoped copy is durable do we remove the legacy
     // singleton copy. This prevents another account from inheriting the first
