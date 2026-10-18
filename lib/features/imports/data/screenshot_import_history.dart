@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/account/account_models.dart';
 import '../../../core/storage/atomic_file.dart';
+import '../../../core/sync/embedded_syncthing_bridge.dart';
 import '../../../core/sync/sync_record_store.dart';
 
 /// A fingerprint is attached to ONE recognized card, not an entire
@@ -18,10 +19,13 @@ String screenshotCardFingerprint({
     '${products ? 'products' : 'orders'}|$imageSha256|$cardIndex';
 
 class ScreenshotImportHistory {
-  const ScreenshotImportHistory({SyncRecordStore? syncRecordStore})
-      : _syncRecordStore = syncRecordStore;
+  const ScreenshotImportHistory({
+    SyncRecordStore? syncRecordStore,
+    this.syncBridge = const EmbeddedSyncthingBridge(),
+  }) : _syncRecordStore = syncRecordStore;
 
   final SyncRecordStore? _syncRecordStore;
+  final EmbeddedSyncthingBridge syncBridge;
 
   SyncRecordStore get _store => _syncRecordStore ?? SyncRecordStore();
 
@@ -52,6 +56,7 @@ class ScreenshotImportHistory {
     if (values.isEmpty) return;
     final directory = await _syncDirectory(accountId);
     await directory.create(recursive: true);
+    var wrote = false;
     for (final fingerprint in values) {
       final file = File(
         '${directory.path}${Platform.pathSeparator}'
@@ -62,6 +67,14 @@ class ScreenshotImportHistory {
         file,
         jsonEncode(<String, dynamic>{'fingerprint': fingerprint}),
       );
+      wrote = true;
+    }
+    if (wrote) {
+      try {
+        await syncBridge.requestScan(accountId: accountId);
+      } catch (_) {
+        // Marker files remain in the shared folder for the next normal scan.
+      }
     }
   }
 
