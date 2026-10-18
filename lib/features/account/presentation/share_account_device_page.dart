@@ -206,6 +206,8 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       await widget.syncCoordinator.bootstrapPeerTransport(
         deviceId: deviceId,
         name: deviceName,
+        appDeviceId: server.acceptedReceiverAppDeviceId,
+        platform: server.acceptedReceiverPlatform,
       );
       await server.completeTransfer();
       if (mounted && identical(_server, server)) {
