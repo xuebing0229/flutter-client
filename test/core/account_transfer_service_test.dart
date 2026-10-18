@@ -13,21 +13,23 @@ void main() {
         'artist-workbench-bootstrap-abcdefghijklmnopqrstuvwxyz123456',
   );
 
-  test('v175 response authenticates provisional app-device binding', () async {
-    final response = await AccountTransferResponseCode.create(
-      descriptor: descriptor,
-      receiverDeviceId:
-          'IIIIIII-JJJJJJJ-KKKKKKK-LLLLLLL-MMMMMMM-NNNNNNN-OOOOOOO-PPPPPPP',
-      receiverName: 'new-pc',
-      receiverAppDeviceId: 'provisional-app-device-123456',
-      receiverPlatform: 'windows',
-    );
+  for (final platform in <String>['windows', 'android']) {
+    test('v175 response authenticates $platform provisional binding', () async {
+      final response = await AccountTransferResponseCode.create(
+        descriptor: descriptor,
+        receiverDeviceId:
+            'IIIIIII-JJJJJJJ-KKKKKKK-LLLLLLL-MMMMMMM-NNNNNNN-OOOOOOO-PPPPPPP',
+        receiverName: 'new-device',
+        receiverAppDeviceId: 'provisional-app-device-123456',
+        receiverPlatform: platform,
+      );
 
-    final decoded = AccountTransferResponseCode.decode(response.encode());
-    expect(decoded.receiverAppDeviceId, 'provisional-app-device-123456');
-    expect(decoded.receiverPlatform, 'windows');
-    expect(await decoded.verifies(descriptor), isTrue);
-  });
+      final decoded = AccountTransferResponseCode.decode(response.encode());
+      expect(decoded.receiverAppDeviceId, 'provisional-app-device-123456');
+      expect(decoded.receiverPlatform, platform);
+      expect(await decoded.verifies(descriptor), isTrue);
+    });
+  }
 
   test('tampering provisional app-device id invalidates binding proof', () async {
     final response = await AccountTransferResponseCode.create(
