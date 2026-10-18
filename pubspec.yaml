@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+176
-# beta-176: card-grid-and-device-code-ui
+version: 0.0.1+177
+# beta-177: card-grid-fix
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
