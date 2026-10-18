@@ -1330,12 +1330,15 @@ class DesktopPetAccountSync {
     }
   }
 
-  Future<void> reconcile(String accountId) {
+  Future<void> reconcile(
+    String accountId, {
+    bool seedLocalIfMissing = false,
+  }) {
     return _enqueue(() async {
       await settings.load();
       final manifestFile = await _manifestFile(accountId);
       if (!await manifestFile.exists()) {
-        if (await settings.hasLocalConfigFile()) {
+        if (seedLocalIfMissing) {
           await _publishUnlocked(accountId);
         }
         return;
