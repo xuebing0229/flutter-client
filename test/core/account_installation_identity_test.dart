@@ -21,12 +21,6 @@ AccountDevice _device({
 
 void main() {
   test('same name and platform are not enough to identify one device', () {
-    final current = _device(
-      id: 'new',
-      name: 'yyt',
-      platform: 'windows',
-      firstSeenAt: DateTime.utc(2026, 10, 18),
-    );
     final other = _device(
       id: 'old',
       name: 'yyt',
@@ -34,12 +28,49 @@ void main() {
       firstSeenAt: DateTime.utc(2026, 10, 12),
     );
 
-    expect(current.name, other.name);
-    expect(current.platform, other.platform);
-    expect(current.installationId, isNull);
-    expect(other.installationId, isNull);
-    // Automatic device collapse now requires exact installation or transport
-    // identity inside AccountStore.reconcileCurrentDeviceTransportIdentity.
+    expect(
+      isSameDeviceIdentityForAutomaticDedupe(
+        installationId: 'new-installation-identity',
+        syncTransportId: 'NEW-TRANSPORT-IDENTITY-1234567890',
+        candidate: other,
+      ),
+      isFalse,
+    );
+  });
+
+  test('exact installation or transport identity can dedupe', () {
+    final byInstallation = _device(
+      id: 'installation',
+      name: 'other-name',
+      platform: 'windows',
+      firstSeenAt: DateTime.utc(2026, 10, 12),
+      installationId: 'same-installation-identity',
+    );
+    expect(
+      isSameDeviceIdentityForAutomaticDedupe(
+        installationId: 'same-installation-identity',
+        syncTransportId: 'NEW-TRANSPORT-IDENTITY-1234567890',
+        candidate: byInstallation,
+      ),
+      isTrue,
+    );
+
+    final byTransport = AccountDevice(
+      id: 'transport',
+      name: 'other-name',
+      platform: 'windows',
+      firstSeenAt: DateTime.utc(2026, 10, 12),
+      lastSeenAt: DateTime.utc(2026, 10, 12),
+      syncTransportId: 'SAME-TRANSPORT-IDENTITY-1234567890',
+    );
+    expect(
+      isSameDeviceIdentityForAutomaticDedupe(
+        installationId: 'new-installation-identity',
+        syncTransportId: 'SAME-TRANSPORT-IDENTITY-1234567890',
+        candidate: byTransport,
+      ),
+      isTrue,
+    );
   });
 
   test('installation identity survives device json round trip', () {
