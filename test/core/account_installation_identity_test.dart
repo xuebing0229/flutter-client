@@ -99,4 +99,56 @@ void main() {
 
     expect(decoded.installationId, 'installation-identity-123');
   });
+  test('newer transport binding can migrate under the same installation id', () {
+    final oldTime = DateTime.utc(2026, 10, 12);
+    final newTime = DateTime.utc(2026, 10, 18);
+    final local = AccountSyncState(
+      accountId: 'account',
+      accountName: 'artist',
+      password: '123456',
+      accountNameUpdatedAt: oldTime,
+      passwordUpdatedAt: oldTime,
+      devices: <String, AccountDevice>{
+        'device': AccountDevice(
+          id: 'device',
+          name: 'yyt',
+          platform: 'windows',
+          firstSeenAt: oldTime,
+          lastSeenAt: oldTime,
+          syncTransportId: 'OLD-TRANSPORT-IDENTITY-1234567890',
+        ),
+      },
+      revocations: const <String, DeviceRevocation>{},
+    );
+    final incoming = AccountSyncState(
+      accountId: 'account',
+      accountName: 'artist',
+      password: '123456',
+      accountNameUpdatedAt: oldTime,
+      passwordUpdatedAt: oldTime,
+      devices: <String, AccountDevice>{
+        'device': AccountDevice(
+          id: 'device',
+          name: 'yyt',
+          platform: 'windows',
+          firstSeenAt: oldTime,
+          lastSeenAt: newTime,
+          syncTransportId: 'NEW-TRANSPORT-IDENTITY-1234567890',
+          installationId: 'installation-identity-123',
+        ),
+      },
+      revocations: const <String, DeviceRevocation>{},
+    );
+
+    final merged = local.merge(incoming);
+    expect(
+      merged.devices['device']!.syncTransportId,
+      'NEW-TRANSPORT-IDENTITY-1234567890',
+    );
+    expect(
+      merged.devices['device']!.installationId,
+      'installation-identity-123',
+    );
+  });
+
 }
