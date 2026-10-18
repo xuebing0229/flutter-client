@@ -14,6 +14,7 @@ class CollectionCardGrid extends StatelessWidget {
     required this.desktopMinHeight,
     this.desktopAspectRatio = 1,
     this.minimumCardWidth = 0,
+    this.equalizeRowHeights = false,
     super.key,
   });
 
@@ -26,6 +27,7 @@ class CollectionCardGrid extends StatelessWidget {
   final double desktopMinHeight;
   final double desktopAspectRatio;
   final double minimumCardWidth;
+  final bool equalizeRowHeights;
 
   @override
   Widget build(BuildContext context) {
@@ -58,23 +60,29 @@ class CollectionCardGrid extends StatelessWidget {
           itemCount: rows,
           itemBuilder: (context, row) {
             final first = row * columns;
+            final rowContent = Row(
+              crossAxisAlignment: equalizeRowHeights
+                  ? CrossAxisAlignment.stretch
+                  : CrossAxisAlignment.start,
+              children: [
+                for (var column = 0; column < columns; column++) ...[
+                  if (column != 0) const SizedBox(width: spacing),
+                  Expanded(
+                    child: first + column < itemCount
+                        ? itemBuilder(context, first + column)
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            );
+
             return Padding(
               padding: EdgeInsets.only(
                 bottom: row == rows - 1 ? 0 : spacing,
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var column = 0; column < columns; column++) ...[
-                    if (column != 0) const SizedBox(width: spacing),
-                    Expanded(
-                      child: first + column < itemCount
-                          ? itemBuilder(context, first + column)
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
-                ],
-              ),
+              child: equalizeRowHeights
+                  ? IntrinsicHeight(child: rowContent)
+                  : rowContent,
             );
           },
         );
