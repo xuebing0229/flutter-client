@@ -113,8 +113,10 @@ void main() {
       platform: CommissionPlatform.mihuashi,
       title: '这是一个需要在列表视图完整换行展示的很长图名标题',
       clientName: '单主',
+      deadline: null,
       nodePresetId: defaultNodePreset.id,
       nodePresetSnapshot: defaultNodePreset,
+      currentNodeId: notStartedNodeId,
     );
 
     await tester.pumpWidget(
