@@ -188,6 +188,14 @@ class AccountSyncState {
           ? incoming.lastSeenAt
           : local.lastSeenAt;
 
+      final sameInstallation =
+          local.installationId != null &&
+          incoming.installationId == local.installationId;
+      final acceptIncomingBinding =
+          incoming.installationId != null &&
+          (local.installationId == null || sameInstallation) &&
+          takeIncomingActivity;
+
       mergedDevices[entry.key] = AccountDevice(
         id: local.id,
         name: nameSource.name,
@@ -195,9 +203,13 @@ class AccountSyncState {
         firstSeenAt: firstSeenAt,
         lastSeenAt: lastSeenAt,
         nameUpdatedAt: nameSource.nameUpdatedAt,
-        // Device identities are bindings, not mutable profile data. Prefer an
-        // already-known local binding and only fill missing legacy fields.
-        syncTransportId: local.syncTransportId ?? incoming.syncTransportId,
+        // The stable installation identity is the durable physical-install
+        // binding. Syncthing transport identity may legitimately change after
+        // core/config migration, so accept a newer binding only when it comes
+        // from the same installation (or upgrades a legacy record without one).
+        syncTransportId: acceptIncomingBinding
+            ? incoming.syncTransportId ?? local.syncTransportId
+            : local.syncTransportId ?? incoming.syncTransportId,
         installationId: local.installationId ?? incoming.installationId,
       );
     }
