@@ -260,7 +260,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       return;
     }
     await Clipboard.setData(ClipboardData(text: _qrData(server)));
-    if (mounted) _message('配对码已复制');
+    if (mounted) _message('设备码已复制');
   }
 
   String _qrData(SyncthingAccountTransferServer server) {
@@ -493,7 +493,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                     ),
                   ],
                 ),
-              ),
               ),
             ],
           );
