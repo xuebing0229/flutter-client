@@ -263,6 +263,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '桌宠与导入记录加入账号同步',
     description: '桌宠预设、A/B 图片、气泡图片、位置缩放和文字等设置现在保存在账号同步工作区，手机即使不显示桌宠也会作为同步中转；电脑重装后重新加入账号可以恢复桌宠资料。截图识别的已导入记录也改为设备间合并同步，避免换机后重复导入。完整备份在手机端同样会带上已同步的桌宠素材。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 173,
+    title: '退出账号时关闭桌宠',
+    description: '修复退出登录、返回账号选择或设备被远程解绑后，独立桌宠进程仍可能继续留在桌面的问题。离开账号前会先写入关闭状态并停止桌宠宿主，避免旧账号桌宠残留。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
