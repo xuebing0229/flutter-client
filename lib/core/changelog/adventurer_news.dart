@@ -253,6 +253,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '重复设备记录修复',
     description: '同一台电脑或手机重复走加入账号流程时，会按底层同步设备身份识别为同一台物理设备，不再每加入一次就新增一条“使用中设备”。已经产生的同机重复记录也会在该设备再次上线并识别到相同同步身份后自动合并，重复记录通过同步解绑标记从其他设备列表中消失。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 171,
+    title: '设备身份去重继续修复',
+    description: '修复旧设备记录缺少稳定安装身份、或 Syncthing 身份曾因同步核心迁移而变化时，170 仍无法识别同一台电脑的问题。新版为每个安装保留独立稳定身份；历史重复记录会按稳定身份优先合并，并对旧版仅有“同名同平台”的遗留记录做一次兼容迁移，之后再次加入不会重复新增设备。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
