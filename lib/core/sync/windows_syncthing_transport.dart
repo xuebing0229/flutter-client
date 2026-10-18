@@ -539,6 +539,12 @@ class WindowsSyncthingTransport {
       return;
     }
 
+    final unchanged =
+        existing['label']?.toString() == label &&
+        existing['path']?.toString() == folderPath &&
+        existing['type']?.toString() == 'sendreceive';
+    if (unchanged) return;
+
     existing
       ..['label'] = label
       ..['path'] = folderPath
