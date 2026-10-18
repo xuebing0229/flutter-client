@@ -55,6 +55,41 @@ void main() {
     );
   });
 
+  testWidgets('row-aware builder receives sibling indices and card width',
+      (tester) async {
+    final seenRows = <List<int>>[];
+    final seenWidths = <double>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 580,
+            height: 700,
+            child: CollectionCardGrid(
+              itemCount: 4,
+              mobileAspectRatio: 0.5,
+              desktopMinHeight: 260,
+              rowItemBuilder: (_, index, rowIndices, cardWidth) {
+                if (index == rowIndices.first) {
+                  seenRows.add(List<int>.from(rowIndices));
+                  seenWidths.add(cardWidth);
+                }
+                return SizedBox(height: 80, child: Text('row-aware-$index'));
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(seenRows, <List<int>>[
+      <int>[0, 1],
+      <int>[2, 3],
+    ]);
+    expect(seenWidths.every((width) => width > 250), isTrue);
+  });
+
   testWidgets('wide content pane uses four columns', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
