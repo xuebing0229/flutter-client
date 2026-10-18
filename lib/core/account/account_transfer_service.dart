@@ -76,6 +76,9 @@ class AccountTransferResponseCode {
     required this.receiverDeviceId,
     required this.receiverName,
     required this.proof,
+    this.receiverAppDeviceId,
+    this.receiverPlatform,
+    this.bindingProof,
   });
 
   final String folderId;
@@ -84,10 +87,18 @@ class AccountTransferResponseCode {
   final String receiverName;
   final String proof;
 
+  /// v175+: provisional app-device identity created before the permanent
+  /// account folder is shared. Older response codes omit these fields.
+  final String? receiverAppDeviceId;
+  final String? receiverPlatform;
+  final String? bindingProof;
+
   static Future<AccountTransferResponseCode> create({
     required AccountTransferDescriptor descriptor,
     required String receiverDeviceId,
     required String receiverName,
+    required String receiverAppDeviceId,
+    required String receiverPlatform,
   }) async {
     final normalizedReceiverId = receiverDeviceId.trim();
     if (normalizedReceiverId.length < 20) {
@@ -102,12 +113,26 @@ class AccountTransferResponseCode {
     if (name.isEmpty) {
       throw const FormatException('无法读取新设备名称。');
     }
+    final appDeviceId = receiverAppDeviceId.trim();
+    final platform = receiverPlatform.trim();
+    if (appDeviceId.length < 16 || platform.isEmpty) {
+      throw const FormatException('无法建立新设备的应用身份。');
+    }
     final proofBytes = await _responseProof(
       keyBytes: keyBytes,
       folderId: descriptor.folderId,
       sourceDeviceId: descriptor.sourceDeviceId,
       receiverDeviceId: normalizedReceiverId,
       receiverName: name,
+    );
+    final bindingProofBytes = await _responseBindingProof(
+      keyBytes: keyBytes,
+      folderId: descriptor.folderId,
+      sourceDeviceId: descriptor.sourceDeviceId,
+      receiverDeviceId: normalizedReceiverId,
+      receiverName: name,
+      receiverAppDeviceId: appDeviceId,
+      receiverPlatform: platform,
     );
 
     return AccountTransferResponseCode(
@@ -116,6 +141,9 @@ class AccountTransferResponseCode {
       receiverDeviceId: normalizedReceiverId,
       receiverName: name,
       proof: _encodeBase64Url(proofBytes),
+      receiverAppDeviceId: appDeviceId,
+      receiverPlatform: platform,
+      bindingProof: _encodeBase64Url(bindingProofBytes),
     );
   }
 
@@ -136,6 +164,12 @@ class AccountTransferResponseCode {
       'receiverDeviceId': receiverDeviceId,
       'receiverName': receiverName,
       'proof': proof,
+      if (receiverAppDeviceId?.trim().isNotEmpty == true)
+        'receiverAppDeviceId': receiverAppDeviceId,
+      if (receiverPlatform?.trim().isNotEmpty == true)
+        'receiverPlatform': receiverPlatform,
+      if (bindingProof?.trim().isNotEmpty == true)
+        'bindingProof': bindingProof,
     });
   }
 
@@ -152,6 +186,9 @@ class AccountTransferResponseCode {
     final receiverDeviceId = decoded['receiverDeviceId'];
     final receiverName = decoded['receiverName'];
     final proof = decoded['proof'];
+    final receiverAppDeviceId = decoded['receiverAppDeviceId'];
+    final receiverPlatform = decoded['receiverPlatform'];
+    final bindingProof = decoded['bindingProof'];
 
     if (folderId is! String || !_validBootstrapFolderId(folderId)) {
       throw const FormatException('回应码的临时会话无效。');
@@ -169,12 +206,32 @@ class AccountTransferResponseCode {
       throw const FormatException('回应码缺少会话校验信息。');
     }
 
+    final hasBindingFields =
+        receiverAppDeviceId != null ||
+        receiverPlatform != null ||
+        bindingProof != null;
+    if (hasBindingFields &&
+        (receiverAppDeviceId is! String ||
+            receiverAppDeviceId.trim().length < 16 ||
+            receiverPlatform is! String ||
+            receiverPlatform.trim().isEmpty ||
+            bindingProof is! String ||
+            bindingProof.trim().isEmpty)) {
+      throw const FormatException('回应码的新设备绑定信息不完整。');
+    }
+
     return AccountTransferResponseCode(
       folderId: folderId,
       sourceDeviceId: sourceDeviceId.trim(),
       receiverDeviceId: receiverDeviceId.trim(),
       receiverName: receiverName.trim(),
       proof: proof.trim(),
+      receiverAppDeviceId: receiverAppDeviceId is String
+          ? receiverAppDeviceId.trim()
+          : null,
+      receiverPlatform:
+          receiverPlatform is String ? receiverPlatform.trim() : null,
+      bindingProof: bindingProof is String ? bindingProof.trim() : null,
     );
   }
 
@@ -194,7 +251,33 @@ class AccountTransferResponseCode {
       receiverName: receiverName,
     );
     try {
-      return _secureBytesEqual(_decodeBase64UrlStrict(proof), expected);
+      if (!_secureBytesEqual(_decodeBase64UrlStrict(proof), expected)) {
+        return false;
+      }
+
+      final appDeviceId = receiverAppDeviceId;
+      final platform = receiverPlatform;
+      final extraProof = bindingProof;
+      if (appDeviceId == null && platform == null && extraProof == null) {
+        return true;
+      }
+      if (appDeviceId == null || platform == null || extraProof == null) {
+        return false;
+      }
+
+      final expectedBinding = await _responseBindingProof(
+        keyBytes: keyBytes,
+        folderId: folderId,
+        sourceDeviceId: sourceDeviceId,
+        receiverDeviceId: receiverDeviceId,
+        receiverName: receiverName,
+        receiverAppDeviceId: appDeviceId,
+        receiverPlatform: platform,
+      );
+      return _secureBytesEqual(
+        _decodeBase64UrlStrict(extraProof),
+        expectedBinding,
+      );
     } catch (_) {
       return false;
     }
@@ -285,11 +368,15 @@ class SyncthingAccountTransferServer {
   bool _transferred = false;
   String? _acceptedReceiverDeviceId;
   String? _acceptedReceiverName;
+  String? _acceptedReceiverAppDeviceId;
+  String? _acceptedReceiverPlatform;
 
   bool get receiverFinished => _receiverFinished;
   bool get transferred => _transferred;
   String? get acceptedReceiverDeviceId => _acceptedReceiverDeviceId;
   String? get acceptedReceiverName => _acceptedReceiverName;
+  String? get acceptedReceiverAppDeviceId => _acceptedReceiverAppDeviceId;
+  String? get acceptedReceiverPlatform => _acceptedReceiverPlatform;
 
   static Future<SyncthingAccountTransferServer> start({
     required String payload,
@@ -377,6 +464,8 @@ class SyncthingAccountTransferServer {
 
     _acceptedReceiverDeviceId = response.receiverDeviceId;
     _acceptedReceiverName = response.receiverName;
+    _acceptedReceiverAppDeviceId = response.receiverAppDeviceId;
+    _acceptedReceiverPlatform = response.receiverPlatform;
 
     // Device-level connectivity is not enough. Wait until Syncthing confirms
     // that the receiver shares THIS bootstrap folder back (remoteState=valid).
@@ -523,10 +612,13 @@ class SyncthingAccountTransferClient {
       }
 
       final device = await DeviceDescriptor.current();
+      final provisionalAppDeviceId = _randomToken();
       final response = await AccountTransferResponseCode.create(
         descriptor: descriptor,
         receiverDeviceId: receiverDeviceId,
         receiverName: device.name,
+        receiverAppDeviceId: provisionalAppDeviceId,
+        receiverPlatform: device.platform,
       );
 
       await bridge.pairFolder(
@@ -778,6 +870,31 @@ Future<List<int>> _responseProof({
 }) async {
   final message = utf8.encode(
     '$folderId\n$sourceDeviceId\n$receiverDeviceId\n$receiverName',
+  );
+  final mac = await Hmac.sha256().calculateMac(
+    message,
+    secretKey: SecretKey(keyBytes),
+  );
+  return mac.bytes;
+}
+
+Future<List<int>> _responseBindingProof({
+  required List<int> keyBytes,
+  required String folderId,
+  required String sourceDeviceId,
+  required String receiverDeviceId,
+  required String receiverName,
+  required String receiverAppDeviceId,
+  required String receiverPlatform,
+}) async {
+  final message = utf8.encode(
+    'app-device-binding-v1\n'
+    '$folderId\n'
+    '$sourceDeviceId\n'
+    '$receiverDeviceId\n'
+    '$receiverName\n'
+    '$receiverAppDeviceId\n'
+    '$receiverPlatform',
   );
   final mac = await Hmac.sha256().calculateMac(
     message,
