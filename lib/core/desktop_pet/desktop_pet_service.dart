@@ -1290,42 +1290,44 @@ class DesktopPetAccountSync {
   }
 
   Future<void> publish(String accountId) {
-    return _enqueue(() async {
-      await settings.load();
-      final revision = DateTime.now().toUtc();
-      await settings.markAccountSyncRevision(revision);
-      final exported = await settings.exportForBackup();
-      final root = await _recordStore.rootDirectory(accountId);
+    return _enqueue(() => _publishUnlocked(accountId));
+  }
 
-      for (final entry in exported.files.entries) {
-        final destination = File(
-          <String>[
-            root.path,
-            ...entry.key.split('/'),
-          ].join(Platform.pathSeparator),
-        );
-        await destination.parent.create(recursive: true);
-        if (entry.value.absolute.path != destination.absolute.path) {
-          await entry.value.copy(destination.path);
-        }
-      }
+  Future<void> _publishUnlocked(String accountId) async {
+    await settings.load();
+    final revision = DateTime.now().toUtc();
+    final exported = await settings.exportForBackup();
+    final root = await _recordStore.rootDirectory(accountId);
 
-      final manifest = <String, dynamic>{
-        ...exported.manifest,
-        'syncRevision': revision.toIso8601String(),
-      };
-      await atomicWriteString(
-        await _manifestFile(accountId),
-        const JsonEncoder.withIndent('  ').convert(manifest),
+    for (final entry in exported.files.entries) {
+      final destination = File(
+        <String>[
+          root.path,
+          ...entry.key.split('/'),
+        ].join(Platform.pathSeparator),
       );
-
-      try {
-        await _bridge.requestScan(accountId: accountId);
-      } catch (_) {
-        // Files already live in the shared account workspace and will be
-        // discovered by the next normal Syncthing scan.
+      await destination.parent.create(recursive: true);
+      if (entry.value.absolute.path != destination.absolute.path) {
+        await entry.value.copy(destination.path);
       }
-    });
+    }
+
+    final manifest = <String, dynamic>{
+      ...exported.manifest,
+      'syncRevision': revision.toIso8601String(),
+    };
+    await atomicWriteString(
+      await _manifestFile(accountId),
+      const JsonEncoder.withIndent('  ').convert(manifest),
+    );
+    await settings.markAccountSyncRevision(revision);
+
+    try {
+      await _bridge.requestScan(accountId: accountId);
+    } catch (_) {
+      // Files already live in the shared account workspace and will be
+      // discovered by the next normal Syncthing scan.
+    }
   }
 
   Future<void> reconcile(String accountId) {
@@ -1334,7 +1336,7 @@ class DesktopPetAccountSync {
       final manifestFile = await _manifestFile(accountId);
       if (!await manifestFile.exists()) {
         if (await settings.hasLocalConfigFile()) {
-          await publish(accountId);
+          await _publishUnlocked(accountId);
         }
         return;
       }
