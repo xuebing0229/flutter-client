@@ -260,6 +260,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // clean/reinstalled PC publish its empty runtime config over the
           // copy that a phone is relaying.
           await _desktopPetAccountSync.reconcile(widget.accountId);
+        } catch (_) {
+          // The auxiliary manifest/assets can still be arriving from another
+          // device. Normal sync notifications retry without blocking work data.
         } finally {
           _applyingSyncedDesktopPet = false;
         }
