@@ -387,12 +387,34 @@ class _ReceiveAccountTransferPageState
           });
         },
       );
+      var adoptedSource = source;
+      final provisionalAppDeviceId =
+          session.response.receiverAppDeviceId?.trim();
+      if (provisionalAppDeviceId != null &&
+          provisionalAppDeviceId.length >= 16) {
+        final backup = AppBackupData.decode(source);
+        adoptedSource = AppBackupData(
+          exportedAt: backup.exportedAt,
+          orders: backup.orders,
+          products: backup.products,
+          nodePresets: backup.nodePresets,
+          focusSessions: backup.focusSessions,
+          accountSyncState: backup.accountSyncState,
+          syncRecords: backup.syncRecords,
+          settings: <String, dynamic>{
+            ...backup.settings,
+            'joinDeviceId': provisionalAppDeviceId,
+            'joinTransportId': session.response.receiverDeviceId,
+          },
+        ).encode(pretty: false);
+      }
+
       _finished = true;
       await Future<void>.delayed(const Duration(milliseconds: 700));
       await session.close();
 
       if (!mounted) return;
-      Navigator.of(context).pop(source);
+      Navigator.of(context).pop(adoptedSource);
     } on FormatException catch (error) {
       await session?.close();
       if (mounted) setState(() => _error = error.message);
