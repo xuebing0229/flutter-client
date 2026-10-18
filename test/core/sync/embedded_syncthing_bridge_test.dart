@@ -45,4 +45,27 @@ void main() {
     expect(status.connectedDeviceIds, contains('REMOTE-DEVICE-ID'));
     expect(status.remoteFolderStates['REMOTE-DEVICE-ID'], 'notSharing');
   });
+  test('pairing payload keeps platform metadata role-neutral', () {
+    const bridge = EmbeddedSyncthingBridge();
+
+    for (final platform in <String>['windows', 'android']) {
+      final payload = bridge.pairingPayload(
+        accountId: 'account-123',
+        deviceId:
+            'AAAAAAA-BBBBBBB-CCCCCCC-DDDDDDD-EEEEEEE-FFFFFFF-GGGGGGG-HHHHHHH',
+        deviceName: 'peer',
+        appDeviceId: 'app-device-1234567890',
+        devicePlatform: platform,
+      );
+      final parsed = bridge.parsePairingPayload(
+        payload,
+        accountId: 'account-123',
+      );
+
+      expect(parsed.devicePlatform, platform);
+      expect(parsed.deviceName, 'peer');
+      expect(parsed.appDeviceId, 'app-device-1234567890');
+    }
+  });
+
 }
