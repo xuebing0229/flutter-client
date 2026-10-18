@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../storage/atomic_file.dart';
+import '../sync/embedded_syncthing_bridge.dart';
+import '../sync/sync_record_store.dart';
 
 enum DesktopPetAssetSlot { idleA, keyB }
 
@@ -278,6 +280,7 @@ class DesktopPetSettings extends ChangeNotifier {
   int _bubbleBorderArgb = 0x33202020;
   int _bubbleAccentArgb = 0xFF6C7A6B;
   DateTime? _focusStartedAt;
+  DateTime? _accountSyncRevision;
   bool _focusEnabled = true;
   final List<DesktopPetPreset> _presets = <DesktopPetPreset>[];
 
@@ -305,6 +308,7 @@ class DesktopPetSettings extends ChangeNotifier {
           : bubbleAboveOffset;
   String get customText => _customText;
   String? get currentOrderId => _currentOrderId;
+  DateTime? get accountSyncRevision => _accountSyncRevision;
 
   DesktopPetPreset? get selectedPreset {
     final selectedId = _selectedPresetId;
@@ -324,6 +328,8 @@ class DesktopPetSettings extends ChangeNotifier {
     final root = await _rootDirectory();
     return File('${root.path}/config.json');
   }
+
+  Future<bool> hasLocalConfigFile() async => (await _configFile()).exists();
 
   Future<void> _cleanupExplicitlyRemovedAssetsAtStartup() async {
     if (_pendingAssetDeletes.isEmpty) return;
@@ -463,6 +469,9 @@ class DesktopPetSettings extends ChangeNotifier {
       _focusStartedAt = raw['focusStartedAt'] is String
           ? DateTime.tryParse(raw['focusStartedAt'] as String)
           : null;
+      _accountSyncRevision = raw['accountSyncRevision'] is String
+          ? DateTime.tryParse(raw['accountSyncRevision'] as String)?.toUtc()
+          : null;
       _focusEnabled = raw['focusEnabled'] is bool
           ? raw['focusEnabled'] as bool
           : true;
@@ -576,6 +585,8 @@ class DesktopPetSettings extends ChangeNotifier {
     return DesktopPetBackupExport(
       manifest: <String, dynamic>{
         'schema': 1,
+        if (_accountSyncRevision != null)
+          'syncRevision': _accountSyncRevision!.toUtc().toIso8601String(),
         'selectedPresetId': _selectedPresetId,
         'bubbleContentMode': _bubbleContentMode.name,
         'textMode': _textMode.name,
@@ -742,6 +753,9 @@ class DesktopPetSettings extends ChangeNotifier {
     _currentOrderId = rawManifest['currentOrderId'] is String
         ? rawManifest['currentOrderId'] as String
         : null;
+    _accountSyncRevision = rawManifest['syncRevision'] is String
+        ? DateTime.tryParse(rawManifest['syncRevision'] as String)?.toUtc()
+        : _accountSyncRevision;
     _pendingAssetDeletes.clear();
     _loaded = true;
     await _persist();
@@ -1187,6 +1201,7 @@ class DesktopPetSettings extends ChangeNotifier {
       'bubbleAccentArgb': _bubbleAccentArgb,
       'focusEnabled': _focusEnabled,
       'focusStartedAt': _focusStartedAt?.toUtc().toIso8601String(),
+      'accountSyncRevision': _accountSyncRevision?.toUtc().toIso8601String(),
       'presets': <Map<String, dynamic>>[
         for (final preset in _presets) preset.toJson(),
       ],
@@ -1221,6 +1236,135 @@ class DesktopPetSettings extends ChangeNotifier {
     }
   }
 
+
+  Future<void> markAccountSyncRevision(DateTime revision) async {
+    final normalized = revision.toUtc();
+    if (_accountSyncRevision == normalized) return;
+    _accountSyncRevision = normalized;
+    await _persist();
+  }
+
+}
+
+class DesktopPetAccountSync {
+  DesktopPetAccountSync({
+    required this.settings,
+    SyncRecordStore? recordStore,
+    EmbeddedSyncthingBridge bridge = const EmbeddedSyncthingBridge(),
+  })  : _recordStore = recordStore ?? SyncRecordStore(),
+        _bridge = bridge;
+
+  final DesktopPetSettings settings;
+  final SyncRecordStore _recordStore;
+  final EmbeddedSyncthingBridge _bridge;
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> _enqueue<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _tail = _tail.then<void>(
+      (_) async {
+        try {
+          completer.complete(await operation());
+        } catch (error, stackTrace) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+      onError: (Object _, StackTrace __) async {
+        try {
+          completer.complete(await operation());
+        } catch (error, stackTrace) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+    );
+    return completer.future;
+  }
+
+  Future<File> _manifestFile(String accountId) async {
+    final root = await _recordStore.rootDirectory(accountId);
+    return File(
+      '${root.path}${Platform.pathSeparator}auxiliary'
+      '${Platform.pathSeparator}desktop-pet'
+      '${Platform.pathSeparator}manifest.json',
+    );
+  }
+
+  Future<void> publish(String accountId) {
+    return _enqueue(() async {
+      await settings.load();
+      final revision = DateTime.now().toUtc();
+      await settings.markAccountSyncRevision(revision);
+      final exported = await settings.exportForBackup();
+      final root = await _recordStore.rootDirectory(accountId);
+
+      for (final entry in exported.files.entries) {
+        final destination = File(
+          <String>[
+            root.path,
+            ...entry.key.split('/'),
+          ].join(Platform.pathSeparator),
+        );
+        await destination.parent.create(recursive: true);
+        if (entry.value.absolute.path != destination.absolute.path) {
+          await entry.value.copy(destination.path);
+        }
+      }
+
+      final manifest = <String, dynamic>{
+        ...exported.manifest,
+        'syncRevision': revision.toIso8601String(),
+      };
+      await atomicWriteString(
+        await _manifestFile(accountId),
+        const JsonEncoder.withIndent('  ').convert(manifest),
+      );
+
+      try {
+        await _bridge.requestScan(accountId: accountId);
+      } catch (_) {
+        // Files already live in the shared account workspace and will be
+        // discovered by the next normal Syncthing scan.
+      }
+    });
+  }
+
+  Future<void> reconcile(String accountId) {
+    return _enqueue(() async {
+      await settings.load();
+      final manifestFile = await _manifestFile(accountId);
+      if (!await manifestFile.exists()) {
+        if (await settings.hasLocalConfigFile()) {
+          await publish(accountId);
+        }
+        return;
+      }
+
+      final raw = jsonDecode(await manifestFile.readAsString());
+      if (raw is! Map || raw['schema'] != 1) {
+        throw const FormatException('同步桌宠设置格式无效。');
+      }
+      final revisionRaw = raw['syncRevision'];
+      if (revisionRaw is! String) {
+        throw const FormatException('同步桌宠设置缺少版本时间。');
+      }
+      final remoteRevision = DateTime.tryParse(revisionRaw)?.toUtc();
+      if (remoteRevision == null) {
+        throw const FormatException('同步桌宠设置版本时间无效。');
+      }
+
+      final localRevision = settings.accountSyncRevision;
+      if (localRevision != null && !remoteRevision.isAfter(localRevision)) {
+        return;
+      }
+
+      final root = await _recordStore.rootDirectory(accountId);
+      await settings.restoreFromBackup(
+        rawManifest: raw,
+        extractedRoot: root,
+      );
+      await settings.markAccountSyncRevision(remoteRevision);
+    });
+  }
 }
 
 class DesktopPetService {
