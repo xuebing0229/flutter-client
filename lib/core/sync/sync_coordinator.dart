@@ -159,6 +159,7 @@ String syncFieldLabel(String field) {
 
 class SyncCoordinator extends ChangeNotifier {
   static const settingsRecordId = 'app';
+  static const _transportReauthorizationLifetime = Duration(minutes: 30);
 
   SyncCoordinator({
     required this.accountId,
@@ -831,12 +832,24 @@ class SyncCoordinator extends ChangeNotifier {
       if (remoteName.isEmpty) {
         throw const FormatException('新设备名称无效。');
       }
-      await _bridge.pairDevice(
-        accountId: accountId,
-        deviceId: remoteId,
-        name: remoteName,
-      );
-      await _refreshTransportStatus();
+      // A previously unbound installation can legitimately rejoin with the
+      // same Syncthing identity but a new app-device ID. Keep this explicit
+      // user-approved transport share alive long enough for the new device to
+      // publish that app-device record; otherwise an older acknowledged
+      // tombstone can immediately unshare it again and create an endless
+      // "repairing sync channel" loop.
+      await _authorizeTransportRejoin(remoteId);
+      try {
+        await _bridge.pairDevice(
+          accountId: accountId,
+          deviceId: remoteId,
+          name: remoteName,
+        );
+        await _refreshTransportStatus();
+      } catch (_) {
+        await _clearTransportReauthorization(remoteId);
+        rethrow;
+      }
     });
   }
 
@@ -1021,6 +1034,75 @@ class SyncCoordinator extends ChangeNotifier {
       _lastError = '同步核心启动失败：$error';
     }
     if (!_disposed) notifyListeners();
+  }
+
+  Future<File> _transportReauthorizationFile() async {
+    final directory = await getApplicationSupportDirectory();
+    return File(
+      '${directory.path}${Platform.pathSeparator}accounts'
+      '${Platform.pathSeparator}$accountId'
+      '${Platform.pathSeparator}transport-reauthorizations-v1.json',
+    );
+  }
+
+  Future<Map<String, DateTime>> _loadTransportReauthorizations() async {
+    final file = await _transportReauthorizationFile();
+    if (!await file.exists()) return <String, DateTime>{};
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return <String, DateTime>{};
+      final now = DateTime.now().toUtc();
+      final result = <String, DateTime>{};
+      for (final entry in decoded.entries) {
+        final id = entry.key.toString().trim();
+        final value = entry.value;
+        if (id.isEmpty || value is! String) continue;
+        final expiresAt = DateTime.tryParse(value)?.toUtc();
+        if (expiresAt == null || !expiresAt.isAfter(now)) continue;
+        result[id] = expiresAt;
+      }
+      return result;
+    } catch (_) {
+      return <String, DateTime>{};
+    }
+  }
+
+  Future<void> _saveTransportReauthorizations(
+    Map<String, DateTime> values,
+  ) async {
+    final file = await _transportReauthorizationFile();
+    if (values.isEmpty) {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+      return;
+    }
+    await file.parent.create(recursive: true);
+    await file.writeAsString(
+      jsonEncode(<String, String>{
+        for (final entry in values.entries)
+          entry.key: entry.value.toUtc().toIso8601String(),
+      }),
+      flush: true,
+    );
+  }
+
+  Future<void> _authorizeTransportRejoin(String transportId) async {
+    final id = transportId.trim();
+    if (id.isEmpty) return;
+    final values = await _loadTransportReauthorizations();
+    values[id] = DateTime.now().toUtc().add(
+      _transportReauthorizationLifetime,
+    );
+    await _saveTransportReauthorizations(values);
+  }
+
+  Future<void> _clearTransportReauthorization(String transportId) async {
+    final id = transportId.trim();
+    if (id.isEmpty) return;
+    final values = await _loadTransportReauthorizations();
+    if (values.remove(id) == null) return;
+    await _saveTransportReauthorizations(values);
   }
 
   Future<File> _syncPauseFile() async {
@@ -1707,6 +1789,15 @@ class SyncCoordinator extends ChangeNotifier {
         if (device.syncTransportId?.trim().isNotEmpty == true)
           device.syncTransportId!.trim(),
     };
+    final reauthorizedTransportIds =
+        (await _loadTransportReauthorizations()).keys.toSet();
+
+    // Once the rejoined app-device record has propagated, the normal active
+    // device binding is enough; remove the temporary local authorization.
+    for (final transportId
+        in activeTransportIds.intersection(reauthorizedTransportIds)) {
+      await _clearTransportReauthorization(transportId);
+    }
 
     for (final entry in state.revocations.entries) {
       final revokedId = entry.key;
@@ -1727,7 +1818,10 @@ class SyncCoordinator extends ChangeNotifier {
 
       // The same physical Syncthing identity may be explicitly re-authorized
       // after a revoked device rejoins and receives a new app-device ID.
-      if (activeTransportIds.contains(transportId)) {
+      // During the short bootstrap window the new app-device record may not
+      // have arrived yet, so also honor the persisted explicit rejoin marker.
+      if (activeTransportIds.contains(transportId) ||
+          reauthorizedTransportIds.contains(transportId)) {
         continue;
       }
 
