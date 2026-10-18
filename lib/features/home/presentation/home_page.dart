@@ -140,6 +140,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         break;
       }
     }
+    _desktopPetService.settings.bindAccount(widget.accountId);
     _desktopPetAccountSync = DesktopPetAccountSync(
       settings: _desktopPetService.settings,
     );
