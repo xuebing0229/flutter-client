@@ -283,6 +283,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '卡片与添加设备界面整理',
     description: '排单卡片视图改为同一行卡片等高，减少内容多少不同造成的参差感；添加设备页把“复制设备码”移到第一步二维码正下方，并移除底部重复入口，扫码和复制两种方式放在一起。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 177,
+    title: '修复卡片视图按钮溢出',
+    description: '修复 176 排单卡片视图中，同一行卡片等高后“确认节点”按钮被挤出卡片、压到下一行的问题。现在每张卡片都完整显示按钮，同一行依旧保持等高。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
