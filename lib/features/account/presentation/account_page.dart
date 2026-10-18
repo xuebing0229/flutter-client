@@ -77,7 +77,7 @@ class AccountPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '设备数量不限制。解绑记录会在下一次正常数据同步时同步到其他设备。',
+                        '设备数量不限制。',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -91,18 +91,6 @@ class AccountPage extends StatelessWidget {
                           onRevoke: device.id == currentId
                               ? null
                               : () => _revokeDevice(context, device),
-                        ),
-                      if (store.revokedDeviceCount > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 6),
-                          child: Text(
-                            '另有 ${store.revokedDeviceCount} 条已解绑设备记录，会保留用于防止其他设备的滞后同步状态重新恢复已解绑设备。',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                          ),
                         ),
                     ],
                   ),
