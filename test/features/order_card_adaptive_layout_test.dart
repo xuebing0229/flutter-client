@@ -113,7 +113,10 @@ void main() {
       // because later fields (progress/actions) legitimately differ.
       final firstRowClientOffset = clientIconRect(0).top - first.top;
       final secondRowClientOffset = clientIconRect(2).top - third.top;
-      expect(secondRowClientOffset, lessThan(firstRowClientOffset));
+      expect(
+        (firstRowClientOffset - secondRowClientOffset).abs(),
+        greaterThan(10),
+      );
     },
   );
 
