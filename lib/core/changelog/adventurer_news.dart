@@ -268,6 +268,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '退出账号时关闭桌宠',
     description: '修复退出登录、返回账号选择或设备被远程解绑后，独立桌宠进程仍可能继续留在桌面的问题。离开账号前会先写入关闭状态并停止桌宠宿主，避免旧账号桌宠残留。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 174,
+    title: '新设备加入与设备去重修复',
+    description: '修复设备去重逻辑误把同名同平台的新设备当成旧设备、以及已解绑设备重新加入时旧撤销记录可能抢先断开其 Syncthing 通道的问题。新设备现在只按稳定安装身份或精确同步身份去重；显式重新加入会临时保护新同步通道，直到新的设备记录完成同步。账号页不再展示内部已解绑记录数量。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
