@@ -273,6 +273,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新设备加入与设备去重修复',
     description: '修复设备去重逻辑误把同名同平台的新设备当成旧设备、以及已解绑设备重新加入时旧撤销记录可能抢先断开其 Syncthing 通道的问题。新设备现在只按稳定安装身份或精确同步身份去重；显式重新加入会临时保护新同步通道，直到新的设备记录完成同步。账号页不再展示内部已解绑记录数量。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 175,
+    title: '新设备加入改为原子绑定',
+    description: '新设备在正式同步目录开放前先生成并认证自己的应用设备身份，原设备确认回应码后会先登记这台新设备，再开放正式 Syncthing 目录；新设备登录时复用同一个身份。这样设备记录、同步通道与旧解绑墓碑不会再出现先后竞争，避免“已连接但持续修复、旧设备看不到新设备、功能开关没同步完整”等半连接状态。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
