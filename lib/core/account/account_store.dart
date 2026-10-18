@@ -756,17 +756,16 @@ class AccountStore extends ChangeNotifier {
     for (final device in record.syncState.activeDevices) {
       if (device.id == currentId) continue;
 
-      final sameInstallation =
-          device.installationId?.trim() == installationId;
-      final sameTransport =
-          device.syncTransportId?.trim() == normalizedTransportId;
-
       // Never infer physical identity from display name/platform. Two genuine
       // devices can have the same Windows/Android name, and treating that as a
       // duplicate revokes a freshly joined device before its account state can
       // reach the existing peers. Exact stable-installation or transport
       // identity is required for automatic collapse.
-      if (sameInstallation || sameTransport) {
+      if (isSameDeviceIdentityForAutomaticDedupe(
+        installationId: installationId,
+        syncTransportId: normalizedTransportId,
+        candidate: device,
+      )) {
         aliases.add(device);
       }
     }
@@ -1181,6 +1180,27 @@ class AccountStore extends ChangeNotifier {
     }
   }
 }
+
+
+@visibleForTesting
+bool isSameDeviceIdentityForAutomaticDedupe({
+  required String installationId,
+  required String syncTransportId,
+  required AccountDevice candidate,
+}) {
+  final candidateInstallationId = candidate.installationId?.trim();
+  if (candidateInstallationId != null &&
+      candidateInstallationId.isNotEmpty &&
+      candidateInstallationId == installationId.trim()) {
+    return true;
+  }
+
+  final candidateTransportId = candidate.syncTransportId?.trim();
+  return candidateTransportId != null &&
+      candidateTransportId.isNotEmpty &&
+      candidateTransportId == syncTransportId.trim();
+}
+
 
 String _randomId() => base64UrlEncode(_randomBytes(12)).replaceAll('=', '');
 
