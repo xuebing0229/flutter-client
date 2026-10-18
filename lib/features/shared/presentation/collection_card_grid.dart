@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import 'layout_spacing.dart';
 
@@ -60,33 +61,125 @@ class CollectionCardGrid extends StatelessWidget {
           itemCount: rows,
           itemBuilder: (context, row) {
             final first = row * columns;
-            final rowContent = Row(
-              crossAxisAlignment: equalizeRowHeights
-                  ? CrossAxisAlignment.stretch
-                  : CrossAxisAlignment.start,
-              children: [
-                for (var column = 0; column < columns; column++) ...[
-                  if (column != 0) const SizedBox(width: spacing),
-                  Expanded(
-                    child: first + column < itemCount
-                        ? itemBuilder(context, first + column)
-                        : const SizedBox.shrink(),
-                  ),
-                ],
-              ],
-            );
+            final rowContent = equalizeRowHeights
+                ? _EqualHeightRow(
+                    spacing: spacing,
+                    children: [
+                      for (var column = 0; column < columns; column++)
+                        first + column < itemCount
+                            ? itemBuilder(context, first + column)
+                            : const SizedBox.shrink(),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var column = 0; column < columns; column++) ...[
+                        if (column != 0) const SizedBox(width: spacing),
+                        Expanded(
+                          child: first + column < itemCount
+                              ? itemBuilder(context, first + column)
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ],
+                  );
 
             return Padding(
               padding: EdgeInsets.only(
                 bottom: row == rows - 1 ? 0 : spacing,
               ),
-              child: equalizeRowHeights
-                  ? IntrinsicHeight(child: rowContent)
-                  : rowContent,
+              child: rowContent,
             );
           },
         );
       },
     );
+  }
+}
+
+class _EqualHeightRow extends MultiChildRenderObjectWidget {
+  const _EqualHeightRow({
+    required this.spacing,
+    required super.children,
+  });
+
+  final double spacing;
+
+  @override
+  _RenderEqualHeightRow createRenderObject(BuildContext context) {
+    return _RenderEqualHeightRow(spacing: spacing);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderEqualHeightRow renderObject,
+  ) {
+    renderObject.spacing = spacing;
+  }
+}
+
+class _RenderEqualHeightRow extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, MultiChildLayoutParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, MultiChildLayoutParentData> {
+  _RenderEqualHeightRow({required double spacing}) : _spacing = spacing;
+
+  double _spacing;
+
+  double get spacing => _spacing;
+
+  set spacing(double value) {
+    if (_spacing == value) return;
+    _spacing = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! MultiChildLayoutParentData) {
+      child.parentData = MultiChildLayoutParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    final columnWidth =
+        (constraints.maxWidth - spacing * (childCount - 1)) / childCount;
+    var rowHeight = 0.0;
+    var child = firstChild;
+    while (child != null) {
+      child.layout(
+        BoxConstraints.tightFor(width: columnWidth),
+        parentUsesSize: true,
+      );
+      if (child.size.height > rowHeight) {
+        rowHeight = child.size.height;
+      }
+      child = childAfter(child);
+    }
+
+    var column = 0;
+    child = firstChild;
+    while (child != null) {
+      child.layout(BoxConstraints.tightFor(width: columnWidth, height: rowHeight));
+      final childParentData = child.parentData! as MultiChildLayoutParentData;
+      childParentData.offset = Offset(column * (columnWidth + spacing), 0);
+      column++;
+      child = childParentData.nextSibling;
+    }
+
+    size = constraints.constrain(Size(constraints.maxWidth, rowHeight));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    defaultPaint(context, offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    return defaultHitTestChildren(result, position: position);
   }
 }

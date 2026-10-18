@@ -34,6 +34,35 @@ void main() {
     );
   }
 
+  Widget layoutBuilderHarness({ValueChanged<double>? onCardWidth}) {
+    return MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 580,
+          height: 700,
+          child: CollectionCardGrid(
+            itemCount: 2,
+            mobileAspectRatio: 0.5,
+            desktopMinHeight: 260,
+            equalizeRowHeights: true,
+            itemBuilder: (_, index) {
+              if (index == 0) {
+                return const SizedBox(key: Key('short-card'), height: 80);
+              }
+              return LayoutBuilder(
+                key: const Key('tall-card'),
+                builder: (_, constraints) {
+                  onCardWidth?.call(constraints.maxWidth);
+                  return const SizedBox(height: 140);
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   testWidgets('two-column rows keep individual card heights', (tester) async {
     await tester.pumpWidget(harness(580));
     expect(tester.getSize(find.byKey(const Key('item-0'))).height, 80);
@@ -53,6 +82,23 @@ void main() {
       tester.getTopLeft(find.byKey(const Key('item-2'))).dy,
       tester.getBottomLeft(find.byKey(const Key('item-0'))).dy + 10,
     );
+  });
+
+  testWidgets('equalizes card heights with LayoutBuilder content', (tester) async {
+    await tester.pumpWidget(layoutBuilderHarness());
+
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byKey(const Key('short-card'))).height, 140);
+    expect(tester.getSize(find.byKey(const Key('tall-card'))).height, 140);
+  });
+
+  testWidgets('LayoutBuilder content receives the column width', (tester) async {
+    final widths = <double>[];
+    await tester.pumpWidget(layoutBuilderHarness(onCardWidth: widths.add));
+
+    expect(tester.takeException(), isNull);
+    expect(widths, isNotEmpty);
+    expect(widths, everyElement((580 - 24 - 10) / 2));
   });
 
   testWidgets('wide content pane uses four columns', (tester) async {
