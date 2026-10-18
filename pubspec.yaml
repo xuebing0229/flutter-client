@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+172
-# beta-172 retry: account-scoped-pet-sync
+# beta-172 retry: account-scoped-pet-sync-and-signout-stop
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
