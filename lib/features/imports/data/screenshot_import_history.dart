@@ -18,8 +18,8 @@ String screenshotCardFingerprint({
     '${products ? 'products' : 'orders'}|$imageSha256|$cardIndex';
 
 class ScreenshotImportHistory {
-  const ScreenshotImportHistory({SyncRecordStore? syncRecordStore})
-      : _syncRecordStore = syncRecordStore ?? const SyncRecordStore();
+  ScreenshotImportHistory({SyncRecordStore? syncRecordStore})
+      : _syncRecordStore = syncRecordStore ?? SyncRecordStore();
 
   final SyncRecordStore _syncRecordStore;
 
