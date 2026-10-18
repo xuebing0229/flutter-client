@@ -1016,7 +1016,10 @@ class AccountStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> adoptSyncedAccount(AccountSyncState incoming) async {
+  Future<void> adoptSyncedAccount(
+    AccountSyncState incoming, {
+    String? preferredDeviceId,
+  }) async {
     if (!incoming.hasCredentials) {
       throw const FormatException('同步账号缺少登录信息，不能加入。');
     }
@@ -1047,12 +1050,22 @@ class AccountStore extends ChangeNotifier {
         break;
       }
     }
+    final preferredId = preferredDeviceId?.trim();
+    final safePreferredId =
+        preferredId != null &&
+            preferredId.length >= 16 &&
+            !incoming.isRevoked(preferredId)
+        ? preferredId
+        : null;
     final newDeviceId =
-        installationDeviceId != null && !incoming.isRevoked(installationDeviceId)
-        ? installationDeviceId
-        : rememberedDeviceId != null && !incoming.isRevoked(rememberedDeviceId)
-        ? rememberedDeviceId
-        : _randomId();
+        safePreferredId ??
+        (installationDeviceId != null &&
+                !incoming.isRevoked(installationDeviceId)
+            ? installationDeviceId
+            : rememberedDeviceId != null &&
+                  !incoming.isRevoked(rememberedDeviceId)
+            ? rememberedDeviceId
+            : _randomId());
 
     // A locally removed account keeps only its device marker so rejoining the
     // same account can reuse the existing app-device identity. A revoked
