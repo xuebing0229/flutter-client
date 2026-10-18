@@ -257,6 +257,22 @@ class SyncRecordStore {
               Directory('${staging.path}/revocation-acks'),
             );
           }
+
+          // Auxiliary account data is synchronized by the same Syncthing
+          // folder but is intentionally outside the entity record graph.
+          // Preserve it across history replacement; callers that restore a
+          // full backup rehydrate/replace their exact auxiliary payloads
+          // immediately afterwards.
+          for (final name in const <String>['auxiliary', 'desktop-pet']) {
+            final source = Directory('${previous.path}/$name');
+            if (await source.exists()) {
+              await _copyDirectory(
+                source,
+                Directory('${staging.path}/$name'),
+              );
+            }
+          }
+
           // A legacy JSON backup does not carry image binaries, so keep the
           // current shared assets in that case. A full ZIP backup does carry
           // every referenced image and is an exact workspace replacement:
