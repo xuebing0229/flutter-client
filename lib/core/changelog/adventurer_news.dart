@@ -288,6 +288,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '排单卡片字段对齐',
     description: '卡片视图不再只统一外框高度，而是给图名、单主等固定信息区预留一致行高，让同一排卡片的对应字段横向对齐；自定义标签改到独立一行，优先显示能放下的标签，剩余标签再用省略号表示，不再把唯一可见标签直接压成“#…”。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 179,
+    title: '排单卡片改为按行自适应对齐',
+    description: '图名、单主等字段不再写死两行或固定高度，而是按当前这一排卡片里实际占用最多的行数动态对齐；如果这一排都只占一行就只保留一行，另一排需要两三行时再随该排增长。卡片总高度随本排内容自适应，列表视图的图名也移到平台信息下一行并完整换行显示。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
