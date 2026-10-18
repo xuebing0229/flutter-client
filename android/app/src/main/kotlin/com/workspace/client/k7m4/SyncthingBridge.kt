@@ -435,8 +435,15 @@ class SyncthingBridge(
                 .put("name", name.ifBlank { normalizedId.take(7) })
                 .put("addresses", JSONArray().put("dynamic"))
             request("POST", "/rest/config/devices", payload.toString())
-        } else if (name.isNotBlank()) {
-            existingDevice.put("name", name)
+        } else if (
+            name.isNotBlank() &&
+            existingDevice.optString("name").trim() != name.trim()
+        ) {
+            // The bootstrap receiver retries pairDevice while the folder
+            // handshake settles. Rewriting an unchanged device config on every
+            // retry can churn the Syncthing connection and keep remoteState
+            // from ever reaching "valid".
+            existingDevice.put("name", name.trim())
             request(
                 "PUT",
                 "/rest/config/devices/" + encodePathSegment(normalizedId),
