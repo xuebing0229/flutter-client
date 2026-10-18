@@ -284,7 +284,7 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     description: '排单卡片视图改为同一行卡片等高，减少内容多少不同造成的参差感；添加设备页把“复制设备码”移到第一步二维码正下方，并移除底部重复入口，扫码和复制两种方式放在一起。',
   ),
   AdventurerNewsEntry(
-    introducedBuild: 177,
+    introducedBuild: 178,
     title: '排单卡片字段对齐',
     description: '卡片视图不再只统一外框高度，而是给图名、单主等固定信息区预留一致行高，让同一排卡片的对应字段横向对齐；自定义标签改到独立一行，优先显示能放下的标签，剩余标签再用省略号表示，不再把唯一可见标签直接压成“#…”。',
   ),
