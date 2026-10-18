@@ -240,7 +240,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (bootstrapOnly) {
       // First-device handoff intentionally carries only account identity.
       // Write placeholder data so user knows data is being synced in background.
-      await _accountStore.adoptSyncedAccount(account);
+      final joinDeviceId = backup.settings['joinDeviceId'];
+      await _accountStore.adoptSyncedAccount(
+        account,
+        preferredDeviceId: joinDeviceId is String ? joinDeviceId : null,
+      );
       await _persistence.save(
         AppBackupData.capture(
           orderStore: OrderStore(),
