@@ -398,6 +398,12 @@ class SyncthingBridge(
             return
         }
 
+        val unchanged =
+            existing.optString("label") == label &&
+                existing.optString("path") == path &&
+                existing.optString("type") == "sendreceive"
+        if (unchanged) return
+
         existing
             .put("label", label)
             .put("path", path)
