@@ -114,6 +114,7 @@ class AccountStore extends ChangeNotifier {
   static const String _fileName = 'account-state-v1.json';
   static const String _accountsDirName = 'accounts';
   static const String _deviceIdentityFileName = 'local-device-id.txt';
+  static const String _installationIdentityFileName = 'installation-id-v1.txt';
   static const String _pendingActivationDirName = 'pending-activations';
 
   final OfflineLicenseVerifier _verifier;
@@ -202,6 +203,28 @@ class AccountStore extends ChangeNotifier {
   Future<File> _file() async {
     final directory = await getApplicationSupportDirectory();
     return File('${directory.path}/$_fileName');
+  }
+
+  Future<File> _installationIdentityFile() async {
+    final directory = await getApplicationSupportDirectory();
+    return File('${directory.path}/$_installationIdentityFileName');
+  }
+
+  Future<String> _installationIdentity() async {
+    final file = await _installationIdentityFile();
+    try {
+      if (await file.exists()) {
+        final value = (await file.readAsString()).trim();
+        if (value.length >= 16) return value;
+      }
+    } catch (_) {
+      // Replace a damaged marker below.
+    }
+
+    final value = _randomId();
+    await file.parent.create(recursive: true);
+    await atomicWriteString(file, value);
+    return value;
   }
 
   Future<File> _deviceIdentityFile(String accountId) async {
@@ -520,6 +543,7 @@ class AccountStore extends ChangeNotifier {
 
     final now = DateTime.now().toUtc();
     final descriptor = await DeviceDescriptor.current();
+    final installationId = await _installationIdentity();
     final newDeviceId = _randomId();
 
     var state = AccountSyncState(
@@ -539,6 +563,7 @@ class AccountStore extends ChangeNotifier {
       platform: descriptor.platform,
       firstSeenAt: now,
       lastSeenAt: now,
+      installationId: installationId,
     );
     state = state.copyWith(devices: devices);
 
@@ -659,9 +684,11 @@ class AccountStore extends ChangeNotifier {
     final current = record.syncState.devices[record.currentDeviceId];
     if (current == null) return;
 
+    final installationId = await _installationIdentity();
     final devices = <String, AccountDevice>{...record.syncState.devices};
     devices[record.currentDeviceId] = current.copyWith(
       lastSeenAt: DateTime.now().toUtc(),
+      installationId: installationId,
     );
 
     _accounts[record.syncState.accountId] = record.copyWith(
@@ -723,39 +750,66 @@ class AccountStore extends ChangeNotifier {
     final current = record.syncState.devices[currentId];
     if (current == null) return currentId;
 
-    final sameTransport = <AccountDevice>[
-      for (final device in record.syncState.activeDevices)
-        if (device.id == currentId ||
-            device.syncTransportId?.trim() == normalizedTransportId)
-          device,
-    ];
+    final installationId = await _installationIdentity();
+    final aliases = <AccountDevice>[current];
 
-    final hasExistingOwner = sameTransport.any(
-      (device) =>
-          device.id != currentId &&
-          device.syncTransportId?.trim() == normalizedTransportId,
-    );
-    if (!hasExistingOwner) return currentId;
+    for (final device in record.syncState.activeDevices) {
+      if (device.id == currentId) continue;
 
-    sameTransport.sort((left, right) {
+      final sameInstallation =
+          device.installationId?.trim() == installationId;
+      final sameTransport =
+          device.syncTransportId?.trim() == normalizedTransportId;
+
+      // Legacy builds did not persist a stable installation ID. When the
+      // current record was created later for the exact same named/platform
+      // device, reclaim that older alias once and attach the stable ID.
+      final legacySameDevice =
+          device.installationId == null &&
+          device.name.trim() == current.name.trim() &&
+          device.platform.trim() == current.platform.trim() &&
+          !device.firstSeenAt.isAfter(current.firstSeenAt);
+
+      if (sameInstallation || sameTransport || legacySameDevice) {
+        aliases.add(device);
+      }
+    }
+
+    if (aliases.length == 1) {
+      final devices = <String, AccountDevice>{...record.syncState.devices};
+      devices[currentId] = current.copyWith(
+        installationId: installationId,
+        syncTransportId: normalizedTransportId,
+        lastSeenAt: DateTime.now().toUtc(),
+      );
+      _accounts[record.syncState.accountId] = record.copyWith(
+        syncState: record.syncState.copyWith(devices: devices),
+      );
+      await _save();
+      return currentId;
+    }
+
+    aliases.sort((left, right) {
       final byFirstSeen = left.firstSeenAt.compareTo(right.firstSeenAt);
       if (byFirstSeen != 0) return byFirstSeen;
       return left.id.compareTo(right.id);
     });
-    final canonical = sameTransport.first;
+    final canonical = aliases.first;
     final now = DateTime.now().toUtc();
 
     final devices = <String, AccountDevice>{...record.syncState.devices};
     devices[canonical.id] = canonical.copyWith(
+      name: current.name,
       platform: current.platform,
       lastSeenAt: now,
       syncTransportId: normalizedTransportId,
+      installationId: installationId,
     );
 
     final revocations = <String, DeviceRevocation>{
       ...record.syncState.revocations,
     };
-    for (final duplicate in sameTransport) {
+    for (final duplicate in aliases) {
       if (duplicate.id == canonical.id) continue;
       revocations.putIfAbsent(
         duplicate.id,
@@ -798,6 +852,9 @@ class AccountStore extends ChangeNotifier {
     if (record == null) return;
 
     final now = DateTime.now().toUtc();
+    final installationId = normalizedAppDeviceId == record.currentDeviceId
+        ? await _installationIdentity()
+        : null;
     final devices = <String, AccountDevice>{...record.syncState.devices};
     final current = devices[normalizedAppDeviceId];
 
@@ -813,9 +870,11 @@ class AccountStore extends ChangeNotifier {
             firstSeenAt: now,
             lastSeenAt: now,
             syncTransportId: normalizedTransportId,
+            installationId: installationId,
           )
         : current.copyWith(
             syncTransportId: normalizedTransportId,
+            installationId: installationId,
             lastSeenAt: now,
           );
 
@@ -983,10 +1042,20 @@ class AccountStore extends ChangeNotifier {
 
     final now = DateTime.now().toUtc();
     final descriptor = await DeviceDescriptor.current();
+    final installationId = await _installationIdentity();
     final rememberedDeviceId =
         existing == null ? await _readDeviceIdentity(incoming) : null;
+    String? installationDeviceId;
+    for (final device in incoming.activeDevices) {
+      if (device.installationId?.trim() == installationId) {
+        installationDeviceId = device.id;
+        break;
+      }
+    }
     final newDeviceId =
-        rememberedDeviceId != null && !incoming.isRevoked(rememberedDeviceId)
+        installationDeviceId != null && !incoming.isRevoked(installationDeviceId)
+        ? installationDeviceId
+        : rememberedDeviceId != null && !incoming.isRevoked(rememberedDeviceId)
         ? rememberedDeviceId
         : _randomId();
 
@@ -1005,8 +1074,10 @@ class AccountStore extends ChangeNotifier {
       id: newDeviceId,
       name: descriptor.name,
       platform: descriptor.platform,
-      firstSeenAt: now,
+      firstSeenAt: devices[newDeviceId]?.firstSeenAt ?? now,
       lastSeenAt: now,
+      syncTransportId: devices[newDeviceId]?.syncTransportId,
+      installationId: installationId,
     );
 
     final state = baseState.copyWith(devices: devices);
