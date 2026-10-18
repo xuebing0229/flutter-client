@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../account/account_models.dart';
 import '../storage/atomic_file.dart';
 import '../sync/embedded_syncthing_bridge.dart';
 import '../sync/sync_record_store.dart';
@@ -255,6 +256,8 @@ class DesktopPetSettings extends ChangeNotifier {
   DesktopPetSettings();
 
   bool _loaded = false;
+  String? _accountId;
+  bool _legacyAccountMigrationChecked = false;
   Future<void>? _loadInFlight;
   Future<void>? _runtimePersistInFlight;
   Future<void> _persistTail = Future<void>.value();
@@ -319,9 +322,146 @@ class DesktopPetSettings extends ChangeNotifier {
     return null;
   }
 
-  Future<Directory> _rootDirectory() async {
+  void bindAccount(String accountId) {
+    final safeId = requireValidAccountId(accountId);
+    if (_loaded && _accountId != null && _accountId != safeId) {
+      throw StateError('桌宠设置已经绑定到另一个账号。');
+    }
+    _accountId = safeId;
+    _legacyAccountMigrationChecked = false;
+  }
+
+  Future<Directory> _legacyRootDirectory() async {
     final support = await getApplicationSupportDirectory();
     return Directory('${support.path}/desktop-pet');
+  }
+
+  Future<void> _copyDirectory(
+    Directory source,
+    Directory destination,
+  ) async {
+    await destination.create(recursive: true);
+    await for (final entity in source.list(followLinks: false)) {
+      final name = entity.uri.pathSegments
+          .where((segment) => segment.isNotEmpty)
+          .last;
+      if (entity is File) {
+        await entity.copy(
+          '${destination.path}${Platform.pathSeparator}$name',
+        );
+      } else if (entity is Directory) {
+        await _copyDirectory(
+          entity,
+          Directory(
+            '${destination.path}${Platform.pathSeparator}$name',
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _migrateLegacyAccountRoot(
+    Directory legacyRoot,
+    Directory target,
+  ) async {
+    if (_legacyAccountMigrationChecked) return;
+    _legacyAccountMigrationChecked = true;
+
+    final targetConfig = File(
+      '${target.path}${Platform.pathSeparator}config.json',
+    );
+    if (await targetConfig.exists()) return;
+
+    final legacyConfig = File(
+      '${legacyRoot.path}${Platform.pathSeparator}config.json',
+    );
+    if (!await legacyConfig.exists()) return;
+
+    await target.create(recursive: true);
+    final legacyPresets = Directory(
+      '${legacyRoot.path}${Platform.pathSeparator}presets',
+    );
+    final targetPresets = Directory(
+      '${target.path}${Platform.pathSeparator}presets',
+    );
+    if (await legacyPresets.exists()) {
+      await _copyDirectory(legacyPresets, targetPresets);
+    }
+
+    final decoded = jsonDecode(await legacyConfig.readAsString());
+    if (decoded is! Map) {
+      throw const FormatException('旧桌宠设置格式无效。');
+    }
+    Object? remapPath(Object? value) {
+      if (value is! String) return value;
+      final legacyPrefix = legacyRoot.absolute.path;
+      if (!value.toLowerCase().startsWith(legacyPrefix.toLowerCase())) {
+        return value;
+      }
+      return target.absolute.path + value.substring(legacyPrefix.length);
+    }
+
+    final normalized = <String, dynamic>{
+      for (final entry in decoded.entries)
+        entry.key.toString(): entry.value,
+    };
+    for (final key in const <String>['imageA', 'imageB', 'bubbleImage']) {
+      normalized[key] = remapPath(normalized[key]);
+    }
+    final presets = normalized['presets'];
+    if (presets is List) {
+      normalized['presets'] = <Object?>[
+        for (final raw in presets)
+          if (raw is Map)
+            <String, dynamic>{
+              for (final entry in raw.entries)
+                entry.key.toString(): entry.value,
+              for (final key in const <String>[
+                'imageA',
+                'imageB',
+                'bubbleImage',
+              ])
+                key: remapPath(raw[key]),
+            }
+          else
+            raw,
+      ];
+    }
+    final pendingDeletes = normalized['pendingAssetDeletes'];
+    if (pendingDeletes is List) {
+      normalized['pendingAssetDeletes'] = <Object?>[
+        for (final value in pendingDeletes) remapPath(value),
+      ];
+    }
+
+    await atomicWriteString(
+      targetConfig,
+      const JsonEncoder.withIndent('  ').convert(normalized),
+    );
+
+    // Only after the account-scoped copy is durable do we remove the legacy
+    // singleton copy. This prevents another account from inheriting the first
+    // account's desktop pet on a later login.
+    try {
+      await legacyConfig.delete();
+      if (await legacyPresets.exists()) {
+        await legacyPresets.delete(recursive: true);
+      }
+    } catch (_) {
+      // The account-scoped copy is already authoritative.
+    }
+  }
+
+  Future<Directory> _rootDirectory() async {
+    final legacyRoot = await _legacyRootDirectory();
+    final accountId = _accountId;
+    if (accountId == null) return legacyRoot;
+    final target = Directory(
+      '${legacyRoot.path}${Platform.pathSeparator}accounts'
+      '${Platform.pathSeparator}$accountId',
+    );
+    await _migrateLegacyAccountRoot(legacyRoot, target);
+    return target;
   }
 
   Future<File> _configFile() async {
