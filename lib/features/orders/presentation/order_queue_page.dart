@@ -251,9 +251,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
               !order.isCompleted &&
               order.currentNodeId != notStartedNodeId,
         );
-    final progressHeight = widget.featureStore.nodeProgress
-        ? (hasEditableProgress ? 42.0 : 5.0)
-        : 0.0;
     final reserveAction = rowOrders.any(
       (order) =>
           !order.isCompleted &&
@@ -264,7 +261,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       titleHeight: titleHeight,
       clientHeight: clientHeight,
       reserveTagLine: reserveTagLine,
-      progressHeight: progressHeight,
+      reserveEditableProgress: hasEditableProgress,
       reserveAction: reserveAction,
     );
   }
