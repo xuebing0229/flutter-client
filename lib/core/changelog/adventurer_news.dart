@@ -278,6 +278,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新设备加入改为原子绑定',
     description: '新设备在正式同步目录开放前先生成并认证自己的应用设备身份，原设备确认回应码后会先登记这台新设备，再开放正式 Syncthing 目录；新设备登录时复用同一个身份。这样设备记录、同步通道与旧解绑墓碑不会再出现先后竞争，避免“已连接但持续修复、旧设备看不到新设备、功能开关没同步完整”等半连接状态。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 176,
+    title: '卡片与添加设备界面整理',
+    description: '排单卡片视图改为同一行卡片等高，减少内容多少不同造成的参差感；添加设备页把“复制设备码”移到第一步二维码正下方，并移除底部重复入口，扫码和复制两种方式放在一起。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
