@@ -118,6 +118,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _syncConflictPromptedUntilClear = false;
   bool _desktopPetAccountSyncReady = false;
   bool _applyingSyncedDesktopPet = false;
+  bool _leavingAccount = false;
   Map<String, dynamic>? _syncProgressOverlay;
   String? _syncProgressOverlaySignature;
   AccountSyncState? _accountSyncSnapshot;
@@ -400,7 +401,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _onAccountStoreChanged() {
     final snapshot = widget.accountStore.syncSnapshot;
-    if (snapshot?.accountId != widget.accountId) return;
+    if (widget.accountStore.status != AccountStatus.unlocked ||
+        snapshot?.accountId != widget.accountId) {
+      if (!_leavingAccount && Platform.isWindows) {
+        _leavingAccount = true;
+        _desktopPetAccountSyncDebounce?.cancel();
+        _desktopPetLegacySeedTimer?.cancel();
+        unawaited(_desktopPetService.stopForAccountExit());
+      }
+      return;
+    }
     _accountSyncSnapshot = snapshot;
     _scheduleSave();
   }
@@ -771,7 +781,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _syncDesktopPet() async {
-    if (!Platform.isWindows) return;
+    if (!Platform.isWindows || _leavingAccount) return;
     try {
       final order = await _currentDesktopPetOrder();
       if (!mounted) return;
@@ -1136,9 +1146,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _prepareForSignOut() async {
+    _leavingAccount = true;
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
     _focusPersistenceHeartbeat?.cancel();
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetLegacySeedTimer?.cancel();
+
+    if (Platform.isWindows) {
+      // Account chooser/login pages must never retain the previous account's
+      // detached desktop-pet process.
+      await _desktopPetService.stopForAccountExit();
+    }
+
     if (_ready && _localDataHealthy) {
       await _flushSyncThenPersist();
     }
