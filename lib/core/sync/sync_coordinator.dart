@@ -946,7 +946,12 @@ class SyncCoordinator extends ChangeNotifier {
 
   Future<void> revokeDevice(String appDeviceId) {
     return _enqueue(() async {
+      final transportId =
+          accountStore.syncSnapshot?.devices[appDeviceId]?.syncTransportId;
       await accountStore.revokeDevice(appDeviceId);
+      if (transportId?.trim().isNotEmpty == true) {
+        await _clearTransportReauthorization(transportId!);
+      }
       await _syncAccountState();
 
       if (_transportPrepared) {
