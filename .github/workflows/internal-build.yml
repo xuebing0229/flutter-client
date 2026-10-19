@@ -303,6 +303,7 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
           mkdir -p "site/internal/$VERSION"
+          cp server/release_site/index.html site/index.html
           cp dist/app-internal.apk "site/internal/$VERSION/app-internal.apk"
           cp dist/app-windows-internal.zip "site/internal/$VERSION/app-windows-internal.zip"
           cp dist/app-windows-internal-setup.exe "site/internal/$VERSION/app-windows-internal-setup.exe"
@@ -417,9 +418,10 @@ jobs:
           SCP="scp -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
           $SCP -p site/internal/$VERSION/* \
             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/internal/$VERSION/"
-
-          # The public download page is intentionally NOT overwritten by app releases.
-          # It is a stable surface and must only change through an explicit site update.
+          # index.html is guarded by check_internal_public_release.py before publish,
+          # so every release repairs stale public-page copies instead of preserving them.
+          $SCP -p site/index.html \
+            "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/index.html"
 
       - name: Publish latest manifests last
         if: steps.deploy.outputs.enabled == 'true'
@@ -444,4 +446,8 @@ jobs:
           curl --fail --show-error --silent --retry 5 --retry-delay 2 \
             "$RELEASE_SITE_BASE_URL/internal/windows-latest.json" >/dev/null
           curl --fail --show-error --silent --retry 5 --retry-delay 2 \
-            "$RELEASE_SITE_BASE_URL/" >/dev/null
+            "$RELEASE_SITE_BASE_URL/" > published-index.html
+          if grep -Eq '文件校验信息|SHA-256|androidSha|windowsSha' published-index.html; then
+            echo "::error::Published download page regressed and exposes checksum UI."
+            exit 1
+          fi
