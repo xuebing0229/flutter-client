@@ -11,7 +11,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
   const AndroidBetaUpdateInstaller();
 
   static const MethodChannel _channel = MethodChannel('app.beta_update');
-  static const String _userAgent = 'adventurers-guild-android-updater';
+  static const String _userAgent = 'artist-queue-android-beta-updater';
 
   @override
   Future<Map<String, dynamic>> fetchLatestManifest() async {
@@ -25,13 +25,6 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
 
     return raw.map(
       (key, value) => MapEntry(key.toString(), value),
-    );
-  }
-
-  Future<void> _setDownloadActive(bool active) {
-    return _channel.invokeMethod<void>(
-      'setUpdateDownloadActive',
-      <String, Object?>{'active': active},
     );
   }
 
@@ -185,7 +178,6 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
 
     var existingBytes = await partial.exists() ? await partial.length() : 0;
     final client = HttpClient();
-    await _setDownloadActive(true);
 
     try {
       final request = await client.getUrl(uri);
@@ -308,7 +300,6 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
       await partial.rename(target.path);
     } finally {
       client.close(force: true);
-      await _setDownloadActive(false);
     }
 
     return _install(target);
