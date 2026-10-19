@@ -369,6 +369,12 @@ const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '更新说明展示优化',
     description: '冒险者新见闻与下载页的说明进一步精简，只展示实际功能变化和必要的下载信息。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 8,
+    versionLabel: '0.1.7',
+    title: '后台更新下载修复',
+    description: '修复 Android 下载应用更新时切到后台后可能中断的问题；下载任务会继续进行，返回公会后仍可查看进度，并继续保留暂停、断点续传和自动安装。',
+  ),
 ];
 
 String internalAdventurerNewsVersion(int build) {
