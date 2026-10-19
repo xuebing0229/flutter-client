@@ -1,4 +1,4 @@
-# Internal 0.1.7 build/publish pipeline.
+# Internal 0.1.8 build/publish pipeline.
 name: Build and Publish Internal
 
 on:
@@ -20,7 +20,7 @@ env:
   RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
   ACTIVATION_API_BASE_URL: https://license.apixb.top
   INTERNAL_SOURCE_BUILD: '181'
-  INTERNAL_RELEASE_BUILD: '8'
+  INTERNAL_RELEASE_BUILD: '9'
   RELEASE_SITE_BASE_URL: https://license.apixb.top/releases
   RELEASE_DEPLOY_HOST: license.apixb.top
   RELEASE_DEPLOY_USER: adventure-release
