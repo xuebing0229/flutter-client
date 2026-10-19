@@ -10,9 +10,18 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        private const val MANIFEST_URL =
+            "https://license.apixb.top/releases/internal/android-latest.json"
+        private const val USER_AGENT = "adventurers-guild-internal-updater"
+    }
+
     private lateinit var backupFileBridge: BackupFileBridge
     private lateinit var feedbackLinkBridge: FeedbackLinkBridge
     private lateinit var orderReminderBridge: OrderReminderBridge
@@ -48,10 +57,114 @@ class MainActivity : FlutterActivity() {
             "app.beta_update",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+                "fetchLatestManifest" -> handleFetchLatestManifest(result)
+                "setUpdateDownloadActive" -> handleSetUpdateDownloadActive(call, result)
                 "installDownloadedUpdate" -> handleInstallDownloadedUpdate(call, result)
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun handleFetchLatestManifest(
+        result: MethodChannel.Result,
+    ) {
+        Thread {
+            try {
+                val manifest = fetchInternalManifest()
+                runOnUiThread {
+                    result.success(manifest)
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    result.error(
+                        "UPDATE_CHECK_FAILED",
+                        error.message ?: "Native update check failed.",
+                        null,
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun fetchInternalManifest(): Map<String, Any?> {
+        val json = fetchJson(MANIFEST_URL)
+
+        val schema = json.optInt("schema", -1)
+        val published = json.optBoolean("published", false)
+        val channel = json.optString("channel", "")
+        val version = json.optString("version", "")
+        val build = json.optInt("build", -1)
+        val downloadUrl = json.optString("download_url", "")
+        val sizeBytes = json.optLong("size_bytes", -1L)
+        val sha256 = json.optString("sha256", "")
+
+        if (
+            schema != 1 ||
+            !published ||
+            channel != "internal" ||
+            version.isBlank() ||
+            build < 0 ||
+            downloadUrl.isBlank()
+        ) {
+            throw IllegalStateException("Internal update manifest is invalid.")
+        }
+
+        return linkedMapOf(
+            "schema" to schema,
+            "channel" to channel,
+            "version" to version,
+            "build" to build,
+            "published" to published,
+            "download_url" to downloadUrl,
+            "size_bytes" to sizeBytes.takeIf { it > 0L },
+            "sha256" to sha256.takeIf { it.isNotBlank() },
+            "notes" to json.optString("notes", ""),
+        )
+    }
+
+    private fun fetchJson(url: String): JSONObject {
+        val connection =
+            (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                instanceFollowRedirects = true
+                connectTimeout = 12000
+                readTimeout = 12000
+                useCaches = false
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("Cache-Control", "no-cache")
+            }
+
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                throw IllegalStateException(
+                    "Update endpoint returned HTTP $status",
+                )
+            }
+
+            val body =
+                connection.inputStream
+                    .bufferedReader()
+                    .use { it.readText() }
+
+            return JSONObject(body)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun handleSetUpdateDownloadActive(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
+        val active = call.argument<Boolean>("active") == true
+        if (active) {
+            UpdateDownloadKeepAliveService.start(this)
+        } else {
+            UpdateDownloadKeepAliveService.stop(this)
+        }
+        result.success(null)
     }
 
     private fun handleInstallDownloadedUpdate(
