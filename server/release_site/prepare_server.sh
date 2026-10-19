@@ -48,6 +48,11 @@ if marker not in text:
     block = f"""    location ^~ /releases/ {{
         alias {root}/;
         autoindex off;
+        # Android may temporarily stop reading the socket while the app is in
+        # the background. Keep long APK transfers alive instead of dropping
+        # them at nginx's default 60s send timeout.
+        send_timeout 30m;
+        sendfile on;
         limit_except GET HEAD {{ deny all; }}
         add_header Cache-Control "no-cache";
     }}
