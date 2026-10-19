@@ -190,7 +190,10 @@ class AppToolMenu extends StatelessWidget {
       return;
     }
 
-    onBeforeNavigate?.call();
+    // Keep the mobile drawer open underneath the pushed tool page. Flutter's
+    // drawer lives as local route history, so popping the tool page naturally
+    // reveals the drawer again instead of dropping straight back to the
+    // current work tab.
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
   }
 
