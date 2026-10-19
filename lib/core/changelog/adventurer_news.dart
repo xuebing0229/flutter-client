@@ -375,6 +375,12 @@ const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '后台更新下载修复',
     description: '修复 Android 下载应用更新时切到后台后可能中断的问题；下载任务会继续进行，返回公会后仍可查看进度，并继续保留暂停、断点续传和自动安装。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 9,
+    versionLabel: '0.1.8',
+    title: '后台更新测试版',
+    description: '用于验证应用切到后台后仍能继续下载更新，并保留断点续传与自动安装体验。',
+  ),
 ];
 
 String internalAdventurerNewsVersion(int build) {
