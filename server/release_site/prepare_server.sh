@@ -21,7 +21,7 @@ if [[ ! -f "$NGINX_SITE" ]]; then
   exit 3
 fi
 
-id "$DEPLOY_USER" >/dev/null 2>&1 ||   useradd --create-home --shell /bin/bash "$DEPLOY_USER"
+id "$DEPLOY_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$DEPLOY_USER"
 
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 "$RELEASE_ROOT"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 "$RELEASE_ROOT/internal"
@@ -36,37 +36,7 @@ chmod 0600 "$HOME_DIR/.ssh/authorized_keys"
 # The exact server SSH policy may be managed elsewhere, so this script verifies
 # the effective per-user configuration instead of blindly rewriting global SSH.
 SSHD_EFFECTIVE="$(sshd -T -C "user=$DEPLOY_USER,host=$DOMAIN,addr=127.0.0.1" 2>/dev/null || true)"
-if ! grep -q '^pubkeyauthentication yesfrom pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-root = sys.argv[2].rstrip("/")
-text = path.read_text()
-marker = "    location ^~ /releases/ {"
-if marker not in text:
-    proxy_marker = "    location / {"
-    block = f"""    location ^~ /releases/ {{
-        alias {root}/;
-        autoindex off;
-        limit_except GET HEAD {{ deny all; }}
-        add_header Cache-Control "no-cache";
-    }}
-
-"""
-    if proxy_marker not in text:
-        raise SystemExit("Could not find the existing location / block.")
-    text = text.replace(proxy_marker, block + proxy_marker, 1)
-    path.write_text(text)
-PY
-
-nginx -t
-systemctl reload nginx
-
-echo "Prepared release site:"
-echo "  https://$DOMAIN/releases/"
-echo "  release root: $RELEASE_ROOT"
-echo "  deploy user: $DEPLOY_USER"
- <<<"$SSHD_EFFECTIVE"; then
+if ! grep -q '^pubkeyauthentication yes' <<<"$SSHD_EFFECTIVE"; then
   echo "ERROR: sshd does not currently allow public-key authentication for $DEPLOY_USER." >&2
   echo "Fix the effective sshd policy for this user, run 'sshd -t', reload ssh, then rerun this script." >&2
   exit 4
