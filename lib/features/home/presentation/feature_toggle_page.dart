@@ -37,13 +37,30 @@ class FeatureTogglePage extends StatelessWidget {
         return;
       }
 
-      if (context.mounted) {
-        await showReminderBackgroundGuide(
-          context: context,
-          reminderService: reminderService,
-        );
-      }
+      final diagnostics = await reminderService.getDiagnostics();
+      final batteryOptimizationIgnored =
+          diagnostics['batteryOptimizationIgnored'] == true;
+
       await store.setEnabled(AppFeature.deadlineReminders, true);
+
+      if (!context.mounted) return;
+      if (!batteryOptimizationIgnored) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '还需要允许后台运行：请把冒险者公会设为“不限制 / 完全允许后台行为”。',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        await reminderService.openBatteryOptimizationSettings();
+        return;
+      }
+
+      await showReminderBackgroundGuide(
+        context: context,
+        reminderService: reminderService,
+      );
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
