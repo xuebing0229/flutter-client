@@ -20,6 +20,9 @@ for token in page_forbidden:
 if not notes:
     raise SystemExit("Public release notes must not be empty.")
 
+if "\\n" in notes or "\\r" in notes:
+    raise SystemExit("Public release notes must use real line breaks, not escaped \\n / \\r text.")
+
 notes_forbidden = [
     "GitHub",
     "服务器",
