@@ -1,0 +1,124 @@
+name: Repair Internal Release Site
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'build/internal-*'
+    paths:
+      - '.github/workflows/internal-release-site.yml'
+      - 'server/release_site/index.html'
+      - 'server/release_site/public_notes.txt'
+      - 'tool/check_internal_public_release.py'
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_SITE_BASE_URL: https://license.apixb.top/releases
+  RELEASE_DEPLOY_HOST: license.apixb.top
+  RELEASE_DEPLOY_USER: adventure-release
+  RELEASE_DEPLOY_PATH: /srv/adventure-releases
+  RELEASE_SSH_KEY: ${{ secrets.INTERNAL_RELEASE_SSH_KEY }}
+
+jobs:
+  repair-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Guard public release surface
+        run: python3 tool/check_internal_public_release.py
+
+      - name: Require release-site SSH
+        shell: bash
+        run: |
+          test -n "$RELEASE_SSH_KEY"
+
+      - name: Prepare current-page repair payload
+        shell: bash
+        run: |
+          VERSION=$(python3 - <<'PY'
+          from pathlib import Path
+          for line in Path("pubspec.yaml").read_text().splitlines():
+              if line.startswith("version:"):
+                  print(line.split(":", 1)[1].strip().split("+", 1)[0])
+                  break
+          PY
+          )
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          mkdir -p "sitefix/internal/$VERSION"
+          cp server/release_site/index.html sitefix/index.html
+
+          curl --fail --show-error --silent --retry 5 --retry-delay 2             "$RELEASE_SITE_BASE_URL/internal/latest.json"             -o sitefix/internal/latest.json
+          curl --fail --show-error --silent --retry 5 --retry-delay 2             "$RELEASE_SITE_BASE_URL/internal/android-latest.json"             -o sitefix/internal/android-latest.json
+          curl --fail --show-error --silent --retry 5 --retry-delay 2             "$RELEASE_SITE_BASE_URL/internal/windows-latest.json"             -o sitefix/internal/windows-latest.json
+          curl --fail --show-error --silent --retry 5 --retry-delay 2             "$RELEASE_SITE_BASE_URL/internal/$VERSION/release.json"             -o "sitefix/internal/$VERSION/release.json"
+
+          python3 - "$VERSION" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          notes = Path("server/release_site/public_notes.txt").read_text(
+              encoding="utf-8"
+          ).strip()
+          if not notes:
+              raise SystemExit("Public release notes are empty.")
+
+          paths = [
+              Path("sitefix/internal/latest.json"),
+              Path("sitefix/internal/android-latest.json"),
+              Path("sitefix/internal/windows-latest.json"),
+              Path("sitefix/internal") / version / "release.json",
+          ]
+          for path in paths:
+              data = json.loads(path.read_text(encoding="utf-8"))
+              data["notes"] = notes
+              path.write_text(
+                  json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                  encoding="utf-8",
+              )
+          PY
+
+      - name: Configure release-site SSH
+        shell: bash
+        run: |
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$RELEASE_SSH_KEY" > "$HOME/.ssh/internal-release"
+          chmod 0600 "$HOME/.ssh/internal-release"
+          ssh-keyscan -H "$RELEASE_DEPLOY_HOST" > "$HOME/.ssh/known_hosts"
+
+      - name: Publish repaired page and notes only
+        shell: bash
+        run: |
+          SCP="scp -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
+          $SCP -p sitefix/index.html             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/index.html"
+          $SCP -p             sitefix/internal/android-latest.json             sitefix/internal/windows-latest.json             sitefix/internal/latest.json             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/internal/"
+          $SCP -p "sitefix/internal/$VERSION/release.json"             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/internal/$VERSION/release.json"
+
+      - name: Verify repaired public page
+        shell: bash
+        run: |
+          curl --fail --show-error --silent --retry 5 --retry-delay 2             "$RELEASE_SITE_BASE_URL/" > published-index.html
+          if grep -Eq '文件校验信息|SHA-256|androidSha|windowsSha' published-index.html; then
+            echo "::error::Published page still exposes checksum UI."
+            exit 1
+          fi
+
+          curl --fail --show-error --silent --retry 5 --retry-delay 2             "$RELEASE_SITE_BASE_URL/internal/latest.json" > published-latest.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          page = Path("published-index.html").read_text(encoding="utf-8")
+          latest = json.loads(Path("published-latest.json").read_text(encoding="utf-8"))
+          notes = latest.get("notes", "")
+          if "\\n" in notes or "\\r" in notes:
+              raise SystemExit("Published notes still contain escaped newline text.")
+          if "文件校验信息" in page or "SHA-256" in page:
+              raise SystemExit("Checksum UI is still visible.")
+          print("Release-site repair verification passed.")
+          PY
