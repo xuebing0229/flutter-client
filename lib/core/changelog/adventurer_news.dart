@@ -363,6 +363,12 @@ const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '关于与开源致谢',
     description: '设置新增“关于冒险者公会”，可以查看当前版本、开源组件与许可证致谢。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 7,
+    versionLabel: '0.1.6',
+    title: '更新说明展示优化',
+    description: '冒险者新见闻与下载页的说明进一步精简，只展示实际功能变化和必要的下载信息。',
+  ),
 ];
 
 String internalAdventurerNewsVersion(int build) {
