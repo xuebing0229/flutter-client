@@ -3,7 +3,7 @@ description: Private local-first application.
 publish_to: "none"
 version: 0.1.5
 # Internal release 0.1.5 promoted from test build 181.
-# Internal numeric update sequence is 6; CI injects it as build number.
+# Internal numeric update sequence is 6; CI injects it as build number. Release trigger: 2026-10-19.
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
