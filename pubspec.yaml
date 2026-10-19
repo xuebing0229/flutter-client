@@ -1,8 +1,9 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+181
-# beta-181: restore mobile drawer return state
+version: 0.1.5
+# Internal release 0.1.5 promoted from test build 181.
+# Internal numeric update sequence is 6; CI injects it as build number.
 
 environment:
   sdk: ">=3.10.0 <4.0.0"

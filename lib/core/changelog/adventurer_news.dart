@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../build/build_channel.dart';
 import '../storage/atomic_file.dart';
 
 /// Each feature is recorded once, against the FIRST build where it ships.
@@ -13,11 +14,15 @@ class AdventurerNewsEntry {
     required this.introducedBuild,
     required this.title,
     required this.description,
+    this.versionLabel,
   });
 
   final int introducedBuild;
   final String title;
   final String description;
+  final String? versionLabel;
+
+  String get displayVersion => versionLabel ?? introducedBuild.toString();
 }
 
 /// Append a block when its feature ships; don't rewrite older entries.
@@ -295,6 +300,94 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
   ),
 ];
 
+/// Internal releases have their own user-facing version line. The numeric key
+/// is only a monotonic release sequence; test-build lineage stays diagnostic.
+const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
+  AdventurerNewsEntry(
+    introducedBuild: 1,
+    versionLabel: '0.1.0',
+    title: '首个内测版',
+    description: '建立独立内测发布线：Android 与 Windows 可以和测试版并存，使用独立应用身份与签名，版本号按正常版本独立递增。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 2,
+    versionLabel: '0.1.1',
+    title: '新设备加入状态修复',
+    description: '修复首次扫码加入新设备时，设备已经建立连接却仍被误判为等待确认超时的问题；连接成功后会继续进入账号传输流程。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 3,
+    versionLabel: '0.1.2',
+    title: '应用名称统一',
+    description: '内测渠道继续保持独立安装身份，但手机应用名、Windows 窗口与快捷方式统一显示为“冒险者公会”。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 4,
+    versionLabel: '0.1.3',
+    title: 'UI 风格、自定义配色与完整备份',
+    description: '加入十二种 UI 风格与自定义浅色/深色配色，补齐主题分享、截图重复检测历史和桌宠自定义美术等完整备份内容，并修复新设备加入与旧主题恢复异常。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 5,
+    versionLabel: '0.1.4',
+    title: 'Windows 卸载与新设备加入修复',
+    description: 'Windows 卸载流程会安全关闭公会、桌宠与同步核心，并让你选择是否保留个人数据；同时修复新设备加入时同步核心端口冲突、旧进程残留和启动超时难以区分的问题。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 5,
+    versionLabel: '0.1.4',
+    title: '内测版支持应用内更新',
+    description: '内测版新增和测试版一致的检查更新、断点续传、暂停继续与自动安装流程；更新清单和安装包改由公会自己的下载站提供，不再依赖 GitHub 下载。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 6,
+    versionLabel: '0.1.5',
+    title: '设备同步与新设备加入继续完善',
+    description: '继续修复电脑已登录后手机首次加入、Windows 同步通道迁移、同步目录卡住、解绑状态跨设备传播和重复设备记录等问题；设备身份改为稳定安装身份优先，新设备加入采用更完整的原子绑定流程，不同平台之间的配对握手也统一处理，减少“已经连接却迟迟不同步”的半连接状态。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 6,
+    versionLabel: '0.1.5',
+    title: '完整备份与桌宠资料同步',
+    description: '修复完整备份因历史设置和同步快照不一致而导出失败的问题；桌宠预设、A/B 图片、气泡图片、位置缩放和截图导入历史进入账号同步工作区，换电脑重新加入账号也能恢复。退出账号或设备被解绑时会同步关闭旧账号桌宠。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 6,
+    versionLabel: '0.1.5',
+    title: '排单卡片与操作体验整理',
+    description: '排单卡片改为按每一排实际内容自适应对齐图名、单主等字段，不再写死两行或统一整张卡高度；自定义标签展示更自然，列表图名可完整换行。手机从设置、同步等功能页返回时会先恢复左侧栏展开状态，再按一次返回自然关闭侧栏。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 6,
+    versionLabel: '0.1.5',
+    title: '关于与开源致谢',
+    description: '设置新增“关于冒险者公会”，可以查看当前版本以及项目使用的开源组件和许可证信息，并补充 Syncthing 与 Windows 桌宠相关组件的来源与致谢。',
+  ),
+];
+
+String internalAdventurerNewsVersion(int build) {
+  for (final entry in internalAdventurerNewsCatalog.reversed) {
+    if (entry.introducedBuild == build && entry.versionLabel != null) {
+      return entry.versionLabel!;
+    }
+  }
+  return build <= 0 ? '旧内测版' : '内测版 $build';
+}
+
+String adventurerNewsVersionLabel(int build) =>
+    isInternalBuild ? internalAdventurerNewsVersion(build) : build.toString();
+
+List<AdventurerNewsEntry> newsBetweenCurrentChannelBuilds(
+  int previousBuild,
+  int currentBuild,
+) =>
+    newsBetweenBuilds(
+      previousBuild,
+      currentBuild,
+      catalog:
+          isInternalBuild ? internalAdventurerNewsCatalog : adventurerNewsCatalog,
+    );
+
 List<AdventurerNewsEntry> newsBetweenBuilds(
   int previousBuild,
   int currentBuild, {
@@ -320,6 +413,9 @@ class AdventurerNewsNotice {
   final int previousBuild;
   final int currentBuild;
   final List<AdventurerNewsEntry> entries;
+
+  String get previousVersionLabel => adventurerNewsVersionLabel(previousBuild);
+  String get currentVersionLabel => adventurerNewsVersionLabel(currentBuild);
 }
 
 /// Local INSTALLATION-level acknowledgement (NOT account data / sync data).
@@ -336,8 +432,21 @@ class AdventurerNewsStore {
   }
 
   Future<int> installedBuild() async {
+    if (isInternalBuild && internalReleaseBuild > 0) {
+      return internalReleaseBuild;
+    }
     final info = await PackageInfo.fromPlatform();
     return int.tryParse(info.buildNumber) ?? 0;
+  }
+
+  int _normalizeStoredBuild(int value) {
+    if (!isInternalBuild || value < 100) return value;
+
+    // Older Internal builds stored their source test build rather than the
+    // independent Internal release sequence.
+    if (value <= 144) return 1;
+    if (value <= 145) return 3;
+    return 4;
   }
 
   Future<int?> _readLastSeen() async {
@@ -345,7 +454,7 @@ class AdventurerNewsStore {
     if (!await file.exists()) return null;
     // Corrupt files must not accidentally mark a newer version as read.
     final value = int.tryParse((await file.readAsString()).trim());
-    return value != null && value >= 0 ? value : null;
+    return value != null && value >= 0 ? _normalizeStoredBuild(value) : null;
   }
 
   Future<void> _writeLastSeen(int build) async {
@@ -363,9 +472,12 @@ class AdventurerNewsStore {
   /// build numbers cannot be recovered retroactively.
   Future<void> initialize({required bool hasExistingAccounts}) async {
     if (await _readLastSeen() != null) return;
+    final currentBuild = await installedBuild();
     final initialBuild = hasExistingAccounts
-        ? 105
-        : await installedBuild();
+        ? isInternalBuild
+            ? (currentBuild > 0 ? currentBuild - 1 : 0)
+            : 105
+        : currentBuild;
     await _writeLastSeen(initialBuild);
   }
 
@@ -376,7 +488,7 @@ class AdventurerNewsStore {
     return AdventurerNewsNotice(
       previousBuild: previousBuild,
       currentBuild: currentBuild,
-      entries: newsBetweenBuilds(previousBuild, currentBuild),
+      entries: newsBetweenCurrentChannelBuilds(previousBuild, currentBuild),
     );
   }
 

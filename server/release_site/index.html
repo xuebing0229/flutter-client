@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>冒险者公会 · 内测下载</title>
+  <style>
+    :root { font-family: system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; color-scheme: light dark; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; background:#f3efe7; color:#241f1a; }
+    main { width:min(760px,calc(100% - 32px)); box-sizing:border-box; padding:28px; border:1px solid #c9bca8; border-radius:24px; background:rgba(255,255,255,.84); box-shadow:0 18px 60px rgba(54,43,29,.12); }
+    h1 { margin:0 0 6px; font-size:30px; }
+    .muted { color:#6f655a; }
+    .version { margin:24px 0 8px; font-size:22px; font-weight:750; }
+    .actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:22px 0; }
+    a.button { text-decoration:none; text-align:center; padding:14px 16px; border-radius:14px; background:#684f38; color:white; font-weight:700; }
+    a.button.secondary { background:#86715d; }
+    section { margin-top:20px; padding-top:18px; border-top:1px solid #ddd2c5; }
+    pre { white-space:pre-wrap; word-break:break-word; font:inherit; line-height:1.65; margin:8px 0 0; }
+    details { margin-top:16px; }
+    code { word-break:break-all; font-size:12px; }
+    @media (max-width:600px) { main{padding:22px}.actions{grid-template-columns:1fr} h1{font-size:26px} }
+    @media (prefers-color-scheme:dark) {
+      body { background:#171411; color:#f2ece4; }
+      main { background:rgba(38,33,29,.94); border-color:#5a4e43; box-shadow:none; }
+      .muted { color:#bfb3a6; }
+      section { border-color:#554a40; }
+      a.button { background:#9a7655; }
+      a.button.secondary { background:#756556; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>冒险者公会</h1>
+    <div class="muted">内测版下载页</div>
+
+    <div id="state" class="version">正在读取最新版本…</div>
+    <div id="published" class="muted"></div>
+
+    <div class="actions">
+      <a id="android" class="button" href="#" hidden>下载 Android</a>
+      <a id="windows" class="button secondary" href="#" hidden>下载 Windows</a>
+    </div>
+
+    <section>
+      <strong>冒险者新见闻</strong>
+      <pre id="notes" class="muted">正在读取…</pre>
+    </section>
+
+    <details>
+      <summary>文件校验信息</summary>
+      <p>Android SHA-256<br><code id="androidSha">—</code></p>
+      <p>Windows SHA-256<br><code id="windowsSha">—</code></p>
+    </details>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const prettySize = value => {
+      if (!Number.isFinite(value)) return '';
+      const units = ['B','KB','MB','GB'];
+      let size = value, unit = 0;
+      while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit++; }
+      return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+    };
+
+    fetch('./internal/latest.json', {cache:'no-store'})
+      .then(response => {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(data => {
+        $('state').textContent = '最新内测版 ' + data.version;
+        $('published').textContent = data.published_at
+          ? '发布时间：' + new Date(data.published_at).toLocaleString()
+          : '';
+        $('notes').textContent = data.notes || '本次没有单独登记更新说明。';
+
+        if (data.android?.download_url) {
+          $('android').hidden = false;
+          $('android').href = data.android.download_url;
+          $('android').textContent = '下载 Android' +
+            (data.android.size_bytes ? ' · ' + prettySize(data.android.size_bytes) : '');
+          $('androidSha').textContent = data.android.sha256 || '—';
+        }
+        if (data.windows?.installer_url || data.windows?.download_url) {
+          $('windows').hidden = false;
+          $('windows').href = data.windows.installer_url || data.windows.download_url;
+          $('windows').textContent = '下载 Windows' +
+            (data.windows.installer_size_bytes ? ' · ' + prettySize(data.windows.installer_size_bytes) : '');
+          $('windowsSha').textContent = data.windows.sha256 || '—';
+        }
+      })
+      .catch(error => {
+        $('state').textContent = '暂时无法读取最新内测版';
+        $('notes').textContent = '请稍后刷新页面。\n' + error;
+      });
+  </script>
+</body>
+</html>
