@@ -381,6 +381,18 @@ const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '后台更新测试版',
     description: '用于验证应用切到后台后仍能继续下载更新，并保留断点续传与自动安装体验。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 10,
+    versionLabel: '0.1.9',
+    title: '后台运行引导完善',
+    description: '设置页会明确提示后台运行限制对截稿提醒和应用更新的影响，并提供直达系统后台设置的入口；开启截稿通知时也会检查后台设置，未完成时直接引导处理。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 10,
+    versionLabel: '0.1.9',
+    title: '下载页展示修复',
+    description: '内测下载页只展示版本、下载入口和功能说明，更新说明换行显示正常。',
+  ),
 ];
 
 String internalAdventurerNewsVersion(int build) {
