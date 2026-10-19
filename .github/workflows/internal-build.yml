@@ -1,4 +1,4 @@
-# Internal 0.1.5 build/publish pipeline.
+# Internal 0.1.6 build/publish pipeline.
 name: Build and Publish Internal
 
 on:
@@ -20,7 +20,7 @@ env:
   RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
   ACTIVATION_API_BASE_URL: https://license.apixb.top
   INTERNAL_SOURCE_BUILD: '181'
-  INTERNAL_RELEASE_BUILD: '6'
+  INTERNAL_RELEASE_BUILD: '7'
   RELEASE_SITE_BASE_URL: https://license.apixb.top/releases
   RELEASE_DEPLOY_HOST: license.apixb.top
   RELEASE_DEPLOY_USER: adventure-release
@@ -331,10 +331,8 @@ jobs:
           published_at = datetime.now(timezone.utc).isoformat()
           release_base = f"{base_url}/internal/{version}"
           notes = (
-              "设备同步与新设备加入继续完善，减少连接后迟迟不同步、重复设备记录等问题；"
-              "完整备份与桌宠资料同步进一步补齐，换设备后恢复更完整；"
-              "排单卡片按内容自适应对齐，列表图名展示更完整，手机返回侧栏体验也更自然；"
-              "设置新增“关于冒险者公会”，可查看版本与开源致谢。"
+              "更新说明展示更简洁，只保留实际功能变化；"
+              "下载页也进一步精简，方便直接查看版本并下载对应平台安装包。"
           )
 
           android_data = {
