@@ -1,9 +1,9 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.1.7
-# Internal release 0.1.7 promoted from test build 181.
-# Internal numeric update sequence is 8; CI injects it as build number. Final publish trigger.
+version: 0.1.8
+# Internal release 0.1.8 promoted from test build 181.
+# Internal numeric update sequence is 9; CI injects it as build number. Publish trigger.
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
