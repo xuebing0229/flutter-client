@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
@@ -13,16 +12,9 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
 
   static const MethodChannel _channel = MethodChannel('app.beta_update');
   static const String _userAgent = 'adventurers-guild-android-updater';
-  static final Uri _internalManifestUri = Uri.parse(
-    'https://license.apixb.top/releases/internal/android-latest.json',
-  );
 
   @override
   Future<Map<String, dynamic>> fetchLatestManifest() async {
-    if (isInternalBuild) {
-      return _fetchInternalManifest();
-    }
-
     final raw = await _channel.invokeMethod<Map<Object?, Object?>>(
       'fetchLatestManifest',
     );
@@ -36,35 +28,11 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     );
   }
 
-  Future<Map<String, dynamic>> _fetchInternalManifest() async {
-    final client = HttpClient();
-    try {
-      final request = await client.getUrl(_internalManifestUri);
-      request.followRedirects = true;
-      request.headers
-        ..set(HttpHeaders.userAgentHeader, _userAgent)
-        ..set(HttpHeaders.acceptHeader, 'application/json')
-        ..set(HttpHeaders.cacheControlHeader, 'no-cache');
-
-      final response = await request.close();
-      final body = await utf8.decoder.bind(response).join();
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          '更新地址返回 HTTP ${response.statusCode}',
-          uri: _internalManifestUri,
-        );
-      }
-
-      final decoded = jsonDecode(body);
-      if (decoded is! Map) {
-        throw const FormatException('更新信息不是 JSON 对象。');
-      }
-      return decoded.map(
-        (key, value) => MapEntry(key.toString(), value),
-      );
-    } finally {
-      client.close(force: true);
-    }
+  Future<void> _setDownloadActive(bool active) {
+    return _channel.invokeMethod<void>(
+      'setUpdateDownloadActive',
+      <String, Object?>{'active': active},
+    );
   }
 
   Future<Directory> _updateDirectory() async {
@@ -217,6 +185,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
 
     var existingBytes = await partial.exists() ? await partial.length() : 0;
     final client = HttpClient();
+    await _setDownloadActive(true);
 
     try {
       final request = await client.getUrl(uri);
@@ -339,6 +308,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
       await partial.rename(target.path);
     } finally {
       client.close(force: true);
+      await _setDownloadActive(false);
     }
 
     return _install(target);
