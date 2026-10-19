@@ -62,7 +62,6 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "fetchLatestManifest" -> handleFetchLatestManifest(result)
-                "setUpdateDownloadActive" -> handleSetUpdateDownloadActive(call, result)
                 "installDownloadedUpdate" -> handleInstallDownloadedUpdate(call, result)
                 else -> result.notImplemented()
             }
@@ -246,19 +245,6 @@ class MainActivity : FlutterActivity() {
         } finally {
             connection.disconnect()
         }
-    }
-
-    private fun handleSetUpdateDownloadActive(
-        call: MethodCall,
-        result: MethodChannel.Result,
-    ) {
-        val active = call.argument<Boolean>("active") == true
-        if (active) {
-            UpdateDownloadKeepAliveService.start(this)
-        } else {
-            UpdateDownloadKeepAliveService.stop(this)
-        }
-        result.success(null)
     }
 
     private fun handleInstallDownloadedUpdate(
