@@ -139,4 +139,10 @@ void main() {
     );
   });
 
+  test('182 包含电池优化设置修复见闻', () {
+    final picked = newsBetweenBuilds(181, 182);
+    expect(picked.map((e) => e.title).toList(), ['电池优化设置修复']);
+  });
+
+
 }
