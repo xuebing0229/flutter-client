@@ -17,9 +17,9 @@ import java.net.URL
 
 class MainActivity : FlutterActivity() {
     companion object {
-        private const val MANIFEST_URL =
+        private const val STATIC_MANIFEST_URL =
             "https://license.apixb.top/releases/internal/android-latest.json"
-        private const val USER_AGENT = "adventurers-guild-internal-updater"
+        private const val USER_AGENT = "artist-queue-beta-updater"
     }
 
     private lateinit var backupFileBridge: BackupFileBridge
@@ -36,6 +36,7 @@ class MainActivity : FlutterActivity() {
         licenseDirectHttpsBridge = LicenseDirectHttpsBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
+
         backupFileBridge = BackupFileBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
@@ -52,13 +53,13 @@ class MainActivity : FlutterActivity() {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
 
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "app.beta_update",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "fetchLatestManifest" -> handleFetchLatestManifest(result)
-                "setUpdateDownloadActive" -> handleSetUpdateDownloadActive(call, result)
                 "installDownloadedUpdate" -> handleInstallDownloadedUpdate(call, result)
                 else -> result.notImplemented()
             }
@@ -70,7 +71,12 @@ class MainActivity : FlutterActivity() {
     ) {
         Thread {
             try {
-                val manifest = fetchInternalManifest()
+                val manifest =
+                    fetchStaticManifest()
+                        ?: throw IllegalStateException(
+                            "Could not load the latest Internal release metadata.",
+                        )
+
                 runOnUiThread {
                     result.success(manifest)
                 }
@@ -86,8 +92,13 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
-    private fun fetchInternalManifest(): Map<String, Any?> {
-        val json = fetchJson(MANIFEST_URL)
+    private fun fetchStaticManifest(): Map<String, Any?>? {
+        val json = runCatching {
+            fetchJson(
+                STATIC_MANIFEST_URL,
+                "application/json",
+            )
+        }.getOrNull() ?: return null
 
         val schema = json.optInt("schema", -1)
         val published = json.optBoolean("published", false)
@@ -106,7 +117,7 @@ class MainActivity : FlutterActivity() {
             build < 0 ||
             downloadUrl.isBlank()
         ) {
-            throw IllegalStateException("Internal update manifest is invalid.")
+            return null
         }
 
         return linkedMapOf(
@@ -122,7 +133,10 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    private fun fetchJson(url: String): JSONObject {
+    private fun fetchJson(
+        url: String,
+        accept: String,
+    ): JSONObject {
         val connection =
             (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
@@ -131,15 +145,22 @@ class MainActivity : FlutterActivity() {
                 readTimeout = 12000
                 useCaches = false
                 setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
+                setRequestProperty("Accept", accept)
                 setRequestProperty("Cache-Control", "no-cache")
             }
 
         try {
             val status = connection.responseCode
             if (status !in 200..299) {
+                val errorBody =
+                    connection.errorStream
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                        .orEmpty()
+
                 throw IllegalStateException(
-                    "Update endpoint returned HTTP $status",
+                    "Update endpoint returned HTTP $status" +
+                        if (errorBody.isBlank()) "" else ": $errorBody",
                 )
             }
 
@@ -152,19 +173,6 @@ class MainActivity : FlutterActivity() {
         } finally {
             connection.disconnect()
         }
-    }
-
-    private fun handleSetUpdateDownloadActive(
-        call: MethodCall,
-        result: MethodChannel.Result,
-    ) {
-        val active = call.argument<Boolean>("active") == true
-        if (active) {
-            UpdateDownloadKeepAliveService.start(this)
-        } else {
-            UpdateDownloadKeepAliveService.stop(this)
-        }
-        result.success(null)
     }
 
     private fun handleInstallDownloadedUpdate(
@@ -254,6 +262,11 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Prefer the dedicated package-install action. Some Android/OEM
+        // package installers accept ACTION_VIEW but then fail to surface the
+        // installer UI after receiving a FileProvider URI from app-private
+        // storage. Explicit ClipData + URI grants also keep the permission
+        // intact through intermediary system activities.
         val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
             data = uri
         }
@@ -263,6 +276,7 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        // Compatibility fallback for devices without ACTION_INSTALL_PACKAGE.
         val viewIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
         }
@@ -289,6 +303,8 @@ class MainActivity : FlutterActivity() {
         runCatching {
             openInstaller(apk)
         }.onFailure {
+            // Keep the verified package so the user can retry installation
+            // without downloading the full APK again.
             pendingInstallApk = apk
         }
     }
