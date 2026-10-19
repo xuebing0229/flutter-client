@@ -33,6 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Guard public release surface
+        run: python3 tool/check_internal_public_release.py
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.5'
@@ -303,7 +306,6 @@ jobs:
           cp dist/app-internal.apk "site/internal/$VERSION/app-internal.apk"
           cp dist/app-windows-internal.zip "site/internal/$VERSION/app-windows-internal.zip"
           cp dist/app-windows-internal-setup.exe "site/internal/$VERSION/app-windows-internal-setup.exe"
-          cp server/release_site/index.html site/index.html
 
           python3 - "$VERSION" "$INTERNAL_RELEASE_BUILD" "$INTERNAL_SOURCE_BUILD" "$RELEASE_SITE_BASE_URL" <<'PY'
           import hashlib
@@ -330,10 +332,11 @@ jobs:
 
           published_at = datetime.now(timezone.utc).isoformat()
           release_base = f"{base_url}/internal/{version}"
-          notes = (
-              "更新说明展示更简洁，只保留实际功能变化；"
-              "下载页也进一步精简，方便直接查看版本并下载对应平台安装包。"
-          )
+          notes = Path("server/release_site/public_notes.txt").read_text(
+              encoding="utf-8"
+          ).strip()
+          if not notes:
+              raise SystemExit("Public release notes are empty.")
 
           android_data = {
               "schema": 1,
@@ -414,8 +417,9 @@ jobs:
           SCP="scp -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
           $SCP -p site/internal/$VERSION/* \
             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/internal/$VERSION/"
-          $SCP -p site/index.html \
-            "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/index.html"
+
+          # The public download page is intentionally NOT overwritten by app releases.
+          # It is a stable surface and must only change through an explicit site update.
 
       - name: Publish latest manifests last
         if: steps.deploy.outputs.enabled == 'true'
