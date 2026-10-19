@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+181
-# beta-181: restore mobile drawer return state
+version: 0.0.1+182
+# beta-182: fix per-app battery optimization exemption
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
