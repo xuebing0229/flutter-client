@@ -249,15 +249,16 @@ class _SettingsPageState extends State<SettingsPage>
 
     final coreReady =
         notificationsEnabled && notificationChannelEnabled && exactAlarmGranted;
+    final backgroundReady = coreReady && batteryOptimizationIgnored;
     final guidanceText = !loaded
         ? '正在检查系统提醒状态…'
         : !coreReady
         ? '有系统权限尚未准备好，建议先按下面的状态逐项处理。'
+        : !batteryOptimizationIgnored
+        ? '后台运行仍受系统限制。请把冒险者公会设为“不限制 / 完全允许后台行为”；否则截稿提醒可能延迟，应用更新切到后台后也可能中断。'
         : isAggressiveReminderVendor(_reminderDiagnostics)
-        ? '提醒链路本身正常。你的系统在手动划掉 App 后仍可能停止本地提醒，建议锁定最近任务并不要主动划掉。'
-        : batteryOptimizationIgnored
-        ? '本地提醒配置正常。'
-        : '提醒链路正常，但系统仍在对 App 做电池优化，可能导致后台提醒延迟。';
+        ? '后台权限已经准备好。你的系统在手动划掉 App 后仍可能停止本地提醒，建议锁定最近任务并不要主动划掉。'
+        : '后台权限和本地提醒配置正常。';
 
     return _SettingsCard(
       title: '截稿提醒',
@@ -266,7 +267,7 @@ class _SettingsPageState extends State<SettingsPage>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Material(
-            color: coreReady
+            color: backgroundReady
                 ? colors.primaryContainer.withValues(alpha: 0.55)
                 : colors.errorContainer.withValues(alpha: 0.45),
             borderRadius: BorderRadius.circular(14),
@@ -276,11 +277,11 @@ class _SettingsPageState extends State<SettingsPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    coreReady
+                    backgroundReady
                         ? Icons.notifications_active_rounded
                         : Icons.notification_important_outlined,
                     size: 20,
-                    color: coreReady
+                    color: backgroundReady
                         ? colors.onPrimaryContainer
                         : colors.onErrorContainer,
                   ),
@@ -289,7 +290,7 @@ class _SettingsPageState extends State<SettingsPage>
                     child: Text(
                       guidanceText,
                       style: TextStyle(
-                        color: coreReady
+                        color: backgroundReady
                             ? colors.onPrimaryContainer
                             : colors.onErrorContainer,
                       ),
@@ -846,6 +847,42 @@ class _SettingsPageState extends State<SettingsPage>
                           : '${_formatDownloadBytes(_downloadReceivedBytes)} 已下载',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                  if (Platform.isAndroid &&
+                      _reminderDiagnostics.isNotEmpty &&
+                      !_diagnosticBool('batteryOptimizationIgnored')) ...[
+                    const SizedBox(height: 12),
+                    Material(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withValues(alpha: 0.42),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.battery_alert_outlined, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '想让更新切到后台后继续下载，请先把系统里的后台行为设为“不限制 / 完全允许后台行为”。',
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onErrorContainer,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _openBatteryOptimizationSettings,
+                              child: const Text('去设置'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
