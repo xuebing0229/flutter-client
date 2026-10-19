@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: internal-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
