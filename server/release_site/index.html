@@ -17,8 +17,6 @@
     a.button.secondary { background:#86715d; }
     section { margin-top:20px; padding-top:18px; border-top:1px solid #ddd2c5; }
     pre { white-space:pre-wrap; word-break:break-word; font:inherit; line-height:1.65; margin:8px 0 0; }
-    details { margin-top:16px; }
-    code { word-break:break-all; font-size:12px; }
     @media (max-width:600px) { main{padding:22px}.actions{grid-template-columns:1fr} h1{font-size:26px} }
     @media (prefers-color-scheme:dark) {
       body { background:#171411; color:#f2ece4; }
@@ -47,12 +45,6 @@
       <strong>冒险者新见闻</strong>
       <pre id="notes" class="muted">正在读取…</pre>
     </section>
-
-    <details>
-      <summary>文件校验信息</summary>
-      <p>Android SHA-256<br><code id="androidSha">—</code></p>
-      <p>Windows SHA-256<br><code id="windowsSha">—</code></p>
-    </details>
   </main>
 
   <script>
@@ -82,14 +74,12 @@
           $('android').href = data.android.download_url;
           $('android').textContent = '下载 Android' +
             (data.android.size_bytes ? ' · ' + prettySize(data.android.size_bytes) : '');
-          $('androidSha').textContent = data.android.sha256 || '—';
         }
         if (data.windows?.installer_url || data.windows?.download_url) {
           $('windows').hidden = false;
           $('windows').href = data.windows.installer_url || data.windows.download_url;
           $('windows').textContent = '下载 Windows' +
             (data.windows.installer_size_bytes ? ' · ' + prettySize(data.windows.installer_size_bytes) : '');
-          $('windowsSha').textContent = data.windows.sha256 || '—';
         }
       })
       .catch(error => {
