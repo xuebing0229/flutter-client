@@ -293,6 +293,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '排单卡片改为按行自适应对齐',
     description: '图名、单主等字段不再写死两行或固定高度，而是按当前这一排卡片里实际占用最多的行数动态对齐；如果这一排都只占一行就只保留一行，另一排需要两三行时再随该排增长。卡片总高度随本排内容自适应，列表视图的图名也移到平台信息下一行并完整换行显示。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 182,
+    title: '电池优化设置修复',
+    description: '修复截稿提醒里的电池优化入口只打开系统通用列表、导致当前 App 即使反复调整也可能一直显示受限制的问题。Android 现在会直接请求将当前安装的冒险者公会加入系统电池优化豁免，返回 App 后自动重新读取状态；厂商自己的后台运行与省电设置说明继续保留。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
