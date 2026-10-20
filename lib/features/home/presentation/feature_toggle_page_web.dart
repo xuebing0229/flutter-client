@@ -25,7 +25,7 @@ class FeatureTogglePage extends StatelessWidget {
     (AppFeature.statistics, '统计', '显示收入统计'),
     (AppFeature.abstractMode, '抽象版', '启用抽象模式'),
     (AppFeature.abstractEffects, '抽象表现', '启用抽象模式附加效果'),
-    (AppFeature.focus, '专注记录', '保留专注数据；PWA 计时入口后续适配'),
+    (AppFeature.focus, '专注记录', '显示专注计时与历史记录'),
   ];
 
   @override
