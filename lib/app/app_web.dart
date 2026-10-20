@@ -12,6 +12,7 @@ import '../core/account/web_account_store.dart';
 import '../core/features/app_feature_store.dart';
 import '../core/portability/app_backup_data.dart';
 import '../core/portability/web_backup_reader.dart';
+import '../core/sync/public_peer_sync_service.dart';
 import '../core/sync/sync_entity_codec.dart';
 import '../core/sync/sync_models.dart';
 import '../core/sync/sync_coordinator.dart';
@@ -783,6 +784,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   final NodePresetStore _nodePresetStore = NodePresetStore();
   final FocusStore _focusStore = FocusStore();
   late final SyncCoordinator _syncUi;
+  PublicPeerSyncService? _peerSync;
   final OrderReferenceImageStore _referenceImageStore =
       OrderReferenceImageStore();
   final WebBackupReader _backupReader = const WebBackupReader();
@@ -809,7 +811,17 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   @override
   void initState() {
     super.initState();
-    _syncUi = SyncCoordinator.web(accountId: _accountId);
+    _syncUi = SyncCoordinator.web(
+      accountId: _accountId,
+      deviceId: _webDeviceId,
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      focusStore: _focusStore,
+      captureSettings: _captureSettings,
+      applySettings: _applySettings,
+    );
+    _syncUi.addListener(_onSyncUiChanged);
     _orderStore.addListener(_scheduleSave);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
@@ -817,6 +829,53 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     widget.featureStore.addListener(_onFeatureStoreChanged);
     widget.themeStore.addListener(_scheduleSave);
     unawaited(_restoreWorkspace());
+  }
+
+  void _onSyncUiChanged() {
+    if (!_ready) return;
+    _scheduleSave();
+    _peerSync?.requestSync();
+    if (mounted) setState(() {});
+  }
+
+  void _onPeerSyncChanged() {
+    if (mounted && _ready) setState(() {});
+  }
+
+  void _startPublicPeerSync() {
+    if (_peerSync != null) return;
+    final service = PublicPeerSyncService(
+      accountId: _accountId,
+      deviceId: _webDeviceId,
+      captureAccountState: () => _accountState,
+      mergeAccountState: widget.accountStore.mergeCurrentAccountState,
+      exportRecords: _syncUi.exportPeerRecords,
+      mergeRecords: _syncUi.mergePeerRecords,
+      captureAssetPaths: () => <String>{
+        for (final order in _orderStore.orders)
+          for (final image in order.referenceImages) image.relativePath,
+        for (final product in _productStore.products)
+          for (final image in product.referenceImages) image.relativePath,
+      },
+      assetExists: (path) async =>
+          (await _referenceImageStore.readAssetBytes(
+            accountId: _accountId,
+            relativePath: path,
+          )) !=
+          null,
+      readAsset: (path) => _referenceImageStore.readAssetBytes(
+        accountId: _accountId,
+        relativePath: path,
+      ),
+      writeAsset: (path, bytes) => _referenceImageStore.writeAssetBytes(
+        accountId: _accountId,
+        relativePath: path,
+        bytes: bytes,
+      ),
+    );
+    _peerSync = service;
+    service.addListener(_onPeerSyncChanged);
+    unawaited(service.start());
   }
 
   void _onFeatureStoreChanged() {
@@ -863,6 +922,9 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           focusStore: _focusStore,
         );
         await _applySettings(backup.settings);
+        if (backup.syncRecords != null) {
+          _syncUi.restorePortableRecords(backup.syncRecords!);
+        }
         if (migratedLegacy) {
           await _persistWorkspace();
           html.window.localStorage.remove(_legacyWorkspaceKey);
@@ -872,6 +934,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         await widget.themeStore.resetToDefaults();
         await widget.featureStore.resetToDefaults();
       }
+      await _syncUi.initialize();
+      _startPublicPeerSync();
     } catch (error) {
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1075,62 +1139,16 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       nodePresetStore: _nodePresetStore,
       focusStore: _focusStore,
       accountSyncState: _accountState,
-      syncRecords: portable ? _buildPortableRecords(settings) : null,
+      syncRecords: _syncUi.portableRecordsSnapshot,
       settings: settings,
     );
-  }
-
-  List<Map<String, dynamic>> _buildPortableRecords(
-    Map<String, dynamic> settings,
-  ) {
-    final accountId = _accountState.accountId;
-
-    Map<String, dynamic> record(
-      SyncEntityKind kind,
-      String id,
-      Map<String, dynamic> values,
-    ) {
-      return SyncRecord.bootstrap(
-        kind: kind,
-        id: id,
-        values: values,
-        deviceId: _webDeviceId,
-      ).copyWith(accountId: accountId).toJson();
-    }
-
-    return <Map<String, dynamic>>[
-      for (final order in _orderStore.orders)
-        record(
-          SyncEntityKind.order,
-          order.id,
-          SyncEntityCodec.orderToFields(order),
-        ),
-      for (final product in _productStore.products)
-        record(
-          SyncEntityKind.product,
-          product.id,
-          SyncEntityCodec.productToFields(product),
-        ),
-      for (final preset in _nodePresetStore.presets)
-        record(
-          SyncEntityKind.nodePreset,
-          preset.id,
-          SyncEntityCodec.nodePresetToFields(preset),
-        ),
-      for (final session in _focusStore.sessions)
-        record(
-          SyncEntityKind.focusSession,
-          session.id,
-          SyncEntityCodec.focusSessionToFields(session),
-        ),
-      record(SyncEntityKind.settings, 'app', settings),
-    ];
   }
 
   void _scheduleSave() {
     if (!_ready) return;
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 300), _persistWorkspace);
+    _peerSync?.requestSync();
   }
 
   Future<void> _persistWorkspace() async {
@@ -1515,6 +1533,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     _focusStore.dispose();
     widget.featureStore.removeListener(_onFeatureStoreChanged);
     widget.themeStore.removeListener(_scheduleSave);
+    _syncUi.removeListener(_onSyncUiChanged);
+    _peerSync?.removeListener(_onPeerSyncChanged);
+    _peerSync?.dispose();
+    _peerSync = null;
     _syncUi.dispose();
     super.dispose();
   }
@@ -1542,7 +1564,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         ),
         actions: [
           IconButton(
-            tooltip: '手动同步 / 备份',
+            tooltip: '设备同步 / 备份',
             onPressed: _busy
                 ? null
                 : () => Navigator.of(context).push(
@@ -1552,6 +1574,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                           busy: () => _busy,
                           onExport: _exportBackup,
                           onImport: _importBackup,
+                          peerSync: _peerSync,
                         ),
                       ),
                     ),
@@ -1654,8 +1677,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
               ),
               ListTile(
                 leading: const Icon(Icons.sync_alt_rounded),
-                title: const Text('手动同步 / 备份'),
-                subtitle: const Text('导入、导出完整备份'),
+                title: const Text('设备同步 / 备份'),
+                subtitle: Text(_peerSync?.connected == true ? '在线同步已连接 · 另有完整备份' : '在线同步正在连接 · 另有完整备份'),
                 onTap: () => _openTool(
                   context,
                   _WebDataPage(
@@ -1663,6 +1686,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                     busy: () => _busy,
                     onExport: _exportBackup,
                     onImport: _importBackup,
+                    peerSync: _peerSync,
                   ),
                 ),
               ),
@@ -1670,8 +1694,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
                 child: Text(
-                  'PWA 当前不连接 Syncthing。数据默认只保存在这个浏览器里；'
-                  '要与安卓 / Windows 同步时，用“完整备份”手动导入导出。',
+                  'PWA 会在两端同时打开时自动加入公共同步网络，业务数据先端到端加密再经过公共中继；'
+                  '不使用冒险者公会自己的服务器。完整备份仍可用于手动恢复。',
                   style: TextStyle(
                     height: 1.45,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1748,12 +1772,14 @@ class _WebDataPage extends StatelessWidget {
     required this.busy,
     required this.onExport,
     required this.onImport,
+    required this.peerSync,
   });
 
   final String? linkedAccountName;
   final bool Function() busy;
   final Future<void> Function(BuildContext context) onExport;
   final Future<void> Function(BuildContext context) onImport;
+  final PublicPeerSyncService? peerSync;
 
   @override
   Widget build(BuildContext context) {
@@ -1761,7 +1787,7 @@ class _WebDataPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          '手动同步 / 备份',
+          '设备同步 / 备份',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
@@ -1790,6 +1816,33 @@ class _WebDataPage extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: Icon(
+                peerSync?.connected == true
+                    ? Icons.sync_rounded
+                    : Icons.sync_problem_rounded,
+              ),
+              title: Text(
+                peerSync?.connected == true
+                    ? '在线设备同步已连接'
+                    : '正在连接公共同步网络',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                peerSync?.lastError ??
+                    '两端同时打开时会自动交换排单、成品、节点、设置和参考图；不经过冒险者公会自建服务器。',
+              ),
+              trailing: TextButton(
+                onPressed: peerSync == null
+                    ? null
+                    : () => peerSync!.requestSync(immediate: true),
+                child: const Text('立即同步'),
               ),
             ),
           ),
@@ -1836,8 +1889,8 @@ class _WebDataPage extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            '网页版没有后台 P2P，同步动作只发生在你主动导入或导出时。'
-            '网页本地数据使用浏览器存储；清除站点数据前请先导出备份。',
+            '在线同步只在设备打开时进行；公共中继只看到端到端加密后的临时数据。'
+            '网页本地数据仍使用浏览器存储，清除站点数据前建议保留完整备份。',
             style: TextStyle(
               height: 1.5,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
