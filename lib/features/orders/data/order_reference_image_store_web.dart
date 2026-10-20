@@ -173,10 +173,34 @@ class OrderReferenceImageStore {
     }
   }
 
+  Future<void> deleteAssetPaths({
+    required String accountId,
+    required Iterable<String> relativePaths,
+  }) async {
+    final paths = relativePaths.toSet();
+    if (paths.isEmpty) return;
+
+    final db = await _openDatabase();
+    try {
+      final transaction = db.transaction(_storeName, 'readwrite');
+      final store = transaction.objectStore(_storeName);
+      for (final path in paths) {
+        try {
+          _validateRelativePath(path);
+          await store.delete(_assetKey(accountId, path));
+        } catch (_) {
+          // A stale optional bundle asset must not block the rest of import.
+        }
+      }
+      await transaction.completed;
+    } finally {
+      db.close();
+    }
+  }
+
   Future<void> clearAccountAssets(String accountId) async {
-    // Imports overwrite every referenced asset for this account. Do not call
-    // ObjectStore.clear(): the IndexedDB store is shared by all local accounts,
-    // so clearing it would delete another account's reference images too.
+    // The store is shared by every browser-local account. Account-wide cleanup
+    // stays explicit so one account can never clear another account's assets.
   }
 
   Future<bool> exportImage({
@@ -241,20 +265,53 @@ class OrderReferenceImageStore {
 
   void _validateRelativePath(String value) {
     if (value.contains('\\') || value.startsWith('/')) {
-      throw const FormatException('参考图路径无效。');
+      throw const FormatException('本地素材路径无效。');
     }
     final segments = value.split('/');
-    final valid = segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
+    final safeSegments = segments.length == 4 &&
         segments.skip(2).every(
               (segment) =>
                   segment.isNotEmpty &&
                   segment != '.' &&
                   segment != '..' &&
-                  RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
+                  RegExp(r'^[A-Za-z0-9._-]+
+  String? _safeExtension(String value) {
+    final name = value.split(RegExp(r'[\\/]')).last;
+    final dot = name.lastIndexOf('.');
+    if (dot < 0 || dot == name.length - 1) return null;
+    final extension = name.substring(dot + 1).toLowerCase();
+    if (extension.length > 8 ||
+        !RegExp(r'^[a-z0-9]+$').hasMatch(extension)) {
+      return null;
+    }
+    return '.$extension';
+  }
+
+  String _mimeType(String fileName) {
+    final extension = _safeExtension(fileName)?.toLowerCase();
+    return switch (extension) {
+      '.jpg' || '.jpeg' => 'image/jpeg',
+      '.png' => 'image/png',
+      '.webp' => 'image/webp',
+      '.gif' => 'image/gif',
+      '.bmp' => 'image/bmp',
+      '.heic' => 'image/heic',
+      '.heif' => 'image/heif',
+      _ => 'application/octet-stream',
+    };
+  }
+}
+).hasMatch(segment),
             );
-    if (!valid) throw const FormatException('参考图路径无效。');
+    final referenceImage = safeSegments &&
+        segments[0] == 'assets' &&
+        segments[1] == 'order-reference-images';
+    final desktopPetAsset = safeSegments &&
+        segments[0] == 'desktop-pet' &&
+        segments[1] == 'presets';
+    if (!referenceImage && !desktopPetAsset) {
+      throw const FormatException('本地素材路径无效。');
+    }
   }
 
   String? _safeExtension(String value) {
