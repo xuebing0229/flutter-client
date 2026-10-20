@@ -174,7 +174,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (_relay?.connected != true) {
       await _connectRelay();
     }
-    if (_relay?.connected == true) {
+    if (_relay?.connected == true || _webrtc?.hasOpenPeer == true) {
       await _publishSnapshot();
     }
   }
@@ -196,7 +196,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (_disposed || _syncing) return;
     if (_relay?.connected != true) {
       await _connectRelay();
-      if (_relay?.connected != true) return;
+      if (_relay?.connected != true && _webrtc?.hasOpenPeer != true) return;
     }
 
     final state = captureAccountState();
@@ -263,7 +263,7 @@ class PublicPeerSyncService extends ChangeNotifier {
   }) async {
     final relay = _relay;
     final secretKey = _secretKey;
-    if (relay == null || !relay.connected || secretKey == null) return;
+    if (secretKey == null) return;
 
     final clear = utf8.encode(jsonEncode(payload));
     final box = await _cipher.encrypt(clear, secretKey: secretKey);
@@ -300,6 +300,9 @@ class PublicPeerSyncService extends ChangeNotifier {
         }
       }
       if (!sentDirect) {
+        if (relay == null || !relay.connected) {
+          throw StateError('点对点连接不可用，公共同步网络也未连接');
+        }
         relay.publish(_topicFor(targetDeviceId), frame);
       }
       if (index % 8 == 7) {

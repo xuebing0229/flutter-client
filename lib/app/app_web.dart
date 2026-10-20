@@ -1756,7 +1756,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
                 child: Text(
-                  'PWA 会在两端同时打开时自动加入公共同步网络，业务数据先端到端加密再经过公共中继；'
+                  'PWA 会在两端同时打开时自动同步：优先建立 WebRTC 点对点通道，'
+                  '公共网络只负责加密配对信令，并在直连失败时作为加密兜底；'
                   '不使用冒险者公会自己的服务器。完整备份仍可用于手动恢复。',
                   style: TextStyle(
                     height: 1.45,
@@ -1898,7 +1899,7 @@ class _WebDataPage extends StatelessWidget {
               ),
               subtitle: Text(
                 peerSync?.lastError ??
-                    '两端同时打开时会自动交换排单、成品、节点、设置和参考图；不经过冒险者公会自建服务器。',
+                    '两端同时打开时会自动交换排单、成品、节点、设置和参考图；优先 WebRTC 点对点直连，直连失败才走加密公共中继。',
               ),
               trailing: TextButton(
                 onPressed: peerSync == null
