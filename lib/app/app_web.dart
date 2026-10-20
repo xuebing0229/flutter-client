@@ -1521,6 +1521,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         focusStore: _focusStore,
       );
       await _applySettings(backup.settings);
+      await _syncUi.replacePortableRecordsForCurrentWorkspace(
+        backup.syncRecords,
+      );
+      _peerSync?.requestSync(immediate: true);
       await _persistWorkspace();
 
       if (!context.mounted) return;
