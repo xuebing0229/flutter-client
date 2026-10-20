@@ -27,6 +27,8 @@ jobs:
         run: flutter pub get
       - name: Build PWA
         run: flutter build web --release --no-web-resources-cdn
+      - name: Finalize offline PWA cache
+        run: python3 tool/finalize_pwa.py build/web
       - name: Validate installable shell
         shell: bash
         run: |
@@ -34,10 +36,14 @@ jobs:
           test -s build/web/manifest.json
           test -s build/web/pwa_service_worker.js
           test -s build/web/main.dart.js
+          test -s build/web/canvaskit/canvaskit.js
+          test -s build/web/canvaskit/canvaskit.wasm
           grep -q '"display": "standalone"' build/web/manifest.json
           grep -q "serviceWorker.register" build/web/index.html
-          if grep -R "https://www.gstatic.com/flutter-canvaskit" build/web/flutter_bootstrap.js build/web/main.dart.js; then
-            echo "Web build still references the CanvasKit CDN." >&2
+          grep -q './main.dart.js' build/web/pwa_service_worker.js
+          grep -q './canvaskit/canvaskit.wasm' build/web/pwa_service_worker.js
+          if grep -q '__PWA_PRECACHE_FILES__' build/web/pwa_service_worker.js; then
+            echo "PWA precache manifest was not finalized." >&2
             exit 1
           fi
       - name: Package PWA
