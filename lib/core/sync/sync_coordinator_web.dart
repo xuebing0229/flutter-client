@@ -230,6 +230,49 @@ class SyncCoordinator extends ChangeNotifier {
     return portableRecordsSnapshot;
   }
 
+  /// Replaces browser sync history after an explicit full-backup restore.
+  ///
+  /// Old backups may not contain CRDT history. In that case the newly restored
+  /// workspace is bootstrapped as the fresh baseline instead of letting stale
+  /// browser records overwrite it on the next online sync.
+  Future<void> replacePortableRecordsForCurrentWorkspace(
+    List<Map<String, dynamic>>? incoming,
+  ) async {
+    if (!_initialized || _disposed) return;
+    await _enqueue(() async {
+      for (final kind in SyncEntityKind.values) {
+        _records[kind]!.clear();
+      }
+
+      if (incoming != null) {
+        _mergeDecodedRecords(incoming);
+      }
+
+      final current = _captureEntities();
+      for (final kind in SyncEntityKind.values) {
+        final records = _records[kind]!;
+        for (final entry in current[kind]!.entries) {
+          records.putIfAbsent(
+            entry.key,
+            () => SyncRecord.bootstrap(
+              kind: kind,
+              id: entry.key,
+              values: entry.value,
+              deviceId: deviceId,
+            ).copyWith(accountId: accountId),
+          );
+        }
+      }
+
+      _lastEntityValues = current;
+      _rebuildConflicts();
+      _persistRecords();
+      _lastSuccessfulSyncAt = DateTime.now();
+      _lastError = null;
+      if (!_disposed) notifyListeners();
+    });
+  }
+
   Future<void> mergePeerRecords(
     List<Map<String, dynamic>> incoming,
   ) async {
