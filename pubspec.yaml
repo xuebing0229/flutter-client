@@ -23,6 +23,7 @@ dependencies:
   mobile_scanner: ^7.4.2
   qr_flutter: ^4.1.0
   image: ^4.5.4
+  mqtt_client: ^10.13.0
   zxing2: ^0.2.4
   synchronized: ^3.3.0+3
 
