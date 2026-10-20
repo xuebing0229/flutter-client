@@ -274,34 +274,7 @@ class OrderReferenceImageStore {
                   segment.isNotEmpty &&
                   segment != '.' &&
                   segment != '..' &&
-                  RegExp(r'^[A-Za-z0-9._-]+
-  String? _safeExtension(String value) {
-    final name = value.split(RegExp(r'[\\/]')).last;
-    final dot = name.lastIndexOf('.');
-    if (dot < 0 || dot == name.length - 1) return null;
-    final extension = name.substring(dot + 1).toLowerCase();
-    if (extension.length > 8 ||
-        !RegExp(r'^[a-z0-9]+$').hasMatch(extension)) {
-      return null;
-    }
-    return '.$extension';
-  }
-
-  String _mimeType(String fileName) {
-    final extension = _safeExtension(fileName)?.toLowerCase();
-    return switch (extension) {
-      '.jpg' || '.jpeg' => 'image/jpeg',
-      '.png' => 'image/png',
-      '.webp' => 'image/webp',
-      '.gif' => 'image/gif',
-      '.bmp' => 'image/bmp',
-      '.heic' => 'image/heic',
-      '.heif' => 'image/heif',
-      _ => 'application/octet-stream',
-    };
-  }
-}
-).hasMatch(segment),
+                  RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
             );
     final referenceImage = safeSegments &&
         segments[0] == 'assets' &&
