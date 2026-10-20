@@ -91,6 +91,16 @@ class WebBackupReader {
       assets[image.relativePath] = assetBytes;
     }
 
+    final desktopPetPaths =
+        _desktopPetAssetPaths(backup.settings['desktopPetBackup']);
+    for (final path in desktopPetPaths) {
+      final file = files[path];
+      if (file == null) {
+        throw FormatException('桌宠备份缺少素材：$path');
+      }
+      assets[path] = _archiveFileBytes(file);
+    }
+
     return WebImportedBackup(
       backup: backup,
       includesAssets: true,
@@ -100,18 +110,60 @@ class WebBackupReader {
 
   Uint8List _archiveFileBytes(ArchiveFile file) => file.content;
 
-  bool _safeAssetPath(String value) {
+  Set<String> _desktopPetAssetPaths(Object? rawManifest) {
+    if (rawManifest == null) return const <String>{};
+    if (rawManifest is! Map || rawManifest['schema'] != 1) {
+      throw const FormatException('桌宠备份设置格式无效。');
+    }
+    final rawPresets = rawManifest['presets'];
+    if (rawPresets is! List) {
+      throw const FormatException('桌宠备份缺少预设列表。');
+    }
+
+    final result = <String>{};
+    for (final preset in rawPresets) {
+      if (preset is! Map) {
+        throw const FormatException('桌宠备份包含无效预设。');
+      }
+      for (final key in const <String>['imageA', 'imageB', 'bubbleImage']) {
+        final value = preset[key];
+        if (value == null) continue;
+        if (value is! String || !_isDesktopPetAssetPath(value)) {
+          throw const FormatException('桌宠备份素材路径无效。');
+        }
+        result.add(value);
+      }
+    }
+    return result;
+  }
+
+  bool _safeAssetPath(String value) =>
+      _isReferenceAssetPath(value) || _isDesktopPetAssetPath(value);
+
+  bool _isReferenceAssetPath(String value) {
+    if (!_safeFourSegmentPath(value)) return false;
+    final segments = value.split('/');
+    return segments[0] == 'assets' &&
+        segments[1] == 'order-reference-images';
+  }
+
+  bool _isDesktopPetAssetPath(String value) {
+    if (!_safeFourSegmentPath(value)) return false;
+    final segments = value.split('/');
+    return segments[0] == 'desktop-pet' &&
+        segments[1] == 'presets';
+  }
+
+  bool _safeFourSegmentPath(String value) {
     if (value.contains('\\') || value.startsWith('/')) return false;
     final segments = value.split('/');
     return segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
         segments.skip(2).every(
               (segment) =>
                   segment.isNotEmpty &&
                   segment != '.' &&
                   segment != '..' &&
-                  RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
+                  RegExp(r'^[A-Za-z0-9._-]+).hasMatch(segment),
             );
   }
 }
