@@ -23,11 +23,13 @@ import '../features/home/presentation/archive_page.dart';
 import '../features/home/presentation/feature_toggle_page.dart';
 import '../features/home/presentation/theme_color_page.dart';
 import '../features/focus/state/focus_store.dart';
+import '../features/focus/presentation/focus_panel.dart';
 import '../features/orders/data/node_presets.dart';
 import '../features/orders/data/order_reference_image_store.dart';
 import '../features/orders/domain/queue_order.dart';
 import '../features/orders/presentation/add_order_page.dart';
 import '../features/orders/presentation/node_preset_page.dart';
+import '../features/orders/presentation/order_detail_page.dart';
 import '../features/orders/presentation/order_queue_page.dart';
 import '../features/orders/state/order_store.dart';
 import '../features/products/presentation/add_product_page.dart';
@@ -1155,6 +1157,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         const _WebTab('schedule', '日程', Icons.calendar_month_outlined),
       if (widget.featureStore.statistics)
         const _WebTab('statistics', '统计', Icons.bar_chart_rounded),
+      if (widget.featureStore.focus)
+        const _WebTab('focus', '专注', Icons.timer_outlined),
     ];
   }
 
@@ -1187,6 +1191,11 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           store: _orderStore,
           productStore: _productStore,
         ),
+      'focus' => FocusPanel(
+          orderStore: _orderStore,
+          focusStore: _focusStore,
+          onOpenOrder: _openFocusOrder,
+        ),
       _ => OrderQueuePage(
           accountId: _accountId,
           store: _orderStore,
@@ -1205,6 +1214,21 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           },
         ),
     };
+  }
+
+  Future<void> _openFocusOrder(String orderId) async {
+    if (!_orderStore.contains(orderId)) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OrderDetailPage(
+          accountId: _accountId,
+          store: _orderStore,
+          orderId: orderId,
+          nodePresetStore: _nodePresetStore,
+          featureStore: widget.featureStore,
+        ),
+      ),
+    );
   }
 
   void _openAdd() {
@@ -1342,7 +1366,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             '节点预设 ${backup.nodePresets.length} 个\n'
             '账号：${accountName ?? '当前账号'}\n'
             '备份时间：${_formatDateTime(backup.exportedAt.toLocal())}\n\n'
-            '导入后会用这份备份替换当前账号的PWA 工作区。'
+            '导入后会用这份备份替换当前账号的 PWA 工作区。'
             '${imported.includesAssets ? '' : '\n这份文件不含参考图原文件，已有参考图可能显示为缺失。'}',
           ),
           actions: [
