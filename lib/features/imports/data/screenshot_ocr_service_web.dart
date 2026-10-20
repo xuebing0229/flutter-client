@@ -21,7 +21,7 @@ class ScreenshotOcrService {
         'adventurersGuildOcrRelease',
         const <Object?>[],
       );
-      if (promise != null) await js_util.promiseToFuture<Object?>(promise);
+      if (promise != null) await js_util.promiseToFuture<Object?>(promise as Object);
     } catch (_) {}
   }
 
