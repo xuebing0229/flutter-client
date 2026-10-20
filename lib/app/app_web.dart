@@ -23,6 +23,7 @@ import '../core/theme/guild_visual_theme.dart';
 import '../features/home/presentation/archive_page.dart';
 import '../features/home/presentation/feature_toggle_page.dart';
 import '../features/home/presentation/theme_color_page.dart';
+import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
 import '../features/focus/presentation/focus_panel.dart';
 import '../features/orders/data/node_presets.dart';
@@ -1276,6 +1277,57 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     }
   }
 
+  Future<void> _openScreenshotImport(BuildContext drawerContext) async {
+    final navigator = Navigator.of(drawerContext);
+    navigator.pop();
+
+    var kind = _selectedTab == 'products'
+        ? ScreenshotImportKind.products
+        : ScreenshotImportKind.orders;
+    if (widget.featureStore.products) {
+      final picked = await showDialog<ScreenshotImportKind>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+          title: const Text('截图识别导入到哪里？'),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                ScreenshotImportKind.orders,
+              ),
+              child: const ListTile(
+                leading: Icon(Icons.assignment_outlined),
+                title: Text('导入排单'),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                ScreenshotImportKind.products,
+              ),
+              child: const ListTile(
+                leading: Icon(Icons.image_outlined),
+                title: Text('导入成品'),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (picked == null || !mounted) return;
+      kind = picked;
+    }
+
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => ScreenshotImportPage(
+          kind: kind,
+          accountId: _accountId,
+          orderStore: _orderStore,
+          productStore: _productStore,
+          presetStore: _nodePresetStore,
+        ),
+      ),
+    );
+  }
+
   void _openTool(BuildContext drawerContext, Widget page) {
     final navigator = Navigator.of(drawerContext);
     navigator.pop();
@@ -1628,6 +1680,12 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 },
               ),
               const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.document_scanner_outlined),
+                title: const Text('截图识别批量导入'),
+                subtitle: const Text('PP-OCRv6 · 浏览器本地识别'),
+                onTap: () => _openScreenshotImport(context),
+              ),
               ListTile(
                 leading: const Icon(Icons.archive_outlined),
                 title: const Text('归档'),
