@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/sync/embedded_syncthing_bridge.dart';
@@ -156,6 +157,50 @@ class OrderReferenceImageStore {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<Uint8List?> readAssetBytes({
+    required String accountId,
+    required String relativePath,
+  }) async {
+    final file = await _localAssetFile(
+      accountId: accountId,
+      relativePath: relativePath,
+    );
+    if (!await file.exists()) return null;
+    return Uint8List.fromList(await file.readAsBytes());
+  }
+
+  Future<void> writeAssetBytes({
+    required String accountId,
+    required String relativePath,
+    required Uint8List bytes,
+  }) async {
+    final file = await _localAssetFile(
+      accountId: accountId,
+      relativePath: relativePath,
+    );
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes, flush: true);
+    await _requestScan(accountId);
+  }
+
+  Future<File> _localAssetFile({
+    required String accountId,
+    required String relativePath,
+  }) async {
+    final segments = relativePath.split('/');
+    final valid = segments.length == 4 &&
+        segments[0] == 'assets' &&
+        segments[1] == 'order-reference-images' &&
+        segments.every(_safeSegment);
+    if (!valid || relativePath.contains('\\')) {
+      throw const FormatException('参考图路径无效。');
+    }
+    final root = await _syncRecordStore.rootDirectory(accountId);
+    return File(
+      <String>[root.path, ...segments].join(Platform.pathSeparator),
+    );
   }
 
   Future<void> deleteImages({
