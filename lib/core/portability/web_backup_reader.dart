@@ -163,7 +163,7 @@ class WebBackupReader {
                   segment.isNotEmpty &&
                   segment != '.' &&
                   segment != '..' &&
-                  RegExp(r'^[A-Za-z0-9._-]+).hasMatch(segment),
+                  RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
             );
   }
 }
