@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import '../account/account_models.dart';
 import 'public_relay_client.dart';
+import 'public_webrtc_transport.dart';
 
 typedef PeerAccountStateReader = AccountSyncState Function();
 typedef PeerAccountStateMerger = Future<void> Function(AccountSyncState state);
@@ -62,6 +63,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       <String, String>{};
 
   PublicRelayClient? _relay;
+  PublicPeerWebRtcTransport? _webrtc;
   StreamSubscription<PublicRelayMessage>? _relaySubscription;
   Timer? _heartbeatTimer;
   Timer? _syncDebounce;
@@ -84,6 +86,13 @@ class PublicPeerSyncService extends ChangeNotifier {
     _starting = true;
     try {
       await _prepareRoom();
+      _webrtc = PublicPeerWebRtcTransport(
+        deviceId: deviceId,
+        sendSignal: _sendRtcSignal,
+        onFrame: (sender, frame) => _handleRelayMessage(
+          PublicRelayMessage(topic: _inboxTopic, payload: frame),
+        ),
+      );
       final relay = PublicRelayClient(clientId: _mqttClientId());
       _relay = relay;
       _relaySubscription = relay.messages.listen(
@@ -231,10 +240,27 @@ class PublicPeerSyncService extends ChangeNotifier {
     }
   }
 
+  Future<void> _sendRtcSignal(
+    String targetDeviceId,
+    Map<String, dynamic> signal,
+  ) {
+    return _sendEncrypted(
+      targetDeviceId,
+      <String, dynamic>{
+        'type': 'rtc-signal',
+        'accountId': accountId,
+        'sender': deviceId,
+        'signal': signal,
+      },
+      allowDirect: false,
+    );
+  }
+
   Future<void> _sendEncrypted(
     String targetDeviceId,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    bool allowDirect = true,
+  }) async {
     final relay = _relay;
     final secretKey = _secretKey;
     if (relay == null || !relay.connected || secretKey == null) return;
@@ -265,7 +291,17 @@ class PublicPeerSyncService extends ChangeNotifier {
         'total': total,
         'data': protected.substring(start, end),
       });
-      relay.publish(_topicFor(targetDeviceId), frame);
+      var sentDirect = false;
+      if (allowDirect) {
+        try {
+          sentDirect = await _webrtc?.send(targetDeviceId, frame) ?? false;
+        } catch (_) {
+          sentDirect = false;
+        }
+      }
+      if (!sentDirect) {
+        relay.publish(_topicFor(targetDeviceId), frame);
+      }
       if (index % 8 == 7) {
         await Future<void>.delayed(const Duration(milliseconds: 8));
       }
@@ -367,6 +403,15 @@ class PublicPeerSyncService extends ChangeNotifier {
           break;
         case 'asset':
           await _receiveAsset(sender, payload);
+          break;
+        case 'rtc-signal':
+          final rawSignal = payload['signal'];
+          if (rawSignal is Map) {
+            await _webrtc?.handleSignal(
+              sender,
+              rawSignal.map((key, value) => MapEntry(key.toString(), value)),
+            );
+          }
           break;
       }
     } catch (_) {
@@ -496,6 +541,9 @@ class PublicPeerSyncService extends ChangeNotifier {
     _relaySubscription = null;
     final relay = _relay;
     _relay = null;
+    final webrtc = _webrtc;
+    _webrtc = null;
+    if (webrtc != null) unawaited(webrtc.dispose());
     if (relay != null) unawaited(relay.dispose());
     super.dispose();
   }
