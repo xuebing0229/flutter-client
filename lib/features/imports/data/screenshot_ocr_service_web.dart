@@ -42,7 +42,7 @@ class ScreenshotOcrService {
       'adventurersGuildOcrRecognize',
       <Object?>[blob],
     );
-    final result = await js_util.promiseToFuture<Object?>(promise);
+    final result = await js_util.promiseToFuture<Object?>(promise as Object);
     final value = js_util.dartify(result);
     if (value is! Map) throw const FormatException('浏览器 OCR 返回格式无效');
 
