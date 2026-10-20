@@ -1,0 +1,102 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/theme/app_theme_palette.dart';
+import '../../../core/theme/app_theme_store.dart';
+import '../../../core/theme/app_ui_style.dart';
+
+class ThemeColorPage extends StatelessWidget {
+  const ThemeColorPage({
+    required this.store,
+    this.onBack,
+    super.key,
+  });
+
+  final AppThemeStore store;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: onBack == null
+            ? null
+            : IconButton(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+        title: const Text('UI主题'),
+      ),
+      body: AnimatedBuilder(
+        animation: store,
+        builder: (context, _) => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
+          children: [
+            const Text('明暗模式', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.system, label: Text('跟随系统')),
+                ButtonSegment(value: ThemeMode.light, label: Text('浅色')),
+                ButtonSegment(value: ThemeMode.dark, label: Text('深色')),
+              ],
+              selected: <ThemeMode>{store.mode},
+              onSelectionChanged: (value) => store.setMode(value.first),
+            ),
+            const SizedBox(height: 24),
+            const Text('主题色', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            for (final palette in AppThemePalettes.all)
+              RadioListTile<String>(
+                value: palette.id,
+                groupValue: store.paletteId,
+                onChanged: (value) {
+                  if (value != null) store.setPaletteId(value);
+                },
+                title: Text(palette.name),
+                secondary: Wrap(
+                  spacing: 3,
+                  children: [
+                    for (final color in palette.previewColors.take(4))
+                      Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 18),
+            const Text('界面风格', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            for (final style in AppUiStyle.values)
+              RadioListTile<AppUiStyle>(
+                value: style,
+                groupValue: store.style,
+                onChanged: (value) {
+                  if (value != null) store.setStyle(value);
+                },
+                title: Text(style.label),
+              ),
+            if (store.customPalettes.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              const Text('已保存自定义配色',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              for (final palette in store.customPalettes)
+                RadioListTile<String>(
+                  value: palette.id,
+                  groupValue: store.paletteId,
+                  onChanged: (value) {
+                    if (value != null) store.setPaletteId(value);
+                  },
+                  title: Text(palette.name),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
