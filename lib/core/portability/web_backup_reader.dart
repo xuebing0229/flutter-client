@@ -75,18 +75,20 @@ class WebBackupReader {
       utf8.decode(_archiveFileBytes(manifest)),
     );
     final assets = <String, Uint8List>{};
-    for (final order in backup.orders) {
-      for (final image in order.referenceImages) {
-        final file = files[image.relativePath];
-        if (file == null) {
-          throw FormatException('完整备份缺少参考图：${image.fileName}');
-        }
-        final assetBytes = _archiveFileBytes(file);
-        if (assetBytes.length != image.sizeBytes) {
-          throw FormatException('参考图大小校验失败：${image.fileName}');
-        }
-        assets[image.relativePath] = assetBytes;
+    final referenceImages = [
+      for (final order in backup.orders) ...order.referenceImages,
+      for (final product in backup.products) ...product.referenceImages,
+    ];
+    for (final image in referenceImages) {
+      final file = files[image.relativePath];
+      if (file == null) {
+        throw FormatException('完整备份缺少参考图：${image.fileName}');
       }
+      final assetBytes = _archiveFileBytes(file);
+      if (assetBytes.length != image.sizeBytes) {
+        throw FormatException('参考图大小校验失败：${image.fileName}');
+      }
+      assets[image.relativePath] = assetBytes;
     }
 
     return WebImportedBackup(
