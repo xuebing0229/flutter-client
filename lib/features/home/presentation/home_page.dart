@@ -12,6 +12,7 @@ import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
+import '../../../core/sync/public_peer_sync_service.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
@@ -21,6 +22,7 @@ import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/data/node_presets.dart';
+import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
 import '../../orders/presentation/node_preset_page.dart';
@@ -70,6 +72,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
   final FocusStore _focusStore = FocusStore();
+  final OrderReferenceImageStore _referenceImageStore =
+      OrderReferenceImageStore();
   final AppDataPersistence _persistence = const AppDataPersistence();
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
@@ -77,6 +81,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final DesktopPetService _desktopPetService = DesktopPetService();
   late final DesktopPetAccountSync _desktopPetAccountSync;
   late final SyncCoordinator _syncCoordinator;
+  PublicPeerSyncService? _publicPeerSync;
 
   static const _orderCardViewSettingKey = 'orderCardView';
   static const _productCardViewSettingKey = 'productCardView';
@@ -255,6 +260,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         seedLocalSettings:
             !bootstrapOnly && (hasWorkspaceSettings || isNewAccount),
       );
+      _startPublicPeerSync();
       if (Platform.isWindows) {
         _applyingSyncedDesktopPet = true;
         try {
@@ -413,6 +419,47 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     _accountSyncSnapshot = snapshot;
     _scheduleSave();
+    _publicPeerSync?.requestSync();
+  }
+
+  void _startPublicPeerSync() {
+    if (_publicPeerSync != null) return;
+    final currentDeviceId = widget.accountStore.currentDeviceId;
+    final state = widget.accountStore.syncSnapshot;
+    if (currentDeviceId == null || state == null) return;
+
+    final service = PublicPeerSyncService(
+      accountId: widget.accountId,
+      deviceId: currentDeviceId,
+      captureAccountState: () =>
+          widget.accountStore.syncSnapshot ?? state,
+      mergeAccountState: widget.accountStore.mergeSyncedState,
+      exportRecords: _syncCoordinator.exportPeerRecords,
+      mergeRecords: _syncCoordinator.mergePeerRecords,
+      captureAssetPaths: () => <String>{
+        for (final order in _orderStore.orders)
+          for (final image in order.referenceImages) image.relativePath,
+        for (final product in _productStore.products)
+          for (final image in product.referenceImages) image.relativePath,
+      },
+      assetExists: (path) async =>
+          (await _referenceImageStore.readAssetBytes(
+            accountId: widget.accountId,
+            relativePath: path,
+          )) !=
+          null,
+      readAsset: (path) => _referenceImageStore.readAssetBytes(
+        accountId: widget.accountId,
+        relativePath: path,
+      ),
+      writeAsset: (path, bytes) => _referenceImageStore.writeAssetBytes(
+        accountId: widget.accountId,
+        relativePath: path,
+        bytes: bytes,
+      ),
+    );
+    _publicPeerSync = service;
+    unawaited(service.start());
   }
 
   Map<String, dynamic>? _activeSyncProgress(
@@ -991,6 +1038,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       const Duration(milliseconds: 350),
       _persistCurrentData,
     );
+    _publicPeerSync?.requestSync();
   }
 
   void _scheduleReminderSync() {
@@ -1203,6 +1251,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
 
+    _publicPeerSync?.dispose();
+    _publicPeerSync = null;
     _desktopContentNavigatorObserver.deactivate();
     _desktopPetService.dispose();
     _syncCoordinator.dispose();
