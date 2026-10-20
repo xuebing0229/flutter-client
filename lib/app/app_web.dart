@@ -205,19 +205,22 @@ class _WebAccountGateState extends State<_WebAccountGate> {
         }
 
         final importedPaths = <String>{};
-        for (final order in imported.backup.orders) {
-          for (final image in order.referenceImages) {
-            final bytes = imported.assets[image.relativePath];
-            if (bytes == null) {
-              throw FormatException('完整备份缺少参考图：${image.fileName}');
-            }
-            await _referenceImageStore.writeAssetBytes(
-              accountId: accountId,
-              relativePath: image.relativePath,
-              bytes: bytes,
-            );
-            importedPaths.add(image.relativePath);
+        final importedImages = <OrderReferenceImage>[
+          for (final order in imported.backup.orders) ...order.referenceImages,
+          for (final product in imported.backup.products)
+            ...product.referenceImages,
+        ];
+        for (final image in importedImages) {
+          final bytes = imported.assets[image.relativePath];
+          if (bytes == null) {
+            throw FormatException('完整备份缺少参考图：${image.fileName}');
           }
+          await _referenceImageStore.writeAssetBytes(
+            accountId: accountId,
+            relativePath: image.relativePath,
+            bytes: bytes,
+          );
+          importedPaths.add(image.relativePath);
         }
 
         if (previousBackup != null) {
@@ -226,6 +229,9 @@ class _WebAccountGateState extends State<_WebAccountGate> {
             images: [
               for (final order in previousBackup.orders)
                 for (final image in order.referenceImages)
+                  if (!importedPaths.contains(image.relativePath)) image,
+              for (final product in previousBackup.products)
+                for (final image in product.referenceImages)
                   if (!importedPaths.contains(image.relativePath)) image,
             ],
           );
@@ -1181,22 +1187,24 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         ArchiveFile(_manifestName, manifest.length, manifest),
       );
 
-      for (final order in backup.orders) {
-        for (final image in order.referenceImages) {
-          final bytes = await _referenceImageStore.readAssetBytes(
-            accountId: _accountId,
-            relativePath: image.relativePath,
-          );
-          if (bytes == null) {
-            throw StateError('参考图“${image.fileName}”原文件缺失，无法生成完整备份。');
-          }
-          if (bytes.length != image.sizeBytes) {
-            throw StateError('参考图“${image.fileName}”文件大小与记录不一致。');
-          }
-          archive.addFile(
-            ArchiveFile(image.relativePath, bytes.length, bytes),
-          );
+      final referenceImages = <OrderReferenceImage>[
+        for (final order in backup.orders) ...order.referenceImages,
+        for (final product in backup.products) ...product.referenceImages,
+      ];
+      for (final image in referenceImages) {
+        final bytes = await _referenceImageStore.readAssetBytes(
+          accountId: _accountId,
+          relativePath: image.relativePath,
+        );
+        if (bytes == null) {
+          throw StateError('参考图“${image.fileName}”原文件缺失，无法生成完整备份。');
         }
+        if (bytes.length != image.sizeBytes) {
+          throw StateError('参考图“${image.fileName}”文件大小与记录不一致。');
+        }
+        archive.addFile(
+          ArchiveFile(image.relativePath, bytes.length, bytes),
+        );
       }
 
       final encoded = ZipEncoder().encode(archive);
@@ -1277,25 +1285,30 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
       if (imported.includesAssets) {
         final importedPaths = <String>{};
-        for (final order in backup.orders) {
-          for (final image in order.referenceImages) {
-            final bytes = imported.assets[image.relativePath];
-            if (bytes == null) {
-              throw FormatException('完整备份缺少参考图：${image.fileName}');
-            }
-            await _referenceImageStore.writeAssetBytes(
-              accountId: _accountId,
-              relativePath: image.relativePath,
-              bytes: bytes,
-            );
-            importedPaths.add(image.relativePath);
+        final importedImages = <OrderReferenceImage>[
+          for (final order in backup.orders) ...order.referenceImages,
+          for (final product in backup.products) ...product.referenceImages,
+        ];
+        for (final image in importedImages) {
+          final bytes = imported.assets[image.relativePath];
+          if (bytes == null) {
+            throw FormatException('完整备份缺少参考图：${image.fileName}');
           }
+          await _referenceImageStore.writeAssetBytes(
+            accountId: _accountId,
+            relativePath: image.relativePath,
+            bytes: bytes,
+          );
+          importedPaths.add(image.relativePath);
         }
         await _referenceImageStore.deleteImages(
           accountId: _accountId,
           images: [
             for (final order in _orderStore.orders)
               for (final image in order.referenceImages)
+                if (!importedPaths.contains(image.relativePath)) image,
+            for (final product in _productStore.products)
+              for (final image in product.referenceImages)
                 if (!importedPaths.contains(image.relativePath)) image,
           ],
         );
