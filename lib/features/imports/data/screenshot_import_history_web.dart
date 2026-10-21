@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:html' as html;
+
+import '../../../core/web/web_platform_bridge.dart';
 
 import 'package:cryptography/cryptography.dart';
 
@@ -26,7 +27,7 @@ class ScreenshotImportHistory {
   }
 
   Future<Set<String>> read({required String accountId}) async {
-    final source = html.window.localStorage[_key(accountId)];
+    final source = webStorageGet(_key(accountId));
     if (source == null || source.trim().isEmpty) return <String>{};
     try {
       final decoded = jsonDecode(source);
@@ -43,7 +44,7 @@ class ScreenshotImportHistory {
   }) async {
     final values = fingerprints.where((item) => item.isNotEmpty).toSet().toList()
       ..sort();
-    html.window.localStorage[_key(accountId)] = jsonEncode(values);
+    webStorageSet(_key(accountId), jsonEncode(values));
   }
 
   Future<void> markImported({
