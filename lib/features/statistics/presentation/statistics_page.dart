@@ -53,7 +53,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return sales;
   }
 
-  double _pendingFor(DateTime month) {
+  List<QueueOrder> _pendingOrdersFor(DateTime month) {
     return widget.store.orders.where((order) {
       final deadline = order.deadline;
       return !order.isArchived &&
@@ -61,7 +61,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
           deadline != null &&
           deadline.year == month.year &&
           deadline.month == month.month;
-    }).fold<double>(0, (sum, order) => sum + order.realIncome);
+    }).toList();
   }
 
   double _yearTotal(int year) {
@@ -208,7 +208,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final monthSales = _productSalesFor(_selectedMonth);
         final total = _totalFor(_selectedMonth);
         final platformTotals = _platformTotals(_selectedMonth);
-        final pendingThisMonth = _pendingFor(_selectedMonth);
+        final pendingOrders = _pendingOrdersFor(_selectedMonth);
+        final pendingThisMonth = pendingOrders.fold<double>(
+          0,
+          (sum, order) => sum + order.realIncome,
+        );
         final yearTotal = _yearTotal(_selectedMonth.year);
 
         return ListView(
@@ -230,14 +234,15 @@ class _StatisticsPageState extends State<StatisticsPage> {
             ),
             const SizedBox(height: 10),
             _PeriodOverviewCard(
-              monthPending: pendingThisMonth,
               yearIncome: yearTotal,
               year: _selectedMonth.year,
             ),
             const SizedBox(height: 12),
             _SummaryCard(
-              count: monthOrders.length + monthSales.length,
-              total: total,
+              incomeCount: monthOrders.length + monthSales.length,
+              incomeTotal: total,
+              pendingCount: pendingOrders.length,
+              pendingTotal: pendingThisMonth,
             ),
             const SizedBox(height: 12),
             _PlatformCategoryCard(
@@ -264,42 +269,20 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
 class _PeriodOverviewCard extends StatelessWidget {
   const _PeriodOverviewCard({
-    required this.monthPending,
     required this.yearIncome,
     required this.year,
   });
 
-  final double monthPending;
   final double yearIncome;
   final int year;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return _StatsCard(
-      child: Row(
-        children: [
-          Expanded(
-            child: _PeriodMetric(
-              label: '本月待收入',
-              value: monthPending,
-              helpText: '本月截稿且尚未完成归档的排单。',
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 70,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            color: colors.outlineVariant,
-          ),
-          Expanded(
-            child: _PeriodMetric(
-              label: '$year 年度收入',
-              value: yearIncome,
-              helpText: '已结算排单 + 成品售出',
-            ),
-          ),
-        ],
+      child: _PeriodMetric(
+        label: '$year 年度收入',
+        value: yearIncome,
+        helpText: '已结算排单 + 成品售出',
       ),
     );
   }
@@ -315,21 +298,6 @@ class _PeriodMetric extends StatelessWidget {
   final String label;
   final double value;
   final String helpText;
-
-  void _showHelp(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        content: Text(helpText),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -347,16 +315,13 @@ class _PeriodMetric extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            InkWell(
-              borderRadius: BorderRadius.circular(99),
-              onTap: () => _showHelp(context),
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Icon(
-                  Icons.help_outline_rounded,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+            Tooltip(
+              message: helpText,
+              triggerMode: TooltipTriggerMode.tap,
+              child: Icon(
+                Icons.help_outline_rounded,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -379,38 +344,77 @@ class _PeriodMetric extends StatelessWidget {
 
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
-    required this.count,
-    required this.total,
+    required this.incomeCount,
+    required this.incomeTotal,
+    required this.pendingCount,
+    required this.pendingTotal,
   });
 
-  final int count;
-  final double total;
+  final int incomeCount;
+  final double incomeTotal;
+  final int pendingCount;
+  final double pendingTotal;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+
+    Widget metricRow({
+      required String label,
+      required int count,
+      required double amount,
+      bool emphasize = false,
+    }) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$label $count 笔',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            '¥ ${_money(amount)}',
+            style: (emphasize
+                    ? theme.textTheme.titleLarge
+                    : theme.textTheme.titleMedium)
+                ?.copyWith(fontWeight: FontWeight.w900),
+          ),
+        ],
+      );
+    }
+
     return _StatsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '收入总计',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '收入 $count 笔，共计金额',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '¥ ${_money(total)}',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+          const SizedBox(height: 14),
+          metricRow(
+            label: '已收入',
+            count: incomeCount,
+            amount: incomeTotal,
+            emphasize: true,
+          ),
+          const SizedBox(height: 12),
+          Divider(
+            height: 1,
+            color: theme.colorScheme.outlineVariant,
+          ),
+          const SizedBox(height: 12),
+          metricRow(
+            label: '待收入',
+            count: pendingCount,
+            amount: pendingTotal,
           ),
         ],
       ),
