@@ -884,6 +884,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
             );
           },
         );
+      },
+    );
 
     controller.dispose();
     return result;
