@@ -1389,16 +1389,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     child: TextFormField(
                       key: ValueKey('${row.id}-client-${row.clientInputRevision}'),
                       initialValue: row.clientName,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: '单主',
                         isDense: true,
-                        suffixIcon: row.clientBox == null ? null : IconButton(
-                          tooltip: '在原图定位单主',
-                          icon: const Icon(Icons.image_search_rounded),
-                          onPressed: () => unawaited(_inspectScreenshot(
-                            row, highlight: row.clientBox,
-                          )),
-                        ),
                       ),
                       onChanged: (value) => setState(() {
                         row.clientName = value;
@@ -1415,16 +1408,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: '稿价 ¥',
                       isDense: true,
-                      suffixIcon: row.priceBox == null ? null : IconButton(
-                        tooltip: '在原图定位稿价',
-                        icon: const Icon(Icons.image_search_rounded),
-                        onPressed: () => unawaited(_inspectScreenshot(
-                          row, highlight: row.priceBox,
-                        )),
-                      ),
                     ),
                     onChanged: (value) => setState(() {
                       row.price = double.tryParse(value.trim());
