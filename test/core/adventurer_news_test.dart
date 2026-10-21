@@ -144,5 +144,10 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['电池优化设置修复']);
   });
 
+  test('183 包含 PWA 点对点同步支持见闻', () {
+    final picked = newsBetweenBuilds(182, 183);
+    expect(picked.map((e) => e.title).toList(), ['PWA 点对点同步支持']);
+  });
+
 
 }
