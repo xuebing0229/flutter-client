@@ -18,6 +18,7 @@ typedef PeerAssetExists = Future<bool> Function(String relativePath);
 typedef PeerAssetReader = Future<Uint8List?> Function(String relativePath);
 typedef PeerAssetWriter =
     Future<void> Function(String relativePath, Uint8List bytes);
+typedef PeerTargetFilter = bool Function(AccountDevice device);
 
 /// Browser-compatible online sync that keeps the native Syncthing path intact.
 ///
@@ -36,6 +37,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     this.assetExists,
     this.readAsset,
     this.writeAsset,
+    this.shouldTargetDevice,
   });
 
   static const String _topicRoot = 'adventurers-guild-peer/v1';
@@ -56,6 +58,7 @@ class PublicPeerSyncService extends ChangeNotifier {
   final PeerAssetExists? assetExists;
   final PeerAssetReader? readAsset;
   final PeerAssetWriter? writeAsset;
+  final PeerTargetFilter? shouldTargetDevice;
 
   final AesGcm _cipher = AesGcm.with256bits();
   final Random _random = Random.secure();
@@ -202,7 +205,8 @@ class PublicPeerSyncService extends ChangeNotifier {
     final targets = <String>[
       for (final device in state.activeDevices)
         if (device.id != deviceId &&
-            (onlyTarget == null || device.id == onlyTarget))
+            (onlyTarget == null || device.id == onlyTarget) &&
+            (shouldTargetDevice?.call(device) ?? true))
           device.id,
     ];
     if (targets.isEmpty) return;
