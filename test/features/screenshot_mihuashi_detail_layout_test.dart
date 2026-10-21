@@ -172,6 +172,31 @@ void main() {
     expect(found.single.deadlineHasTime, isFalse);
   });
 
+  test('workbench still prefers lower total when faint 总额 label is lost', () {
+    final lines = [
+      box('工作板', 92, x: 302),
+      box('一则生贺～', 207, x: 28),
+      box('距截稿日 2026-11-15 还有 25 天', 274, x: 28),
+      box('一个弹珠', 349, x: 111),
+      box('验收节点', 470, x: 28),
+      box('草稿 20%', 514, x: 28),
+      box('已付 ￥148', 478, x: 438),
+      box('￥740', 522, x: 487),
+      box('稿件夹', 626, x: 28),
+      box('进程动态', 626, x: 165),
+      box('参考信息', 626, x: 326),
+    ];
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 690,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.price, 740);
+  });
+
   test('normal vertically stacked commission list is not a detail page', () {
     final lines = [
       box('进行中', 115, x: 167),
