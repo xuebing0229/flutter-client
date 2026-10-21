@@ -1369,16 +1369,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               key: ValueKey('${row.id}-title-${row.titleInputRevision}'),
               initialValue: row.title,
               maxLines: 1,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: '图名',
                 isDense: true,
-                suffixIcon: row.titleBox == null ? null : IconButton(
-                  tooltip: '在原图定位图名',
-                  icon: const Icon(Icons.image_search_rounded),
-                  onPressed: () => unawaited(_inspectScreenshot(
-                    row, highlight: row.titleBox,
-                  )),
-                ),
               ),
               onChanged: (value) => setState(() {
                 row.title = value;
@@ -1483,14 +1476,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     icon: const Icon(Icons.calendar_month_outlined, size: 16),
                     label: Text(dateLabel),
                   ),
-                  if (row.deadlineBox != null)
-                    IconButton(
-                      tooltip: '在原图定位截稿日期',
-                      icon: const Icon(Icons.image_search_rounded),
-                      onPressed: () => unawaited(_inspectScreenshot(
-                        row, highlight: row.deadlineBox,
-                      )),
-                    ),
+
                   if (!row.deadlineConfirmed &&
                       row.detectedDate != null &&
                       row.relativeDeadline == null &&
