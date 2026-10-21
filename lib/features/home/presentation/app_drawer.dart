@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_store.dart';
@@ -15,6 +16,7 @@ import '../../orders/presentation/node_preset_page.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
+import '../../shared/presentation/pricing_preset_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
@@ -45,6 +47,7 @@ class AppDrawer extends StatelessWidget {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    required this.pricingPresetStore,
     required this.focusStore,
     required this.desktopPetSettings,
     required this.onOpenOrder,
@@ -63,6 +66,7 @@ class AppDrawer extends StatelessWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final PricingPresetStore pricingPresetStore;
   final FocusStore focusStore;
   final DesktopPetSettings desktopPetSettings;
   final Future<void> Function(String orderId) onOpenOrder;
@@ -99,6 +103,7 @@ class AppDrawer extends StatelessWidget {
             orderStore: orderStore,
             productStore: productStore,
             nodePresetStore: nodePresetStore,
+            pricingPresetStore: pricingPresetStore,
             focusStore: focusStore,
             desktopPetSettings: desktopPetSettings,
             onOpenOrder: onOpenOrder,
@@ -123,6 +128,7 @@ class AppDrawer extends StatelessWidget {
 
 class AppToolMenu extends StatelessWidget {
   static const nodePresetTool = 'nodePreset';
+  static const pricingPresetTool = 'pricingPreset';
   static const featureToggleTool = 'featureToggle';
   static const archiveTool = 'archive';
   static const syncTool = 'sync';
@@ -136,6 +142,7 @@ class AppToolMenu extends StatelessWidget {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    required this.pricingPresetStore,
     required this.focusStore,
     required this.desktopPetSettings,
     required this.onOpenOrder,
@@ -160,6 +167,7 @@ class AppToolMenu extends StatelessWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final PricingPresetStore pricingPresetStore;
   final FocusStore focusStore;
   final DesktopPetSettings desktopPetSettings;
   final Future<void> Function(String orderId) onOpenOrder;
@@ -232,6 +240,16 @@ class AppToolMenu extends StatelessWidget {
             context,
             nodePresetTool,
             NodePresetPage(store: nodePresetStore),
+          ),
+        ),
+        _item(
+          icon: Icons.calculate_outlined,
+          title: '加价预设',
+          tool: pricingPresetTool,
+          onTap: () => _open(
+            context,
+            pricingPresetTool,
+            PricingPresetPage(store: pricingPresetStore),
           ),
         ),
         if (showFeatureToggle)
