@@ -1903,6 +1903,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     productStore: _productStore,
                                     nodePresetStore: _nodePresetStore,
                                     pricingPresetStore: _pricingPresetStore,
+                                    receiptStyleStore: _receiptStyleStore,
                                     focusStore: _focusStore,
                                     desktopPetSettings:
                                         _desktopPetService.settings,
