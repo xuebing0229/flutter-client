@@ -1020,7 +1020,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     final nextOverviewColumns = settings[_orderOverviewColumnsSettingKey];
     if (nextOverviewColumns is num && nextOverviewColumns.isFinite) {
-      final normalized = nextOverviewColumns.round().clamp(1, 20);
+      final rounded = nextOverviewColumns.round();
+      final normalized = rounded < 1 ? 1 : rounded;
       if (normalized != _orderOverviewColumns) {
         _orderOverviewColumns = normalized;
         layoutChanged = true;
@@ -1496,7 +1497,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _setOrderOverviewColumns(int value) {
-    final normalized = value.clamp(1, 20);
+    final normalized = value < 1 ? 1 : value;
     if (_orderOverviewColumns == normalized) return;
     setState(() {
       _orderOverviewColumns = normalized;
