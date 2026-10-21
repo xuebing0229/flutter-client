@@ -159,7 +159,7 @@ Uri _relayUri({
 }) {
   final raw = configured.trim();
   final parsed = raw.isEmpty
-      ? Uri.parse(html.window.location.origin)
+      ? Uri.parse(Uri.parse(html.window.location.href).origin)
       : Uri.parse(raw);
 
   final scheme = switch (parsed.scheme) {
