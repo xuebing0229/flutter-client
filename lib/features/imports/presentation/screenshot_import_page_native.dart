@@ -305,6 +305,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 date: candidate.detectedDate,
                 hasTime: candidate.deadlineHasTime,
                 percentage: candidate.progressPercent,
+                recognizedNodeLabel: candidate.recognizedNodeLabel,
                 relative: candidate.relativeDeadlineText,
                 sourceStartY: candidate.sourceStartY,
                 sourceEndY: candidate.sourceEndY,
@@ -388,10 +389,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             }
           }
           row.presetId = preset.id;
-          row.nodeId = resolveImportNode(
+          row.nodeId = resolveScreenshotImportNodeId(
             preset: preset,
             recognizedPercent: row.recognizedPercent,
-          ).id;
+            recognizedNodeLabel: row.recognizedNodeLabel,
+          );
         }
       }
 
@@ -465,6 +467,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     DateTime? date,
     bool hasTime = false,
     int? percentage,
+    String? recognizedNodeLabel,
     String? relative,
   }) {
     final suggestedPreset = platform == null
@@ -489,9 +492,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         }
       }
     }
-    final selectedNode = resolveImportNode(
+    final selectedNodeId = resolveScreenshotImportNodeId(
       preset: presetForRow,
       recognizedPercent: percentage,
+      recognizedNodeLabel: recognizedNodeLabel,
     );
     return ScreenshotImportDraft(
       id: 'preview-' + DateTime.now().microsecondsSinceEpoch.toString() +
@@ -515,13 +519,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       detectedDate: date,
       sourceHasClock: hasTime,
       recognizedPercent: percentage,
+      recognizedNodeLabel: recognizedNodeLabel,
       relativeDeadline: relative,
       deadline: hasTime ? date : null,
       deadlineConfirmed: hasTime,
       feeEnabled: platform?.defaultFeeEnabled ?? false,
       saleType: _defaultSaleType,
       presetId: presetForRow.id,
-      nodeId: selectedNode.id,
+      nodeId: selectedNodeId,
     );
   }
 
@@ -868,10 +873,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           existingOrders: widget.orderStore.orders,
         );
         row.presetId = preset.id;
-        row.nodeId = resolveImportNode(
+        row.nodeId = resolveScreenshotImportNodeId(
           preset: preset,
           recognizedPercent: row.recognizedPercent,
-        ).id;
+          recognizedNodeLabel: row.recognizedNodeLabel,
+        );
       }
       _refreshDuplicateWarnings();
     });
