@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:html' as html;
 
 import 'package:flutter/foundation.dart';
+
+import '../web/web_platform_bridge.dart';
 
 enum AppFeature {
   clientInfo,
@@ -57,7 +58,7 @@ class AppFeatureStore extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final source = html.window.localStorage[_storageKey];
+      final source = webStorageGet(_storageKey);
       if (source == null || source.trim().isEmpty) return;
       final decoded = jsonDecode(source);
       if (decoded is Map) {
@@ -132,7 +133,7 @@ class AppFeatureStore extends ChangeNotifier {
 
   Future<void> _persist() async {
     try {
-      html.window.localStorage[_storageKey] = jsonEncode(toJson());
+      webStorageSet(_storageKey, jsonEncode(toJson()));
     } catch (_) {
       // Keep the in-memory choice if browser storage is unavailable.
     }
