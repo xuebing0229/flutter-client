@@ -25,6 +25,7 @@ import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
+import 'sync_coordinator_view.dart';
 import 'sync_reference_image_gc.dart';
 
 typedef SyncSettingsCapture = Map<String, dynamic> Function();
@@ -169,7 +170,7 @@ String syncFieldLabel(String field) {
   };
 }
 
-class SyncCoordinator extends ChangeNotifier {
+class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   static const settingsRecordId = 'app';
   static const _transportReauthorizationLifetime = Duration(minutes: 30);
 
