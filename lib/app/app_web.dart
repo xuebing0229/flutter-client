@@ -2177,9 +2177,8 @@ class _WebAccountPageState extends State<_WebAccountPage> {
               OutlinedButton.icon(
                 onPressed: () async {
                   await widget.store.lock();
-                  if (mounted) {
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                  }
+                  if (!context.mounted) return;
+                  Navigator.of(context).popUntil((route) => route.isFirst);
                 },
                 icon: const Icon(Icons.logout_rounded),
                 label: const Text('退出登录'),
