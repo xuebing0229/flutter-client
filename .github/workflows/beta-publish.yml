@@ -248,10 +248,68 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  web:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build PWA Beta
+        run: |
+          flutter build web \
+            --release \
+            --no-web-resources-cdn \
+            --dart-define=APP_CHANNEL=beta \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
+
+      - name: Finalize offline PWA cache
+        run: python3 tool/finalize_pwa.py build/web
+
+      - name: Validate installable PWA shell
+        shell: bash
+        run: |
+          test -s build/web/index.html
+          test -s build/web/manifest.json
+          test -s build/web/pwa_service_worker.js
+          test -s build/web/main.dart.js
+          test -s build/web/canvaskit/canvaskit.js
+          test -s build/web/canvaskit/canvaskit.wasm
+          grep -q '"display": "standalone"' build/web/manifest.json
+          grep -q "serviceWorker.register" build/web/index.html
+          grep -q './main.dart.js' build/web/pwa_service_worker.js
+          grep -q './canvaskit/canvaskit.wasm' build/web/pwa_service_worker.js
+          if grep -q '__PWA_PRECACHE_FILES__' build/web/pwa_service_worker.js; then
+            echo "PWA precache manifest was not finalized." >&2
+            exit 1
+          fi
+
+      - name: Package PWA Beta
+        run: |
+          cd build/web
+          zip -qr ../../app-pwa-beta.zip .
+
+      - name: Upload PWA Beta package
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-pwa-package
+          path: app-pwa-beta.zip
+          retention-days: 1
+          if-no-files-found: error
+
   publish:
     needs:
       - android
       - windows
+      - web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -266,6 +324,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: beta-windows-package
+          path: dist
+
+      - name: Download PWA Beta package
+        uses: actions/download-artifact@v4
+        with:
+          name: beta-pwa-package
           path: dist
 
       - name: Read build metadata
@@ -327,6 +391,7 @@ jobs:
           )
           android_path = Path("dist/app-beta.apk")
           windows_path = Path("dist/app-windows-beta.zip")
+          pwa_path = Path("dist/app-pwa-beta.zip")
 
           def sha256(path):
               digest = hashlib.sha256()
@@ -348,6 +413,9 @@ jobs:
               "windows_size_bytes": windows_path.stat().st_size,
               "windows_sha256": sha256(windows_path),
               "windows_installer_url": release_base + "/app-windows-beta-setup.exe",
+              "pwa_download_url": release_base + "/app-pwa-beta.zip",
+              "pwa_size_bytes": pwa_path.stat().st_size,
+              "pwa_sha256": sha256(pwa_path),
               "notes": "Beta ${VERSION} (${BUILD})",
           }
           Path("app-beta-latest.json").write_text(
@@ -365,6 +433,7 @@ jobs:
             "dist/app-beta.apk#app-beta.apk" \
             "dist/app-windows-beta.zip#app-windows-beta.zip" \
             "dist/app-windows-beta-setup.exe#app-windows-beta-setup.exe" \
+            "dist/app-pwa-beta.zip#app-pwa-beta.zip" \
             "app-beta-latest.json#app-beta-latest.json" \
             --repo xuebing0229/release-files \
             --title "Beta ${VERSION} (${BUILD})" \
@@ -393,6 +462,7 @@ jobs:
           )
           android_path = Path("${GITHUB_WORKSPACE}/dist/app-beta.apk")
           windows_path = Path("${GITHUB_WORKSPACE}/dist/app-windows-beta.zip")
+          pwa_path = Path("${GITHUB_WORKSPACE}/dist/app-pwa-beta.zip")
 
           def sha256(path):
               digest = hashlib.sha256()
@@ -416,6 +486,9 @@ jobs:
               "windows_size_bytes": windows_path.stat().st_size,
               "windows_sha256": sha256(windows_path),
               "windows_installer_url": release_base + "/app-windows-beta-setup.exe",
+              "pwa_download_url": release_base + "/app-pwa-beta.zip",
+              "pwa_size_bytes": pwa_path.stat().st_size,
+              "pwa_sha256": sha256(pwa_path),
           })
           path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
           PY
