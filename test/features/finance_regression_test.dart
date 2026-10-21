@@ -1,3 +1,4 @@
+import 'package:flutter_app/core/finance/pricing_adjustments.dart';
 import 'package:flutter_app/features/orders/data/node_presets.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
 import 'package:flutter_app/features/orders/state/order_store.dart';
@@ -46,6 +47,90 @@ void main() {
     expect(merged.amount, 0);
     // This checkbox was explicitly changed by the local dialog.
     expect(merged.feeEnabled, isFalse);
+  });
+
+  test('pricing presets apply proportional rules before flat amounts', () {
+    const adjustments = <PricingAdjustment>[
+      PricingAdjustment(
+        id: 'commercial',
+        name: '商用',
+        multiplier: 2,
+      ),
+      PricingAdjustment(
+        id: 'rush',
+        name: '加急',
+        percent: 30,
+      ),
+      PricingAdjustment(
+        id: 'background',
+        name: '复杂背景',
+        fixedAmount: 100,
+      ),
+    ];
+
+    expect(applyPricingAdjustments(1000, adjustments), 2700);
+    expect(
+      pricedSupplementAmount(
+        basePrice: 1000,
+        supplementAmount: 200,
+        adjustments: adjustments,
+        participates: true,
+      ),
+      520,
+    );
+    expect(
+      pricedSupplementAmount(
+        basePrice: 1000,
+        supplementAmount: 200,
+        adjustments: adjustments,
+        participates: false,
+      ),
+      200,
+    );
+  });
+
+  test('order pricing snapshot and supplement participation affect total', () {
+    final order = QueueOrder(
+      id: 'order-pricing',
+      platform: CommissionPlatform.offline,
+      title: '测试',
+      clientName: '单主',
+      deadline: null,
+      nodePresetId: defaultNodePreset.id,
+      nodePresetSnapshot: defaultNodePreset,
+      currentNodeId: defaultNodePreset.nodes.first.id,
+      price: 1000,
+      feeEnabled: false,
+      supplementAmount: 200,
+      supplementPricingEnabled: true,
+      pricingAdjustments: const <PricingAdjustment>[
+        PricingAdjustment(id: 'commercial', name: '商用', multiplier: 2),
+      ],
+    );
+
+    expect(order.pricedBaseAmount, 2000);
+    expect(order.pricedSupplementAmountValue, 400);
+    expect(order.originalTotal, 2400);
+  });
+
+  test('supplement pricing switch merges independently from fee switch', () {
+    final merged = mergeAdjustmentEdit(
+      baselineAmount: 100,
+      baselineFeeEnabled: false,
+      baselinePricingEnabled: false,
+      draft: const AdjustmentDialogResult(
+        amount: 120,
+        feeEnabled: false,
+        pricingEnabled: true,
+      ),
+      currentAmount: 130,
+      currentFeeEnabled: true,
+      currentPricingEnabled: false,
+    );
+
+    expect(merged.amount, 150);
+    expect(merged.feeEnabled, isTrue);
+    expect(merged.pricingEnabled, isTrue);
   });
 
   test('invalid custom refunds cannot archive or poison settled income', () {
