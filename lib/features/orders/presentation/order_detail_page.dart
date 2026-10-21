@@ -27,9 +27,9 @@ class OrderDetailPage extends StatefulWidget {
     required this.store,
     required this.orderId,
     required this.nodePresetStore,
-    required this.pricingPresetStore,
-    required this.receiptStyleStore,
     required this.featureStore,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
     super.key,
   });
 
@@ -37,8 +37,8 @@ class OrderDetailPage extends StatefulWidget {
   final OrderStore store;
   final String orderId;
   final NodePresetStore nodePresetStore;
-  final PricingPresetStore pricingPresetStore;
-  final ReceiptStyleStore receiptStyleStore;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -51,6 +51,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   final _tags = <String>[];
   final _pricingAdjustments = <PricingAdjustment>[];
   final _sessionAddedReferenceImages = <OrderReferenceImage>[];
+  late final PricingPresetStore _effectivePricingPresetStore;
+  late final ReceiptStyleStore _effectiveReceiptStyleStore;
 
   bool _editing = false;
   bool _pickingReferenceImages = false;
@@ -78,6 +80,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePricingPresetStore =
+        _effectivePricingPresetStore ?? PricingPresetStore();
+    _effectiveReceiptStyleStore =
+        _effectiveReceiptStyleStore ?? ReceiptStyleStore();
     final order = _order;
     _titleController = TextEditingController();
     _clientController = TextEditingController();
@@ -106,6 +112,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _descriptionController.dispose();
     _onlineController.dispose();
     _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
+    if (widget.receiptStyleStore == null) {
+      _effectiveReceiptStyleStore.dispose();
+    }
     super.dispose();
   }
 
@@ -806,7 +818,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         MaterialPageRoute<void>(
                           builder: (_) => ReceiptPage(
                             data: ReceiptData.fromOrder(order),
-                            styleStore: widget.receiptStyleStore,
+                            styleStore: _effectiveReceiptStyleStore,
                           ),
                         ),
                       );
@@ -874,7 +886,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 ),
                 const SizedBox(height: 14),
                 PricingPresetSelector(
-                  store: widget.pricingPresetStore,
+                  store: _effectivePricingPresetStore,
                   selected: _pricingAdjustments,
                   onChanged: (value) => setState(() {
                     _pricingAdjustments
