@@ -83,10 +83,13 @@ double applyPricingAdjustments(
   Iterable<PricingAdjustment> adjustments,
 ) {
   var value = amount;
+  var fixedTotal = 0.0;
   for (final adjustment in adjustments) {
-    value = adjustment.apply(value);
+    value *= adjustment.multiplier;
+    value *= 1 + adjustment.percent / 100;
+    fixedTotal += adjustment.fixedAmount;
   }
-  return value;
+  return value + fixedTotal;
 }
 
 /// Returns the part of a supplement that is attributable to proportional
