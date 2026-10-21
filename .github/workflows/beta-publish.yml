@@ -489,6 +489,7 @@ jobs:
               "pwa_download_url": release_base + "/app-pwa-beta.zip",
               "pwa_size_bytes": pwa_path.stat().st_size,
               "pwa_sha256": sha256(pwa_path),
+              "notes": "Beta ${VERSION} (${BUILD})",
           })
           path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
           PY
