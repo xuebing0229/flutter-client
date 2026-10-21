@@ -1388,115 +1388,22 @@ class _OrderOverviewGrid extends StatelessWidget {
       ),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns < 1 ? 1 : columns,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-        mainAxisExtent: 62,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: OrderOverviewSummaryCard.aspectRatio,
       ),
           itemCount: orders.length,
           itemBuilder: (context, index) {
             final order = orders[index];
-            return _OrderOverviewCard(
+            return OrderOverviewSummaryCard(
               order: order,
-              hasConflict: conflictedOrderIds.contains(order.id),
+              hasSyncConflict: conflictedOrderIds.contains(order.id),
               showClient: showClient,
               onTap: () => onTap(order),
               onLongPress: () => onLongPress(order),
             );
           },
         );
-  }
-}
-
-class _OrderOverviewCard extends StatelessWidget {
-  const _OrderOverviewCard({
-    required this.order,
-    required this.hasConflict,
-    required this.showClient,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  final QueueOrder order;
-  final bool hasConflict;
-  final bool showClient;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  String _deadlineLabel() {
-    final value = order.deadline;
-    if (value == null) return '未设置';
-    final local = value.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${local.month}/${local.day} ${two(local.hour)}:${two(local.minute)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final client = showClient && order.clientName.trim().isNotEmpty
-        ? order.clientName.trim()
-        : '';
-    final secondLine = [
-      if (client.isNotEmpty) client,
-      order.title,
-      '¥${order.originalTotal == order.originalTotal.roundToDouble() ? order.originalTotal.toStringAsFixed(0) : order.originalTotal.toStringAsFixed(2)}',
-    ].join(' / ');
-
-    return Material(
-      color: colors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: colors.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${order.platform.label} · ${_deadlineLabel()}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: colors.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (hasConflict) ...[
-                    const SizedBox(width: 2),
-                    Icon(
-                      Icons.sync_problem_rounded,
-                      size: 11,
-                      color: colors.error,
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 3),
-              Text(
-                secondLine,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
