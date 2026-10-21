@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:html' as html;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -13,13 +12,11 @@ import '../core/features/app_feature_store.dart';
 import '../core/portability/app_backup_data.dart';
 import '../core/portability/web_backup_reader.dart';
 import '../core/sync/public_peer_sync_service.dart';
-import '../core/sync/sync_entity_codec.dart';
-import '../core/sync/sync_models.dart';
-import '../core/sync/sync_coordinator.dart';
-import '../core/theme/app_theme_palette.dart';
+import '../core/sync/sync_coordinator_web.dart';
 import '../core/theme/app_theme_store.dart';
 import '../core/theme/app_ui_style.dart';
 import '../core/theme/guild_visual_theme.dart';
+import '../core/web/web_platform_bridge.dart';
 import '../features/home/presentation/archive_page.dart';
 import '../features/home/presentation/feature_toggle_page.dart';
 import '../features/home/presentation/theme_color_page.dart';
@@ -27,7 +24,7 @@ import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
 import '../features/focus/presentation/focus_panel.dart';
 import '../features/orders/data/node_presets.dart';
-import '../features/orders/data/order_reference_image_store.dart';
+import '../features/orders/data/order_reference_image_store_web.dart';
 import '../features/orders/domain/queue_order.dart';
 import '../features/orders/presentation/add_order_page.dart';
 import '../features/orders/presentation/node_preset_page.dart';
@@ -231,7 +228,7 @@ class _WebAccountGateState extends State<_WebAccountGate> {
 
       if (imported.includesAssets) {
         AppBackupData? previousBackup;
-        final previousSource = html.window.localStorage[workspaceKey];
+        final previousSource = webStorageGet(workspaceKey);
         if (previousSource != null && previousSource.trim().isNotEmpty) {
           try {
             previousBackup = AppBackupData.decode(previousSource);
@@ -302,8 +299,10 @@ class _WebAccountGateState extends State<_WebAccountGate> {
         throw const FormatException('这份备份包含桌宠素材记录，但没有随包素材文件。');
       }
 
-      html.window.localStorage[workspaceKey] =
-          imported.backup.encode(pretty: false);
+      webStorageSet(
+        workspaceKey,
+        imported.backup.encode(pretty: false),
+      );
 
       await widget.accountStore.importAccountState(
         state,
@@ -891,10 +890,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   Future<void> _restoreWorkspace() async {
     var foundWorkspace = false;
     try {
-      var source = html.window.localStorage[_workspaceKey];
+      var source = webStorageGet(_workspaceKey);
       var migratedLegacy = false;
       if (source == null || source.trim().isEmpty) {
-        final legacy = html.window.localStorage[_legacyWorkspaceKey];
+        final legacy = webStorageGet(_legacyWorkspaceKey);
         if (legacy != null && legacy.trim().isNotEmpty) {
           final legacyBackup = AppBackupData.decode(legacy);
           final legacyAccountId = legacyBackup.accountSyncState?.accountId;
@@ -928,7 +927,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         }
         if (migratedLegacy) {
           await _persistWorkspace();
-          html.window.localStorage.remove(_legacyWorkspaceKey);
+          webStorageRemove(_legacyWorkspaceKey);
         }
       } else {
         _retainedSettings = <String, dynamic>{};
@@ -1007,10 +1006,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         'adventurers-guild.web.backup-reminder.v1.$_accountId';
 
     try {
-      if (html.window.localStorage[reminderKey] == today) return;
+      if (webStorageGet(reminderKey) == today) return;
       // Record the reminder as soon as it is shown so dismissing it still
       // keeps the promise of at most one reminder per local calendar day.
-      html.window.localStorage[reminderKey] = today;
+      webStorageSet(reminderKey, today);
     } catch (_) {
       // If browser storage is unavailable, showing the reminder is safer than
       // silently skipping backup guidance.
@@ -1154,8 +1153,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   Future<void> _persistWorkspace() async {
     try {
-      html.window.localStorage[_workspaceKey] =
-          _captureLocalBackup().encode(pretty: false);
+      webStorageSet(
+        _workspaceKey,
+        _captureLocalBackup().encode(pretty: false),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1553,18 +1554,11 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     required Uint8List bytes,
     required String mimeType,
   }) {
-    final blob = html.Blob(<Object>[bytes], mimeType);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..download = fileName
-      ..style.display = 'none';
-    html.document.body?.append(anchor);
-    try {
-      anchor.click();
-    } finally {
-      anchor.remove();
-      html.Url.revokeObjectUrl(url);
-    }
+    webDownloadBytes(
+      fileName: fileName,
+      bytes: bytes,
+      mimeType: mimeType,
+    );
   }
 
   String _backupFileName(DateTime now) {
