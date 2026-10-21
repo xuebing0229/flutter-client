@@ -127,6 +127,7 @@ jobs:
           if-no-files-found: error
 
   windows:
+    if: ${{ !contains(github.ref_name, 'nobridge') }}
     needs: check
     runs-on: windows-latest
     steps:
@@ -251,6 +252,7 @@ jobs:
           if-no-files-found: error
 
   web:
+    if: ${{ !contains(github.ref_name, 'nobridge') }}
     needs: check
     runs-on: ubuntu-latest
     steps:
@@ -309,6 +311,7 @@ jobs:
           if-no-files-found: error
 
   publish:
+    if: ${{ !contains(github.ref_name, 'nobridge') }}
     needs:
       - android
       - windows
