@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
@@ -31,10 +33,16 @@ class OrderQueuePage extends StatefulWidget {
     required this.accountId,
     required this.store,
     required this.nodePresetStore,
+    required this.pricingPresetStore,
+    required this.receiptStyleStore,
     required this.featureStore,
     required this.syncCoordinator,
     required this.cardView,
     required this.onCardViewChanged,
+    required this.overviewView,
+    required this.onOverviewViewChanged,
+    required this.overviewCardWidth,
+    required this.onOverviewCardWidthChanged,
     required this.sortModeName,
     required this.onSortModeChanged,
     super.key,
@@ -43,10 +51,16 @@ class OrderQueuePage extends StatefulWidget {
   final String accountId;
   final OrderStore store;
   final NodePresetStore nodePresetStore;
+  final PricingPresetStore pricingPresetStore;
+  final ReceiptStyleStore receiptStyleStore;
   final AppFeatureStore featureStore;
   final SyncCoordinatorView syncCoordinator;
   final bool cardView;
   final ValueChanged<bool> onCardViewChanged;
+  final bool overviewView;
+  final ValueChanged<bool> onOverviewViewChanged;
+  final double overviewCardWidth;
+  final ValueChanged<double> onOverviewCardWidthChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
 
@@ -61,6 +75,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   final Set<String> _selectedTags = <String>{};
   final Map<String, _TerminationDraft> _bulkTerminationDrafts =
       <String, _TerminationDraft>{};
+  double? _overviewCardWidthDraft;
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -275,6 +290,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           store: widget.store,
           orderId: order.id,
           nodePresetStore: widget.nodePresetStore,
+          pricingPresetStore: widget.pricingPresetStore,
+          receiptStyleStore: widget.receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -999,7 +1016,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
             .toSet()
             .toList()
           ..sort();
-        final useCardView = widget.featureStore.viewSwitch && widget.cardView;
+        final useOverviewView =
+            widget.featureStore.viewSwitch && widget.overviewView;
+        final useCardView =
+            widget.featureStore.viewSwitch && widget.cardView && !useOverviewView;
 
         return Column(
           children: [
