@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
-import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
 import '../../shared/presentation/collection_widgets.dart';
@@ -44,7 +44,7 @@ class OrderQueuePage extends StatefulWidget {
   final OrderStore store;
   final NodePresetStore nodePresetStore;
   final AppFeatureStore featureStore;
-  final SyncCoordinator syncCoordinator;
+  final SyncCoordinatorView syncCoordinator;
   final bool cardView;
   final ValueChanged<bool> onCardViewChanged;
   final String sortModeName;
