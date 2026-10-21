@@ -1215,7 +1215,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           final parsed = int.tryParse(raw.trim());
                           if (parsed == null) return;
                           widget.onOverviewColumnsChanged
-                              ?.call(parsed.clamp(1, 20));
+                              ?.call(parsed < 1 ? 1 : parsed);
                         },
                       ),
                     ),
@@ -1387,7 +1387,7 @@ class _OrderOverviewGrid extends StatelessWidget {
         right: 12,
       ),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns.clamp(1, 20),
+        crossAxisCount: columns < 1 ? 1 : columns,
         crossAxisSpacing: 6,
         mainAxisSpacing: 6,
         mainAxisExtent: 62,
@@ -1404,8 +1404,6 @@ class _OrderOverviewGrid extends StatelessWidget {
             );
           },
         );
-      },
-    );
   }
 }
 
