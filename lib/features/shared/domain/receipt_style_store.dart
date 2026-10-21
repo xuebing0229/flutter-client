@@ -1,15 +1,80 @@
 import 'package:flutter/foundation.dart';
 
+class ReceiptStylePreset {
+  const ReceiptStylePreset({
+    required this.id,
+    required this.name,
+    required this.fontColorValue,
+    this.backgroundImageBase64,
+    this.backgroundImageName,
+  });
+
+  final String id;
+  final String name;
+  final int fontColorValue;
+  final String? backgroundImageBase64;
+  final String? backgroundImageName;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'fontColorValue': fontColorValue,
+        if (backgroundImageBase64 != null)
+          'backgroundImageBase64': backgroundImageBase64,
+        if (backgroundImageName != null)
+          'backgroundImageName': backgroundImageName,
+      };
+
+  factory ReceiptStylePreset.fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    final name = json['name'];
+    final font = json['fontColorValue'];
+    final background = json['backgroundImageBase64'];
+    final backgroundName = json['backgroundImageName'];
+
+    if (id is! String || id.trim().isEmpty) {
+      throw const FormatException('小票样式预设 ID 无效。');
+    }
+    if (name is! String || name.trim().isEmpty) {
+      throw const FormatException('小票样式预设名称无效。');
+    }
+    if (font is! int) {
+      throw const FormatException('小票样式预设字体颜色无效。');
+    }
+    if (background != null && background is! String) {
+      throw const FormatException('小票样式预设背景无效。');
+    }
+    if (backgroundName != null && backgroundName is! String) {
+      throw const FormatException('小票样式预设背景名称无效。');
+    }
+
+    return ReceiptStylePreset(
+      id: id,
+      name: name.trim(),
+      fontColorValue: font,
+      backgroundImageBase64: background as String?,
+      backgroundImageName: backgroundName as String?,
+    );
+  }
+}
+
 class ReceiptStyleStore extends ChangeNotifier {
   static const int defaultFontColorValue = 0xFF000000;
 
   int _fontColorValue = defaultFontColorValue;
   String? _backgroundImageBase64;
   String? _backgroundImageName;
+  final List<ReceiptStylePreset> _presets = <ReceiptStylePreset>[];
 
   int get fontColorValue => _fontColorValue;
   String? get backgroundImageBase64 => _backgroundImageBase64;
   String? get backgroundImageName => _backgroundImageName;
+  List<ReceiptStylePreset> get presets =>
+      List<ReceiptStylePreset>.unmodifiable(_presets);
+
+  bool get isDefault =>
+      _fontColorValue == defaultFontColorValue &&
+      _backgroundImageBase64 == null;
 
   void setFontColorValue(int value) {
     if (_fontColorValue == value) return;
@@ -33,12 +98,55 @@ class ReceiptStyleStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void resetDefault() {
+    final changed = !isDefault || _backgroundImageName != null;
+    _fontColorValue = defaultFontColorValue;
+    _backgroundImageBase64 = null;
+    _backgroundImageName = null;
+    if (changed) notifyListeners();
+  }
+
+  ReceiptStylePreset saveCurrentPreset(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw const FormatException('小票样式预设名称不能为空。');
+    }
+    final preset = ReceiptStylePreset(
+      id: 'receipt-style-${DateTime.now().microsecondsSinceEpoch}',
+      name: trimmed,
+      fontColorValue: _fontColorValue,
+      backgroundImageBase64: _backgroundImageBase64,
+      backgroundImageName: _backgroundImageName,
+    );
+    _presets.add(preset);
+    notifyListeners();
+    return preset;
+  }
+
+  void applyPreset(String id) {
+    final preset = _presets.where((item) => item.id == id).firstOrNull;
+    if (preset == null) return;
+    _fontColorValue = preset.fontColorValue;
+    _backgroundImageBase64 = preset.backgroundImageBase64;
+    _backgroundImageName = preset.backgroundImageName;
+    notifyListeners();
+  }
+
+  void deletePreset(String id) {
+    final before = _presets.length;
+    _presets.removeWhere((item) => item.id == id);
+    if (_presets.length != before) notifyListeners();
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'fontColorValue': _fontColorValue,
         if (_backgroundImageBase64 != null)
           'backgroundImageBase64': _backgroundImageBase64,
         if (_backgroundImageName != null)
           'backgroundImageName': _backgroundImageName,
+        'presets': <Map<String, dynamic>>[
+          for (final preset in _presets) preset.toJson(),
+        ],
       };
 
   void applyJson(Object? raw) {
@@ -46,6 +154,7 @@ class ReceiptStyleStore extends ChangeNotifier {
       _fontColorValue = defaultFontColorValue;
       _backgroundImageBase64 = null;
       _backgroundImageName = null;
+      _presets.clear();
       notifyListeners();
       return;
     }
@@ -65,9 +174,31 @@ class ReceiptStyleStore extends ChangeNotifier {
     if (name != null && name is! String) {
       throw const FormatException('同步小票背景名称格式无效。');
     }
+
+    final rawPresets = json['presets'];
+    if (rawPresets != null && rawPresets is! List) {
+      throw const FormatException('同步小票样式预设格式无效。');
+    }
+    final presets = <ReceiptStylePreset>[];
+    if (rawPresets is List) {
+      for (final item in rawPresets) {
+        if (item is! Map) {
+          throw const FormatException('同步小票样式预设条目无效。');
+        }
+        presets.add(
+          ReceiptStylePreset.fromJson(
+            item.map((key, value) => MapEntry(key.toString(), value)),
+          ),
+        );
+      }
+    }
+
     _fontColorValue = font is int ? font : defaultFontColorValue;
     _backgroundImageBase64 = background as String?;
     _backgroundImageName = name as String?;
+    _presets
+      ..clear()
+      ..addAll(presets);
     notifyListeners();
   }
 }
