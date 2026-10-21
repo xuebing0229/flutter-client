@@ -516,9 +516,9 @@ class _DashedDivider extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => CustomPaint(
-        size: const Size(double.infinity, 1),
-        painter: _DashedDividerPainter(color),
+  Widget build(BuildContext context) => SizedBox(
+        height: 1,
+        child: CustomPaint(painter: _DashedDividerPainter(color)),
       );
 }
 
