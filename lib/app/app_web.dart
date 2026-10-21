@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import '../core/account/account_models.dart';
 import '../core/account/web_account_store.dart';
 import '../core/features/app_feature_store.dart';
+import '../core/finance/pricing_preset_store.dart';
 import '../core/portability/app_backup_data.dart';
 import '../core/portability/web_backup_reader.dart';
 import '../core/sync/public_peer_sync_service.dart';
@@ -36,6 +37,8 @@ import '../features/products/presentation/product_page.dart';
 import '../features/products/state/product_store.dart';
 import '../features/schedule/presentation/schedule_page.dart';
 import '../features/statistics/presentation/statistics_page.dart';
+import '../features/shared/domain/receipt_style_store.dart';
+import '../features/shared/presentation/pricing_preset_page.dart';
 
 Set<String> _desktopPetAssetPaths(Object? rawManifest) {
   if (rawManifest == null) return const <String>{};
@@ -387,7 +390,7 @@ class _WebAccountEntryPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '网页账号只保存在当前浏览器。已有安卓 / Windows 账号请从客户端完整备份导入，不需要重新使用激活码。',
+                '网页账号只保存在当前浏览器。可以使用激活码创建新账号，也可以登录当前浏览器已保存的账号，或从 Android / Windows 完整备份加入已有账号。',
                 style: TextStyle(
                   height: 1.5,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -421,6 +424,16 @@ class _WebAccountEntryPage extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 18),
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => _WebActivationPage(store: store),
+                  ),
+                ),
+                icon: const Icon(Icons.add_card_rounded),
+                label: const Text('首次使用 / 注册激活'),
+              ),
+              const SizedBox(height: 10),
               FilledButton.icon(
                 onPressed: importing ? null : onImportBackup,
                 icon: importing
@@ -428,18 +441,8 @@ class _WebAccountEntryPage extends StatelessWidget {
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.file_upload_outlined),
-                label: Text(importing ? '正在导入…' : '从客户端完整备份导入账号'),
-              ),
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  'PWA 暂不直接创建新账号；请先在 Android / Windows 客户端激活，再从完整备份加入。',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                    : const Icon(Icons.devices_other_rounded),
+                label: Text(importing ? '正在导入…' : '已有账号 / 导入完整备份'),
               ),
             ],
           ),
@@ -782,6 +785,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   final OrderStore _orderStore = OrderStore();
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
+  final PricingPresetStore _pricingPresetStore = PricingPresetStore();
+  final ReceiptStyleStore _receiptStyleStore = ReceiptStyleStore();
   final FocusStore _focusStore = FocusStore();
   late final SyncCoordinator _syncUi;
   PublicPeerSyncService? _peerSync;
@@ -825,6 +830,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     _orderStore.addListener(_scheduleSave);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
+    _pricingPresetStore.addListener(_scheduleSave);
+    _receiptStyleStore.addListener(_scheduleSave);
     _focusStore.addListener(_scheduleSave);
     widget.featureStore.addListener(_onFeatureStoreChanged);
     widget.themeStore.addListener(_scheduleSave);
@@ -1052,6 +1059,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       'themePaletteId': widget.themeStore.paletteId,
       'customThemePalettes': widget.themeStore.exportCustomPalettes(),
       'uiStyle': widget.themeStore.style.id,
+      'pricingAdjustmentPresets': _pricingPresetStore.toJson(),
+      'receiptStyle': _receiptStyleStore.toJson(),
       for (final entry in features.entries)
         'feature.${entry.key}': entry.key == AppFeature.deadlineReminders.name
             ? _nativeDeadlineReminderPreference
@@ -1089,6 +1098,13 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     final styleId = settings['uiStyle'] ?? settings['uiTexture'];
     if (styleId is String) {
       await widget.themeStore.setStyle(AppUiStyle.byId(styleId));
+    }
+
+    if (settings.containsKey('pricingAdjustmentPresets')) {
+      _pricingPresetStore.applyJson(settings['pricingAdjustmentPresets']);
+    }
+    if (settings.containsKey('receiptStyle')) {
+      _receiptStyleStore.applyJson(settings['receiptStyle']);
     }
 
     final legacyFeatures = settings['features'];
@@ -1188,6 +1204,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           accountId: _accountId,
           store: _productStore,
           featureStore: widget.featureStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           syncCoordinator: _syncUi,
           cardView: _productCardView,
           onCardViewChanged: (value) {
@@ -1220,6 +1238,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           accountId: _accountId,
           store: _orderStore,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
           syncCoordinator: _syncUi,
           cardView: _orderCardView,
@@ -1245,6 +1265,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           store: _orderStore,
           orderId: orderId,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -1258,6 +1280,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           builder: (_) => AddProductPage(
             accountId: _accountId,
             store: _productStore,
+            pricingPresetStore: _pricingPresetStore,
             featureStore: widget.featureStore,
           ),
         ),
@@ -1271,6 +1294,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             accountId: _accountId,
             store: _orderStore,
             nodePresetStore: _nodePresetStore,
+            pricingPresetStore: _pricingPresetStore,
             featureStore: widget.featureStore,
           ),
         ),
@@ -1579,6 +1603,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     _orderStore.removeListener(_scheduleSave);
     _productStore.removeListener(_scheduleSave);
     _nodePresetStore.removeListener(_scheduleSave);
+    _pricingPresetStore.removeListener(_scheduleSave);
+    _receiptStyleStore.removeListener(_scheduleSave);
+    _pricingPresetStore.dispose();
+    _receiptStyleStore.dispose();
     _focusStore.removeListener(_scheduleSave);
     _focusStore.dispose();
     widget.featureStore.removeListener(_onFeatureStoreChanged);
@@ -1694,6 +1722,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                     orderStore: _orderStore,
                     productStore: _productStore,
                     nodePresetStore: _nodePresetStore,
+                    pricingPresetStore: _pricingPresetStore,
+                    receiptStyleStore: _receiptStyleStore,
                     featureStore: widget.featureStore,
                     syncCoordinator: _syncUi,
                   ),
@@ -1705,6 +1735,14 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 onTap: () => _openTool(
                   context,
                   NodePresetPage(store: _nodePresetStore),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calculate_outlined),
+                title: const Text('加价预设'),
+                onTap: () => _openTool(
+                  context,
+                  PricingPresetPage(store: _pricingPresetStore),
                 ),
               ),
               ListTile(
