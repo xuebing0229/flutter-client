@@ -13,6 +13,7 @@ import '../../features/products/state/product_store.dart';
 import 'sync_entity_codec.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
+import 'sync_coordinator_view.dart';
 import '../web/web_platform_bridge.dart';
 
 typedef WebSyncSettingsCapture = Map<String, dynamic> Function();
@@ -39,7 +40,7 @@ String syncFieldLabel(String field) => field;
 /// but persists the record graph in browser storage instead of a Syncthing
 /// directory. A transport can exchange the portable records without changing
 /// merge semantics.
-class SyncCoordinator extends ChangeNotifier {
+class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   SyncCoordinator.web({
     required this.accountId,
     required this.deviceId,
