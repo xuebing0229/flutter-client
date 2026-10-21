@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+187
-# beta-187: Cloudflare PWA three-end sync bridge; native Syncthing restored byte-for-byte to 182
+# beta-187: Cloudflare three-end sync; native Syncthing exact 182; shared UI adapter fix
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
