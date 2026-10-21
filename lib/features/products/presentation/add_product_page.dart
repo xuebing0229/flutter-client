@@ -18,14 +18,14 @@ class AddProductPage extends StatefulWidget {
   const AddProductPage({
     required this.accountId,
     required this.store,
-    required this.pricingPresetStore,
     required this.featureStore,
+    this.pricingPresetStore,
     super.key,
   });
 
   final String accountId;
   final ProductStore store;
-  final PricingPresetStore pricingPresetStore;
+  final PricingPresetStore? pricingPresetStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -36,6 +36,7 @@ class _AddProductPageState extends State<AddProductPage> {
   final _referenceImageStore = OrderReferenceImageStore();
   final _referenceImages = <OrderReferenceImage>[];
   final _pricingAdjustments = <PricingAdjustment>[];
+  late final PricingPresetStore _effectivePricingPresetStore;
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -54,6 +55,8 @@ class _AddProductPageState extends State<AddProductPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePricingPresetStore =
+        widget.pricingPresetStore ?? PricingPresetStore();
     _draftProductId = 'product-${DateTime.now().microsecondsSinceEpoch}';
   }
 
@@ -72,6 +75,9 @@ class _AddProductPageState extends State<AddProductPage> {
     _descriptionController.dispose();
     _onlineController.dispose();
     _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
     super.dispose();
   }
 
@@ -241,7 +247,7 @@ class _AddProductPageState extends State<AddProductPage> {
           ),
           const SizedBox(height: 14),
           PricingPresetSelector(
-            store: widget.pricingPresetStore,
+            store: _effectivePricingPresetStore,
             selected: _pricingAdjustments,
             onChanged: (value) => setState(() {
               _pricingAdjustments
