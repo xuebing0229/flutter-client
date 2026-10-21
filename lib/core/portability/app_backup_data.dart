@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../account/account_models.dart';
+import '../finance/pricing_adjustments.dart';
 import '../../features/orders/data/node_presets.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/focus/domain/focus_session.dart';
@@ -267,6 +268,8 @@ Map<String, dynamic> _normalizeLegacyOrder(Map<String, dynamic> source) {
   json['onlinePercent'] ??= 100;
   json['supplementAmount'] ??= 0;
   json['supplementFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
+  json['supplementPricingEnabled'] ??= false;
+  json['pricingAdjustments'] ??= <dynamic>[];
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
@@ -294,6 +297,8 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['onlinePercent'] ??= 100;
   json['supplementAmount'] ??= 0;
   json['supplementFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
+  json['supplementPricingEnabled'] ??= false;
+  json['pricingAdjustments'] ??= <dynamic>[];
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
@@ -342,6 +347,10 @@ Map<String, dynamic> _orderToJson(QueueOrder order) {
     'onlinePercent': order.onlinePercent,
     'supplementAmount': order.supplementAmount,
     'supplementFeeEnabled': order.supplementFeeEnabled,
+    'supplementPricingEnabled': order.supplementPricingEnabled,
+    'pricingAdjustments': [
+      for (final adjustment in order.pricingAdjustments) adjustment.toJson(),
+    ],
     'deductionAmount': order.deductionAmount,
     'deductionFeeEnabled': order.deductionFeeEnabled,
     'description': order.description,
@@ -414,6 +423,19 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'order.supplementFeeEnabled',
     ),
+    supplementPricingEnabled: json['supplementPricingEnabled'] == null
+        ? false
+        : _asBool(
+            json['supplementPricingEnabled'],
+            'order.supplementPricingEnabled',
+          ),
+    pricingAdjustments: <PricingAdjustment>[
+      for (final item in _asList(
+        json['pricingAdjustments'] ?? <dynamic>[],
+        'order.pricingAdjustments',
+      ))
+        PricingAdjustment.fromJson(_asMap(item, 'order.pricingAdjustment')),
+    ],
     deductionAmount: _asDouble(
       json['deductionAmount'],
       'order.deductionAmount',
@@ -493,6 +515,10 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
     'onlinePercent': product.onlinePercent,
     'supplementAmount': product.supplementAmount,
     'supplementFeeEnabled': product.supplementFeeEnabled,
+    'supplementPricingEnabled': product.supplementPricingEnabled,
+    'pricingAdjustments': [
+      for (final adjustment in product.pricingAdjustments) adjustment.toJson(),
+    ],
     'deductionAmount': product.deductionAmount,
     'deductionFeeEnabled': product.deductionFeeEnabled,
     'description': product.description,
@@ -551,6 +577,19 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'product.supplementFeeEnabled',
     ),
+    supplementPricingEnabled: json['supplementPricingEnabled'] == null
+        ? false
+        : _asBool(
+            json['supplementPricingEnabled'],
+            'product.supplementPricingEnabled',
+          ),
+    pricingAdjustments: <PricingAdjustment>[
+      for (final item in _asList(
+        json['pricingAdjustments'] ?? <dynamic>[],
+        'product.pricingAdjustments',
+      ))
+        PricingAdjustment.fromJson(_asMap(item, 'product.pricingAdjustment')),
+    ],
     deductionAmount: _asDouble(
       json['deductionAmount'],
       'product.deductionAmount',
