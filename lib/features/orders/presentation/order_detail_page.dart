@@ -81,9 +81,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   void initState() {
     super.initState();
     _effectivePricingPresetStore =
-        _effectivePricingPresetStore ?? PricingPresetStore();
+        widget.pricingPresetStore ?? PricingPresetStore();
     _effectiveReceiptStyleStore =
-        _effectiveReceiptStyleStore ?? ReceiptStyleStore();
+        widget.receiptStyleStore ?? ReceiptStyleStore();
     final order = _order;
     _titleController = TextEditingController();
     _clientController = TextEditingController();
