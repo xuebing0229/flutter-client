@@ -169,7 +169,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
-      pricingPresetStore: _pricingPresetStore,
       focusStore: _focusStore,
       captureSettings: _captureSyncSettings,
       applySettings: _applySyncSettings,
@@ -226,7 +225,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           orderStore: _orderStore,
           productStore: _productStore,
           nodePresetStore: _nodePresetStore,
-          pricingPresetStore: _pricingPresetStore,
           focusStore: _focusStore,
         );
         final restoredActiveFocus = _focusStore.activeSession;
@@ -1184,7 +1182,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       orderStore: _orderStore,
       productStore: _productStore,
       nodePresetStore: _nodePresetStore,
-      pricingPresetStore: _pricingPresetStore,
       focusStore: _focusStore,
       accountSyncState: _accountSyncSnapshot,
       settings: <String, dynamic>{
@@ -1623,7 +1620,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         orderStore: _orderStore,
         productStore: _productStore,
         nodePresetStore: _nodePresetStore,
-        pricingPresetStore: _pricingPresetStore,
         focusStore: _focusStore,
         themeStore: widget.themeStore,
         featureStore: widget.featureStore,
