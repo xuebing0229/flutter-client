@@ -42,8 +42,8 @@ class OrderQueuePage extends StatefulWidget {
     this.receiptStyleStore,
     this.overviewView = false,
     this.onOverviewViewChanged,
-    this.overviewCardWidth = 150,
-    this.onOverviewCardWidthChanged,
+    this.overviewColumns = 3,
+    this.onOverviewColumnsChanged,
     required this.onSortModeChanged,
     super.key,
   });
@@ -59,8 +59,8 @@ class OrderQueuePage extends StatefulWidget {
   final ValueChanged<bool> onCardViewChanged;
   final bool overviewView;
   final ValueChanged<bool>? onOverviewViewChanged;
-  final double overviewCardWidth;
-  final ValueChanged<double>? onOverviewCardWidthChanged;
+  final int overviewColumns;
+  final ValueChanged<int>? onOverviewColumnsChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
 
@@ -75,7 +75,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   final Set<String> _selectedTags = <String>{};
   final Map<String, _TerminationDraft> _bulkTerminationDrafts =
       <String, _TerminationDraft>{};
-  double? _overviewCardWidthDraft;
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -885,8 +884,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
             );
           },
         );
-      },
-    );
 
     controller.dispose();
     return result;
@@ -1201,30 +1198,25 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Row(
                   children: [
-                    const Text('卡片大小'),
+                    const Text('每行'),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Slider(
-                        min: 72,
-                        max: 280,
-                        value: (_overviewCardWidthDraft ??
-                                widget.overviewCardWidth)
-                            .clamp(72, 280)
-                            .toDouble(),
-                        onChanged: (value) {
-                          setState(() => _overviewCardWidthDraft = value);
-                        },
-                        onChangeEnd: (value) {
-                          widget.onOverviewCardWidthChanged?.call(value);
-                          setState(() => _overviewCardWidthDraft = null);
-                        },
-                      ),
-                    ),
                     SizedBox(
-                      width: 42,
-                      child: Text(
-                        '${(_overviewCardWidthDraft ?? widget.overviewCardWidth).round()}',
-                        textAlign: TextAlign.right,
+                      width: 72,
+                      child: TextFormField(
+                        key: ValueKey<int>(widget.overviewColumns),
+                        initialValue: widget.overviewColumns.toString(),
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          suffixText: '列',
+                        ),
+                        onFieldSubmitted: (raw) {
+                          final parsed = int.tryParse(raw.trim());
+                          if (parsed == null) return;
+                          widget.onOverviewColumnsChanged
+                              ?.call(parsed.clamp(1, 20));
+                        },
                       ),
                     ),
                   ],
@@ -1243,8 +1235,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   : useOverviewView
                   ? _OrderOverviewGrid(
                       orders: orders,
-                      targetCardWidth:
-                          _overviewCardWidthDraft ?? widget.overviewCardWidth,
+                      columns: widget.overviewColumns,
                       conflictedOrderIds:
                           widget.syncCoordinator.conflictedOrderIds,
                       onTap: _openOrder,
@@ -1373,7 +1364,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 class _OrderOverviewGrid extends StatelessWidget {
   const _OrderOverviewGrid({
     required this.orders,
-    required this.targetCardWidth,
+    required this.columns,
     required this.conflictedOrderIds,
     required this.onTap,
     required this.onLongPress,
@@ -1381,7 +1372,7 @@ class _OrderOverviewGrid extends StatelessWidget {
   });
 
   final List<QueueOrder> orders;
-  final double targetCardWidth;
+  final int columns;
   final Set<String> conflictedOrderIds;
   final ValueChanged<QueueOrder> onTap;
   final ValueChanged<QueueOrder> onLongPress;
@@ -1389,30 +1380,18 @@ class _OrderOverviewGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 8.0;
-        const horizontalPadding = 24.0;
-        final available = (constraints.maxWidth - horizontalPadding)
-            .clamp(1, double.infinity)
-            .toDouble();
-        final target = targetCardWidth.clamp(72, 280).toDouble();
-        final columns = ((available + spacing) / (target + spacing))
-            .floor()
-            .clamp(1, 12)
-            .toInt();
-        return GridView.builder(
-          padding: AppLayoutSpacing.tabScrollPaddingWithFab(
-            left: 12,
-            top: 0,
-            right: 12,
-          ),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: spacing,
-            mainAxisSpacing: spacing,
-            mainAxisExtent: 76,
-          ),
+    return GridView.builder(
+      padding: AppLayoutSpacing.tabScrollPaddingWithFab(
+        left: 12,
+        top: 0,
+        right: 12,
+      ),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns.clamp(1, 20),
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        mainAxisExtent: 62,
+      ),
           itemCount: orders.length,
           itemBuilder: (context, index) {
             final order = orders[index];
@@ -1465,14 +1444,18 @@ class _OrderOverviewCard extends StatelessWidget {
       '¥${order.originalTotal == order.originalTotal.roundToDouble() ? order.originalTotal.toStringAsFixed(0) : order.originalTotal.toStringAsFixed(2)}',
     ].join(' / ');
 
-    return Card(
-      margin: EdgeInsets.zero,
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: colors.outlineVariant),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1485,29 +1468,29 @@ class _OrderOverviewCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
                         color: colors.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   if (hasConflict) ...[
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 2),
                     Icon(
                       Icons.sync_problem_rounded,
-                      size: 13,
+                      size: 11,
                       color: colors.error,
                     ),
                   ],
                 ],
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 3),
               Text(
                 secondLine,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
               ),
