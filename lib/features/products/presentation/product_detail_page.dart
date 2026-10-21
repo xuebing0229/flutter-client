@@ -26,17 +26,17 @@ class ProductDetailPage extends StatefulWidget {
     required this.accountId,
     required this.store,
     required this.productId,
-    required this.pricingPresetStore,
-    required this.receiptStyleStore,
     required this.featureStore,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
     super.key,
   });
 
   final String accountId;
   final ProductStore store;
   final String productId;
-  final PricingPresetStore pricingPresetStore;
-  final ReceiptStyleStore receiptStyleStore;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -48,6 +48,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   final _referenceImages = <OrderReferenceImage>[];
   final _pricingAdjustments = <PricingAdjustment>[];
   final _sessionAddedReferenceImages = <OrderReferenceImage>[];
+  late final PricingPresetStore _effectivePricingPresetStore;
+  late final ReceiptStyleStore _effectiveReceiptStyleStore;
   bool _editing = false;
   bool _pickingReferenceImages = false;
 
@@ -71,6 +73,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePricingPresetStore =
+        _effectivePricingPresetStore ?? PricingPresetStore();
+    _effectiveReceiptStyleStore =
+        _effectiveReceiptStyleStore ?? ReceiptStyleStore();
     final product = _product;
     _titleController = TextEditingController();
     _priceController = TextEditingController();
@@ -97,6 +103,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     _soldCountController.dispose();
     _onlineController.dispose();
     _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
+    if (widget.receiptStyleStore == null) {
+      _effectiveReceiptStyleStore.dispose();
+    }
     super.dispose();
   }
 
@@ -745,7 +757,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                         MaterialPageRoute<void>(
                           builder: (_) => ReceiptPage(
                             data: ReceiptData.fromProduct(product),
-                            styleStore: widget.receiptStyleStore,
+                            styleStore: _effectiveReceiptStyleStore,
                           ),
                         ),
                       );
@@ -808,7 +820,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 ),
                 const SizedBox(height: 14),
                 PricingPresetSelector(
-                  store: widget.pricingPresetStore,
+                  store: _effectivePricingPresetStore,
                   selected: _pricingAdjustments,
                   onChanged: (value) => setState(() {
                     _pricingAdjustments
