@@ -303,6 +303,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'PWA 点对点同步支持',
     description: 'Android 与 Windows 保留原有 Syncthing 同步，同时新增与 PWA 互通的 WebRTC 点对点通道。两端同时在线时会优先直连传输排单、成品、节点、设置与参考图；公共 MQTT 只用于加密配对信令，并在直连失败时作为加密兜底，不使用冒险者公会自建同步服务器。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 185,
+    title: '总概览、加价预设与小票',
+    description: '排单新增可自由调节卡片大小的总概览视图，会按屏幕宽度自动排成合适列数；排单和成品共用新的加价预设，可组合倍率、百分比和固定金额并按记录保存快照，补款可自行选择是否参与倍率和百分比加价。排单与成品详情都可直接生成仿真小票，默认白底黑字，也能导入自定义背景和调整字体颜色；统计页同时新增本月待收入与年度收入。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
