@@ -537,7 +537,7 @@ class _DashedDividerPainter extends CustomPainter {
     while (x < size.width) {
       canvas.drawLine(
         Offset(x, 0),
-        Offset((x + dash).clamp(0, size.width), 0),
+        Offset((x + dash).clamp(0, size.width).toDouble(), 0),
         paint,
       );
       x += dash + gap;
