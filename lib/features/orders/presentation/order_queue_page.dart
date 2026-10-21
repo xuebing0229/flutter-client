@@ -1388,11 +1388,14 @@ class _OrderOverviewGrid extends StatelessWidget {
       builder: (context, constraints) {
         const spacing = 8.0;
         const horizontalPadding = 24.0;
-        final available =
-            (constraints.maxWidth - horizontalPadding).clamp(1, double.infinity);
+        final available = (constraints.maxWidth - horizontalPadding)
+            .clamp(1, double.infinity)
+            .toDouble();
         final target = targetCardWidth.clamp(72, 280).toDouble();
-        final columns =
-            ((available + spacing) / (target + spacing)).floor().clamp(1, 12);
+        final columns = ((available + spacing) / (target + spacing))
+            .floor()
+            .clamp(1, 12)
+            .toInt();
         return GridView.builder(
           padding: AppLayoutSpacing.tabScrollPaddingWithFab(
             left: 12,
