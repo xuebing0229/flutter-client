@@ -552,18 +552,281 @@ class ScreenshotLayoutParser {
       }
     }
 
+    final explicitAmounts = <(double, ScreenshotTextLine)>[];
     for (final line in nearby) {
       final matched = _money.firstMatch(line.text.trim().replaceFirst(
         RegExp(r'^[yY](?=\s*\d)'), '¥',
       ));
       if (matched != null) {
         final value = double.tryParse(matched.group(1)!);
-        if (value != null) return (value, line);
+        if (value != null) explicitAmounts.add((value, line));
       }
     }
+    // The light gray "总额" label may disappear in OCR while both ¥ amounts
+    // remain. On the workbench payment block, "已付" is above the total, so
+    // prefer the lower money row instead of importing the instalment.
+    if (nearby.any((line) => line.text.contains('已付')) &&
+        explicitAmounts.length >= 2) {
+      explicitAmounts.sort((a, b) => b.$2.centerY.compareTo(a.$2.centerY));
+      return explicitAmounts.first;
+    }
+    if (explicitAmounts.isNotEmpty) return explicitAmounts.first;
+
     final currencyMarks = nearby.where(
-      (line) => RegExp(r'^[¥￥]$').hasMatch(line.text.trim()),
+      (line) => RegExp(r'^[¥￥]
+  }
+
+  static bool _plausibleDetailTitle(String text) {
+    if (!_plausibleTitle(text)) return false;
+    final name = text.trim();
+    if (_detailTab.hasMatch(name) || _detailPayment.hasMatch(name) ||
+        name.contains('截稿') || name.contains('上传') ||
+        name == '订单' || name == '工作板' || name.contains('文件')) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _plausibleDetailBuyer(String text) {
+    final name = text.trim();
+    if (!_plausibleBuyer(name) || _detailTab.hasMatch(name) ||
+        _detailPayment.hasMatch(name) || name.contains('截稿') ||
+        name == '订单' || name == '工作板' || name == '验收节点' ||
+        name.contains('文件') ||
+        name.contains('.png') || name.contains('.jpg') ||
+        name.contains('KB') || name.contains('GB')) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Find amounts even when OCR separates the currency glyph from its digits.
+  /// Standalone digits are trusted only in a known price location.
+  static (double, ScreenshotTextLine)? _findCardPrice(
+    List<ScreenshotTextLine> lines, {
+    required ScreenshotTextLine titleLine,
+    required ScreenshotTextLine deadlineLine,
+    required double imageWidth,
+    bool detail = false,
+  }) {
+    // Full-image OCR may return ¥30, a zoomed crop may return ¥ and 30.
+    // Both are valid, but only inside the current card.
+    final currency = lines.where((line) =>
+        RegExp(r'^[¥￥]$').hasMatch(line.text.trim())).toList();
+    final candidates = <(double, ScreenshotTextLine, int)>[];
+    for (final line in lines) {
+      final cleaned = line.text.trim();
+      // The real Chinese ML Kit pass sometimes reads ¥94 as y94 / Y94.
+      // Accept that confusable glyph ONLY when geometry proves a fee row;
+      // never reinterpret ordinary artwork/title text as money.
+      final looksLikeMisreadYen = RegExp(r'^[yY]\s*\d').hasMatch(cleaned);
+      final currencyText = looksLikeMisreadYen
+          ? cleaned.replaceFirst(RegExp(r'^[yY]'), '¥')
+          : cleaned;
+      final explicit = _money.firstMatch(currencyText);
+      final bare = RegExp(r'^\d{1,7}(?:\.\d{1,2})?$')
+          .firstMatch(cleaned);
+      final value = double.tryParse(
+        explicit != null ? explicit.group(1)! : (bare?.group(0) ?? ''),
+      );
+      if (value == null || value < 0) continue;
+      final adjacentYen = currency.any((symbol) =>
+          (symbol.centerY - line.centerY).abs() < 28 &&
+          (line.left - symbol.right).abs() < 90);
+      // Never mistake a cropped right-end fragment of 16:48 for a fee.
+      final belowDeadline = line.centerY > deadlineLine.centerY + 12;
+      final huajiaPricePosition = belowDeadline &&
+          line.left >= imageWidth * 0.69;
+      final mihuashiPricePosition =
+          line.centerY > titleLine.centerY + 10 &&
+          line.centerY < deadlineLine.centerY - 8 &&
+          (line.left - titleLine.left).abs() < imageWidth * 0.19 &&
+          cleaned.length >= 2;
+      final detailFee = detail && lines.any((label) =>
+          (label.text.contains('稿酬') || label.text.contains('支付')) &&
+          (label.centerY - line.centerY).abs() < 30);
+      if (looksLikeMisreadYen &&
+          !huajiaPricePosition && !mihuashiPricePosition && !detailFee) {
+        continue;
+      }
+      if (explicit == null && !adjacentYen &&
+          !huajiaPricePosition && !mihuashiPricePosition && !detailFee) {
+        continue;
+      }
+      final strength = explicit != null ? 3 : adjacentYen ? 2 : 1;
+      candidates.add((value, line, strength));
+    }
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final byStrength = b.$3.compareTo(a.$3);
+      if (byStrength != 0) return byStrength;
+      return a.$2.centerY.compareTo(b.$2.centerY);
+    });
+    final best = candidates.first;
+    return (best.$1, best.$2);
+  }
+
+  static bool _plausibleTitle(String source) {
+    final text = source.trim();
+    // PaddleOCR can emit progress/icon debris such as "。0" / "°0" beside
+    // a real "60%" line. Punctuation+digits can never be an order title.
+    final hasLanguageGlyph = RegExp(
+      r'[A-Za-z\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]',
+    ).hasMatch(text);
+    if (text.length < 2 || !hasLanguageGlyph || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) ||
+        RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    const ignore = [
+      '当前交付节点', '截稿时间', '购买时间', '添加备注',
+      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '进行中', '待交稿', '等待对方收稿', '企划方名称',
+    ];
+    if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _isBuyerStatus(String source) {
+    final text = source.trim();
+    return text == '已实名' || text == '未实名';
+  }
+
+  static String _cleanBuyerName(String source) {
+    // Some platform UIs render identity state next to the buyer name. It is
+    // account metadata, never part of the user's actual name. OCR may return it as a
+    // standalone box or glue it directly onto the name.
+    var text = source.trim().replaceFirst(RegExp(r'\s*[›＞>》»]\s*$'), '').trim();
+    for (final status in const <String>['已实名', '未实名']) {
+      if (text == status) return '';
+      if (text.endsWith(status)) {
+        text = text.substring(0, text.length - status.length).trim();
+      }
+    }
+    return text;
+  }
+
+  static bool _plausibleBuyer(String source) {
+    final text = source.trim();
+    if (text.isEmpty || _date.hasMatch(text) ||
+        _money.hasMatch(text) || _percent.hasMatch(text) ||
+        RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) ||
+        RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {
+      return false;
+    }
+    if (_isBuyerStatus(text) ||
+        <String>{
+          '进行中', '已完成', '我卖出的', '待交稿', '添加备注',
+          '全部', '默认', '返回', '全额支付', '定向企划', '订单',
+          '稿件夹', '进程动态', '参考信息', '联系企划方', '上传稿件',
+        }.contains(text)) {
+      return false;
+    }
+    if (text.startsWith('当前交付节点') || text.startsWith('截稿时间')) {
+      return false;
+    }
+    return true;
+  }
+
+  static String _stripKnownUiLabel(String source) {
+    var text = source.trim();
+    // These are platform presentation badges, unlike real title prefixes
+    // such as 【常驻】, which must remain untouched.
+    if (text.startsWith('定向企划 ')) {
+      text = text.substring('定向企划 '.length);
+    }
+    return text.trim();
+  }
+}
+
+
+
+/// An order detail is a SINGLE transaction; its lower half can contain many
+/// file timestamps. Use geometry plus page-specific landmarks, not an exact
+/// list of OCR spellings (small tab captions are frequently omitted by ML Kit).
+bool isMiHuashiOrderDetailScreenshot({
+  required Iterable<ScreenshotTextLine> lines,
+  required double imageWidth,
+  required double imageHeight,
+}) {
+  if (imageWidth <= 0 || imageHeight <= 0) return false;
+  final prepared = lines.toList();
+  final combined = prepared.map((line) => line.text).join(' ');
+  // "订单" / "参考信息" / "已支付" appear in multiple platforms.
+  // Do not use those generic labels to silently assign MiHuashi.
+  if (combined.contains('我卖出的') ||
+      combined.contains('改价历史') ||
+      combined.contains('订单动态') ||
+      combined.contains('真爱永恒')) {
+    return false;
+  }
+  final miSpecific = <String>[
+    '稿件夹', '进程动态', '联系企划方', '上传稿件', '约稿完成',
+    '创作节点',
+  ].any(combined.contains);
+  if (!miSpecific) return false;
+  final centeredHeader = prepared.any((line) =>
+      line.centerY < imageHeight * 0.135 &&
+      line.centerY > imageHeight * 0.025 &&
+      line.left >= imageWidth * 0.3 &&
+      line.right <= imageWidth * 0.78 &&
+      (line.text.trim() == '订单' || line.text.trim() == '工作板'));
+  final deadlineTop = prepared.any((line) =>
+      line.centerY > imageHeight * 0.115 &&
+      line.centerY < imageHeight * 0.42 &&
+      ScreenshotLayoutParser._date.hasMatch(line.text));
+  final strongTab = prepared.any((line) =>
+      line.centerY > imageHeight * 0.30 &&
+      line.centerY < imageHeight * 0.72 &&
+      ScreenshotLayoutParser._detailTab.hasMatch(line.text));
+  final paymentRow = prepared.any((line) =>
+      line.centerY > imageHeight * 0.23 &&
+      line.centerY < imageHeight * 0.60 &&
+      ScreenshotLayoutParser._detailPayment.hasMatch(line.text));
+  final attachment = prepared.any((line) =>
+      line.centerY > imageHeight * 0.36 &&
+      (RegExp(r'\.(png|jpe?g|webp)\b', caseSensitive: false)
+          .hasMatch(line.text) ||
+       line.text.contains('企划方已下载')));
+  // Header + order date + one independent confirmation suffices. If the
+  // "订单" glyph is lost, require BOTH the payment line and attachment/tab.
+  if (centeredHeader && deadlineTop &&
+      (strongTab || paymentRow || attachment)) {
+    return true;
+  }
+  // ML Kit can miss the small centered "订单" heading or attachment filename.
+  // The deadline, payment status and MiHuashi-specific tab form three
+  // independent signals. Never mistake a file timestamp for another order.
+  if (deadlineTop && paymentRow && (strongTab || attachment)) return true;
+  if (strongTab && paymentRow && attachment) return true;
+  // If the deadline was not recognized at all, still preserve this page as
+  // one editable order rather than manufacturing orders from upload times.
+  return centeredHeader && paymentRow && strongTab && attachment;
+}
+
+/// One screenshot-level deadline anchor. The date can be absent; an explicit
+/// acceptance-relative phrase is retained verbatim for the preview.
+class _ScreenshotDeadlineAnchor {
+  const _ScreenshotDeadlineAnchor({
+    required this.line,
+    this.date,
+    this.hasTime = false,
+    this.relativeText,
+    this.isTitleAnchor = false,
+  });
+
+  final ScreenshotTextLine line;
+  final DateTime? date;
+  final bool hasTime;
+  final String? relativeText;
+  final bool isTitleAnchor;
+}
+).hasMatch(line.text.trim()),
     ).toList();
+    final splitAmounts = <(double, ScreenshotTextLine)>[];
     for (final line in nearby) {
       final value = double.tryParse(line.text.trim());
       if (value == null || value < 0 || value > 10000000) continue;
@@ -575,9 +838,14 @@ class ScreenshotLayoutParser {
           _detailPayment.hasMatch(label.text) &&
           (label.centerY - line.centerY).abs() < 25 &&
           label.left <= line.left);
-      if (paired || feeLabel) return (value, line);
+      if (paired || feeLabel) splitAmounts.add((value, line));
     }
-    return null;
+    if (nearby.any((line) => line.text.contains('已付')) &&
+        splitAmounts.length >= 2) {
+      splitAmounts.sort((a, b) => b.$2.centerY.compareTo(a.$2.centerY));
+      return splitAmounts.first;
+    }
+    return splitAmounts.isEmpty ? null : splitAmounts.first;
   }
 
   static bool _plausibleDetailTitle(String text) {
