@@ -41,7 +41,7 @@ class FeatureTogglePage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  'PWA 不接入系统级截稿通知和 Windows 桌宠；其余开关继续使用 182 的业务逻辑。',
+                  'PWA 业务功能直接复用当前客户端组件；仅系统级截稿通知和 Windows 桌宠按平台能力关闭。',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
