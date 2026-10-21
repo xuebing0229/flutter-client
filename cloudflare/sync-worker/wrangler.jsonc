@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "adventurers-guild",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-21",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SYNC_ROOM",
+        "class_name": "SyncRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SyncRoom"]
+    }
+  ],
+  "assets": {
+    "directory": "../../build/web",
+    "binding": "ASSETS",
+    "run_worker_first": ["/sync", "/sync-health"]
+  }
+}
