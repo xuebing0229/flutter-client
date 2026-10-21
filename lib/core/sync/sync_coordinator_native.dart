@@ -321,13 +321,11 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
     _onLocalChanged();
   }
 
-  @override
   Set<String> get conflictedOrderIds => <String>{
     for (final item in _conflicts)
       if (item.kind == SyncEntityKind.order) item.recordId,
   };
 
-  @override
   Set<String> get conflictedProductIds => <String>{
     for (final item in _conflicts)
       if (item.kind == SyncEntityKind.product) item.recordId,
@@ -347,7 +345,6 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
     );
   }
 
-  @override
   Future<void> flushNow() async {
     if (_disposed || !_initialized) return;
     _changeDebounce?.cancel();
@@ -358,60 +355,6 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
 
   Future<List<Map<String, dynamic>>> exportPortableRecords() async {
     return (await exportPortableWorkspace()).syncRecords;
-  }
-
-  /// Lightweight portable-record snapshot for the browser-compatible relay.
-  ///
-  /// Unlike a full backup export this does not pause Syncthing or package
-  /// assets. It only flushes local CRDT changes and returns the canonical
-  /// record graph.
-  Future<List<Map<String, dynamic>>> exportPeerRecords() async {
-    if (_disposed || !_initialized) return const <Map<String, dynamic>>[];
-    _changeDebounce?.cancel();
-    return _enqueue(() async {
-      await _flushLocalChanges();
-      return _portableRecordsFromCurrentBaseline();
-    }, showBusy: false);
-  }
-
-  /// Merge records arriving from the browser-compatible relay into the same
-  /// on-disk graph Syncthing already uses, then apply the merged state.
-  Future<void> mergePeerRecords(List<Map<String, dynamic>> incoming) async {
-    if (_disposed || !_initialized || incoming.isEmpty) return;
-    _changeDebounce?.cancel();
-    await _enqueue(() async {
-      await _flushLocalChanges();
-
-      for (final raw in incoming) {
-        final decoded = SyncRecord.decode(jsonEncode(raw));
-        if (decoded.accountId != null && decoded.accountId != accountId) {
-          throw const FormatException('同步记录属于另一个账号');
-        }
-        if (decoded.fields['id']?.value != decoded.id) {
-          throw const FormatException('同步记录身份不一致');
-        }
-        final bound = decoded.copyWith(accountId: accountId);
-        final local = await _recordStore.readMergedRecord(
-          accountId: accountId,
-          kind: bound.kind,
-          recordId: bound.id,
-        );
-        final merged =
-            local == null ? bound : _mergeEngine.merge(local, bound);
-        await _recordStore.write(accountId: accountId, record: merged);
-      }
-
-      if (_transportPrepared) {
-        try {
-          await _bridge.requestScan(accountId: accountId);
-        } catch (_) {
-          // Relay sync has already succeeded locally; the next normal
-          // Syncthing scan can publish it to native peers.
-        }
-      }
-
-      await _reconcileFromSyncDirectory(seedMissing: false);
-    }, showBusy: false);
   }
 
   Future<PortableWorkspaceSnapshot> exportPortableWorkspace() {
