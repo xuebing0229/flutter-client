@@ -573,16 +573,12 @@ class _ReceiveAccountTransferPageState
                           : folderReady
                               ? '临时账号目录已经双方确认，正在接收账号信息……'
                               : sourceConnected
-                                  ? remoteFolderState == 'notSharing'
-                                      ? '设备已经连接，但临时账号目录尚未被原设备共享，双方正在持续自动修复……'
-                                      : remoteFolderState == 'paused'
-                                          ? '设备已经连接，但临时账号目录处于暂停状态，正在自动恢复……'
-                                          : '设备已经连接，正在完成临时账号目录握手……'
+                                  ? remoteFolderState == 'paused'
+                                      ? '设备已经连接，但临时账号目录处于暂停状态。请先让原设备扫描上面的回应二维码完成授权。'
+                                      : '两台设备已经连接，但还没有完成账号授权。请让原设备扫描上面的回应二维码；确认后会继续自动建立临时账号目录。'
                                   : responseConfirmed
                                       ? '原设备已确认，正在恢复同步连接……'
-                                      : sourceConnected
-                                          ? '两台设备已经连接，但仍需原设备扫描上面的回应二维码完成授权。'
-                                          : folderState == 'scanning'
+                                      : folderState == 'scanning'
                                           ? '同步通道已准备，正在连接原设备……'
                                           : '等待原设备确认并建立连接……',
                       textAlign: TextAlign.center,
