@@ -153,4 +153,9 @@ void main() {
     final picked = newsBetweenBuilds(190, 191);
     expect(picked.map((e) => e.title).toList(), ['重装后重新加入设备修复']);
   });
+
+  test('192 包含新设备回应码显示修复见闻', () {
+    final picked = newsBetweenBuilds(191, 192);
+    expect(picked.map((e) => e.title).toList(), ['新设备回应码显示修复']);
+  });
 }
