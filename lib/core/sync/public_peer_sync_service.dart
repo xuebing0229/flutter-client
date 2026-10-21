@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 
 import '../account/account_models.dart';
 import 'public_relay_client.dart';
-import 'public_webrtc_transport.dart';
 
 typedef PeerAccountStateReader = AccountSyncState Function();
 typedef PeerAccountStateMerger = Future<void> Function(AccountSyncState state);
@@ -19,12 +18,13 @@ typedef PeerAssetExists = Future<bool> Function(String relativePath);
 typedef PeerAssetReader = Future<Uint8List?> Function(String relativePath);
 typedef PeerAssetWriter =
     Future<void> Function(String relativePath, Uint8List bytes);
+typedef PeerTargetFilter = bool Function(AccountDevice device);
 
 /// Browser-compatible online sync that keeps the native Syncthing path intact.
 ///
-/// A public MQTT service is only a transient relay. Every application payload
-/// is AES-GCM encrypted before it leaves the device and retained messages are
-/// never used, so both devices still need to be online at the same time.
+/// Cloudflare only acts as an online transient relay. Every application payload
+/// is AES-GCM encrypted before it leaves the device and the relay stores no
+/// workspace messages, so both devices still need to be online at the same time.
 class PublicPeerSyncService extends ChangeNotifier {
   PublicPeerSyncService({
     required this.accountId,
@@ -37,11 +37,16 @@ class PublicPeerSyncService extends ChangeNotifier {
     this.assetExists,
     this.readAsset,
     this.writeAsset,
+    this.shouldTargetDevice,
   });
 
   static const String _topicRoot = 'adventurers-guild-peer/v1';
+  static const String _syncChannel = String.fromEnvironment(
+    'APP_CHANNEL',
+    defaultValue: 'release',
+  );
   static const int _chunkCharacters = 22000;
-  static const Duration _heartbeat = Duration(seconds: 12);
+  static const Duration _heartbeat = Duration(seconds: 30);
 
   final String accountId;
   final String deviceId;
@@ -53,6 +58,7 @@ class PublicPeerSyncService extends ChangeNotifier {
   final PeerAssetExists? assetExists;
   final PeerAssetReader? readAsset;
   final PeerAssetWriter? writeAsset;
+  final PeerTargetFilter? shouldTargetDevice;
 
   final AesGcm _cipher = AesGcm.with256bits();
   final Random _random = Random.secure();
@@ -62,7 +68,6 @@ class PublicPeerSyncService extends ChangeNotifier {
       <String, String>{};
 
   PublicRelayClient? _relay;
-  PublicPeerWebRtcTransport? _webrtc;
   StreamSubscription<PublicRelayMessage>? _relaySubscription;
   Timer? _heartbeatTimer;
   Timer? _syncDebounce;
@@ -85,14 +90,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     _starting = true;
     try {
       await _prepareRoom();
-      _webrtc = PublicPeerWebRtcTransport(
-        deviceId: deviceId,
-        sendSignal: _sendRtcSignal,
-        onFrame: (sender, frame) => _handleRelayMessage(
-          PublicRelayMessage(topic: _inboxTopic, payload: frame),
-        ),
-      );
-      final relay = PublicRelayClient(clientId: _mqttClientId());
+      final relay = PublicRelayClient(clientId: _relayClientId());
       _relay = relay;
       _relaySubscription = relay.messages.listen(
         (message) => unawaited(_handleRelayMessage(message)),
@@ -124,7 +122,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       });
     final anchor = devices.first;
     final seed =
-        'guild-peer-sync-v1\u0000$accountId\u0000${anchor.id}';
+        'guild-peer-sync-v2\u0000$_syncChannel\u0000$accountId\u0000${anchor.id}';
     final roomDigest = await Sha256().hash(utf8.encode(seed));
     final keyDigest = await Sha256().hash(
       utf8.encode('guild-peer-key-v1\u0000$seed'),
@@ -133,7 +131,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     _secretKey = SecretKey(keyDigest.bytes);
   }
 
-  String _mqttClientId() {
+  String _relayClientId() {
     final compact = base64Url
         .encode(utf8.encode(deviceId))
         .replaceAll('=', '');
@@ -172,9 +170,12 @@ class PublicPeerSyncService extends ChangeNotifier {
     _dropExpiredTransfers();
     if (_relay?.connected != true) {
       await _connectRelay();
-    }
-    if (_relay?.connected == true || _webrtc?.hasOpenPeer == true) {
-      await _publishSnapshot();
+      if (_relay?.connected == true) {
+        // Reconnecting is itself enough reason to offer a fresh snapshot.
+        // While the socket remains healthy we intentionally stay idle so the
+        // Durable Object can hibernate instead of processing periodic traffic.
+        requestSync(immediate: true);
+      }
     }
   }
 
@@ -195,7 +196,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (_disposed || _syncing) return;
     if (_relay?.connected != true) {
       await _connectRelay();
-      if (_relay?.connected != true && _webrtc?.hasOpenPeer != true) return;
+      if (_relay?.connected != true) return;
     }
 
     final state = captureAccountState();
@@ -204,7 +205,8 @@ class PublicPeerSyncService extends ChangeNotifier {
     final targets = <String>[
       for (final device in state.activeDevices)
         if (device.id != deviceId &&
-            (onlyTarget == null || device.id == onlyTarget))
+            (onlyTarget == null || device.id == onlyTarget) &&
+            (shouldTargetDevice?.call(device) ?? true))
           device.id,
     ];
     if (targets.isEmpty) return;
@@ -239,27 +241,10 @@ class PublicPeerSyncService extends ChangeNotifier {
     }
   }
 
-  Future<void> _sendRtcSignal(
-    String targetDeviceId,
-    Map<String, dynamic> signal,
-  ) {
-    return _sendEncrypted(
-      targetDeviceId,
-      <String, dynamic>{
-        'type': 'rtc-signal',
-        'accountId': accountId,
-        'sender': deviceId,
-        'signal': signal,
-      },
-      allowDirect: false,
-    );
-  }
-
   Future<void> _sendEncrypted(
     String targetDeviceId,
-    Map<String, dynamic> payload, {
-    bool allowDirect = true,
-  }) async {
+    Map<String, dynamic> payload,
+  ) async {
     final relay = _relay;
     final secretKey = _secretKey;
     if (secretKey == null) return;
@@ -290,20 +275,10 @@ class PublicPeerSyncService extends ChangeNotifier {
         'total': total,
         'data': protected.substring(start, end),
       });
-      var sentDirect = false;
-      if (allowDirect) {
-        try {
-          sentDirect = await _webrtc?.send(targetDeviceId, frame) ?? false;
-        } catch (_) {
-          sentDirect = false;
-        }
+      if (relay == null || !relay.connected) {
+        throw StateError('Cloudflare 同步中转尚未连接');
       }
-      if (!sentDirect) {
-        if (relay == null || !relay.connected) {
-          throw StateError('点对点连接不可用，公共同步网络也未连接');
-        }
-        relay.publish(_topicFor(targetDeviceId), frame);
-      }
+      relay.publish(_topicFor(targetDeviceId), frame);
       if (index % 8 == 7) {
         await Future<void>.delayed(const Duration(milliseconds: 8));
       }
@@ -405,15 +380,6 @@ class PublicPeerSyncService extends ChangeNotifier {
           break;
         case 'asset':
           await _receiveAsset(sender, payload);
-          break;
-        case 'rtc-signal':
-          final rawSignal = payload['signal'];
-          if (rawSignal is Map) {
-            await _webrtc?.handleSignal(
-              sender,
-              rawSignal.map((key, value) => MapEntry(key.toString(), value)),
-            );
-          }
           break;
       }
     } catch (_) {
@@ -543,9 +509,6 @@ class PublicPeerSyncService extends ChangeNotifier {
     _relaySubscription = null;
     final relay = _relay;
     _relay = null;
-    final webrtc = _webrtc;
-    _webrtc = null;
-    if (webrtc != null) unawaited(webrtc.dispose());
     if (relay != null) unawaited(relay.dispose());
     super.dispose();
   }
