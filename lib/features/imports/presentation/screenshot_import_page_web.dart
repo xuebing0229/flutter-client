@@ -268,7 +268,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 ' | 稿价=${candidate.price?.toString() ?? "未识别"}'
                 ' | 截稿=${candidate.detectedDate?.toIso8601String() ?? "未识别"}'
                 ' | 时间明确=${candidate.deadlineHasTime}'
-                ' | 进度=${candidate.progressPercent?.toString() ?? "未识别"}',
+                ' | 进度=${candidate.progressPercent?.toString() ?? "未识别"}'
+                ' | 节点=${candidate.recognizedNodeLabel ?? "未识别"}',
               );
               generated.add(_draft(
                 imageId: imageId,
@@ -286,6 +287,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 date: candidate.detectedDate,
                 hasTime: candidate.deadlineHasTime,
                 percentage: candidate.progressPercent,
+                recognizedNodeLabel: candidate.recognizedNodeLabel,
                 relative: candidate.relativeDeadlineText,
                 sourceStartY: candidate.sourceStartY,
                 sourceEndY: candidate.sourceEndY,
@@ -369,10 +371,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             }
           }
           row.presetId = preset.id;
-          row.nodeId = resolveImportNode(
+          row.nodeId = resolveScreenshotImportNodeId(
             preset: preset,
             recognizedPercent: row.recognizedPercent,
-          ).id;
+            recognizedNodeLabel: row.recognizedNodeLabel,
+          );
         }
       }
 
@@ -440,6 +443,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     DateTime? date,
     bool hasTime = false,
     int? percentage,
+    String? recognizedNodeLabel,
     String? relative,
   }) {
     final suggestedPreset = platform == null
@@ -464,9 +468,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         }
       }
     }
-    final selectedNode = resolveImportNode(
+    final selectedNodeId = resolveScreenshotImportNodeId(
       preset: presetForRow,
       recognizedPercent: percentage,
+      recognizedNodeLabel: recognizedNodeLabel,
     );
     return ScreenshotImportDraft(
       id: 'preview-' + DateTime.now().microsecondsSinceEpoch.toString() +
@@ -490,13 +495,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       detectedDate: date,
       sourceHasClock: hasTime,
       recognizedPercent: percentage,
+      recognizedNodeLabel: recognizedNodeLabel,
       relativeDeadline: relative,
       deadline: hasTime ? date : null,
       deadlineConfirmed: hasTime,
       feeEnabled: platform?.defaultFeeEnabled ?? false,
       saleType: _defaultSaleType,
       presetId: presetForRow.id,
-      nodeId: selectedNode.id,
+      nodeId: selectedNodeId,
     );
   }
 
@@ -843,10 +849,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           existingOrders: widget.orderStore.orders,
         );
         row.presetId = preset.id;
-        row.nodeId = resolveImportNode(
+        row.nodeId = resolveScreenshotImportNodeId(
           preset: preset,
           recognizedPercent: row.recognizedPercent,
-        ).id;
+          recognizedNodeLabel: row.recognizedNodeLabel,
+        );
       }
       _refreshDuplicateWarnings();
     });
@@ -966,7 +973,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           tags: normalizeOrderTags(row.tags),
           deadline: row.deadline,
           nodePresetId: preset.id,
-          nodePresetSnapshot: preset.snapshot(),
+          nodePresetSnapshot: screenshotImportPresetSnapshot(
+            preset: preset,
+            row: row,
+          ),
           currentNodeId: row.nodeId,
           price: row.price!,
           feeEnabled: row.feeEnabled,
@@ -1104,10 +1114,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                               existingOrders: widget.orderStore.orders,
                             );
                             row.presetId = preset.id;
-                            row.nodeId = resolveImportNode(
+                            row.nodeId = resolveScreenshotImportNodeId(
                               preset: preset,
                               recognizedPercent: row.recognizedPercent,
-                            ).id;
+                              recognizedNodeLabel: row.recognizedNodeLabel,
+                            );
                           }
                         }
                         _refreshDuplicateWarnings();
@@ -1118,10 +1129,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                         for (final row in _rows) {
                           if (!row.selected) continue;
                           row.presetId = preset.id;
-                          row.nodeId = resolveImportNode(
+                          row.nodeId = resolveScreenshotImportNodeId(
                             preset: preset,
                             recognizedPercent: row.recognizedPercent,
-                          ).id;
+                            recognizedNodeLabel: row.recognizedNodeLabel,
+                          );
                           row.presetManuallyChanged = true;
                           row.nodeManuallyChanged = false;
                         }
@@ -1358,16 +1370,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     child: TextFormField(
                       key: ValueKey('${row.id}-client-${row.clientInputRevision}'),
                       initialValue: row.clientName,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: '单主',
                         isDense: true,
-                        suffixIcon: row.clientBox == null ? null : IconButton(
-                          tooltip: '在原图定位单主',
-                          icon: const Icon(Icons.image_search_rounded),
-                          onPressed: () => unawaited(_inspectScreenshot(
-                            row, highlight: row.clientBox,
-                          )),
-                        ),
                       ),
                       onChanged: (value) => setState(() {
                         row.clientName = value;
@@ -1384,16 +1389,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: '稿价 ¥',
                       isDense: true,
-                      suffixIcon: row.priceBox == null ? null : IconButton(
-                        tooltip: '在原图定位稿价',
-                        icon: const Icon(Icons.image_search_rounded),
-                        onPressed: () => unawaited(_inspectScreenshot(
-                          row, highlight: row.priceBox,
-                        )),
-                      ),
                     ),
                     onChanged: (value) => setState(() {
                       row.price = double.tryParse(value.trim());
@@ -1538,6 +1536,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                             child: Text(node.name + ' ' +
                                 node.progressPercent.toString() + '%'),
                           ),
+                        if (isScreenshotOcrNodeId(row.nodeId) &&
+                            (row.recognizedNodeLabel?.trim().isNotEmpty ?? false))
+                          DropdownMenuItem(
+                            value: row.nodeId,
+                            child: Text(
+                              row.recognizedNodeLabel!.trim() + '（截图识别）',
+                            ),
+                          ),
                       ],
                       onChanged: (id) {
                         if (id == null) return;
@@ -1561,10 +1567,18 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       setState(() => row.feeEnabled = value ?? false),
                 ),
                 const Spacer(),
-                if (row.recognizedPercent != null && !_products)
-                  Text('截图进度 ' +
-                      row.recognizedPercent.toString() + '%',
-                      style: theme.textTheme.labelSmall),
+                if (!_products &&
+                    (row.recognizedPercent != null ||
+                        (row.recognizedNodeLabel?.trim().isNotEmpty ?? false)))
+                  Text(
+                    [
+                      if (row.recognizedNodeLabel?.trim().isNotEmpty ?? false)
+                        '截图节点 ' + row.recognizedNodeLabel!.trim(),
+                      if (row.recognizedPercent != null)
+                        '截图进度 ' + row.recognizedPercent.toString() + '%',
+                    ].join(' · '),
+                    style: theme.textTheme.labelSmall,
+                  ),
               ],
             ),
         ],
