@@ -16,6 +16,7 @@ import '../../orders/presentation/node_preset_page.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
+import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/pricing_preset_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'archive_page.dart';
@@ -48,6 +49,7 @@ class AppDrawer extends StatelessWidget {
     required this.productStore,
     required this.nodePresetStore,
     required this.pricingPresetStore,
+    required this.receiptStyleStore,
     required this.focusStore,
     required this.desktopPetSettings,
     required this.onOpenOrder,
@@ -67,6 +69,7 @@ class AppDrawer extends StatelessWidget {
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
   final PricingPresetStore pricingPresetStore;
+  final ReceiptStyleStore receiptStyleStore;
   final FocusStore focusStore;
   final DesktopPetSettings desktopPetSettings;
   final Future<void> Function(String orderId) onOpenOrder;
@@ -104,6 +107,7 @@ class AppDrawer extends StatelessWidget {
             productStore: productStore,
             nodePresetStore: nodePresetStore,
             pricingPresetStore: pricingPresetStore,
+            receiptStyleStore: receiptStyleStore,
             focusStore: focusStore,
             desktopPetSettings: desktopPetSettings,
             onOpenOrder: onOpenOrder,
@@ -143,6 +147,7 @@ class AppToolMenu extends StatelessWidget {
     required this.productStore,
     required this.nodePresetStore,
     required this.pricingPresetStore,
+    required this.receiptStyleStore,
     required this.focusStore,
     required this.desktopPetSettings,
     required this.onOpenOrder,
@@ -168,6 +173,7 @@ class AppToolMenu extends StatelessWidget {
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
   final PricingPresetStore pricingPresetStore;
+  final ReceiptStyleStore receiptStyleStore;
   final FocusStore focusStore;
   final DesktopPetSettings desktopPetSettings;
   final Future<void> Function(String orderId) onOpenOrder;
@@ -297,6 +303,7 @@ class AppToolMenu extends StatelessWidget {
               productStore: productStore,
               nodePresetStore: nodePresetStore,
               pricingPresetStore: pricingPresetStore,
+              receiptStyleStore: receiptStyleStore,
               featureStore: featureStore,
               syncCoordinator: syncCoordinator,
             ),
