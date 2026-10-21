@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
-import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_coordinator_view.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/order_detail_page.dart';
@@ -29,7 +29,7 @@ class ArchivePage extends StatefulWidget {
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
   final AppFeatureStore featureStore;
-  final SyncCoordinator syncCoordinator;
+  final SyncCoordinatorView syncCoordinator;
 
   @override
   State<ArchivePage> createState() => _ArchivePageState();
