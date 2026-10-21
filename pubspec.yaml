@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+186
-# beta-186: Cloudflare sync relay, receipt styles, OCR fixes, statistics and overview refinements
+# beta-186: Cloudflare sync relay, receipt styles, OCR fixes, statistics and overview refinements; test build
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
