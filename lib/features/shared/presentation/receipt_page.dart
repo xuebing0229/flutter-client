@@ -9,6 +9,7 @@ import '../../../core/finance/pricing_adjustments.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../products/domain/finished_product.dart';
+import '../../home/presentation/theme_color_picker.dart';
 import '../domain/receipt_style_store.dart';
 import 'layout_spacing.dart';
 
@@ -90,6 +91,8 @@ class _ReceiptPageState extends State<ReceiptPage> {
   final DataPortabilityFileBridge _fileBridge =
       const DataPortabilityFileBridge();
   bool _exporting = false;
+  String? _cachedBackgroundBase64;
+  MemoryImage? _cachedBackgroundImage;
 
   Future<void> _pickBackground() async {
     try {
@@ -124,79 +127,156 @@ class _ReceiptPageState extends State<ReceiptPage> {
   }
 
   Future<void> _pickFontColor() async {
-    final initial = Color(widget.styleStore.fontColorValue);
-    var hsv = HSVColor.fromColor(initial);
-    final picked = await showDialog<int>(
+    final picked = await showThemeColorPicker(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final color = hsv.toColor();
-          return AlertDialog(
-            title: const Text('字体颜色'),
-            content: SizedBox(
-              width: 330,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outlineVariant,
+      initialColor: Color(widget.styleStore.fontColorValue),
+      title: '字体颜色',
+    );
+    if (picked != null && mounted) {
+      widget.styleStore.setFontColorValue(picked.toARGB32());
+    }
+  }
+
+  MemoryImage? _backgroundImage() {
+    final raw = widget.styleStore.backgroundImageBase64;
+    if (raw == null || raw.isEmpty) {
+      _cachedBackgroundBase64 = null;
+      _cachedBackgroundImage = null;
+      return null;
+    }
+    if (_cachedBackgroundBase64 == raw && _cachedBackgroundImage != null) {
+      return _cachedBackgroundImage;
+    }
+    try {
+      final image = MemoryImage(base64Decode(raw));
+      _cachedBackgroundBase64 = raw;
+      _cachedBackgroundImage = image;
+      return image;
+    } catch (_) {
+      _cachedBackgroundBase64 = null;
+      _cachedBackgroundImage = null;
+      return null;
+    }
+  }
+
+  Future<void> _resetStyle() async {
+    widget.styleStore.resetDefault();
+  }
+
+  Future<void> _saveCurrentStylePreset() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('保存样式预设'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 20,
+          decoration: const InputDecoration(labelText: '名称'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    widget.styleStore.saveCurrentPreset(name);
+  }
+
+  Future<void> _showStylePresets() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      builder: (sheetContext) => AnimatedBuilder(
+        animation: widget.styleStore,
+        builder: (context, _) {
+          final presets = widget.styleStore.presets;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '样式预设',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  _ColorSlider(
-                    label: '色相',
-                    value: hsv.hue,
-                    max: 360,
-                    onChanged: (value) =>
-                        setDialogState(() => hsv = hsv.withHue(value)),
-                  ),
-                  _ColorSlider(
-                    label: '饱和',
-                    value: hsv.saturation * 100,
-                    max: 100,
-                    onChanged: (value) => setDialogState(
-                      () => hsv = hsv.withSaturation(value / 100),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                if (presets.isNotEmpty)
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: presets.length,
+                      itemBuilder: (context, index) {
+                        final preset = presets[index];
+                        return ListTile(
+                          onTap: () {
+                            widget.styleStore.applyPreset(preset.id);
+                            Navigator.of(sheetContext).pop();
+                          },
+                          leading: CircleAvatar(
+                            backgroundColor: Color(preset.fontColorValue),
+                            radius: 13,
+                          ),
+                          title: Text(preset.name),
+                          trailing: IconButton(
+                            tooltip: '删除',
+                            onPressed: () =>
+                                widget.styleStore.deletePreset(preset.id),
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                  _ColorSlider(
-                    label: '明度',
-                    value: hsv.value * 100,
-                    max: 100,
-                    onChanged: (value) => setDialogState(
-                      () => hsv = hsv.withValue(value / 100),
-                    ),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {
+                      Navigator.of(sheetContext).pop();
+                      _saveCurrentStylePreset();
+                    },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('保存当前样式'),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () =>
-                    Navigator.of(dialogContext).pop(color.toARGB32()),
-                child: const Text('确定'),
-              ),
-            ],
           );
         },
       ),
     );
-    if (picked != null) widget.styleStore.setFontColorValue(picked);
   }
 
   Future<void> _exportReceipt() async {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
+      final backgroundImage = _backgroundImage();
+      if (backgroundImage != null) {
+        await precacheImage(backgroundImage, context);
+      }
       await WidgetsBinding.instance.endOfFrame;
       final boundary = _receiptKey.currentContext?.findRenderObject();
       if (boundary is! RenderRepaintBoundary) {
@@ -240,15 +320,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
       animation: widget.styleStore,
       builder: (context, _) {
         final style = widget.styleStore;
-        final background = style.backgroundImageBase64;
-        MemoryImage? backgroundImage;
-        if (background != null && background.isNotEmpty) {
-          try {
-            backgroundImage = MemoryImage(base64Decode(background));
-          } catch (_) {
-            backgroundImage = null;
-          }
-        }
+        final backgroundImage = _backgroundImage();
 
         return Scaffold(
           appBar: AppBar(
@@ -275,12 +347,6 @@ class _ReceiptPageState extends State<ReceiptPage> {
                           : '更换背景图',
                     ),
                   ),
-                  if (style.backgroundImageBase64 != null)
-                    OutlinedButton.icon(
-                      onPressed: style.clearBackgroundImage,
-                      icon: const Icon(Icons.restart_alt_rounded),
-                      label: const Text('恢复白底'),
-                    ),
                   OutlinedButton.icon(
                     onPressed: _pickFontColor,
                     icon: Icon(
@@ -288,6 +354,16 @@ class _ReceiptPageState extends State<ReceiptPage> {
                       color: Color(style.fontColorValue),
                     ),
                     label: const Text('字体颜色'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _showStylePresets,
+                    icon: const Icon(Icons.bookmarks_outlined),
+                    label: const Text('样式预设'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: style.isDefault ? null : _resetStyle,
+                    icon: const Icon(Icons.restart_alt_rounded),
+                    label: const Text('恢复默认'),
                   ),
                 ],
               ),
@@ -547,38 +623,6 @@ class _DashedDividerPainter extends CustomPainter {
   @override
   bool shouldRepaint(_DashedDividerPainter oldDelegate) =>
       oldDelegate.color != color;
-}
-
-class _ColorSlider extends StatelessWidget {
-  const _ColorSlider({
-    required this.label,
-    required this.value,
-    required this.max,
-    required this.onChanged,
-  });
-  final String label;
-  final double value;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          SizedBox(width: 44, child: Text(label)),
-          Expanded(
-            child: Slider(
-              value: value.clamp(0, max).toDouble(),
-              min: 0,
-              max: max,
-              onChanged: onChanged,
-            ),
-          ),
-          SizedBox(
-            width: 42,
-            child: Text(value.round().toString(), textAlign: TextAlign.right),
-          ),
-        ],
-      );
 }
 
 String _money(double value) {

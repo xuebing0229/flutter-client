@@ -47,7 +47,7 @@ class PricingPresetSelector extends StatelessWidget {
             const SizedBox(height: 8),
             if (presets.isEmpty && detached.isEmpty)
               Text(
-                '还没有加价预设，可在侧栏的“加价预设”里新建。',
+                '暂无加价预设',
                 style: TextStyle(color: colors.onSurfaceVariant),
               )
             else
@@ -74,15 +74,7 @@ class PricingPresetSelector extends StatelessWidget {
                     ),
                 ],
               ),
-            if (selected.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                '已套用 ${selected.length} 个预设；保存后会冻结当前规则，之后修改预设不会影响这条记录。',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-              ),
-            ],
+
           ],
         );
       },

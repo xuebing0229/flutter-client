@@ -53,14 +53,14 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return sales;
   }
 
-  double _pendingForCurrentMonth() {
-    final now = DateTime.now();
+  double _pendingFor(DateTime month) {
     return widget.store.orders.where((order) {
       final deadline = order.deadline;
       return !order.isArchived &&
+          !order.isCompleted &&
           deadline != null &&
-          deadline.year == now.year &&
-          deadline.month == now.month;
+          deadline.year == month.year &&
+          deadline.month == month.month;
     }).fold<double>(0, (sum, order) => sum + order.realIncome);
   }
 
@@ -208,9 +208,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final monthSales = _productSalesFor(_selectedMonth);
         final total = _totalFor(_selectedMonth);
         final platformTotals = _platformTotals(_selectedMonth);
-        final now = DateTime.now();
-        final pendingThisMonth = _pendingForCurrentMonth();
-        final yearTotal = _yearTotal(now.year);
+        final pendingThisMonth = _pendingFor(_selectedMonth);
+        final yearTotal = _yearTotal(_selectedMonth.year);
 
         return ListView(
           padding: AppLayoutSpacing.tabScrollPadding(
@@ -233,7 +232,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             _PeriodOverviewCard(
               monthPending: pendingThisMonth,
               yearIncome: yearTotal,
-              year: now.year,
+              year: _selectedMonth.year,
             ),
             const SizedBox(height: 12),
             _SummaryCard(
@@ -284,8 +283,7 @@ class _PeriodOverviewCard extends StatelessWidget {
             child: _PeriodMetric(
               label: '本月待收入',
               value: monthPending,
-              caption: '按本月截稿且尚未归档的排单',
-              color: colors.primary,
+              helpText: '本月截稿且尚未完成归档的排单。',
             ),
           ),
           Container(
@@ -298,8 +296,7 @@ class _PeriodOverviewCard extends StatelessWidget {
             child: _PeriodMetric(
               label: '$year 年度收入',
               value: yearIncome,
-              caption: '已结算排单 + 成品售出',
-              color: colors.secondary,
+              helpText: '已结算排单 + 成品售出',
             ),
           ),
         ],
@@ -312,46 +309,68 @@ class _PeriodMetric extends StatelessWidget {
   const _PeriodMetric({
     required this.label,
     required this.value,
-    required this.caption,
-    required this.color,
+    required this.helpText,
   });
 
   final String label;
   final double value;
-  final String caption;
-  final Color color;
+  final String helpText;
+
+  void _showHelp(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text(helpText),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
               ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              borderRadius: BorderRadius.circular(99),
+              onTap: () => _showHelp(context),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(
+                  Icons.help_outline_rounded,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 10),
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: Text(
             '¥ ${_money(value)}',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w900,
-                  color: color,
                 ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          caption,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
         ),
       ],
     );

@@ -21,6 +21,113 @@ class OrderSummaryCardCompactLayout {
   final bool reserveAction;
 }
 
+class OrderOverviewSummaryCard extends StatelessWidget {
+  const OrderOverviewSummaryCard({
+    required this.order,
+    required this.onTap,
+    this.onLongPress,
+    this.showClient = true,
+    this.hasSyncConflict = false,
+    super.key,
+  });
+
+  static const double designWidth = 132;
+  static const double designHeight = 126;
+  static const double aspectRatio = designWidth / designHeight;
+
+  final QueueOrder order;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool showClient;
+  final bool hasSyncConflict;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+    );
+
+    return FittedBox(
+      fit: BoxFit.fill,
+      child: SizedBox(
+        width: designWidth,
+        height: designHeight,
+        child: SummaryCardSurface(
+          compact: true,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SummaryTag(
+                    text: order.platform.label,
+                    compact: true,
+                  ),
+                  const Spacer(),
+                  if (hasSyncConflict) ...[
+                    const Tooltip(
+                      message: '有同步冲突待确认',
+                      child: _SyncConflictDot(),
+                    ),
+                    const SizedBox(width: 7),
+                  ],
+                  if (order.isPinned)
+                    Icon(
+                      Icons.push_pin_rounded,
+                      size: 16,
+                      color: colors.primary,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _DeadlineStatusBadge(
+                  order: order,
+                  compact: true,
+                  neverEllipsize: true,
+                ),
+              ),
+              const SizedBox(height: 9),
+              Text(
+                order.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              ),
+              if (showClient) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person_outline_rounded,
+                      size: 16,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        order.clientName.isEmpty ? '未填写' : order.clientName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class OrderSummaryCard extends StatelessWidget {
   const OrderSummaryCard({
     required this.order,
