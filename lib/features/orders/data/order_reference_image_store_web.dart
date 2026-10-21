@@ -1,17 +1,14 @@
 import 'dart:convert';
-import 'dart:html' as html;
-import 'dart:indexed_db';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 
+import '../../../core/web/web_platform_bridge.dart';
+
 import '../domain/queue_order.dart';
 
 class OrderReferenceImageStore {
-  static const String _databaseName = 'adventurers-guild-web-assets-v1';
-  static const String _storeName = 'referenceImages';
-
   static const Set<String> _supportedImageExtensions = <String>{
     '.png',
     '.jpg',
@@ -109,23 +106,7 @@ class OrderReferenceImageStore {
     required String relativePath,
   }) async {
     _validateRelativePath(relativePath);
-    final db = await _openDatabase();
-    try {
-      final transaction = db.transaction(_storeName, 'readonly');
-      final store = transaction.objectStore(_storeName);
-      final value = await store.getObject(_assetKey(accountId, relativePath));
-      await transaction.completed;
-      if (value == null) return null;
-      if (value is ByteBuffer) return Uint8List.view(value);
-      if (value is Uint8List) return value;
-      if (value is List<int>) return Uint8List.fromList(value);
-      if (value is List) {
-        return Uint8List.fromList(value.whereType<num>().map((e) => e.toInt()).toList());
-      }
-      throw const FormatException('浏览器里的参考图数据格式无效。');
-    } finally {
-      db.close();
-    }
+    return webAssetRead(_assetKey(accountId, relativePath));
   }
 
   Future<void> writeAssetBytes({
@@ -134,15 +115,7 @@ class OrderReferenceImageStore {
     required Uint8List bytes,
   }) async {
     _validateRelativePath(relativePath);
-    final db = await _openDatabase();
-    try {
-      final transaction = db.transaction(_storeName, 'readwrite');
-      final store = transaction.objectStore(_storeName);
-      await store.put(bytes, _assetKey(accountId, relativePath));
-      await transaction.completed;
-    } finally {
-      db.close();
-    }
+    await webAssetWrite(_assetKey(accountId, relativePath), bytes);
   }
 
   Future<void> deleteImages({
@@ -150,26 +123,13 @@ class OrderReferenceImageStore {
     required Iterable<OrderReferenceImage> images,
     bool requestScan = true,
   }) async {
-    final paths = <String>[
-      for (final image in images) image.relativePath,
-    ];
-    if (paths.isEmpty) return;
-
-    final db = await _openDatabase();
-    try {
-      final transaction = db.transaction(_storeName, 'readwrite');
-      final store = transaction.objectStore(_storeName);
-      for (final path in paths) {
-        try {
-          _validateRelativePath(path);
-          await store.delete(_assetKey(accountId, path));
-        } catch (_) {
-          // Stale metadata should not block normal editing.
-        }
+    for (final image in images) {
+      try {
+        _validateRelativePath(image.relativePath);
+        await webAssetDelete(_assetKey(accountId, image.relativePath));
+      } catch (_) {
+        // Stale metadata should not block normal editing.
       }
-      await transaction.completed;
-    } finally {
-      db.close();
     }
   }
 
@@ -177,24 +137,13 @@ class OrderReferenceImageStore {
     required String accountId,
     required Iterable<String> relativePaths,
   }) async {
-    final paths = relativePaths.toSet();
-    if (paths.isEmpty) return;
-
-    final db = await _openDatabase();
-    try {
-      final transaction = db.transaction(_storeName, 'readwrite');
-      final store = transaction.objectStore(_storeName);
-      for (final path in paths) {
-        try {
-          _validateRelativePath(path);
-          await store.delete(_assetKey(accountId, path));
-        } catch (_) {
-          // A stale optional bundle asset must not block the rest of import.
-        }
+    for (final path in relativePaths.toSet()) {
+      try {
+        _validateRelativePath(path);
+        await webAssetDelete(_assetKey(accountId, path));
+      } catch (_) {
+        // A stale optional bundle asset must not block the rest of import.
       }
-      await transaction.completed;
-    } finally {
-      db.close();
     }
   }
 
@@ -214,50 +163,12 @@ class OrderReferenceImageStore {
     if (bytes == null) {
       throw StateError('参考图文件还没有导入到当前网页。');
     }
-    _downloadBytes(
+    webDownloadBytes(
       fileName: image.fileName,
       bytes: bytes,
       mimeType: _mimeType(image.fileName),
     );
     return true;
-  }
-
-  void _downloadBytes({
-    required String fileName,
-    required Uint8List bytes,
-    required String mimeType,
-  }) {
-    final blob = html.Blob(<Object>[bytes], mimeType);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..download = fileName
-      ..style.display = 'none';
-    html.document.body?.append(anchor);
-    try {
-      anchor.click();
-    } finally {
-      anchor.remove();
-      html.Url.revokeObjectUrl(url);
-    }
-  }
-
-  Future<Database> _openDatabase() async {
-    final factory = html.window.indexedDB;
-    if (factory == null) {
-      throw StateError('当前浏览器不支持本地参考图存储。');
-    }
-
-    return factory.open(
-      _databaseName,
-      version: 1,
-      onUpgradeNeeded: (VersionChangeEvent event) {
-        final request = event.target as Request;
-        final db = request.result as Database;
-        if (db.objectStoreNames?.contains(_storeName) != true) {
-          db.createObjectStore(_storeName);
-        }
-      },
-    );
   }
 
   String _assetKey(String accountId, String relativePath) =>
