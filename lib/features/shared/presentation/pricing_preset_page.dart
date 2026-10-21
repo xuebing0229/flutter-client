@@ -290,7 +290,7 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
             subtitle: Text(preview.formulaLabel),
           ),
           Text(
-            '同一个预设按“倍率 → 百分比 → 固定金额”的顺序计算；多个预设按套用顺序继续计算。',
+            '倍率和百分比按套用顺序计算；所有固定金额统一最后加减，不会被后续倍率重复放大。',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
