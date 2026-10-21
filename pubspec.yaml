@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+190
-# beta-190: overview input, statistics layout/help and OCR preview cleanup
+# beta-190: overview input, statistics layout/help and OCR preview cleanup; normal release build
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
