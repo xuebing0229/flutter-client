@@ -1457,7 +1457,7 @@ class _OrderOverviewCard extends StatelessWidget {
     final secondLine = [
       if (client.isNotEmpty) client,
       order.title,
-      '¥${_formatMoney(order.originalTotal)}',
+      '¥${order.originalTotal == order.originalTotal.roundToDouble() ? order.originalTotal.toStringAsFixed(0) : order.originalTotal.toStringAsFixed(2)}',
     ].join(' / ');
 
     return Card(
