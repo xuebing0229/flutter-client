@@ -18,6 +18,7 @@ class PublicRelayClient {
 
   static const String _configuredRelayUrl = String.fromEnvironment(
     'PUBLIC_SYNC_RELAY_URL',
+    defaultValue: 'https://guild.apixb.top/sync',
   );
 
   final String clientId;
