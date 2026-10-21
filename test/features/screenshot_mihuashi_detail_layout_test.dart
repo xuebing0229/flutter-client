@@ -197,6 +197,72 @@ void main() {
     expect(found.single.price, 740);
   });
 
+  test('actual order-style MiHuashi detail parses full payment accurately', () {
+    final lines = [
+      box('订单', 111, x: 304),
+      box('【常驻】黑白摸鱼头3.0', 219, x: 208),
+      box('距截稿时间 2026-11-30 23:59 还有 40 天', 312, x: 191),
+      box('y照', 425, x: 116),
+      box('创作节点', 552, x: 32),
+      box('60%', 603, x: 83),
+      box('已全额支付', 557, x: 437),
+      box('￥94', 604, x: 437),
+      box('稿件夹', 730, x: 33),
+      box('进程动态', 730, x: 188),
+      box('参考信息', 730, x: 370),
+      box('0 B/5.0 GB', 820, x: 34),
+      box('共 0 个文件', 820, x: 555),
+    ];
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.title, '【常驻】黑白摸鱼头3.0');
+    expect(found.single.clientName, 'y照');
+    expect(found.single.price, 94);
+    expect(found.single.progressPercent, 60);
+    expect(
+      found.single.importReadyDeadline,
+      DateTime(2026, 11, 30, 23, 59),
+    );
+  });
+
+  test('actual workbench-style MiHuashi detail parses full payment accurately', () {
+    final lines = [
+      box('工作板', 111, x: 304),
+      box('邀请您价目表中的人head气球', 231, x: 32),
+      box('距截稿日 2026-12-31 还有 71 天', 307, x: 32),
+      box('W落秋', 391, x: 116),
+      box('验收节点', 505, x: 32),
+      box('80%', 561, x: 81),
+      box('已全额支付', 512, x: 437),
+      box('￥105', 561, x: 437),
+      box('稿件夹', 690, x: 32),
+      box('进程动态', 690, x: 188),
+      box('参考信息', 690, x: 370),
+      box('0 B/5.0 GB', 789, x: 32),
+      box('共 0 个文件', 789, x: 555),
+    ];
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.title, '邀请您价目表中的人head气球');
+    expect(found.single.clientName, 'W落秋');
+    expect(found.single.price, 105);
+    expect(found.single.progressPercent, 80);
+    expect(found.single.detectedDate, DateTime(2026, 12, 31));
+    expect(found.single.deadlineHasTime, isFalse);
+  });
+
   test('normal vertically stacked commission list is not a detail page', () {
     final lines = [
       box('进行中', 115, x: 167),
