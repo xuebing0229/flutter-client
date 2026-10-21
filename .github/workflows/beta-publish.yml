@@ -500,3 +500,13 @@ jobs:
           git commit -m "beta: publish ${VERSION} (${BUILD})"
           git push
 
+          cp version.json "$RUNNER_TEMP/beta-pwa-version.json"
+          git fetch origin deploy/beta-pwa
+          git checkout deploy/beta-pwa
+          cp "$RUNNER_TEMP/beta-pwa-version.json" version.json
+          git add version.json
+          if ! git diff --cached --quiet; then
+            git commit -m "beta-pwa: publish ${VERSION} (${BUILD})"
+            git push origin deploy/beta-pwa
+          fi
+
