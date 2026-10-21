@@ -453,7 +453,12 @@ class _ReceiveAccountTransferPageState
     final sourceConnected = transferStatus?.sourceConnected == true;
     final folderReady = transferStatus?.folderReady == true;
     final payloadReceived = transferStatus?.payloadReceived == true;
-    final peerConfirmed = sourceConnected || _folderReadyOnce || folderReady;
+    // Device connectivity happens before the original device authenticates
+    // the response code. Do NOT treat a connected Syncthing peer as proof that
+    // the original device has confirmed this join; otherwise the response QR
+    // disappears before the user can scan it and the source never shares the
+    // bootstrap folder.
+    final responseConfirmed = _folderReadyOnce || folderReady;
     final remoteFolderState = transferStatus?.remoteFolderState;
     final folderState = transferStatus?.folderState;
 
@@ -501,7 +506,7 @@ class _ReceiveAccountTransferPageState
                       textAlign: TextAlign.center,
                     ),
                   ] else ...[
-                    if (!peerConfirmed) ...[
+                    if (!responseConfirmed) ...[
                       const Text(
                         '请让原设备扫描下面的回应二维码',
                         style: TextStyle(fontWeight: FontWeight.w800),
@@ -521,7 +526,9 @@ class _ReceiveAccountTransferPageState
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        '如果不方便扫码，也可以复制回应码，在原设备「添加设备」页面粘贴确认。',
+                        sourceConnected
+                            ? '两台设备已经连上，但还没有完成账号授权。请让原设备扫描上面的回应二维码，或复制回应码回原设备确认。'
+                            : '如果不方便扫码，也可以复制回应码，在原设备「添加设备」页面粘贴确认。',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: colors.onSurfaceVariant),
                       ),
@@ -571,9 +578,11 @@ class _ReceiveAccountTransferPageState
                                       : remoteFolderState == 'paused'
                                           ? '设备已经连接，但临时账号目录处于暂停状态，正在自动恢复……'
                                           : '设备已经连接，正在完成临时账号目录握手……'
-                                  : peerConfirmed
+                                  : responseConfirmed
                                       ? '原设备已确认，正在恢复同步连接……'
-                                      : folderState == 'scanning'
+                                      : sourceConnected
+                                          ? '两台设备已经连接，但仍需原设备扫描上面的回应二维码完成授权。'
+                                          : folderState == 'scanning'
                                           ? '同步通道已准备，正在连接原设备……'
                                           : '等待原设备确认并建立连接……',
                       textAlign: TextAlign.center,
