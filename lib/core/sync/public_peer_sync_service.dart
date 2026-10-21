@@ -39,6 +39,10 @@ class PublicPeerSyncService extends ChangeNotifier {
   });
 
   static const String _topicRoot = 'adventurers-guild-peer/v1';
+  static const String _syncChannel = String.fromEnvironment(
+    'APP_CHANNEL',
+    defaultValue: 'release',
+  );
   static const int _chunkCharacters = 22000;
   static const Duration _heartbeat = Duration(seconds: 30);
 
@@ -115,7 +119,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       });
     final anchor = devices.first;
     final seed =
-        'guild-peer-sync-v1\u0000$accountId\u0000${anchor.id}';
+        'guild-peer-sync-v2\u0000$_syncChannel\u0000$accountId\u0000${anchor.id}';
     final roomDigest = await Sha256().hash(utf8.encode(seed));
     final keyDigest = await Sha256().hash(
       utf8.encode('guild-peer-key-v1\u0000$seed'),
