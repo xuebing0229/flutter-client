@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'account_models.dart';
+import 'account_state_mutations.dart';
 import 'activation_api.dart';
 import 'device_descriptor.dart';
 import 'offline_license.dart';
@@ -882,32 +883,15 @@ class AccountStore extends ChangeNotifier {
   }
 
   Future<void> renameDevice(String deviceId, String name) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed.length > 40) {
-      throw const FormatException('设备名称需要在 1–40 个字符之间。');
-    }
-
     final record = _selectedRecord;
     if (record == null) return;
-    if (record.syncState.isRevoked(deviceId)) {
-      throw const FormatException('已解绑设备不能修改名称。');
-    }
-
-    final current = record.syncState.devices[deviceId];
-    if (current == null) {
-      throw const FormatException('这台设备已经不存在。');
-    }
-
-    final devices = <String, AccountDevice>{...record.syncState.devices};
-    devices[deviceId] = current.copyWith(
-      name: trimmed,
-      nameUpdatedAt: DateTime.now().toUtc(),
-    );
-
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(devices: devices),
+      syncState: renameAccountDeviceState(
+        record.syncState,
+        deviceId: deviceId,
+        name: name,
+      ),
     );
-
     await _save();
     notifyListeners();
   }
@@ -919,22 +903,11 @@ class AccountStore extends ChangeNotifier {
   }
 
   Future<void> renameAccount(String name) async {
-    final trimmed = name.trim();
-    if (trimmed.length < 2 || trimmed.length > 32) {
-      throw const FormatException('账号名长度需要在 2–32 个字符之间。');
-    }
-
     final record = _selectedRecord;
     if (record == null) return;
-
-    final now = DateTime.now().toUtc();
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(
-        accountName: trimmed,
-        accountNameUpdatedAt: now,
-      ),
+      syncState: renameAccountState(record.syncState, name),
     );
-
     await _save();
     notifyListeners();
   }
@@ -972,46 +945,27 @@ class AccountStore extends ChangeNotifier {
     if (record == null || !isUnlocked) {
       throw const FormatException('当前账号未登录，不能修改密码。');
     }
-    if (currentPassword != record.syncState.password) {
-      throw const FormatException('当前密码不正确。');
-    }
-    if (newPassword.length < 6) {
-      throw const FormatException('新密码至少需要 6 个字符。');
-    }
-
-    final now = DateTime.now().toUtc();
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(
-        password: newPassword,
-        passwordUpdatedAt: now,
+      syncState: changeAccountPasswordState(
+        record.syncState,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
       ),
     );
-
     await _save();
     notifyListeners();
   }
 
   Future<void> revokeDevice(String deviceId) async {
     final record = _selectedRecord;
-    if (record == null || !record.syncState.devices.containsKey(deviceId)) {
-      return;
-    }
-    if (deviceId == record.currentDeviceId) {
-      throw const FormatException('当前设备不能在这里解绑。');
-    }
-
-    final revocations = <String, DeviceRevocation>{
-      ...record.syncState.revocations,
-    };
-    revocations[deviceId] = DeviceRevocation(
-      deviceId: deviceId,
-      revokedAt: DateTime.now().toUtc(),
-    );
-
+    if (record == null) return;
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(revocations: revocations),
+      syncState: revokeAccountDeviceState(
+        record.syncState,
+        currentDeviceId: record.currentDeviceId,
+        deviceId: deviceId,
+      ),
     );
-
     await _save();
     notifyListeners();
   }
