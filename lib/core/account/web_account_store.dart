@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'account_models.dart';
+import 'account_state_mutations.dart';
 import 'offline_license.dart';
 import '../web/web_platform_bridge.dart';
 
@@ -110,6 +111,14 @@ class WebAccountStore extends ChangeNotifier {
   String? get currentDeviceId => _selectedRecord?.currentDeviceId;
   AccountSyncState? get syncSnapshot => _selectedRecord?.syncState;
   bool get isUnlocked => status == WebAccountStatus.unlocked;
+
+  List<AccountDevice> get activeDevices {
+    final state = syncSnapshot;
+    if (state == null) return const <AccountDevice>[];
+    final devices = state.activeDevices.toList()
+      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    return devices;
+  }
 
   List<WebLocalAccountSummary> get localAccounts {
     final result = <WebLocalAccountSummary>[
@@ -336,6 +345,69 @@ class WebAccountStore extends ChangeNotifier {
     await _persist();
     notifyListeners();
     return true;
+  }
+
+  Future<void> renameDevice(String deviceId, String name) async {
+    final record = _selectedRecord;
+    if (record == null) return;
+    _accounts[record.syncState.accountId] = record.copyWith(
+      syncState: renameAccountDeviceState(
+        record.syncState,
+        deviceId: deviceId,
+        name: name,
+      ),
+    );
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> renameCurrentDevice(String name) {
+    final id = currentDeviceId;
+    if (id == null) return Future<void>.value();
+    return renameDevice(id, name);
+  }
+
+  Future<void> renameAccount(String name) async {
+    final record = _selectedRecord;
+    if (record == null) return;
+    _accounts[record.syncState.accountId] = record.copyWith(
+      syncState: renameAccountState(record.syncState, name),
+    );
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final record = _selectedRecord;
+    if (record == null || !isUnlocked) {
+      throw const FormatException('当前账号未登录，不能修改密码。');
+    }
+    _accounts[record.syncState.accountId] = record.copyWith(
+      syncState: changeAccountPasswordState(
+        record.syncState,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      ),
+    );
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> revokeDevice(String deviceId) async {
+    final record = _selectedRecord;
+    if (record == null) return;
+    _accounts[record.syncState.accountId] = record.copyWith(
+      syncState: revokeAccountDeviceState(
+        record.syncState,
+        currentDeviceId: record.currentDeviceId,
+        deviceId: deviceId,
+      ),
+    );
+    await _persist();
+    notifyListeners();
   }
 
   Future<void> lock() async {
