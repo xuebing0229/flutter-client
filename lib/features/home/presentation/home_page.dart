@@ -875,6 +875,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  void _onSharedWorkspaceSettingChanged() {
+    if (!mounted) return;
+    _scheduleSave();
+    if (_ready) {
+      _syncCoordinator.notifySettingsChanged();
+    }
+  }
+
   @override
   void didChangePlatformBrightness() {
     super.didChangePlatformBrightness();
@@ -895,7 +903,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       for (final entry in features.entries)
         '$_featureSettingPrefix${entry.key}': entry.value,
       _orderCardViewSettingKey: _orderCardView,
+      _orderOverviewViewSettingKey: _orderOverviewView,
+      _orderOverviewCardWidthSettingKey: _orderOverviewCardWidth,
       _productCardViewSettingKey: _productCardView,
+      _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
+      _receiptStyleSettingKey: _receiptStyleStore.toJson(),
       _orderSortModeSettingKey: _orderSortMode,
       _productSortModeSettingKey: _productSortMode,
       _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
@@ -988,11 +1000,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await widget.featureStore.applyJson(nextFeatures);
     }
 
+    if (settings.containsKey(_pricingPresetsSettingKey)) {
+      _pricingPresetStore.applyJson(settings[_pricingPresetsSettingKey]);
+    }
+    if (settings.containsKey(_receiptStyleSettingKey)) {
+      _receiptStyleStore.applyJson(settings[_receiptStyleSettingKey]);
+    }
+
     var layoutChanged = false;
     final nextOrderCardView = settings[_orderCardViewSettingKey];
     if (nextOrderCardView is bool && nextOrderCardView != _orderCardView) {
       _orderCardView = nextOrderCardView;
       layoutChanged = true;
+    }
+    final nextOverviewView = settings[_orderOverviewViewSettingKey];
+    if (nextOverviewView is bool && nextOverviewView != _orderOverviewView) {
+      _orderOverviewView = nextOverviewView;
+      layoutChanged = true;
+    }
+    final nextOverviewWidth = settings[_orderOverviewCardWidthSettingKey];
+    if (nextOverviewWidth is num && nextOverviewWidth.isFinite) {
+      final normalized = nextOverviewWidth.toDouble().clamp(72, 280).toDouble();
+      if (normalized != _orderOverviewCardWidth) {
+        _orderOverviewCardWidth = normalized;
+        layoutChanged = true;
+      }
+    } else if (nextOverviewWidth != null) {
+      throw const FormatException('同步总概览卡片大小格式无效。');
     }
     final nextProductCardView = settings[_productCardViewSettingKey];
     if (nextProductCardView is bool &&
