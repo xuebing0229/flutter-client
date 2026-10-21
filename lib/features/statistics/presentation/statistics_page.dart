@@ -53,6 +53,31 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return sales;
   }
 
+  double _pendingForCurrentMonth() {
+    final now = DateTime.now();
+    return widget.store.orders.where((order) {
+      final deadline = order.deadline;
+      return !order.isArchived &&
+          deadline != null &&
+          deadline.year == now.year &&
+          deadline.month == now.month;
+    }).fold<double>(0, (sum, order) => sum + order.realIncome);
+  }
+
+  double _yearTotal(int year) {
+    var total = widget.store.orders.where((order) {
+      final incomeAt = _incomeDate(order);
+      return order.isArchived && incomeAt != null && incomeAt.year == year;
+    }).fold<double>(0, (sum, order) => sum + order.settlementIncome);
+
+    for (final product in widget.productStore.products) {
+      final count =
+          product.saleRecords.where((soldAt) => soldAt.year == year).length;
+      total += product.realIncome * count;
+    }
+    return total;
+  }
+
   double _totalFor(DateTime month) {
     final orderIncome = _incomeOrdersFor(month).fold<double>(
       0,
@@ -183,6 +208,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final monthSales = _productSalesFor(_selectedMonth);
         final total = _totalFor(_selectedMonth);
         final platformTotals = _platformTotals(_selectedMonth);
+        final now = DateTime.now();
+        final pendingThisMonth = _pendingForCurrentMonth();
+        final yearTotal = _yearTotal(now.year);
 
         return ListView(
           padding: AppLayoutSpacing.tabScrollPadding(
@@ -202,6 +230,12 @@ class _StatisticsPageState extends State<StatisticsPage> {
               ),
             ),
             const SizedBox(height: 10),
+            _PeriodOverviewCard(
+              monthPending: pendingThisMonth,
+              yearIncome: yearTotal,
+              year: now.year,
+            ),
+            const SizedBox(height: 12),
             _SummaryCard(
               count: monthOrders.length + monthSales.length,
               total: total,
@@ -225,6 +259,101 @@ class _StatisticsPageState extends State<StatisticsPage> {
           ],
         );
       },
+    );
+  }
+}
+
+class _PeriodOverviewCard extends StatelessWidget {
+  const _PeriodOverviewCard({
+    required this.monthPending,
+    required this.yearIncome,
+    required this.year,
+  });
+
+  final double monthPending;
+  final double yearIncome;
+  final int year;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return _StatsCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: _PeriodMetric(
+              label: '本月待收入',
+              value: monthPending,
+              caption: '按本月截稿且尚未归档的排单',
+              color: colors.primary,
+            ),
+          ),
+          Container(
+            width: 1,
+            height: 70,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            color: colors.outlineVariant,
+          ),
+          Expanded(
+            child: _PeriodMetric(
+              label: '$year 年度收入',
+              value: yearIncome,
+              caption: '已结算排单 + 成品售出',
+              color: colors.secondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeriodMetric extends StatelessWidget {
+  const _PeriodMetric({
+    required this.label,
+    required this.value,
+    required this.caption,
+    required this.color,
+  });
+
+  final String label;
+  final double value;
+  final String caption;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '¥ ${_money(value)}',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          caption,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+      ],
     );
   }
 }
