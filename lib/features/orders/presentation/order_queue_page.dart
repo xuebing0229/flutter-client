@@ -1127,11 +1127,103 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       )
                     : null,
                 cardView: widget.cardView,
-                onToggleView: widget.featureStore.viewSwitch
-                    ? () {
-                        widget.onCardViewChanged(!widget.cardView);
-                      }
+                viewControl: widget.featureStore.viewSwitch
+                    ? PopupMenuButton<String>(
+                        tooltip: '切换视图',
+                        initialValue: useOverviewView
+                            ? 'overview'
+                            : useCardView
+                                ? 'card'
+                                : 'list',
+                        onSelected: (value) {
+                          if (value == 'overview') {
+                            widget.onCardViewChanged(false);
+                            widget.onOverviewViewChanged(true);
+                          } else if (value == 'card') {
+                            widget.onOverviewViewChanged(false);
+                            widget.onCardViewChanged(true);
+                          } else {
+                            widget.onOverviewViewChanged(false);
+                            widget.onCardViewChanged(false);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'list',
+                            child: Text('列表视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'card',
+                            child: Text('卡片视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'overview',
+                            child: Text('总概览视图'),
+                          ),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                useOverviewView
+                                    ? Icons.view_compact_alt_rounded
+                                    : useCardView
+                                        ? Icons.grid_view_rounded
+                                        : Icons.view_agenda_outlined,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                useOverviewView
+                                    ? '总概览'
+                                    : useCardView
+                                        ? '卡片视图'
+                                        : '列表视图',
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
                     : null,
+              ),
+            if (useOverviewView)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    const Text('卡片大小'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Slider(
+                        min: 72,
+                        max: 280,
+                        value: (_overviewCardWidthDraft ??
+                                widget.overviewCardWidth)
+                            .clamp(72, 280)
+                            .toDouble(),
+                        onChanged: (value) {
+                          setState(() => _overviewCardWidthDraft = value);
+                        },
+                        onChangeEnd: (value) {
+                          widget.onOverviewCardWidthChanged(value);
+                          setState(() => _overviewCardWidthDraft = null);
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 42,
+                      child: Text(
+                        '${(_overviewCardWidthDraft ?? widget.overviewCardWidth).round()}',
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             Expanded(
               child: orders.isEmpty
@@ -1142,6 +1234,17 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                             ? '没有找到匹配的排单'
                             : '还没有排单，点右下角「新增排单」开始记录',
                       ),
+                    )
+                  : useOverviewView
+                  ? _OrderOverviewGrid(
+                      orders: orders,
+                      targetCardWidth:
+                          _overviewCardWidthDraft ?? widget.overviewCardWidth,
+                      conflictedOrderIds:
+                          widget.syncCoordinator.conflictedOrderIds,
+                      onTap: _openOrder,
+                      onLongPress: _showQuickActions,
+                      showClient: widget.featureStore.clientInfo,
                     )
                   : useCardView
                   ? CollectionCardGrid(
@@ -1258,6 +1361,152 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           ],
         );
       },
+    );
+  }
+}
+
+class _OrderOverviewGrid extends StatelessWidget {
+  const _OrderOverviewGrid({
+    required this.orders,
+    required this.targetCardWidth,
+    required this.conflictedOrderIds,
+    required this.onTap,
+    required this.onLongPress,
+    required this.showClient,
+  });
+
+  final List<QueueOrder> orders;
+  final double targetCardWidth;
+  final Set<String> conflictedOrderIds;
+  final ValueChanged<QueueOrder> onTap;
+  final ValueChanged<QueueOrder> onLongPress;
+  final bool showClient;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        const horizontalPadding = 24.0;
+        final available =
+            (constraints.maxWidth - horizontalPadding).clamp(1, double.infinity);
+        final target = targetCardWidth.clamp(72, 280).toDouble();
+        final columns =
+            ((available + spacing) / (target + spacing)).floor().clamp(1, 12);
+        return GridView.builder(
+          padding: AppLayoutSpacing.tabScrollPaddingWithFab(
+            left: 12,
+            top: 0,
+            right: 12,
+          ),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            mainAxisExtent: 76,
+          ),
+          itemCount: orders.length,
+          itemBuilder: (context, index) {
+            final order = orders[index];
+            return _OrderOverviewCard(
+              order: order,
+              hasConflict: conflictedOrderIds.contains(order.id),
+              showClient: showClient,
+              onTap: () => onTap(order),
+              onLongPress: () => onLongPress(order),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _OrderOverviewCard extends StatelessWidget {
+  const _OrderOverviewCard({
+    required this.order,
+    required this.hasConflict,
+    required this.showClient,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final QueueOrder order;
+  final bool hasConflict;
+  final bool showClient;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  String _deadlineLabel() {
+    final value = order.deadline;
+    if (value == null) return '未设置';
+    final local = value.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.month}/${local.day} ${two(local.hour)}:${two(local.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final client = showClient && order.clientName.trim().isNotEmpty
+        ? order.clientName.trim()
+        : '';
+    final secondLine = [
+      if (client.isNotEmpty) client,
+      order.title,
+      '¥${_formatMoney(order.originalTotal)}',
+    ].join(' / ');
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${order.platform.label} · ${_deadlineLabel()}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (hasConflict) ...[
+                    const SizedBox(width: 3),
+                    Icon(
+                      Icons.sync_problem_rounded,
+                      size: 13,
+                      color: colors.error,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                secondLine,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
