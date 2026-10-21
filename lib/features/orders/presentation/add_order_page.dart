@@ -20,15 +20,15 @@ class AddOrderPage extends StatefulWidget {
     required this.accountId,
     required this.store,
     required this.nodePresetStore,
-    required this.pricingPresetStore,
     required this.featureStore,
+    this.pricingPresetStore,
     super.key,
   });
 
   final String accountId;
   final OrderStore store;
   final NodePresetStore nodePresetStore;
-  final PricingPresetStore pricingPresetStore;
+  final PricingPresetStore? pricingPresetStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -40,6 +40,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
   final _referenceImages = <OrderReferenceImage>[];
   final _tags = <String>[];
   final _pricingAdjustments = <PricingAdjustment>[];
+  late final PricingPresetStore _effectivePricingPresetStore;
 
   final _titleController = TextEditingController();
   final _clientController = TextEditingController();
@@ -62,6 +63,8 @@ class _AddOrderPageState extends State<AddOrderPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePricingPresetStore =
+        widget.pricingPresetStore ?? PricingPresetStore();
     _draftOrderId = 'order-${DateTime.now().microsecondsSinceEpoch}';
     final preset = widget.nodePresetStore.byId(_presetId);
     _currentNodeId = preset.nodes.first.id;
@@ -83,6 +86,9 @@ class _AddOrderPageState extends State<AddOrderPage> {
     _descriptionController.dispose();
     _onlineController.dispose();
     _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
     super.dispose();
   }
 
@@ -290,7 +296,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
           ),
           const SizedBox(height: 14),
           PricingPresetSelector(
-            store: widget.pricingPresetStore,
+            store: _effectivePricingPresetStore,
             selected: _pricingAdjustments,
             onChanged: (value) => setState(() {
               _pricingAdjustments
