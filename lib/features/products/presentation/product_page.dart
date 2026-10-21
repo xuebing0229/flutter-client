@@ -26,9 +26,9 @@ class ProductPage extends StatefulWidget {
   const ProductPage({
     required this.accountId,
     required this.store,
-    required this.pricingPresetStore,
-    required this.receiptStyleStore,
     required this.featureStore,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
     required this.syncCoordinator,
     required this.cardView,
     required this.onCardViewChanged,
@@ -39,8 +39,8 @@ class ProductPage extends StatefulWidget {
 
   final String accountId;
   final ProductStore store;
-  final PricingPresetStore pricingPresetStore;
-  final ReceiptStyleStore receiptStyleStore;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
   final SyncCoordinatorView syncCoordinator;
   final bool cardView;
