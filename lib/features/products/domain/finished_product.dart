@@ -1,4 +1,5 @@
 import '../../../core/finance/income_calculator.dart';
+import '../../../core/finance/pricing_adjustments.dart';
 import '../../orders/domain/queue_order.dart';
 
 enum ProductSaleType {
@@ -21,6 +22,8 @@ class FinishedProduct {
     this.onlinePercent = 100,
     this.supplementAmount = 0,
     this.supplementFeeEnabled = false,
+    this.supplementPricingEnabled = false,
+    this.pricingAdjustments = const <PricingAdjustment>[],
     this.deductionAmount = 0,
     this.deductionFeeEnabled = false,
     this.description = '',
@@ -45,6 +48,8 @@ class FinishedProduct {
   final double onlinePercent;
   final double supplementAmount;
   final bool supplementFeeEnabled;
+  final bool supplementPricingEnabled;
+  final List<PricingAdjustment> pricingAdjustments;
   final double deductionAmount;
   final bool deductionFeeEnabled;
 
@@ -80,8 +85,18 @@ class FinishedProduct {
 
   double get offlinePercent => 100 - normalizedOnlinePercent;
 
+  double get pricedBaseAmount =>
+      applyPricingAdjustments(price, pricingAdjustments);
+
+  double get pricedSupplementAmountValue => pricedSupplementAmount(
+        basePrice: price,
+        supplementAmount: supplementAmount,
+        adjustments: pricingAdjustments,
+        participates: supplementPricingEnabled,
+      );
+
   double get originalTotal =>
-      price + supplementAmount - deductionAmount;
+      pricedBaseAmount + pricedSupplementAmountValue - deductionAmount;
 
   double _feeFor(double amount, bool enabled) {
     return calculatePlatformServiceFee(
@@ -95,18 +110,18 @@ class FinishedProduct {
     );
   }
 
-  double get serviceFeeAmount => _feeFor(price, feeEnabled);
+  double get serviceFeeAmount => _feeFor(pricedBaseAmount, feeEnabled);
 
   double get supplementFeeAmount =>
-      _feeFor(supplementAmount, supplementFeeEnabled);
+      _feeFor(pricedSupplementAmountValue, supplementFeeEnabled);
 
   double get deductionFeeAmount =>
       _feeFor(deductionAmount, deductionFeeEnabled);
 
   double get realIncome => calculateAdjustedIncome(
-        basePrice: price,
+        basePrice: pricedBaseAmount,
         baseFee: serviceFeeAmount,
-        supplementAmount: supplementAmount,
+        supplementAmount: pricedSupplementAmountValue,
         supplementFee: supplementFeeAmount,
         deductionAmount: deductionAmount,
         deductionFee: deductionFeeAmount,
@@ -122,6 +137,8 @@ class FinishedProduct {
     double? onlinePercent,
     double? supplementAmount,
     bool? supplementFeeEnabled,
+    bool? supplementPricingEnabled,
+    List<PricingAdjustment>? pricingAdjustments,
     double? deductionAmount,
     bool? deductionFeeEnabled,
     String? description,
@@ -153,6 +170,9 @@ class FinishedProduct {
       supplementAmount: supplementAmount ?? this.supplementAmount,
       supplementFeeEnabled:
           supplementFeeEnabled ?? this.supplementFeeEnabled,
+      supplementPricingEnabled:
+          supplementPricingEnabled ?? this.supplementPricingEnabled,
+      pricingAdjustments: pricingAdjustments ?? this.pricingAdjustments,
       deductionAmount: deductionAmount ?? this.deductionAmount,
       deductionFeeEnabled:
           deductionFeeEnabled ?? this.deductionFeeEnabled,
