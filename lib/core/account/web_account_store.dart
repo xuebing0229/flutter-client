@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:html' as html;
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
 import 'account_models.dart';
 import 'offline_license.dart';
+import '../web/web_platform_bridge.dart';
 
 enum WebAccountStatus { loading, unactivated, locked, unlocked, revoked }
 
@@ -128,7 +128,7 @@ class WebAccountStore extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final source = html.window.localStorage[_storageKey];
+      final source = webStorageGet(_storageKey);
       if (source == null || source.trim().isEmpty) {
         status = WebAccountStatus.unactivated;
         notifyListeners();
@@ -372,9 +372,7 @@ class WebAccountStore extends ChangeNotifier {
       _rememberDeviceId(id, record.currentDeviceId);
     }
     try {
-      html.window.localStorage.remove(
-        'adventurers-guild.web.workspace.v2.$id',
-      );
+      webStorageRemove('adventurers-guild.web.workspace.v2.$id');
     } catch (_) {}
     _accounts.remove(id);
     _selectedAccountId = null;
@@ -420,7 +418,7 @@ class WebAccountStore extends ChangeNotifier {
   String _deviceIdForAccount(String accountId) {
     final key = 'adventurers-guild.web.device.v1.$accountId';
     try {
-      final existing = html.window.localStorage[key];
+      final existing = webStorageGet(key);
       if (existing != null && existing.trim().isNotEmpty) {
         return existing.trim();
       }
@@ -432,9 +430,10 @@ class WebAccountStore extends ChangeNotifier {
 
   void _rememberDeviceId(String accountId, String deviceId) {
     try {
-      html.window.localStorage[
-        'adventurers-guild.web.device.v1.$accountId'
-      ] = deviceId;
+      webStorageSet(
+        'adventurers-guild.web.device.v1.$accountId',
+        deviceId,
+      );
     } catch (_) {}
   }
 
@@ -451,6 +450,6 @@ class WebAccountStore extends ChangeNotifier {
         for (final record in _accounts.values) record.toJson(),
       ],
     };
-    html.window.localStorage[_storageKey] = jsonEncode(payload);
+    webStorageSet(_storageKey, jsonEncode(payload));
   }
 }
