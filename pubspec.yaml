@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+185
-# beta-185: resizable order overview, pricing presets, receipt images and income overview
+# beta-185: resizable order overview, pricing presets, receipt images and income overview; revision 3
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
