@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+182
-# beta-182: fix per-app battery optimization exemption
+version: 0.0.1+183
+# beta-183: add PWA-compatible WebRTC peer sync
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
