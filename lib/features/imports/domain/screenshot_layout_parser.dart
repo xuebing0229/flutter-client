@@ -147,7 +147,7 @@ class ScreenshotLayoutParser {
   static final RegExp _detailTab = RegExp(
       r'稿件夹|进程动态|参考信息|联系企划方|上传稿件|共\s*\d+\s*个文件');
   static final RegExp _detailPayment = RegExp(
-      r'稿酬|全额支付|约稿完成|已支付|已结算');
+      r'稿酬|全额支付|约稿完成|已支付|已付|已结算|总额');
 
 
   // Identifies ONLY an acceptance-relative quick deadline, not labels like
@@ -437,12 +437,20 @@ class ScreenshotLayoutParser {
     final deadlineLine = deadline?.$1;
     final deadlineY = deadlineLine?.centerY ?? imageHeight * 0.19;
 
-    // The actual work title is to the RIGHT of the artwork thumbnail, above
-    // its deadline. The page navigation "订单" must never be a buyer/title.
+    // Older detail pages put the work title to the right of a thumbnail.
+    // The newer MiHuashi "工作板" layout instead places it near the left edge.
+    // Detect that header explicitly rather than lowering the x threshold for
+    // every platform/detail screenshot.
+    final workbenchLayout = prepared.any((line) =>
+        line.centerY < imageHeight * 0.14 &&
+        line.centerY > imageHeight * 0.025 &&
+        line.text.trim() == '工作板');
+    final detailTitleMinLeft =
+        imageWidth * (workbenchLayout ? 0.035 : 0.22);
     final titles = prepared.where((line) =>
         line.centerY > imageHeight * 0.08 &&
         line.centerY < math.min(deadlineY - 8, imageHeight * 0.32) &&
-        line.left >= imageWidth * 0.22 &&
+        line.left >= detailTitleMinLeft &&
         _plausibleDetailTitle(line.text)).toList()
       ..sort((a, b) => b.centerY.compareTo(a.centerY));
     final titleLine = titles.isEmpty ? null : titles.first;
@@ -511,6 +519,39 @@ class ScreenshotLayoutParser {
     final nearby = lines.where((line) =>
         line.centerY >= paymentY - 30 &&
         line.centerY <= paymentY + 105).toList();
+
+    // Newer "工作板" screenshots can show both an instalment ("已付 ¥148")
+    // and the actual commission price ("总额 ¥740"). Import the total, not the
+    // amount already paid. OCR may keep the label/amount together or split
+    // them into adjacent boxes.
+    final totalLabels = nearby.where((line) => line.text.contains('总额')).toList();
+    for (final label in totalLabels) {
+      final direct = _money.firstMatch(label.text.trim());
+      if (direct != null) {
+        final value = double.tryParse(direct.group(1)!);
+        if (value != null) return (value, label);
+      }
+      final sameRow = nearby.where((line) =>
+          !identical(line, label) &&
+          (line.centerY - label.centerY).abs() < 30 &&
+          line.left >= label.left).toList()
+        ..sort((a, b) => a.left.compareTo(b.left));
+      for (final line in sameRow) {
+        final normalized = line.text.trim().replaceFirst(
+          RegExp(r'^[yY](?=\s*\d)'), '¥',
+        );
+        final matched = _money.firstMatch(normalized);
+        if (matched != null) {
+          final value = double.tryParse(matched.group(1)!);
+          if (value != null) return (value, line);
+        }
+        final bare = double.tryParse(line.text.trim());
+        if (bare != null && bare >= 0 && bare <= 10000000) {
+          return (bare, line);
+        }
+      }
+    }
+
     for (final line in nearby) {
       final matched = _money.firstMatch(line.text.trim().replaceFirst(
         RegExp(r'^[yY](?=\s*\d)'), '¥',
@@ -544,7 +585,7 @@ class ScreenshotLayoutParser {
     final name = text.trim();
     if (_detailTab.hasMatch(name) || _detailPayment.hasMatch(name) ||
         name.contains('截稿') || name.contains('上传') ||
-        name == '订单' || name.contains('文件')) {
+        name == '订单' || name == '工作板' || name.contains('文件')) {
       return false;
     }
     return true;
@@ -554,7 +595,8 @@ class ScreenshotLayoutParser {
     final name = text.trim();
     if (!_plausibleBuyer(name) || _detailTab.hasMatch(name) ||
         _detailPayment.hasMatch(name) || name.contains('截稿') ||
-        name == '订单' || name.contains('文件') ||
+        name == '订单' || name == '工作板' || name == '验收节点' ||
+        name.contains('文件') ||
         name.contains('.png') || name.contains('.jpg') ||
         name.contains('KB') || name.contains('GB')) {
       return false;
@@ -735,7 +777,7 @@ bool isMiHuashiOrderDetailScreenshot({
       line.centerY > imageHeight * 0.025 &&
       line.left >= imageWidth * 0.3 &&
       line.right <= imageWidth * 0.78 &&
-      line.text.trim() == '订单');
+      (line.text.trim() == '订单' || line.text.trim() == '工作板'));
   final deadlineTop = prepared.any((line) =>
       line.centerY > imageHeight * 0.115 &&
       line.centerY < imageHeight * 0.42 &&
