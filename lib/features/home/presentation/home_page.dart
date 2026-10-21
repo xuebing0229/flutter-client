@@ -1603,6 +1603,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         orderStore: _orderStore,
         productStore: _productStore,
         nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
+        receiptStyleStore: _receiptStyleStore,
         featureStore: widget.featureStore,
         syncCoordinator: _syncCoordinator,
       ),
