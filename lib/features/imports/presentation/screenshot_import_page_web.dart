@@ -75,23 +75,6 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   }
 
   Future<void> _resumeOrSelectScreenshot() async {
-    if (false) {
-      try {
-        final previous = await _ocr.lastNativeCrashReport();
-        if (!mounted) return;
-        if (previous != null && previous.isNotEmpty) {
-          // Keep the one-time system exit record available behind the
-          // diagnostics button, but never interrupt ordinary importing with
-          // a stale crash snackbar or an extra tap.
-          setState(() {
-            _ocrDiagnostics.add(previous);
-          });
-        }
-      } catch (error) {
-        // Reporting should never block ordinary screenshot selection.
-        _ocrDiagnostics.add('读取 Android 退出信息失败：$error');
-      }
-    }
     if (mounted) await _pickAndRecognize();
   }
 
