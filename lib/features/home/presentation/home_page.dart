@@ -1277,6 +1277,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.removeListener(_onOrderStoreChanged);
     _productStore.removeListener(_scheduleSave);
     _nodePresetStore.removeListener(_scheduleSave);
+    _pricingPresetStore.removeListener(_onSharedWorkspaceSettingChanged);
+    _receiptStyleStore.removeListener(_onSharedWorkspaceSettingChanged);
     _focusStore.removeListener(_onFocusStoreChanged);
 
     // Remote revocation can dispose this page without going through the
@@ -1306,6 +1308,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.dispose();
     _productStore.dispose();
     _nodePresetStore.dispose();
+    _pricingPresetStore.dispose();
+    _receiptStyleStore.dispose();
     _focusStore.dispose();
     super.dispose();
   }
@@ -1684,10 +1688,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           accountId: widget.accountId,
           store: _orderStore,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
           syncCoordinator: _syncCoordinator,
           cardView: _orderCardView,
           onCardViewChanged: _setOrderCardView,
+          overviewView: _orderOverviewView,
+          onOverviewViewChanged: _setOrderOverviewView,
+          overviewCardWidth: _orderOverviewCardWidth,
+          onOverviewCardWidthChanged: _setOrderOverviewCardWidth,
           sortModeName: _orderSortMode,
           onSortModeChanged: _setOrderSortMode,
         ),
@@ -1700,6 +1710,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           page: ProductPage(
             accountId: widget.accountId,
             store: _productStore,
+            pricingPresetStore: _pricingPresetStore,
+            receiptStyleStore: _receiptStyleStore,
             featureStore: widget.featureStore,
             syncCoordinator: _syncCoordinator,
             cardView: _productCardView,
@@ -1737,6 +1749,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final current = tabs[_index];
     final title = switch (_desktopToolSelection) {
       AppToolMenu.nodePresetTool => '节点预设',
+      AppToolMenu.pricingPresetTool => '加价预设',
       AppToolMenu.featureToggleTool => '附加功能开关',
       AppToolMenu.desktopPetTool =>
         Platform.isWindows &&
