@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/finance/pricing_adjustments.dart';
+import '../../../core/finance/pricing_preset_store.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
+import '../../shared/presentation/pricing_preset_selector.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
@@ -15,12 +18,14 @@ class AddProductPage extends StatefulWidget {
   const AddProductPage({
     required this.accountId,
     required this.store,
+    required this.pricingPresetStore,
     required this.featureStore,
     super.key,
   });
 
   final String accountId;
   final ProductStore store;
+  final PricingPresetStore pricingPresetStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -30,6 +35,7 @@ class AddProductPage extends StatefulWidget {
 class _AddProductPageState extends State<AddProductPage> {
   final _referenceImageStore = OrderReferenceImageStore();
   final _referenceImages = <OrderReferenceImage>[];
+  final _pricingAdjustments = <PricingAdjustment>[];
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -157,6 +163,9 @@ class _AddProductPageState extends State<AddProductPage> {
         huajiaLoveLevel: _huajiaLoveLevel,
         onlinePercent: _onlinePercent,
         supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
+        pricingAdjustments: List<PricingAdjustment>.unmodifiable(
+          _pricingAdjustments.map((item) => item.snapshot()),
+        ),
         deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
         description: _descriptionController.text.trim(),
         referenceImages: List<OrderReferenceImage>.unmodifiable(_referenceImages),
@@ -229,6 +238,16 @@ class _AddProductPageState extends State<AddProductPage> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 14),
+          PricingPresetSelector(
+            store: widget.pricingPresetStore,
+            selected: _pricingAdjustments,
+            onChanged: (value) => setState(() {
+              _pricingAdjustments
+                ..clear()
+                ..addAll(value);
+            }),
           ),
           const SizedBox(height: 14),
           const FormFieldLabel('售卖方式'),
