@@ -19,6 +19,7 @@ env:
   RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
   BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
   ACTIVATION_API_BASE_URL: https://license.apixb.top
+  PUBLIC_SYNC_RELAY_URL: https://beta.guild.apixb.top/sync
 
 jobs:
   check:
@@ -107,6 +108,7 @@ jobs:
             --release \
             --flavor beta \
             --dart-define=APP_CHANNEL=beta \
+            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-beta-release.apk app-beta.apk
 
@@ -153,7 +155,7 @@ jobs:
 
       - name: Build Windows Beta
         shell: pwsh
-        run: flutter build windows --release --dart-define=APP_CHANNEL=beta --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
+        run: flutter build windows --release --dart-define=APP_CHANNEL=beta --dart-define="PUBLIC_SYNC_RELAY_URL=$env:PUBLIC_SYNC_RELAY_URL" --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
 
       - name: Build VPet desktop companion
         shell: pwsh
@@ -269,6 +271,7 @@ jobs:
             --release \
             --no-web-resources-cdn \
             --dart-define=APP_CHANNEL=beta \
+            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
 
       - name: Finalize offline PWA cache
