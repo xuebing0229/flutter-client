@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
@@ -24,6 +26,8 @@ class ProductPage extends StatefulWidget {
   const ProductPage({
     required this.accountId,
     required this.store,
+    required this.pricingPresetStore,
+    required this.receiptStyleStore,
     required this.featureStore,
     required this.syncCoordinator,
     required this.cardView,
@@ -35,6 +39,8 @@ class ProductPage extends StatefulWidget {
 
   final String accountId;
   final ProductStore store;
+  final PricingPresetStore pricingPresetStore;
+  final ReceiptStyleStore receiptStyleStore;
   final AppFeatureStore featureStore;
   final SyncCoordinatorView syncCoordinator;
   final bool cardView;
@@ -125,6 +131,8 @@ class _ProductPageState extends State<ProductPage> {
           accountId: widget.accountId,
           store: widget.store,
           productId: product.id,
+          pricingPresetStore: widget.pricingPresetStore,
+          receiptStyleStore: widget.receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
