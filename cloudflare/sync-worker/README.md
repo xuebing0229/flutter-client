@@ -23,10 +23,16 @@ wss://当前域名/sync
 
 ## Android / Windows
 
-原生端通过编译参数指定同一个地址：
+原生端默认连接已经部署的 PWA 域名：
 
 ```
---dart-define=PUBLIC_SYNC_RELAY_URL=https://你的-PWA-域名/sync
+https://guild.apixb.top/sync
+```
+
+如需临时切换测试环境，也可以覆盖：
+
+```
+--dart-define=PUBLIC_SYNC_RELAY_URL=https://其他-PWA-域名/sync
 ```
 
 HTTP/HTTPS 会在客户端自动转换成 WS/WSS。
