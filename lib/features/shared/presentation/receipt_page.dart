@@ -1,11 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../../core/finance/pricing_adjustments.dart';
+import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../products/domain/finished_product.dart';
 import '../domain/receipt_style_store.dart';
@@ -86,32 +87,40 @@ class ReceiptPage extends StatefulWidget {
 
 class _ReceiptPageState extends State<ReceiptPage> {
   final GlobalKey _receiptKey = GlobalKey();
+  final DataPortabilityFileBridge _fileBridge =
+      const DataPortabilityFileBridge();
   bool _exporting = false;
 
   Future<void> _pickBackground() async {
-    const typeGroup = XTypeGroup(
-      label: '图片',
-      extensions: <String>['png', 'jpg', 'jpeg', 'webp'],
-    );
-    final file = await openFile(
-      acceptedTypeGroups: const <XTypeGroup>[typeGroup],
-    );
-    if (file == null) return;
-    final bytes = await file.readAsBytes();
-    if (!mounted) return;
-    if (bytes.length > 5 * 1024 * 1024) {
+    try {
+      final path = await _fileBridge.pickImage();
+      if (path == null) return;
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      if (bytes.length > 5 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('背景图请控制在 5 MB 以内'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      final normalized = path.replaceAll('\\', '/');
+      widget.styleStore.setBackgroundImage(
+        base64: base64Encode(bytes),
+        name: normalized.split('/').last,
+      );
+    } catch (error) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('背景图请控制在 5 MB 以内'),
+        SnackBar(
+          content: Text('导入背景图失败：$error'),
           behavior: SnackBarBehavior.floating,
         ),
       );
-      return;
     }
-    widget.styleStore.setBackgroundImage(
-      base64: base64Encode(bytes),
-      name: file.name,
-    );
   }
 
   Future<void> _pickFontColor() async {
@@ -173,7 +182,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
               ),
               FilledButton(
                 onPressed: () =>
-                    Navigator.of(dialogContext).pop(color.value),
+                    Navigator.of(dialogContext).pop(color.toARGB32()),
                 child: const Text('确定'),
               ),
             ],
@@ -201,19 +210,11 @@ class _ReceiptPageState extends State<ReceiptPage> {
           .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
           .trim();
       final fileName = '${safeTitle.isEmpty ? '小票' : safeTitle}-小票.png';
-      final location = await getSaveLocation(
-        suggestedName: fileName,
-        acceptedTypeGroups: const <XTypeGroup>[
-          XTypeGroup(label: 'PNG 图片', extensions: <String>['png']),
-        ],
+      final saved = await _fileBridge.exportImage(
+        fileName: fileName,
+        bytes: bytes,
       );
-      if (location == null) return;
-      await XFile.fromData(
-        bytes,
-        mimeType: 'image/png',
-        name: fileName,
-      ).saveTo(location.path);
-      if (!mounted) return;
+      if (!mounted || !saved) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('小票图片已保存'),
