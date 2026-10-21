@@ -1387,6 +1387,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         accountId: widget.accountId,
         store: _orderStore,
         nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
       ),
     );
@@ -1413,6 +1414,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       builder: (_) => AddProductPage(
         accountId: widget.accountId,
         store: _productStore,
+        pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
       ),
     );
@@ -1479,6 +1481,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _syncCoordinator.notifySettingsChanged();
   }
 
+  void _setOrderOverviewView(bool value) {
+    if (_orderOverviewView == value) return;
+    setState(() {
+      _orderOverviewView = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _setOrderOverviewCardWidth(double value) {
+    final normalized = value.clamp(72, 280).toDouble();
+    if ((_orderOverviewCardWidth - normalized).abs() < 0.1) return;
+    setState(() {
+      _orderOverviewCardWidth = normalized;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
   void _setProductCardView(bool value) {
     if (_productCardView == value) return;
     setState(() {
@@ -1535,6 +1558,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           store: _orderStore,
           orderId: orderId,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -1553,6 +1578,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _buildDesktopToolPage(String tool) {
     return switch (tool) {
       AppToolMenu.nodePresetTool => NodePresetPage(store: _nodePresetStore),
+      AppToolMenu.pricingPresetTool =>
+        PricingPresetPage(store: _pricingPresetStore),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
         store: widget.featureStore,
         onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
