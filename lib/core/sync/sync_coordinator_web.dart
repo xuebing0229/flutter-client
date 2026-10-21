@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:html' as html;
 
 import 'package:flutter/foundation.dart';
 
@@ -14,6 +13,7 @@ import '../../features/products/state/product_store.dart';
 import 'sync_entity_codec.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
+import '../web/web_platform_bridge.dart';
 
 typedef WebSyncSettingsCapture = Map<String, dynamic> Function();
 typedef WebSyncSettingsApply =
@@ -80,7 +80,7 @@ class SyncCoordinator extends ChangeNotifier {
   bool _disposed = false;
   bool _applyingRemote = false;
   bool _syncBusy = false;
-  bool _syncPaused = false;
+  final bool _syncPaused = false;
   String? _lastError;
   DateTime? _lastSuccessfulSyncAt;
 
@@ -169,7 +169,7 @@ class SyncCoordinator extends ChangeNotifier {
   }
 
   void _loadStoredRecords() {
-    final source = html.window.localStorage[_storageKey];
+    final source = webStorageGet(_storageKey);
     if (source == null || source.trim().isEmpty) return;
     final decoded = jsonDecode(source);
     if (decoded is! Map || decoded['schema'] != 1) return;
@@ -202,10 +202,13 @@ class SyncCoordinator extends ChangeNotifier {
 
   void _persistRecords() {
     if (_disposed) return;
-    html.window.localStorage[_storageKey] = jsonEncode(<String, dynamic>{
-      'schema': 1,
-      'records': portableRecordsSnapshot,
-    });
+    webStorageSet(
+      _storageKey,
+      jsonEncode(<String, dynamic>{
+        'schema': 1,
+        'records': portableRecordsSnapshot,
+      }),
+    );
   }
 
   void _onLocalChanged() {
