@@ -372,11 +372,13 @@ class SyncthingAccountTransferServer {
   String? _acceptedReceiverPlatform;
   bool _receiverFolderReady = false;
   String? _receiverRemoteFolderState;
+  String? _lastRepairError;
 
   bool get receiverFinished => _receiverFinished;
   bool get transferred => _transferred;
   bool get receiverFolderReady => _receiverFolderReady;
   String? get receiverRemoteFolderState => _receiverRemoteFolderState;
+  String? get lastRepairError => _lastRepairError;
   String? get acceptedReceiverDeviceId => _acceptedReceiverDeviceId;
   String? get acceptedReceiverName => _acceptedReceiverName;
   String? get acceptedReceiverAppDeviceId => _acceptedReceiverAppDeviceId;
@@ -472,19 +474,15 @@ class SyncthingAccountTransferServer {
     _acceptedReceiverPlatform = response.receiverPlatform;
     _receiverFolderReady = false;
     _receiverRemoteFolderState = null;
+    _lastRepairError = null;
 
-    // Treat the cryptographically verified response as the confirmation
-    // boundary. Folder sharing can take longer on a freshly reinstalled phone
-    // or after a stale device was just revoked, so do one immediate repair and
-    // let poll() keep repairing instead of failing the whole confirmation after
-    // a fixed 45-second window.
-    try {
-      await _repairReceiverFolderShare();
-    } catch (_) {
-      // The page poll keeps retrying this exact operation. A transient local
-      // Syncthing/API failure must not force the user to scan the response code
-      // again after it has already been authenticated.
-    }
+    // IMPORTANT: response authentication is the user-facing confirmation
+    // boundary. Do not await Syncthing folder repair here. On Windows that
+    // repair may need several bounded localhost REST calls; awaiting it made
+    // the "confirm response code" action appear frozen and prevented the UI
+    // from showing that the response itself had already been accepted.
+    //
+    // poll() owns the transport repair and retries it independently.
   }
 
   Future<void> _repairReceiverFolderShare() async {
@@ -492,18 +490,13 @@ class SyncthingAccountTransferServer {
     final name = _acceptedReceiverName;
     if (_closed || deviceId == null || name == null) return;
 
-    // Re-assert BOTH sides of the local bootstrap configuration every poll.
-    // This is intentionally idempotent. It fixes the half-state where the
-    // devices are connected but the source no longer shares this temporary
-    // folder after a reinstall/revoke/rejoin sequence.
+    // The bootstrap folder is freshly created and unpaused. The critical
+    // repair is to keep re-asserting the receiver on THIS folder. Keep the
+    // sequence idempotent and let the caller retry after transient failures.
     await _bridge.pairFolder(
       folderId: descriptor.folderId,
       deviceId: deviceId,
       name: name,
-    );
-    await _bridge.setFolderPaused(
-      folderId: descriptor.folderId,
-      paused: false,
     );
     await _bridge.requestScanFolder(descriptor.folderId);
 
@@ -531,7 +524,16 @@ class SyncthingAccountTransferServer {
     if (_closed || _transferred) return;
 
     if (_acceptedReceiverDeviceId != null) {
-      await _repairReceiverFolderShare();
+      try {
+        await _repairReceiverFolderShare();
+        _lastRepairError = null;
+      } catch (error) {
+        // Transport repair is intentionally best-effort and retried by the
+        // page timer. A single local Syncthing/API failure must not turn the
+        // already-authenticated response into a failed confirmation or freeze
+        // the page. Keep the last error only for diagnostics/status text.
+        _lastRepairError = error.toString();
+      }
     }
 
     if (!_receiverFinished && await _doneFile.exists()) {
