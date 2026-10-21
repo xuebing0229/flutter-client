@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_app/core/account/account_store.dart';
 import 'package:flutter_app/core/features/app_feature_store.dart';
 import 'package:flutter_app/core/sync/sync_coordinator.dart';
+import 'package:flutter_app/core/cloud_sync/native_sync_coordinator_view_adapter.dart';
 import 'package:flutter_app/features/orders/data/node_presets.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
 import 'package:flutter_app/features/orders/presentation/order_queue_page.dart';
@@ -72,7 +73,7 @@ void main() {
               store: orders,
               nodePresetStore: presets,
               featureStore: features,
-              syncCoordinator: coordinator,
+              syncCoordinator: NativeSyncCoordinatorViewAdapter(coordinator),
               cardView: true,
               onCardViewChanged: (_) {},
               sortModeName: 'defaultOrder',
