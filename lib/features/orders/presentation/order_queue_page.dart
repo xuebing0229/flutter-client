@@ -33,17 +33,17 @@ class OrderQueuePage extends StatefulWidget {
     required this.accountId,
     required this.store,
     required this.nodePresetStore,
-    required this.pricingPresetStore,
-    required this.receiptStyleStore,
     required this.featureStore,
     required this.syncCoordinator,
     required this.cardView,
     required this.onCardViewChanged,
-    required this.overviewView,
-    required this.onOverviewViewChanged,
-    required this.overviewCardWidth,
-    required this.onOverviewCardWidthChanged,
     required this.sortModeName,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
+    this.overviewView = false,
+    this.onOverviewViewChanged,
+    this.overviewCardWidth = 150,
+    this.onOverviewCardWidthChanged,
     required this.onSortModeChanged,
     super.key,
   });
@@ -51,16 +51,16 @@ class OrderQueuePage extends StatefulWidget {
   final String accountId;
   final OrderStore store;
   final NodePresetStore nodePresetStore;
-  final PricingPresetStore pricingPresetStore;
-  final ReceiptStyleStore receiptStyleStore;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
   final SyncCoordinatorView syncCoordinator;
   final bool cardView;
   final ValueChanged<bool> onCardViewChanged;
   final bool overviewView;
-  final ValueChanged<bool> onOverviewViewChanged;
+  final ValueChanged<bool>? onOverviewViewChanged;
   final double overviewCardWidth;
-  final ValueChanged<double> onOverviewCardWidthChanged;
+  final ValueChanged<double>? onOverviewCardWidthChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
 
@@ -1138,12 +1138,12 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         onSelected: (value) {
                           if (value == 'overview') {
                             widget.onCardViewChanged(false);
-                            widget.onOverviewViewChanged(true);
+                            widget.onOverviewViewChanged?.call(true);
                           } else if (value == 'card') {
-                            widget.onOverviewViewChanged(false);
+                            widget.onOverviewViewChanged?.call(false);
                             widget.onCardViewChanged(true);
                           } else {
-                            widget.onOverviewViewChanged(false);
+                            widget.onOverviewViewChanged?.call(false);
                             widget.onCardViewChanged(false);
                           }
                         },
@@ -1210,7 +1210,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           setState(() => _overviewCardWidthDraft = value);
                         },
                         onChangeEnd: (value) {
-                          widget.onOverviewCardWidthChanged(value);
+                          widget.onOverviewCardWidthChanged?.call(value);
                           setState(() => _overviewCardWidthDraft = null);
                         },
                       ),
