@@ -74,9 +74,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   void initState() {
     super.initState();
     _effectivePricingPresetStore =
-        _effectivePricingPresetStore ?? PricingPresetStore();
+        widget.pricingPresetStore ?? PricingPresetStore();
     _effectiveReceiptStyleStore =
-        _effectiveReceiptStyleStore ?? ReceiptStyleStore();
+        widget.receiptStyleStore ?? ReceiptStyleStore();
     final product = _product;
     _titleController = TextEditingController();
     _priceController = TextEditingController();
