@@ -23,7 +23,6 @@ import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/data/node_presets.dart';
-import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
 import '../../orders/presentation/node_preset_page.dart';
@@ -77,8 +76,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final PricingPresetStore _pricingPresetStore = PricingPresetStore();
   final ReceiptStyleStore _receiptStyleStore = ReceiptStyleStore();
   final FocusStore _focusStore = FocusStore();
-  final OrderReferenceImageStore _referenceImageStore =
-      OrderReferenceImageStore();
   final AppDataPersistence _persistence = const AppDataPersistence();
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
