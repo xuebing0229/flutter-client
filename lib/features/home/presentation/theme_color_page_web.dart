@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/app_ui_style.dart';
+import 'custom_theme_color_page.dart';
 
 class ThemeColorPage extends StatelessWidget {
   const ThemeColorPage({
@@ -31,6 +32,22 @@ class ThemeColorPage extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
           children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text(
+                '自定义调色',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text('直接复用客户端的完整调色编辑器'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CustomThemeColorPage(store: store),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
             const Text('明暗模式', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             SegmentedButton<ThemeMode>(
@@ -98,6 +115,18 @@ class ThemeColorPage extends StatelessWidget {
                         : Icons.radio_button_unchecked_rounded,
                   ),
                   title: Text(palette.name),
+                  trailing: IconButton(
+                    tooltip: '编辑配色',
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CustomThemeColorPage(
+                          store: store,
+                          palette: palette,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
             ],
           ],
