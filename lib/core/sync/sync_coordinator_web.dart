@@ -97,11 +97,13 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   List<SyncConflictView> get conflicts =>
       List<SyncConflictView>.unmodifiable(_conflicts);
 
+  @override
   Set<String> get conflictedOrderIds => <String>{
     for (final item in _conflicts)
       if (item.kind == SyncEntityKind.order) item.recordId,
   };
 
+  @override
   Set<String> get conflictedProductIds => <String>{
     for (final item in _conflicts)
       if (item.kind == SyncEntityKind.product) item.recordId,
@@ -223,6 +225,7 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
 
   void notifySettingsChanged() => _onLocalChanged();
 
+  @override
   Future<void> flushNow() async {
     if (!_initialized || _disposed || _syncPaused) return;
     _changeDebounce?.cancel();
