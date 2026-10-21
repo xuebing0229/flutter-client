@@ -298,6 +298,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '电池优化设置修复',
     description: '修复截稿提醒里的电池优化入口只打开系统通用列表、导致当前 App 即使反复调整也可能一直显示受限制的问题。Android 现在会直接请求将当前安装的冒险者公会加入系统电池优化豁免，返回 App 后自动重新读取状态；厂商自己的后台运行与省电设置说明继续保留。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 183,
+    title: 'PWA 点对点同步支持',
+    description: 'Android 与 Windows 保留原有 Syncthing 同步，同时新增与 PWA 互通的 WebRTC 点对点通道。两端同时在线时会优先直连传输排单、成品、节点、设置与参考图；公共 MQTT 只用于加密配对信令，并在直连失败时作为加密兜底，不使用冒险者公会自建同步服务器。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
