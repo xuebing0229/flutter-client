@@ -313,6 +313,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '重装后重新加入设备修复',
     description: '修复手机卸载重装、旧设备记录解绑后重新加入账号时，设备已经连上但临时账号目录停在“未共享”或看似 100% 却无法完成的问题。原设备会在整个首次绑定期间持续重新确认临时目录共享并主动扫描；新设备改为显示真实的“目录握手、账号已收到、等待正式绑定”阶段，不再把 Syncthing 的目录完成度误当成账号传输完成度。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 192,
+    title: '新设备回应码显示修复',
+    description: '修复 191 在两台设备仅建立底层连接时就误判“原设备已确认”，导致新设备的回应二维码提前消失、原设备实际上没有机会授权临时账号目录的问题。新版会一直保留回应二维码，直到原设备真正确认并开始共享临时账号目录。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
