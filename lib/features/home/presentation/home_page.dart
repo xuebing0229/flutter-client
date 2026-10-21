@@ -90,7 +90,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   static const _orderCardViewSettingKey = 'orderCardView';
   static const _orderOverviewViewSettingKey = 'orderOverviewView';
-  static const _orderOverviewCardWidthSettingKey = 'orderOverviewCardWidth';
+  static const _orderOverviewColumnsSettingKey = 'orderOverviewColumns';
   static const _productCardViewSettingKey = 'productCardView';
   static const _pricingPresetsSettingKey = 'pricingAdjustmentPresets';
   static const _receiptStyleSettingKey = 'receiptStyle';
@@ -103,7 +103,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _ready = false;
   bool _orderCardView = false;
   bool _orderOverviewView = false;
-  double _orderOverviewCardWidth = 150;
+  int _orderOverviewColumns = 3;
   bool _productCardView = false;
   String _orderSortMode = 'defaultOrder';
   String _productSortMode = 'defaultOrder';
@@ -904,7 +904,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         '$_featureSettingPrefix${entry.key}': entry.value,
       _orderCardViewSettingKey: _orderCardView,
       _orderOverviewViewSettingKey: _orderOverviewView,
-      _orderOverviewCardWidthSettingKey: _orderOverviewCardWidth,
+      _orderOverviewColumnsSettingKey: _orderOverviewColumns,
       _productCardViewSettingKey: _productCardView,
       _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
       _receiptStyleSettingKey: _receiptStyleStore.toJson(),
@@ -1018,15 +1018,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _orderOverviewView = nextOverviewView;
       layoutChanged = true;
     }
-    final nextOverviewWidth = settings[_orderOverviewCardWidthSettingKey];
-    if (nextOverviewWidth is num && nextOverviewWidth.isFinite) {
-      final normalized = nextOverviewWidth.toDouble().clamp(72, 280).toDouble();
-      if (normalized != _orderOverviewCardWidth) {
-        _orderOverviewCardWidth = normalized;
+    final nextOverviewColumns = settings[_orderOverviewColumnsSettingKey];
+    if (nextOverviewColumns is num && nextOverviewColumns.isFinite) {
+      final normalized = nextOverviewColumns.round().clamp(1, 20);
+      if (normalized != _orderOverviewColumns) {
+        _orderOverviewColumns = normalized;
         layoutChanged = true;
       }
-    } else if (nextOverviewWidth != null) {
-      throw const FormatException('同步总概览卡片大小格式无效。');
+    } else if (nextOverviewColumns != null) {
+      throw const FormatException('同步总概览列数格式无效。');
     }
     final nextProductCardView = settings[_productCardViewSettingKey];
     if (nextProductCardView is bool &&
@@ -1495,11 +1495,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _syncCoordinator.notifySettingsChanged();
   }
 
-  void _setOrderOverviewCardWidth(double value) {
-    final normalized = value.clamp(72, 280).toDouble();
-    if ((_orderOverviewCardWidth - normalized).abs() < 0.1) return;
+  void _setOrderOverviewColumns(int value) {
+    final normalized = value.clamp(1, 20);
+    if (_orderOverviewColumns == normalized) return;
     setState(() {
-      _orderOverviewCardWidth = normalized;
+      _orderOverviewColumns = normalized;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1696,8 +1696,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onCardViewChanged: _setOrderCardView,
           overviewView: _orderOverviewView,
           onOverviewViewChanged: _setOrderOverviewView,
-          overviewCardWidth: _orderOverviewCardWidth,
-          onOverviewCardWidthChanged: _setOrderOverviewCardWidth,
+          overviewColumns: _orderOverviewColumns,
+          onOverviewColumnsChanged: _setOrderOverviewColumns,
           sortModeName: _orderSortMode,
           onSortModeChanged: _setOrderSortMode,
         ),
