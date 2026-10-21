@@ -321,11 +321,13 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
     _onLocalChanged();
   }
 
+  @override
   Set<String> get conflictedOrderIds => <String>{
     for (final item in _conflicts)
       if (item.kind == SyncEntityKind.order) item.recordId,
   };
 
+  @override
   Set<String> get conflictedProductIds => <String>{
     for (final item in _conflicts)
       if (item.kind == SyncEntityKind.product) item.recordId,
@@ -345,6 +347,7 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
     );
   }
 
+  @override
   Future<void> flushNow() async {
     if (_disposed || !_initialized) return;
     _changeDebounce?.cancel();
