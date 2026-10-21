@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
 
 import 'app_theme_palette.dart';
 import 'app_ui_style.dart';
+import '../web/web_platform_bridge.dart';
 
 class AppThemeStore extends ChangeNotifier {
   static const String _storageKey = 'adventurers-guild.pwa.theme.v2';
@@ -39,7 +39,7 @@ class AppThemeStore extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final source = html.window.localStorage[_storageKey];
+      final source = webStorageGet(_storageKey);
       if (source == null || source.trim().isEmpty) {
         notifyListeners();
         return;
@@ -70,7 +70,7 @@ class AppThemeStore extends ChangeNotifier {
 
       final styleId = decoded['style'];
       _style = styleId is String
-          ? (AppUiStyle.byId(styleId) ?? AppUiStyle.classic)
+          ? AppUiStyle.byId(styleId)
           : AppUiStyle.classic;
     } catch (_) {
       _mode = ThemeMode.system;
@@ -180,12 +180,15 @@ class AppThemeStore extends ChangeNotifier {
 
   Future<void> _persist() async {
     try {
-      html.window.localStorage[_storageKey] = jsonEncode(<String, dynamic>{
-        'mode': _mode.name,
-        'paletteId': _paletteId,
-        'style': _style.id,
-        'customPalettes': exportCustomPalettes(),
-      });
+      webStorageSet(
+        _storageKey,
+        jsonEncode(<String, dynamic>{
+          'mode': _mode.name,
+          'paletteId': _paletteId,
+          'style': _style.id,
+          'customPalettes': exportCustomPalettes(),
+        }),
+      );
     } catch (_) {
       // Theme remains usable for the current browser session.
     }
