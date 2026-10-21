@@ -450,19 +450,12 @@ class _ReceiveAccountTransferPageState
     final colors = Theme.of(context).colorScheme;
     final response = _session?.response.encode();
     final transferStatus = _transferStatus;
-    final progress = transferStatus?.progress;
     final sourceConnected = transferStatus?.sourceConnected == true;
     final folderReady = transferStatus?.folderReady == true;
-    final peerConfirmed = _folderReadyOnce || folderReady;
+    final payloadReceived = transferStatus?.payloadReceived == true;
+    final peerConfirmed = sourceConnected || _folderReadyOnce || folderReady;
     final remoteFolderState = transferStatus?.remoteFolderState;
     final folderState = transferStatus?.folderState;
-    final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
-        .clamp(0, 100)
-        .toDouble();
-    final progressBytes = (progress?['globalBytes'] as num?)?.toInt() ?? 0;
-    final progressItems = (progress?['globalItems'] as num?)?.toInt() ?? 0;
-    final hasMeasuredProgress = progress != null &&
-        (progressBytes > 0 || progressItems > 0);
 
     return Scaffold(
       appBar: AppBar(title: const Text('确认新设备')),
@@ -543,43 +536,43 @@ class _ReceiveAccountTransferPageState
                       ),
                     ] else ...[
                       Icon(
-                        folderReady
+                        payloadReceived
                             ? Icons.check_circle_rounded
                             : Icons.sync_rounded,
                         size: 46,
-                        color: folderReady
+                        color: payloadReceived
                             ? colors.primary
                             : colors.onSurfaceVariant,
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        folderReady
-                            ? '账号传输通道已对接'
-                            : sourceConnected
-                                ? '已连接原设备，正在确认临时账号目录'
-                                : '原设备已确认，正在建立同步连接',
+                        payloadReceived
+                            ? '账号信息已收到'
+                            : folderReady
+                                ? '账号传输通道已对接'
+                                : sourceConnected
+                                    ? '已连接原设备，正在确认临时账号目录'
+                                    : '原设备已确认，正在建立同步连接',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                         textAlign: TextAlign.center,
                       ),
                     ],
                     const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: hasMeasuredProgress ? completion / 100 : null,
-                    ),
+                    const LinearProgressIndicator(),
                     const SizedBox(height: 8),
                     Text(
-                      folderReady && hasMeasuredProgress
-                          ? '账号传输通道已对接 · 正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
+                      payloadReceived
+                          ? '账号信息已经接收完成，正在等待原设备完成正式同步绑定……'
                           : folderReady
-                              ? '临时账号目录已经双方确认，正在等待账号数据到达……'
+                              ? '临时账号目录已经双方确认，正在接收账号信息……'
                               : sourceConnected
                                   ? remoteFolderState == 'notSharing'
-                                      ? '设备已经连接，但临时账号目录尚未被原设备共享，正在自动修复……'
+                                      ? '设备已经连接，但临时账号目录尚未被原设备共享，双方正在持续自动修复……'
                                       : remoteFolderState == 'paused'
-                                          ? '设备已经连接，但临时账号目录处于暂停状态……'
+                                          ? '设备已经连接，但临时账号目录处于暂停状态，正在自动恢复……'
                                           : '设备已经连接，正在完成临时账号目录握手……'
                                   : peerConfirmed
-                                      ? '临时账号目录已确认，正在恢复同步连接……'
+                                      ? '原设备已确认，正在恢复同步连接……'
                                       : folderState == 'scanning'
                                           ? '同步通道已准备，正在连接原设备……'
                                           : '等待原设备确认并建立连接……',
