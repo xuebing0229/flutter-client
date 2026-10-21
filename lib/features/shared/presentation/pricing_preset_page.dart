@@ -37,7 +37,7 @@ class PricingPresetPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  '还没有加价预设。\n可以把商用 ×2、加急 +30%、背景 +¥100 等规则保存下来，排单和成品都能直接套用。',
+                  '暂无加价预设',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -349,12 +349,6 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
             contentPadding: EdgeInsets.zero,
             title: const Text('计算预览'),
             subtitle: Text(preview.formulaLabel),
-          ),
-          Text(
-            '每个预设只使用一种计价方式；需要组合加价时，可以同时套用多个预设。',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
           ),
         ],
       ),
