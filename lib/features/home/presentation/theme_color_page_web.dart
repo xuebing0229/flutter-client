@@ -46,14 +46,16 @@ class ThemeColorPage extends StatelessWidget {
             const Text('主题色', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             for (final palette in AppThemePalettes.all)
-              RadioListTile<String>(
-                value: palette.id,
-                groupValue: store.paletteId,
-                onChanged: (value) {
-                  if (value != null) store.setPaletteId(value);
-                },
+              ListTile(
+                selected: store.paletteId == palette.id,
+                onTap: () => store.setPaletteId(palette.id),
+                leading: Icon(
+                  store.paletteId == palette.id
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                ),
                 title: Text(palette.name),
-                secondary: Wrap(
+                trailing: Wrap(
                   spacing: 3,
                   children: [
                     for (final color in palette.previewColors.take(4))
@@ -72,12 +74,14 @@ class ThemeColorPage extends StatelessWidget {
             const Text('界面风格', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             for (final style in AppUiStyle.values)
-              RadioListTile<AppUiStyle>(
-                value: style,
-                groupValue: store.style,
-                onChanged: (value) {
-                  if (value != null) store.setStyle(value);
-                },
+              ListTile(
+                selected: store.style == style,
+                onTap: () => store.setStyle(style),
+                leading: Icon(
+                  store.style == style
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                ),
                 title: Text(style.label),
               ),
             if (store.customPalettes.isNotEmpty) ...[
@@ -85,12 +89,14 @@ class ThemeColorPage extends StatelessWidget {
               const Text('已保存自定义配色',
                   style: TextStyle(fontWeight: FontWeight.w700)),
               for (final palette in store.customPalettes)
-                RadioListTile<String>(
-                  value: palette.id,
-                  groupValue: store.paletteId,
-                  onChanged: (value) {
-                    if (value != null) store.setPaletteId(value);
-                  },
+                ListTile(
+                  selected: store.paletteId == palette.id,
+                  onTap: () => store.setPaletteId(palette.id),
+                  leading: Icon(
+                    store.paletteId == palette.id
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                  ),
                   title: Text(palette.name),
                 ),
             ],
