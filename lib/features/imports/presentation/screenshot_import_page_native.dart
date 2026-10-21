@@ -997,7 +997,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           tags: normalizeOrderTags(row.tags),
           deadline: row.deadline,
           nodePresetId: preset.id,
-          nodePresetSnapshot: preset.snapshot(),
+          nodePresetSnapshot: screenshotImportPresetSnapshot(
+            preset: preset,
+            row: row,
+          ),
           currentNodeId: row.nodeId,
           price: row.price!,
           feeEnabled: row.feeEnabled,
@@ -1135,10 +1138,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                               existingOrders: widget.orderStore.orders,
                             );
                             row.presetId = preset.id;
-                            row.nodeId = resolveImportNode(
+                            row.nodeId = resolveScreenshotImportNodeId(
                               preset: preset,
                               recognizedPercent: row.recognizedPercent,
-                            ).id;
+                              recognizedNodeLabel: row.recognizedNodeLabel,
+                            );
                           }
                         }
                         _refreshDuplicateWarnings();
@@ -1149,10 +1153,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                         for (final row in _rows) {
                           if (!row.selected) continue;
                           row.presetId = preset.id;
-                          row.nodeId = resolveImportNode(
+                          row.nodeId = resolveScreenshotImportNodeId(
                             preset: preset,
                             recognizedPercent: row.recognizedPercent,
-                          ).id;
+                            recognizedNodeLabel: row.recognizedNodeLabel,
+                          );
                           row.presetManuallyChanged = true;
                           row.nodeManuallyChanged = false;
                         }
@@ -1555,6 +1560,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                             child: Text(node.name + ' ' +
                                 node.progressPercent.toString() + '%'),
                           ),
+                        if (isScreenshotOcrNodeId(row.nodeId) &&
+                            (row.recognizedNodeLabel?.trim().isNotEmpty ?? false))
+                          DropdownMenuItem(
+                            value: row.nodeId,
+                            child: Text(
+                              row.recognizedNodeLabel!.trim() + '（截图识别）',
+                            ),
+                          ),
                       ],
                       onChanged: (id) {
                         if (id == null) return;
@@ -1578,10 +1591,18 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       setState(() => row.feeEnabled = value ?? false),
                 ),
                 const Spacer(),
-                if (row.recognizedPercent != null && !_products)
-                  Text('截图进度 ' +
-                      row.recognizedPercent.toString() + '%',
-                      style: theme.textTheme.labelSmall),
+                if (!_products &&
+                    (row.recognizedPercent != null ||
+                        (row.recognizedNodeLabel?.trim().isNotEmpty ?? false)))
+                  Text(
+                    [
+                      if (row.recognizedNodeLabel?.trim().isNotEmpty ?? false)
+                        '截图节点 ' + row.recognizedNodeLabel!.trim(),
+                      if (row.recognizedPercent != null)
+                        '截图进度 ' + row.recognizedPercent.toString() + '%',
+                    ].join(' · '),
+                    style: theme.textTheme.labelSmall,
+                  ),
               ],
             ),
         ],
