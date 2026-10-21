@@ -1,10 +1,15 @@
-import 'dart:async';
-import 'dart:html' as html;
-import 'dart:js_util' as js_util;
+import 'dart:convert';
+import 'dart:js_interop';
 
 import '../domain/screenshot_layout_parser.dart';
 import 'screenshot_ocr_result.dart';
 import 'web_screenshot_files.dart';
+
+@JS('adventurersGuildOcrRecognize')
+external JSPromise<JSString> _recognizeScreenshot(JSString base64Data);
+
+@JS('adventurersGuildOcrRelease')
+external JSPromise<JSString> _releaseScreenshotOcr();
 
 class ScreenshotOcrService {
   const ScreenshotOcrService();
@@ -14,37 +19,20 @@ class ScreenshotOcrService {
   Future<String?> lastNativeCrashReport() async => null;
 
   Future<void> release() async {
-    if (!js_util.hasProperty(html.window, 'adventurersGuildOcrRelease')) return;
     try {
-      final promise = js_util.callMethod<Object?>(
-        html.window,
-        'adventurersGuildOcrRelease',
-        const <Object?>[],
-      );
-      if (promise != null) await js_util.promiseToFuture<Object?>(promise as Object);
-    } catch (_) {}
+      await _releaseScreenshotOcr().toDart;
+    } catch (_) {
+      // Releasing a browser OCR session is best-effort.
+    }
   }
 
   Future<ScreenshotOcrResult> recognize(String imageToken) async {
-    for (var attempt = 0; attempt < 100; attempt++) {
-      if (js_util.hasProperty(html.window, 'adventurersGuildOcrRecognize')) {
-        break;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+    final encoded = base64Encode(WebScreenshotFiles.bytes(imageToken));
+    final source = (await _recognizeScreenshot(encoded.toJS).toDart).toDart;
+    final value = jsonDecode(source);
+    if (value is! Map) {
+      throw const FormatException('浏览器 OCR 返回格式无效');
     }
-    if (!js_util.hasProperty(html.window, 'adventurersGuildOcrRecognize')) {
-      throw StateError('浏览器 OCR 模块没有加载完成，请联网后重试。');
-    }
-
-    final blob = html.Blob(<Object>[WebScreenshotFiles.bytes(imageToken)]);
-    final promise = js_util.callMethod<Object?>(
-      html.window,
-      'adventurersGuildOcrRecognize',
-      <Object?>[blob],
-    );
-    final result = await js_util.promiseToFuture<Object?>(promise as Object);
-    final value = js_util.dartify(result);
-    if (value is! Map) throw const FormatException('浏览器 OCR 返回格式无效');
 
     double number(Object? raw, String field) {
       if (raw is num) return raw.toDouble();
