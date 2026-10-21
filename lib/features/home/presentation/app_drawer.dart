@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/account/account_store.dart';
+import '../../../core/cloud_sync/native_sync_coordinator_view_adapter.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/finance/pricing_preset_store.dart';
@@ -305,7 +306,7 @@ class AppToolMenu extends StatelessWidget {
               pricingPresetStore: pricingPresetStore,
               receiptStyleStore: receiptStyleStore,
               featureStore: featureStore,
-              syncCoordinator: syncCoordinator,
+              syncCoordinator: NativeSyncCoordinatorViewAdapter(syncCoordinator),
             ),
           ),
         ),
