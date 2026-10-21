@@ -263,6 +263,7 @@ class CollectionToolbar extends StatelessWidget {
     this.sortControl,
     this.cardView = false,
     this.onToggleView,
+    this.viewControl,
     this.helpMessage,
     this.summaryText,
     super.key,
@@ -273,6 +274,7 @@ class CollectionToolbar extends StatelessWidget {
   final Widget? sortControl;
   final bool cardView;
   final VoidCallback? onToggleView;
+  final Widget? viewControl;
   final String? helpMessage;
   final String? summaryText;
 
@@ -332,7 +334,9 @@ class CollectionToolbar extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           if (sortControl != null) sortControl!,
-          if (onToggleView != null)
+          if (viewControl != null)
+            viewControl!
+          else if (onToggleView != null)
             InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: onToggleView,
