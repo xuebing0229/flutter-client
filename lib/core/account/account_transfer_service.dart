@@ -370,9 +370,13 @@ class SyncthingAccountTransferServer {
   String? _acceptedReceiverName;
   String? _acceptedReceiverAppDeviceId;
   String? _acceptedReceiverPlatform;
+  bool _receiverFolderReady = false;
+  String? _receiverRemoteFolderState;
 
   bool get receiverFinished => _receiverFinished;
   bool get transferred => _transferred;
+  bool get receiverFolderReady => _receiverFolderReady;
+  String? get receiverRemoteFolderState => _receiverRemoteFolderState;
   String? get acceptedReceiverDeviceId => _acceptedReceiverDeviceId;
   String? get acceptedReceiverName => _acceptedReceiverName;
   String? get acceptedReceiverAppDeviceId => _acceptedReceiverAppDeviceId;
@@ -466,73 +470,68 @@ class SyncthingAccountTransferServer {
     _acceptedReceiverName = response.receiverName;
     _acceptedReceiverAppDeviceId = response.receiverAppDeviceId;
     _acceptedReceiverPlatform = response.receiverPlatform;
+    _receiverFolderReady = false;
+    _receiverRemoteFolderState = null;
 
-    // Device-level connectivity is not enough. Wait until Syncthing confirms
-    // that the receiver shares THIS bootstrap folder back (remoteState=valid).
-    final deadline = DateTime.now().add(const Duration(seconds: 45));
-    String? lastRemoteState;
-    String? lastFolderError;
-    while (!_closed && DateTime.now().isBefore(deadline)) {
-      await _bridge.pairFolder(
-        folderId: descriptor.folderId,
-        deviceId: response.receiverDeviceId,
-        name: response.receiverName,
-      );
-      await _bridge.setFolderPaused(
-        folderId: descriptor.folderId,
-        paused: false,
-      );
-      await _bridge.requestScanFolder(descriptor.folderId);
-
-      final status = await _bridge.statusFolder(descriptor.folderId);
-      lastRemoteState =
-          status.remoteFolderStates[response.receiverDeviceId]?.trim();
-      if (status.folderErrors.isNotEmpty) {
-        lastFolderError = status.folderErrors.first;
-      }
-
-      final connected = status.connectedDeviceIds.contains(
-        response.receiverDeviceId,
-      );
-      if (connected && lastRemoteState == 'valid') {
-        await _bridge.requestScanFolder(descriptor.folderId);
-        return;
-      }
-
-      if (lastRemoteState == 'paused') {
-        throw const FormatException(
-          '新设备已经连接，但临时账号同步目录在对端处于暂停状态。'
-          '请让新设备保持在“确认新设备”页面后重新尝试。',
-        );
-      }
-
-      await Future<void>.delayed(const Duration(milliseconds: 750));
+    // Treat the cryptographically verified response as the confirmation
+    // boundary. Folder sharing can take longer on a freshly reinstalled phone
+    // or after a stale device was just revoked, so do one immediate repair and
+    // let poll() keep repairing instead of failing the whole confirmation after
+    // a fixed 45-second window.
+    try {
+      await _repairReceiverFolderShare();
+    } catch (_) {
+      // The page poll keeps retrying this exact operation. A transient local
+      // Syncthing/API failure must not force the user to scan the response code
+      // again after it has already been authenticated.
     }
+  }
 
-    if (_closed) {
-      throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
-    }
-    if (lastFolderError != null && lastFolderError.isNotEmpty) {
-      throw FormatException('临时账号同步目录建立失败：$lastFolderError');
-    }
-    if (lastRemoteState == 'notSharing') {
-      throw const FormatException(
-        '两台设备已经连接，但新设备没有真正共享临时账号目录。'
-        '请让新设备保持在“确认新设备”页面并重新生成配对。',
-      );
-    }
-    throw FormatException(
-      '临时账号同步目录没有完成握手'
-      '${lastRemoteState == null || lastRemoteState.isEmpty ? '' : '（状态：$lastRemoteState）'}。'
-      '请让两台设备都保持当前页面后重试。',
+  Future<void> _repairReceiverFolderShare() async {
+    final deviceId = _acceptedReceiverDeviceId;
+    final name = _acceptedReceiverName;
+    if (_closed || deviceId == null || name == null) return;
+
+    // Re-assert BOTH sides of the local bootstrap configuration every poll.
+    // This is intentionally idempotent. It fixes the half-state where the
+    // devices are connected but the source no longer shares this temporary
+    // folder after a reinstall/revoke/rejoin sequence.
+    await _bridge.pairFolder(
+      folderId: descriptor.folderId,
+      deviceId: deviceId,
+      name: name,
     );
+    await _bridge.setFolderPaused(
+      folderId: descriptor.folderId,
+      paused: false,
+    );
+    await _bridge.requestScanFolder(descriptor.folderId);
+
+    final status = await _bridge.statusFolder(descriptor.folderId);
+    if (status.folderErrors.isNotEmpty) {
+      throw FormatException(
+        '临时账号目录同步失败：${status.folderErrors.first}',
+      );
+    }
+
+    final remoteState = status.remoteFolderStates[deviceId]?.trim();
+    _receiverRemoteFolderState = remoteState;
+    _receiverFolderReady =
+        status.connectedDeviceIds.contains(deviceId) &&
+        remoteState == 'valid';
+
+    if (_receiverFolderReady) {
+      // The payload existed before pairing. Scan again after the remote folder
+      // becomes valid so a stale empty index cannot leave transfer.json behind.
+      await _bridge.requestScanFolder(descriptor.folderId);
+    }
   }
 
   Future<void> poll() async {
     if (_closed || _transferred) return;
 
     if (_acceptedReceiverDeviceId != null) {
-      await _bridge.requestScanFolder(descriptor.folderId);
+      await _repairReceiverFolderShare();
     }
 
     if (!_receiverFinished && await _doneFile.exists()) {
@@ -659,6 +658,7 @@ Future<void> _cleanupBootstrapFolder(
 typedef AccountTransferStatus = ({
   bool sourceConnected,
   bool folderReady,
+  bool payloadReceived,
   String? remoteFolderState,
   String? folderState,
   List<String> folderErrors,
@@ -690,7 +690,9 @@ class SyncthingAccountTransferClientSession {
 
   bool _closed = false;
 
-  Future<AccountTransferStatus> transferStatus() async {
+  Future<AccountTransferStatus> transferStatus({
+    bool payloadReceived = false,
+  }) async {
     final status = await _bridge.statusFolder(descriptor.folderId);
     final sourceConnected = status.connectedDeviceIds.contains(
       descriptor.sourceDeviceId,
@@ -700,6 +702,7 @@ class SyncthingAccountTransferClientSession {
     return (
       sourceConnected: sourceConnected,
       folderReady: sourceConnected && remoteFolderState == 'valid',
+      payloadReceived: payloadReceived,
       remoteFolderState: remoteFolderState,
       folderState: status.folderState,
       folderErrors: status.folderErrors,
@@ -731,7 +734,7 @@ class SyncthingAccountTransferClientSession {
       if (status.sourceConnected && !sourceConnected) {
         sourceConnected = true;
         folderHandshakeDeadline = DateTime.now().add(
-          const Duration(seconds: 45),
+          const Duration(minutes: 2),
         );
       }
 
@@ -771,6 +774,16 @@ class SyncthingAccountTransferClientSession {
           encrypted,
           descriptor.encryptionKey,
         );
+
+        onStatus?.call((
+          sourceConnected: status.sourceConnected,
+          folderReady: status.folderReady,
+          payloadReceived: true,
+          remoteFolderState: status.remoteFolderState,
+          folderState: status.folderState,
+          folderErrors: status.folderErrors,
+          progress: status.progress,
+        ));
 
         await _doneFile.writeAsString('done', flush: true);
         await _bridge.requestScanFolder(descriptor.folderId);
