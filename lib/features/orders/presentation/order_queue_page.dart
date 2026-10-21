@@ -1185,6 +1185,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                                         ? '卡片视图'
                                         : '列表视图',
                               ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.arrow_drop_down_rounded,
+                                size: 20,
+                              ),
                             ],
                           ),
                         ),
