@@ -141,7 +141,7 @@ NodePreset screenshotImportPresetSnapshot({
         name: label,
         iconKey: 'circle',
         colorValue: 0xFF8D8D8D,
-        progressPercent: (row.recognizedPercent ?? 0).clamp(0, 100),
+        progressPercent: (row.recognizedPercent ?? 0).clamp(0, 100).toInt(),
       ),
     ],
   );
