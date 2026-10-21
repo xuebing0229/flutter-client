@@ -158,4 +158,9 @@ void main() {
     final picked = newsBetweenBuilds(191, 192);
     expect(picked.map((e) => e.title).toList(), ['新设备回应码显示修复']);
   });
+
+  test('193 包含电脑确认回应码卡死修复见闻', () {
+    final picked = newsBetweenBuilds(192, 193);
+    expect(picked.map((e) => e.title).toList(), ['电脑确认回应码卡死修复']);
+  });
 }
