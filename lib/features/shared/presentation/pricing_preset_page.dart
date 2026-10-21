@@ -93,11 +93,14 @@ class _PricingPresetEditorPage extends StatefulWidget {
       _PricingPresetEditorPageState();
 }
 
+enum _PricingPresetKind { multiplier, percent, fixed }
+
 class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _multiplierController;
   late final TextEditingController _percentController;
   late final TextEditingController _fixedController;
+  late _PricingPresetKind _kind;
 
   bool get _isNew => widget.preset == null;
 
@@ -105,9 +108,12 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
   void initState() {
     super.initState();
     final preset = widget.preset;
+    _kind = _kindForPreset(preset);
     _nameController = TextEditingController(text: preset?.name ?? '');
     _multiplierController = TextEditingController(
-      text: preset == null ? '1' : formatPricingNumber(preset.multiplier),
+      text: preset == null || preset.multiplier == 1
+          ? ''
+          : formatPricingNumber(preset.multiplier),
     );
     _percentController = TextEditingController(
       text: preset == null || preset.percent == 0
@@ -130,6 +136,20 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
     super.dispose();
   }
 
+  _PricingPresetKind _kindForPreset(PricingAdjustment? preset) {
+    if (preset == null) return _PricingPresetKind.multiplier;
+    if ((preset.multiplier - 1).abs() > 0.0000001) {
+      return _PricingPresetKind.multiplier;
+    }
+    if (preset.percent.abs() > 0.0000001) {
+      return _PricingPresetKind.percent;
+    }
+    if (preset.fixedAmount.abs() > 0.0000001) {
+      return _PricingPresetKind.fixed;
+    }
+    return _PricingPresetKind.multiplier;
+  }
+
   double? _number(TextEditingController controller, {double? empty}) {
     final raw = controller.text.trim();
     if (raw.isEmpty) return empty;
@@ -144,9 +164,15 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
 
   void _save() {
     final name = _nameController.text.trim();
-    final multiplier = _number(_multiplierController, empty: 1);
-    final percent = _number(_percentController, empty: 0);
-    final fixed = _number(_fixedController, empty: 0);
+    final multiplier = _kind == _PricingPresetKind.multiplier
+        ? _number(_multiplierController)
+        : 1.0;
+    final percent = _kind == _PricingPresetKind.percent
+        ? _number(_percentController)
+        : 0.0;
+    final fixed = _kind == _PricingPresetKind.fixed
+        ? _number(_fixedController)
+        : 0.0;
 
     if (name.isEmpty) {
       _message('请填写预设名称');
@@ -162,7 +188,7 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
       _message('请输入有效的加价数值');
       return;
     }
-    if (percent < -100) {
+    if (_kind == _PricingPresetKind.percent && percent < -100) {
       _message('百分比不能低于 -100%');
       return;
     }
@@ -210,9 +236,15 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
     final preview = PricingAdjustment(
       id: 'preview',
       name: '预览',
-      multiplier: _number(_multiplierController, empty: 1) ?? 1,
-      percent: _number(_percentController, empty: 0) ?? 0,
-      fixedAmount: _number(_fixedController, empty: 0) ?? 0,
+      multiplier: _kind == _PricingPresetKind.multiplier
+          ? (_number(_multiplierController, empty: 1) ?? 1)
+          : 1,
+      percent: _kind == _PricingPresetKind.percent
+          ? (_number(_percentController, empty: 0) ?? 0)
+          : 0,
+      fixedAmount: _kind == _PricingPresetKind.fixed
+          ? (_number(_fixedController, empty: 0) ?? 0)
+          : 0,
     );
 
     return Scaffold(
@@ -244,45 +276,74 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
               hintText: '例如：商用 / 加急 / 复杂背景',
             ),
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _multiplierController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: '倍率',
-              prefixText: '× ',
-              helperText: '不需要倍率时填 1',
-            ),
-            onChanged: (_) => setState(() {}),
+          const SizedBox(height: 18),
+          const Text(
+            '计价方式',
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _percentController,
-            keyboardType: const TextInputType.numberWithOptions(
-              decimal: true,
-              signed: true,
-            ),
-            decoration: const InputDecoration(
-              labelText: '百分比',
-              suffixText: '%',
-              hintText: '例如 30 或 -10',
-            ),
-            onChanged: (_) => setState(() {}),
+          const SizedBox(height: 10),
+          SegmentedButton<_PricingPresetKind>(
+            segments: const [
+              ButtonSegment(
+                value: _PricingPresetKind.multiplier,
+                label: Text('倍率'),
+              ),
+              ButtonSegment(
+                value: _PricingPresetKind.percent,
+                label: Text('百分比'),
+              ),
+              ButtonSegment(
+                value: _PricingPresetKind.fixed,
+                label: Text('固定金额'),
+              ),
+            ],
+            selected: <_PricingPresetKind>{_kind},
+            showSelectedIcon: false,
+            onSelectionChanged: (value) {
+              setState(() => _kind = value.single);
+            },
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _fixedController,
-            keyboardType: const TextInputType.numberWithOptions(
-              decimal: true,
-              signed: true,
+          const SizedBox(height: 16),
+          if (_kind == _PricingPresetKind.multiplier)
+            TextField(
+              controller: _multiplierController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: '倍率',
+                prefixText: '× ',
+                hintText: '例如 2',
+              ),
+              onChanged: (_) => setState(() {}),
             ),
-            decoration: const InputDecoration(
-              labelText: '固定金额',
-              prefixText: '¥ ',
-              hintText: '可正可负',
+          if (_kind == _PricingPresetKind.percent)
+            TextField(
+              controller: _percentController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: '百分比',
+                suffixText: '%',
+                hintText: '例如 20 或 -10',
+              ),
+              onChanged: (_) => setState(() {}),
             ),
-            onChanged: (_) => setState(() {}),
-          ),
+          if (_kind == _PricingPresetKind.fixed)
+            TextField(
+              controller: _fixedController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: '固定金额',
+                prefixText: '¥ ',
+                hintText: '例如 100 或 -50',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
           const SizedBox(height: 20),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -290,7 +351,7 @@ class _PricingPresetEditorPageState extends State<_PricingPresetEditorPage> {
             subtitle: Text(preview.formulaLabel),
           ),
           Text(
-            '倍率和百分比按套用顺序计算；所有固定金额统一最后加减，不会被后续倍率重复放大。',
+            '每个预设只使用一种计价方式；需要组合加价时，可以同时套用多个预设。',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
