@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/account/account_models.dart';
 import '../core/account/web_account_store.dart';
@@ -18,8 +19,10 @@ import '../core/theme/app_theme_store.dart';
 import '../core/theme/app_ui_style.dart';
 import '../core/theme/guild_visual_theme.dart';
 import '../core/web/web_platform_bridge.dart';
+import '../features/home/presentation/about_page.dart';
 import '../features/home/presentation/archive_page.dart';
 import '../features/home/presentation/feature_toggle_page.dart';
+import '../features/home/presentation/first_run_guide.dart';
 import '../features/home/presentation/theme_color_page.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
@@ -1770,6 +1773,30 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 ),
               ),
               ListTile(
+                leading: const Icon(Icons.school_outlined),
+                title: const Text('使用教程'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      unawaited(showFirstRunGuide(context, detailed: true));
+                    }
+                  });
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('账号与设备'),
+                subtitle: Text(widget.accountStore.accountName ?? '当前账号'),
+                onTap: () => _openTool(
+                  context,
+                  _WebAccountPage(
+                    store: widget.accountStore,
+                    peerSync: _peerSync,
+                  ),
+                ),
+              ),
+              ListTile(
                 leading: const Icon(Icons.sync_alt_rounded),
                 title: const Text('设备同步 / 备份'),
                 subtitle: Text(_peerSync?.connected == true ? '在线同步已连接 · 另有完整备份' : '在线同步正在连接 · 另有完整备份'),
@@ -1783,6 +1810,24 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                     peerSync: _peerSync,
                   ),
                 ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded),
+                title: const Text('关于冒险者公会'),
+                onTap: () async {
+                  final navigator = Navigator.of(context);
+                  navigator.pop();
+                  final info = await PackageInfo.fromPlatform();
+                  if (!mounted) return;
+                  await navigator.push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AppAboutPage(
+                        version: info.version,
+                        buildNumber: int.tryParse(info.buildNumber) ?? 0,
+                      ),
+                    ),
+                  );
+                },
               ),
               const Divider(),
               Padding(
@@ -1857,6 +1902,292 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _WebAccountPage extends StatefulWidget {
+  const _WebAccountPage({
+    required this.store,
+    required this.peerSync,
+  });
+
+  final WebAccountStore store;
+  final PublicPeerSyncService? peerSync;
+
+  @override
+  State<_WebAccountPage> createState() => _WebAccountPageState();
+}
+
+class _WebAccountPageState extends State<_WebAccountPage> {
+  Future<void> _renameAccount() async {
+    final controller = TextEditingController(text: widget.store.accountName ?? '');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改账号名'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '新账号名'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.renameAccount(value);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改账号名失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final value = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改密码'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: current,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '当前密码'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: next,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '新密码'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(
+              <String>[current.text, next.text],
+            ),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    current.dispose();
+    next.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.changePassword(
+        currentPassword: value[0],
+        newPassword: value[1],
+      );
+      widget.peerSync?.requestSync(immediate: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('密码已修改')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改密码失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _renameDevice(AccountDevice device) async {
+    final controller = TextEditingController(text: device.name);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改设备名称'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '设备名称'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.renameDevice(device.id, value);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改设备名称失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _revokeDevice(AccountDevice device) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('解绑设备？'),
+        content: Text('“${device.name}”会从使用中设备移除，并通过设备同步发送解绑状态。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('解绑'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.store.revokeDevice(device.id);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('解绑设备失败：$error')),
+      );
+    }
+  }
+
+  String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, _) {
+        final currentId = widget.store.currentDeviceId;
+        final devices = widget.store.activeDevices;
+        final password = widget.store.accountPassword ?? '';
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              '账号与设备',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+            children: [
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('账号名'),
+                      subtitle: Text(widget.store.accountName ?? ''),
+                      trailing: IconButton(
+                        tooltip: '修改账号名',
+                        onPressed: _renameAccount,
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      title: const Text('密码'),
+                      subtitle: Text(password),
+                      trailing: TextButton(
+                        onPressed: _changePassword,
+                        child: const Text('修改'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '使用中设备 · ${devices.length} 台',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              for (final device in devices)
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      device.id == currentId
+                          ? Icons.devices_rounded
+                          : Icons.devices_other_rounded,
+                    ),
+                    title: Text(device.name),
+                    subtitle: Text(
+                      '${device.platform} · 最后使用 ${_formatTime(device.lastSeenAt)}'
+                      '${device.id == currentId ? ' · 当前设备' : ''}',
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'rename') {
+                          _renameDevice(device);
+                        } else if (value == 'revoke') {
+                          _revokeDevice(device);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'rename',
+                          child: Text('修改设备名称'),
+                        ),
+                        if (device.id != currentId)
+                          const PopupMenuItem(
+                            value: 'revoke',
+                            child: Text('解绑设备'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await widget.store.lock();
+                  if (mounted) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  }
+                },
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('退出登录'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
