@@ -5,10 +5,12 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/account/account_models.dart';
 import '../core/account/web_account_store.dart';
 import '../core/features/app_feature_store.dart';
+import '../core/finance/pricing_preset_store.dart';
 import '../core/portability/app_backup_data.dart';
 import '../core/portability/web_backup_reader.dart';
 import '../core/sync/public_peer_sync_service.dart';
@@ -17,8 +19,10 @@ import '../core/theme/app_theme_store.dart';
 import '../core/theme/app_ui_style.dart';
 import '../core/theme/guild_visual_theme.dart';
 import '../core/web/web_platform_bridge.dart';
+import '../features/home/presentation/about_page.dart';
 import '../features/home/presentation/archive_page.dart';
 import '../features/home/presentation/feature_toggle_page.dart';
+import '../features/home/presentation/first_run_guide.dart';
 import '../features/home/presentation/theme_color_page.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
@@ -36,6 +40,8 @@ import '../features/products/presentation/product_page.dart';
 import '../features/products/state/product_store.dart';
 import '../features/schedule/presentation/schedule_page.dart';
 import '../features/statistics/presentation/statistics_page.dart';
+import '../features/shared/domain/receipt_style_store.dart';
+import '../features/shared/presentation/pricing_preset_page.dart';
 
 Set<String> _desktopPetAssetPaths(Object? rawManifest) {
   if (rawManifest == null) return const <String>{};
@@ -387,7 +393,7 @@ class _WebAccountEntryPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '网页账号只保存在当前浏览器。已有安卓 / Windows 账号请从客户端完整备份导入，不需要重新使用激活码。',
+                '网页账号只保存在当前浏览器。可以使用激活码创建新账号，也可以登录当前浏览器已保存的账号，或从 Android / Windows 完整备份加入已有账号。',
                 style: TextStyle(
                   height: 1.5,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -421,6 +427,16 @@ class _WebAccountEntryPage extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 18),
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => _WebActivationPage(store: store),
+                  ),
+                ),
+                icon: const Icon(Icons.add_card_rounded),
+                label: const Text('首次使用 / 注册激活'),
+              ),
+              const SizedBox(height: 10),
               FilledButton.icon(
                 onPressed: importing ? null : onImportBackup,
                 icon: importing
@@ -428,18 +444,8 @@ class _WebAccountEntryPage extends StatelessWidget {
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.file_upload_outlined),
-                label: Text(importing ? '正在导入…' : '从客户端完整备份导入账号'),
-              ),
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  'PWA 暂不直接创建新账号；请先在 Android / Windows 客户端激活，再从完整备份加入。',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                    : const Icon(Icons.devices_other_rounded),
+                label: Text(importing ? '正在导入…' : '已有账号 / 导入完整备份'),
               ),
             ],
           ),
@@ -782,6 +788,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   final OrderStore _orderStore = OrderStore();
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
+  final PricingPresetStore _pricingPresetStore = PricingPresetStore();
+  final ReceiptStyleStore _receiptStyleStore = ReceiptStyleStore();
   final FocusStore _focusStore = FocusStore();
   late final SyncCoordinator _syncUi;
   PublicPeerSyncService? _peerSync;
@@ -825,6 +833,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     _orderStore.addListener(_scheduleSave);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
+    _pricingPresetStore.addListener(_scheduleSave);
+    _receiptStyleStore.addListener(_scheduleSave);
     _focusStore.addListener(_scheduleSave);
     widget.featureStore.addListener(_onFeatureStoreChanged);
     widget.themeStore.addListener(_scheduleSave);
@@ -1052,6 +1062,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       'themePaletteId': widget.themeStore.paletteId,
       'customThemePalettes': widget.themeStore.exportCustomPalettes(),
       'uiStyle': widget.themeStore.style.id,
+      'pricingAdjustmentPresets': _pricingPresetStore.toJson(),
+      'receiptStyle': _receiptStyleStore.toJson(),
       for (final entry in features.entries)
         'feature.${entry.key}': entry.key == AppFeature.deadlineReminders.name
             ? _nativeDeadlineReminderPreference
@@ -1089,6 +1101,13 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     final styleId = settings['uiStyle'] ?? settings['uiTexture'];
     if (styleId is String) {
       await widget.themeStore.setStyle(AppUiStyle.byId(styleId));
+    }
+
+    if (settings.containsKey('pricingAdjustmentPresets')) {
+      _pricingPresetStore.applyJson(settings['pricingAdjustmentPresets']);
+    }
+    if (settings.containsKey('receiptStyle')) {
+      _receiptStyleStore.applyJson(settings['receiptStyle']);
     }
 
     final legacyFeatures = settings['features'];
@@ -1188,6 +1207,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           accountId: _accountId,
           store: _productStore,
           featureStore: widget.featureStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           syncCoordinator: _syncUi,
           cardView: _productCardView,
           onCardViewChanged: (value) {
@@ -1220,6 +1241,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           accountId: _accountId,
           store: _orderStore,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
           syncCoordinator: _syncUi,
           cardView: _orderCardView,
@@ -1245,6 +1268,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           store: _orderStore,
           orderId: orderId,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -1258,6 +1283,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           builder: (_) => AddProductPage(
             accountId: _accountId,
             store: _productStore,
+            pricingPresetStore: _pricingPresetStore,
             featureStore: widget.featureStore,
           ),
         ),
@@ -1271,6 +1297,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             accountId: _accountId,
             store: _orderStore,
             nodePresetStore: _nodePresetStore,
+            pricingPresetStore: _pricingPresetStore,
             featureStore: widget.featureStore,
           ),
         ),
@@ -1579,6 +1606,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     _orderStore.removeListener(_scheduleSave);
     _productStore.removeListener(_scheduleSave);
     _nodePresetStore.removeListener(_scheduleSave);
+    _pricingPresetStore.removeListener(_scheduleSave);
+    _receiptStyleStore.removeListener(_scheduleSave);
+    _pricingPresetStore.dispose();
+    _receiptStyleStore.dispose();
     _focusStore.removeListener(_scheduleSave);
     _focusStore.dispose();
     widget.featureStore.removeListener(_onFeatureStoreChanged);
@@ -1694,6 +1725,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                     orderStore: _orderStore,
                     productStore: _productStore,
                     nodePresetStore: _nodePresetStore,
+                    pricingPresetStore: _pricingPresetStore,
+                    receiptStyleStore: _receiptStyleStore,
                     featureStore: widget.featureStore,
                     syncCoordinator: _syncUi,
                   ),
@@ -1705,6 +1738,14 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 onTap: () => _openTool(
                   context,
                   NodePresetPage(store: _nodePresetStore),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calculate_outlined),
+                title: const Text('加价预设'),
+                onTap: () => _openTool(
+                  context,
+                  PricingPresetPage(store: _pricingPresetStore),
                 ),
               ),
               ListTile(
@@ -1732,6 +1773,30 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 ),
               ),
               ListTile(
+                leading: const Icon(Icons.school_outlined),
+                title: const Text('使用教程'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      unawaited(showFirstRunGuide(context, detailed: true));
+                    }
+                  });
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('账号与设备'),
+                subtitle: Text(widget.accountStore.accountName ?? '当前账号'),
+                onTap: () => _openTool(
+                  context,
+                  _WebAccountPage(
+                    store: widget.accountStore,
+                    peerSync: _peerSync,
+                  ),
+                ),
+              ),
+              ListTile(
                 leading: const Icon(Icons.sync_alt_rounded),
                 title: const Text('设备同步 / 备份'),
                 subtitle: Text(_peerSync?.connected == true ? '在线同步已连接 · 另有完整备份' : '在线同步正在连接 · 另有完整备份'),
@@ -1745,6 +1810,24 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                     peerSync: _peerSync,
                   ),
                 ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded),
+                title: const Text('关于冒险者公会'),
+                onTap: () async {
+                  final navigator = Navigator.of(context);
+                  navigator.pop();
+                  final info = await PackageInfo.fromPlatform();
+                  if (!mounted) return;
+                  await navigator.push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AppAboutPage(
+                        version: info.version,
+                        buildNumber: int.tryParse(info.buildNumber) ?? 0,
+                      ),
+                    ),
+                  );
+                },
               ),
               const Divider(),
               Padding(
@@ -1819,6 +1902,292 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _WebAccountPage extends StatefulWidget {
+  const _WebAccountPage({
+    required this.store,
+    required this.peerSync,
+  });
+
+  final WebAccountStore store;
+  final PublicPeerSyncService? peerSync;
+
+  @override
+  State<_WebAccountPage> createState() => _WebAccountPageState();
+}
+
+class _WebAccountPageState extends State<_WebAccountPage> {
+  Future<void> _renameAccount() async {
+    final controller = TextEditingController(text: widget.store.accountName ?? '');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改账号名'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '新账号名'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.renameAccount(value);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改账号名失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final value = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改密码'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: current,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '当前密码'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: next,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '新密码'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(
+              <String>[current.text, next.text],
+            ),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    current.dispose();
+    next.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.changePassword(
+        currentPassword: value[0],
+        newPassword: value[1],
+      );
+      widget.peerSync?.requestSync(immediate: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('密码已修改')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改密码失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _renameDevice(AccountDevice device) async {
+    final controller = TextEditingController(text: device.name);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改设备名称'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '设备名称'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.renameDevice(device.id, value);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改设备名称失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _revokeDevice(AccountDevice device) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('解绑设备？'),
+        content: Text('“${device.name}”会从使用中设备移除，并通过设备同步发送解绑状态。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('解绑'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.store.revokeDevice(device.id);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('解绑设备失败：$error')),
+      );
+    }
+  }
+
+  String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, _) {
+        final currentId = widget.store.currentDeviceId;
+        final devices = widget.store.activeDevices;
+        final password = widget.store.accountPassword ?? '';
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              '账号与设备',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+            children: [
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('账号名'),
+                      subtitle: Text(widget.store.accountName ?? ''),
+                      trailing: IconButton(
+                        tooltip: '修改账号名',
+                        onPressed: _renameAccount,
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      title: const Text('密码'),
+                      subtitle: Text(password),
+                      trailing: TextButton(
+                        onPressed: _changePassword,
+                        child: const Text('修改'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '使用中设备 · ${devices.length} 台',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              for (final device in devices)
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      device.id == currentId
+                          ? Icons.devices_rounded
+                          : Icons.devices_other_rounded,
+                    ),
+                    title: Text(device.name),
+                    subtitle: Text(
+                      '${device.platform} · 最后使用 ${_formatTime(device.lastSeenAt)}'
+                      '${device.id == currentId ? ' · 当前设备' : ''}',
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'rename') {
+                          _renameDevice(device);
+                        } else if (value == 'revoke') {
+                          _revokeDevice(device);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'rename',
+                          child: Text('修改设备名称'),
+                        ),
+                        if (device.id != currentId)
+                          const PopupMenuItem(
+                            value: 'revoke',
+                            child: Text('解绑设备'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await widget.store.lock();
+                  if (mounted) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  }
+                },
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('退出登录'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
