@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+189
-# beta-189: complete beta-185 base + full PWA/Cloudflare sync line + post-185 UI/OCR/pricing/receipt fixes
+# beta-189: complete beta-185 base + full PWA/Cloudflare sync line + post-185 UI/OCR/pricing/receipt fixes; merge-fix rerun
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
