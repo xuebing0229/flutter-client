@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+185
-# beta-185: resizable order overview, pricing presets, receipt images and income overview; revision 4
+version: 0.0.1+188
+# beta-188: correct beta-185 lineage; Cloudflare PWA three-end sync; native Syncthing exact beta 182
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -20,11 +20,9 @@ dependencies:
   package_info_plus: ^10.2.2
   path_provider: ^2.1.6
   file_selector: ^1.1.0
-  flutter_webrtc: ^1.6.2+hotfix.4
   mobile_scanner: ^7.4.2
   qr_flutter: ^4.1.0
   image: ^4.5.4
-  mqtt_client: ^10.13.0
   zxing2: ^0.2.4
   synchronized: ^3.3.0+3
 
