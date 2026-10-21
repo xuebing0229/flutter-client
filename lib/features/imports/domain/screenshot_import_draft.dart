@@ -16,6 +16,7 @@ class ScreenshotImportDraft {
     required this.platform,
     required this.detectedDate,
     required this.recognizedPercent,
+    this.recognizedNodeLabel,
     this.sourceHasClock = false,
     this.sourceImagePath,
     this.sourceStartY,
@@ -60,6 +61,7 @@ class ScreenshotImportDraft {
   /// Whether the actual screenshot contained HH:mm, not a user guess.
   final bool sourceHasClock;
   final int? recognizedPercent;
+  final String? recognizedNodeLabel;
   final String? relativeDeadline;
   DateTime? deadline;
   bool deadlineConfirmed;
@@ -92,6 +94,59 @@ class ScreenshotImportDraft {
 }
 
 
+
+const String screenshotOcrNodeIdPrefix = '__screenshot_ocr_node__:';
+
+String screenshotOcrNodeId(String label) =>
+    '$screenshotOcrNodeIdPrefix${label.trim().toLowerCase()}';
+
+bool isScreenshotOcrNodeId(String nodeId) =>
+    nodeId.startsWith(screenshotOcrNodeIdPrefix);
+
+String resolveScreenshotImportNodeId({
+  required NodePreset preset,
+  required int? recognizedPercent,
+  String? recognizedNodeLabel,
+}) {
+  final label = recognizedNodeLabel?.trim();
+  if (label != null && label.isNotEmpty) {
+    final normalized = label.toLowerCase();
+    for (final node in preset.nodes) {
+      if (node.name.trim().toLowerCase() == normalized) {
+        return node.id;
+      }
+    }
+    return screenshotOcrNodeId(label);
+  }
+  return resolveImportNode(
+    preset: preset,
+    recognizedPercent: recognizedPercent,
+  ).id;
+}
+
+NodePreset screenshotImportPresetSnapshot({
+  required NodePreset preset,
+  required ScreenshotImportDraft row,
+}) {
+  if (!isScreenshotOcrNodeId(row.nodeId)) return preset.snapshot();
+  final label = row.recognizedNodeLabel?.trim();
+  if (label == null || label.isEmpty) return preset.snapshot();
+  return NodePreset(
+    id: preset.id,
+    name: preset.name,
+    nodes: <NodeDefinition>[
+      for (final node in preset.nodes) node.snapshot(),
+      NodeDefinition(
+        id: row.nodeId,
+        name: label,
+        iconKey: 'circle',
+        colorValue: 0xFF8D8D8D,
+        progressPercent: (row.recognizedPercent ?? 0).clamp(0, 100),
+      ),
+    ],
+  );
+}
+
 String? validateScreenshotPresetSelection({
   required ScreenshotImportDraft row,
   required Iterable<NodePreset> presets,
@@ -106,7 +161,9 @@ String? validateScreenshotPresetSelection({
   if (selectedPreset == null) {
     return '节点预设已在其他位置被删除，请重新选择节点预设';
   }
-  if (!selectedPreset.nodes.any((node) => node.id == row.nodeId)) {
+  if (!selectedPreset.nodes.any((node) => node.id == row.nodeId) &&
+      !(isScreenshotOcrNodeId(row.nodeId) &&
+          (row.recognizedNodeLabel?.trim().isNotEmpty ?? false))) {
     return '节点预设内容已经变化，请重新确认当前节点';
   }
   return null;
@@ -123,6 +180,7 @@ int screenshotImportInformationScore(ScreenshotImportDraft row) {
   // than a day-only deadline and should win a duplicate tie by default.
   if (row.sourceHasClock) score += 4;
   if (row.recognizedPercent != null) score += 2;
+  if (row.recognizedNodeLabel?.trim().isNotEmpty ?? false) score += 2;
   if (row.relativeDeadline?.trim().isNotEmpty ?? false) score += 1;
   if (row.tags.isNotEmpty) score += 1;
   return score;
@@ -160,10 +218,11 @@ void cascadeScreenshotPreset({
       continue;
     }
     row.presetId = selectedPreset.id;
-    row.nodeId = resolveImportNode(
+    row.nodeId = resolveScreenshotImportNodeId(
       preset: selectedPreset,
       recognizedPercent: row.recognizedPercent,
-    ).id;
+      recognizedNodeLabel: row.recognizedNodeLabel,
+    );
     if (row.id == changed.id) {
       row.presetManuallyChanged = true;
       row.nodeManuallyChanged = false;
