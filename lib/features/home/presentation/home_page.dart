@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../../core/account/account_models.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
+import '../../../core/cloud_sync/native_cloudflare_record_bridge.dart';
+import '../../../core/cloud_sync/native_sync_coordinator_view_adapter.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/finance/pricing_preset_store.dart';
@@ -86,6 +88,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final DesktopPetService _desktopPetService = DesktopPetService();
   late final DesktopPetAccountSync _desktopPetAccountSync;
   late final SyncCoordinator _syncCoordinator;
+  late final NativeCloudflareRecordBridge _cloudflareRecordBridge;
+  late final NativeSyncCoordinatorViewAdapter _syncCoordinatorView;
   PublicPeerSyncService? _publicPeerSync;
 
   static const _orderCardViewSettingKey = 'orderCardView';
@@ -174,6 +178,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       applySettings: _applySyncSettings,
     );
     _syncCoordinator.addListener(_onSyncCoordinatorChanged);
+    _syncCoordinatorView = NativeSyncCoordinatorViewAdapter(_syncCoordinator);
+    _cloudflareRecordBridge = NativeCloudflareRecordBridge(
+      accountId: widget.accountId,
+    );
 
     widget.themeStore.addListener(_onThemeSettingsChanged);
     widget.featureStore.addListener(_onFeatureSettingsChanged);
@@ -447,8 +455,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       captureAccountState: () =>
           widget.accountStore.syncSnapshot ?? state,
       mergeAccountState: widget.accountStore.mergeSyncedState,
-      exportRecords: _syncCoordinator.exportPeerRecords,
-      mergeRecords: _syncCoordinator.mergePeerRecords,
+      exportRecords: _cloudflareRecordBridge.exportRecords,
+      mergeRecords: _cloudflareRecordBridge.mergeRecords,
+      shouldTargetDevice: (device) => device.platform == 'web',
       captureAssetPaths: () => <String>{
         for (final order in _orderStore.orders)
           for (final image in order.referenceImages) image.relativePath,
@@ -1606,7 +1615,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         pricingPresetStore: _pricingPresetStore,
         receiptStyleStore: _receiptStyleStore,
         featureStore: widget.featureStore,
-        syncCoordinator: _syncCoordinator,
+        syncCoordinator: _syncCoordinatorView,
       ),
       AppToolMenu.syncTool => DeviceSyncPage(coordinator: _syncCoordinator),
       AppToolMenu.feedbackTool => const FeedbackPage(),
@@ -1693,7 +1702,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           pricingPresetStore: _pricingPresetStore,
           receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
-          syncCoordinator: _syncCoordinator,
+          syncCoordinator: _syncCoordinatorView,
           cardView: _orderCardView,
           onCardViewChanged: _setOrderCardView,
           overviewView: _orderOverviewView,
@@ -1715,7 +1724,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             pricingPresetStore: _pricingPresetStore,
             receiptStyleStore: _receiptStyleStore,
             featureStore: widget.featureStore,
-            syncCoordinator: _syncCoordinator,
+            syncCoordinator: _syncCoordinatorView,
             cardView: _productCardView,
             onCardViewChanged: _setProductCardView,
             sortModeName: _productSortMode,
