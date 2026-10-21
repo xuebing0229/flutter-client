@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+191
-# beta-191: fix reinstall/rejoin bootstrap sharing and truthful account-transfer stages
+version: 0.0.1+192
+# beta-192: keep response QR visible until the source device actually authorizes the join
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
