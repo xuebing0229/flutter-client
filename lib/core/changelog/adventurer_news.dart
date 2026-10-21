@@ -318,6 +318,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新设备回应码显示修复',
     description: '修复 191 在两台设备仅建立底层连接时就误判“原设备已确认”，导致新设备的回应二维码提前消失、原设备实际上没有机会授权临时账号目录的问题。新版会一直保留回应二维码，直到原设备真正确认并开始共享临时账号目录。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 193,
+    title: '电脑确认回应码卡死修复',
+    description: '修复 Windows 原设备收到新设备回应码后，把“确认成功”同步等待在 Syncthing 临时目录修复上，导致页面长时间无响应、手机仍停在等待授权的问题。回应码现在会先立即完成认证，临时目录共享改为独立后台轮询持续重试，单次同步核心异常不再卡住确认页面。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
