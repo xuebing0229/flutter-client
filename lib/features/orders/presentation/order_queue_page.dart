@@ -70,6 +70,8 @@ class OrderQueuePage extends StatefulWidget {
 
 class _OrderQueuePageState extends State<OrderQueuePage> {
   final TextEditingController _searchController = TextEditingController();
+  late final TextEditingController _overviewColumnsController;
+  late final FocusNode _overviewColumnsFocusNode;
   String _query = '';
   String _searchField = 'all';
   final Set<String> _selectedTags = <String>{};
@@ -82,8 +84,34 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    _overviewColumnsController = TextEditingController(
+      text: widget.overviewColumns.toString(),
+    );
+    _overviewColumnsFocusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant OrderQueuePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.overviewColumns == widget.overviewColumns) return;
+
+    final current = int.tryParse(_overviewColumnsController.text.trim());
+    if (current == widget.overviewColumns) return;
+
+    final text = widget.overviewColumns.toString();
+    _overviewColumnsController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _overviewColumnsController.dispose();
+    _overviewColumnsFocusNode.dispose();
     super.dispose();
   }
 
@@ -1202,24 +1230,30 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   children: [
                     const Text('每行'),
                     const SizedBox(width: 8),
-                    SizedBox(
-                      width: 72,
-                      child: TextFormField(
-                        key: ValueKey<int>(widget.overviewColumns),
-                        initialValue: widget.overviewColumns.toString(),
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.center,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          suffixText: '列',
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          child: TextFormField(
+                            controller: _overviewColumnsController,
+                            focusNode: _overviewColumnsFocusNode,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                            ),
+                            onChanged: (raw) {
+                              final parsed = int.tryParse(raw.trim());
+                              if (parsed == null) return;
+                              widget.onOverviewColumnsChanged
+                                  ?.call(parsed < 1 ? 1 : parsed);
+                            },
+                          ),
                         ),
-                        onFieldSubmitted: (raw) {
-                          final parsed = int.tryParse(raw.trim());
-                          if (parsed == null) return;
-                          widget.onOverviewColumnsChanged
-                              ?.call(parsed < 1 ? 1 : parsed);
-                        },
-                      ),
+                        const SizedBox(width: 5),
+                        const Text('列'),
+                      ],
                     ),
                   ],
                 ),
