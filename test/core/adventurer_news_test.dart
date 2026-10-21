@@ -149,5 +149,8 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['PWA 点对点同步支持']);
   });
 
-
+  test('191 包含重装后重新加入设备修复见闻', () {
+    final picked = newsBetweenBuilds(190, 191);
+    expect(picked.map((e) => e.title).toList(), ['重装后重新加入设备修复']);
+  });
 }
