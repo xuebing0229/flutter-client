@@ -8,6 +8,7 @@ import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
@@ -34,6 +35,8 @@ import '../../products/presentation/product_page.dart';
 import '../../products/state/product_store.dart';
 import '../../schedule/presentation/schedule_page.dart';
 import '../../statistics/presentation/statistics_page.dart';
+import '../../shared/domain/receipt_style_store.dart';
+import '../../shared/presentation/pricing_preset_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
@@ -71,6 +74,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderStore _orderStore = OrderStore();
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
+  final PricingPresetStore _pricingPresetStore = PricingPresetStore();
+  final ReceiptStyleStore _receiptStyleStore = ReceiptStyleStore();
   final FocusStore _focusStore = FocusStore();
   final OrderReferenceImageStore _referenceImageStore =
       OrderReferenceImageStore();
@@ -84,7 +89,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   PublicPeerSyncService? _publicPeerSync;
 
   static const _orderCardViewSettingKey = 'orderCardView';
+  static const _orderOverviewViewSettingKey = 'orderOverviewView';
+  static const _orderOverviewCardWidthSettingKey = 'orderOverviewCardWidth';
   static const _productCardViewSettingKey = 'productCardView';
+  static const _pricingPresetsSettingKey = 'pricingAdjustmentPresets';
+  static const _receiptStyleSettingKey = 'receiptStyle';
   static const _orderSortModeSettingKey = 'orderSortMode';
   static const _productSortModeSettingKey = 'productSortMode';
   static const _desktopNavigationOpenSettingKey = 'desktopNavigationOpen';
@@ -93,6 +102,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int _index = 0;
   bool _ready = false;
   bool _orderCardView = false;
+  bool _orderOverviewView = false;
+  double _orderOverviewCardWidth = 150;
   bool _productCardView = false;
   String _orderSortMode = 'defaultOrder';
   String _productSortMode = 'defaultOrder';
@@ -247,6 +258,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.addListener(_onOrderStoreChanged);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
+    _pricingPresetStore.addListener(_onSharedWorkspaceSettingChanged);
+    _receiptStyleStore.addListener(_onSharedWorkspaceSettingChanged);
     _focusStore.addListener(_onFocusStoreChanged);
     _refreshFocusPersistenceHeartbeat();
 
