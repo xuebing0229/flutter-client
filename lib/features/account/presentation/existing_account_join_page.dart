@@ -424,6 +424,39 @@ class _ReceiveAccountTransferPageState
     }
   }
 
+  Future<void> _copyTransferDiagnostics() async {
+    final session = _session;
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('设备加入通道还没有准备好，暂时没有诊断信息。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    try {
+      final source = await session.exportDiagnostics();
+      await Clipboard.setData(ClipboardData(text: source));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('设备加入诊断信息已复制。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('复制诊断信息失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _copyResponse() async {
     final response = _session?.response.encode();
     if (response == null) return;
@@ -584,6 +617,12 @@ class _ReceiveAccountTransferPageState
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _session == null ? null : _copyTransferDiagnostics,
+            icon: const Icon(Icons.bug_report_outlined),
+            label: const Text('复制设备加入诊断信息'),
           ),
         ],
       ),
