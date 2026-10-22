@@ -209,6 +209,27 @@ class SyncthingBridge(
         val connections = JSONObject(request("GET", "/rest/system/connections"))
             .optJSONObject("connections") ?: JSONObject()
 
+        val allConfiguredDevices = mutableListOf<Map<String, Any?>>()
+        for (index in 0 until configured.length()) {
+            val item = configured.optJSONObject(index) ?: continue
+            val id = item.optString("deviceID")
+            if (id.isBlank()) continue
+            allConfiguredDevices += linkedMapOf(
+                "deviceId" to id,
+                "name" to item.optString("name"),
+            )
+        }
+
+        val allConnectedDeviceIds = mutableListOf<String>()
+        val allConnectionKeys = connections.keys()
+        while (allConnectionKeys.hasNext()) {
+            val id = allConnectionKeys.next()
+            val item = connections.optJSONObject(id) ?: continue
+            if (item.optBoolean("connected", false)) {
+                allConnectedDeviceIds += id
+            }
+        }
+
         val folderDeviceIds = mutableSetOf<String>()
         for (index in 0 until folders.length()) {
             val folder = folders.optJSONObject(index) ?: continue
@@ -365,6 +386,8 @@ class SyncthingBridge(
             "version" to version.optString("version"),
             "connectedDeviceIds" to connectedDeviceIds,
             "configuredDevices" to configuredDevices,
+            "allConnectedDeviceIds" to allConnectedDeviceIds,
+            "allConfiguredDevices" to allConfiguredDevices,
             "folderState" to folderState,
             "remoteFolderStates" to remoteFolderStates,
             "folderErrors" to folderErrors,
