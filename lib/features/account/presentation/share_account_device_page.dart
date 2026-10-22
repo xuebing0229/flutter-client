@@ -37,7 +37,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   String? _error;
   bool _transferred = false;
   bool _receiverConfirmed = false;
-  bool _bootstrapReady = false;
   bool _responseBusy = false;
   bool _pairingBusy = false;
   bool _pollBusy = false;
@@ -88,7 +87,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       _error = null;
       _transferred = false;
       _receiverConfirmed = false;
-      _bootstrapReady = false;
       _pollBusy = false;
       _finalizingPermanentPeer = false;
       _responseCodeController.clear();
@@ -154,14 +152,9 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       if (!mounted) return;
       setState(() {
         _receiverConfirmed = true;
-        _bootstrapReady = server.receiverFolderReady;
         _responseCodeController.clear();
       });
-      _message(
-        server.receiverFolderReady
-            ? '新设备已确认，临时账号通道已建立，正在传输账号信息。'
-            : '新设备已确认，正在自动建立并修复临时账号通道。',
-      );
+      _message('新设备已确认，正在传输账号信息。请继续保持本页打开直到显示完成。');
     } on FormatException catch (error) {
       if (mounted) _message(error.message);
     } catch (error) {
@@ -181,18 +174,10 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
           !_finalizingPermanentPeer) {
         await _finalizePermanentPeer(server);
       }
-      if (mounted && identical(_server, server)) {
-        final nextTransferred = server.transferred;
-        final nextBootstrapReady = server.receiverFolderReady;
-        if (_error != null ||
-            nextTransferred != _transferred ||
-            nextBootstrapReady != _bootstrapReady) {
-          setState(() {
-            _error = null;
-            _transferred = nextTransferred;
-            _bootstrapReady = nextBootstrapReady;
-          });
-        }
+      if (mounted &&
+          identical(_server, server) &&
+          server.transferred != _transferred) {
+        setState(() => _transferred = server.transferred);
       }
     } catch (error) {
       if (mounted && identical(_server, server)) {
@@ -372,11 +357,9 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                       Text(
                         _transferred
                             ? '账号信息已经传给新设备，首次绑定完成。以后正常同步不需要再打开这个页面。'
-                            : _receiverConfirmed && _bootstrapReady
-                                ? '临时账号传输通道已经建立，正在等待新设备接收账号信息。请继续保持本页打开。'
-                                : _receiverConfirmed
-                                    ? '新设备已经确认，正在持续建立并修复临时账号传输通道。请继续保持本页打开。'
-                                    : '让未登录的新设备扫描此码后，新设备会显示一枚“回应二维码”。请保持本页打开，不要返回或关闭应用。',
+                            : _receiverConfirmed
+                            ? '新设备已经确认，正在传输账号信息。请继续保持本页打开，直到这里显示完成。'
+                            : '让未登录的新设备扫描此码后，新设备会显示一枚“回应二维码”。请保持本页打开，不要返回或关闭应用。',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: colors.onSurfaceVariant),
                       ),
@@ -400,11 +383,9 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      _receiverConfirmed && _bootstrapReady
-                          ? '已确认新设备，临时账号目录也已双向共享。现在只需等待账号信息传输完成。'
-                          : _receiverConfirmed
-                              ? '已收到并确认这台新设备的回应，正在自动修复临时账号目录共享。'
-                              : '新设备扫完上面的二维码后，会生成回应二维码/回应码。请在这里扫回来或粘贴回来。',
+                      _receiverConfirmed
+                          ? '已收到并确认这台新设备的回应。现在只需等待账号信息传输完成。'
+                          : '新设备扫完上面的二维码后，会生成回应二维码/回应码。请在这里扫回来或粘贴回来。',
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
                     const SizedBox(height: 12),
