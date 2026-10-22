@@ -57,6 +57,18 @@ bool shouldRetainRevokedTransportShare({
           reauthorizedTransportIds.contains(id));
 }
 
+@visibleForTesting
+bool shouldResetRevokedTransportBeforeRejoin({
+  required String transportId,
+  required Set<String> activeTransportIds,
+  required Set<String> revokedTransportIds,
+}) {
+  final id = transportId.trim();
+  return id.isNotEmpty &&
+      revokedTransportIds.contains(id) &&
+      !activeTransportIds.contains(id);
+}
+
 class PortableWorkspaceSnapshot {
   const PortableWorkspaceSnapshot({
     required this.exportedAt,
@@ -814,6 +826,66 @@ class SyncCoordinator extends ChangeNotifier {
         rethrow;
       }
     });
+  }
+
+  Future<void> prepareStaleTransportForAccountRejoin(
+    String transportId,
+  ) {
+    return _enqueue(() async {
+      final remoteId = transportId.trim();
+      if (remoteId.isEmpty) return;
+
+      final state = accountStore.syncSnapshot;
+      if (state == null || state.accountId != accountId) return;
+
+      final activeTransportIds = <String>{
+        for (final device in state.activeDevices)
+          if (device.syncTransportId?.trim().isNotEmpty == true)
+            device.syncTransportId!.trim(),
+      };
+      final revokedTransportIds = <String>{
+        for (final revokedId in state.revocations.keys)
+          if (state.devices[revokedId]?.syncTransportId?.trim().isNotEmpty ==
+              true)
+            state.devices[revokedId]!.syncTransportId!.trim(),
+      };
+
+      if (!shouldResetRevokedTransportBeforeRejoin(
+        transportId: remoteId,
+        activeTransportIds: activeTransportIds,
+        revokedTransportIds: revokedTransportIds,
+      )) {
+        return;
+      }
+
+      // A direct app uninstall cannot acknowledge the revocation tombstone.
+      // If Android restores the same Syncthing identity on reinstall, the
+      // source can therefore keep a stale account-folder share for that
+      // transport forever. Reset ONLY that stale account-folder membership
+      // before the normal, already-proven bootstrap transfer runs. The
+      // bootstrap folder itself is untouched, and the normal final pairing
+      // will re-share the account folder after the new app-device ID exists.
+      await _authorizeTransportRejoin(remoteId);
+
+      if (!_transportPrepared) {
+        await _prepareTransport(force: true);
+      }
+      if (!_transportPrepared) return;
+
+      try {
+        await _bridge.unshareDevice(
+          accountId: accountId,
+          deviceId: remoteId,
+        );
+        await _bridge.requestScan(accountId: accountId);
+        await _refreshTransportStatus();
+      } catch (error) {
+        // This is a targeted stale-state cleanup, not a replacement for the
+        // bootstrap flow. Leave the normal 190 join path in control if the
+        // cleanup cannot be completed immediately.
+        _lastError = '清理旧设备残留同步关系失败：$error';
+      }
+    }, showBusy: false);
   }
 
   Future<void> bootstrapPeerTransport({
