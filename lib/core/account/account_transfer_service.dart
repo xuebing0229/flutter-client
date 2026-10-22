@@ -492,12 +492,28 @@ class SyncthingAccountTransferServer {
   }
 
   Future<void> acceptResponse(AccountTransferResponseCode response) async {
+    await SyncJoinDiagnostics.record('server.response.received', <String, Object?>{
+      'folderId': descriptor.folderId,
+      'sourceDeviceId': descriptor.sourceDeviceId,
+      'receiverDeviceId': response.receiverDeviceId,
+      'receiverAppDeviceId': response.receiverAppDeviceId,
+      'receiverPlatform': response.receiverPlatform,
+      'receiverName': response.receiverName,
+    });
     if (_closed) {
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
     if (!await response.verifies(descriptor)) {
+      await SyncJoinDiagnostics.record('server.response.verifyFailed', <String, Object?>{
+        'folderId': descriptor.folderId,
+        'receiverDeviceId': response.receiverDeviceId,
+      });
       throw const FormatException('回应码不属于当前添加设备会话，请重新扫描。');
     }
+    await SyncJoinDiagnostics.record('server.response.verified', <String, Object?>{
+      'folderId': descriptor.folderId,
+      'receiverDeviceId': response.receiverDeviceId,
+    });
 
     final existing = _acceptedReceiverDeviceId;
     if (existing != null && existing != response.receiverDeviceId) {
@@ -508,6 +524,10 @@ class SyncthingAccountTransferServer {
     _acceptedReceiverName = response.receiverName;
     _acceptedReceiverAppDeviceId = response.receiverAppDeviceId;
     _acceptedReceiverPlatform = response.receiverPlatform;
+    await SyncJoinDiagnostics.record('server.response.accepted', <String, Object?>{
+      'folderId': descriptor.folderId,
+      'receiverDeviceId': response.receiverDeviceId,
+    });
 
     // Device-level connectivity is not enough. Wait until Syncthing confirms
     // that the receiver shares THIS bootstrap folder back (remoteState=valid).
@@ -540,6 +560,10 @@ class SyncthingAccountTransferServer {
         response.receiverDeviceId,
       );
       if (connected && lastRemoteState == 'valid') {
+        await SyncJoinDiagnostics.record('server.handshake.valid', <String, Object?>{
+          'folderId': descriptor.folderId,
+          'receiverDeviceId': response.receiverDeviceId,
+        });
         await _bridge.requestScanFolder(descriptor.folderId);
         return;
       }
