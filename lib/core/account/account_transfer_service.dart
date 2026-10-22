@@ -350,6 +350,23 @@ bool shouldRefreshBootstrapShare({
       !alreadyRefreshed;
 }
 
+@visibleForTesting
+bool shouldRebuildWindowsBootstrapProfile({
+  required bool isWindows,
+  required bool connected,
+  required String? remoteFolderState,
+  required bool bootstrapShareRefreshed,
+  required bool alreadyRebuilt,
+  required int consecutiveNotSharingChecks,
+}) {
+  return isWindows &&
+      connected &&
+      remoteFolderState?.trim() == 'notSharing' &&
+      bootstrapShareRefreshed &&
+      !alreadyRebuilt &&
+      consecutiveNotSharingChecks >= 4;
+}
+
 class SyncthingAccountTransferServer {
   SyncthingAccountTransferServer._({
     required this.descriptor,
@@ -485,6 +502,8 @@ class SyncthingAccountTransferServer {
     String? lastRemoteState;
     String? lastFolderError;
     var refreshedBootstrapShare = false;
+    var rebuiltWindowsProfile = false;
+    var consecutiveNotSharingAfterRefresh = 0;
     while (!_closed && DateTime.now().isBefore(deadline)) {
       await _bridge.pairFolder(
         folderId: descriptor.folderId,
@@ -541,6 +560,45 @@ class SyncthingAccountTransferServer {
         );
         await _bridge.requestScanFolder(descriptor.folderId);
         await Future<void>.delayed(const Duration(milliseconds: 500));
+        continue;
+      }
+
+      if (connected &&
+          lastRemoteState == 'notSharing' &&
+          refreshedBootstrapShare &&
+          !rebuiltWindowsProfile) {
+        consecutiveNotSharingAfterRefresh++;
+      } else {
+        consecutiveNotSharingAfterRefresh = 0;
+      }
+
+      if (shouldRebuildWindowsBootstrapProfile(
+        isWindows: Platform.isWindows,
+        connected: connected,
+        remoteFolderState: lastRemoteState,
+        bootstrapShareRefreshed: refreshedBootstrapShare,
+        alreadyRebuilt: rebuiltWindowsProfile,
+        consecutiveNotSharingChecks: consecutiveNotSharingAfterRefresh,
+      )) {
+        rebuiltWindowsProfile = true;
+        await _bridge.rebuildWindowsProfilePreservingIdentity();
+        await _bridge.prepareFolder(
+          folderId: descriptor.folderId,
+          label: '临时账号加入',
+          folderPath: _folder.path,
+          force: true,
+        );
+        await _bridge.pairFolder(
+          folderId: descriptor.folderId,
+          deviceId: response.receiverDeviceId,
+          name: response.receiverName,
+        );
+        await _bridge.setFolderPaused(
+          folderId: descriptor.folderId,
+          paused: false,
+        );
+        await _bridge.requestScanFolder(descriptor.folderId);
+        await Future<void>.delayed(const Duration(seconds: 1));
         continue;
       }
 
