@@ -14,6 +14,8 @@ class EmbeddedSyncthingStatus {
     this.version,
     this.connectedDeviceIds = const <String>[],
     this.configuredDevices = const <Map<String, dynamic>>[],
+    this.allConnectedDeviceIds = const <String>[],
+    this.allConfiguredDevices = const <Map<String, dynamic>>[],
     this.folderState,
     this.remoteFolderStates = const <String, String>{},
     this.folderErrors = const <String>[],
@@ -27,6 +29,13 @@ class EmbeddedSyncthingStatus {
   final String? version;
   final List<String> connectedDeviceIds;
   final List<Map<String, dynamic>> configuredDevices;
+
+  /// Diagnostic-only global Syncthing device state. These lists are not used
+  /// by pairing/sync decisions; they let a diagnostic build distinguish
+  /// historical device relationships from this exact folder membership.
+  final List<String> allConnectedDeviceIds;
+  final List<Map<String, dynamic>> allConfiguredDevices;
+
   final String? folderState;
 
   /// Folder-level handshake state reported by each connected peer.
@@ -62,6 +71,12 @@ class EmbeddedSyncthingStatus {
             if (item is String) item,
       ],
       configuredDevices: mapList(map['configuredDevices']),
+      allConnectedDeviceIds: [
+        if (map['allConnectedDeviceIds'] is List)
+          for (final item in map['allConnectedDeviceIds'] as List)
+            if (item is String) item,
+      ],
+      allConfiguredDevices: mapList(map['allConfiguredDevices']),
       folderState: map['folderState'] as String?,
       remoteFolderStates: map['remoteFolderStates'] is Map
           ? <String, String>{
