@@ -470,6 +470,13 @@ class SyncthingAccountTransferServer {
       'folderId': folderId,
       'platform': Platform.operatingSystem,
     });
+    final diagnostics = _AccountTransferDiagnostics(role: 'receiver');
+    diagnostics.event('client.start', <String, Object?>{
+      'folderId': descriptor.folderId,
+      'sourceDeviceId': descriptor.sourceDeviceId,
+      'platform': Platform.operatingSystem,
+    });
+
     final support = await getApplicationSupportDirectory();
     final folder = Directory(
       '${support.path}${Platform.pathSeparator}account-bootstrap'
@@ -779,7 +786,14 @@ class SyncthingAccountTransferClient {
         folderPath: folder.path,
         force: true,
       );
+      diagnostics.event('client.prepareFolder.ok');
       final status = await bridge.statusFolder(descriptor.folderId);
+      diagnostics.status(
+        'client.initialStatus',
+        status,
+        folderId: descriptor.folderId,
+        force: true,
+      );
       final receiverDeviceId = status.deviceId?.trim();
       if (receiverDeviceId == null || receiverDeviceId.length < 20) {
         throw const FormatException('无法读取新设备的同步身份。');
@@ -794,11 +808,28 @@ class SyncthingAccountTransferClient {
         receiverAppDeviceId: provisionalAppDeviceId,
         receiverPlatform: device.platform,
       );
+      diagnostics.event('client.response.created', <String, Object?>{
+        'receiverDeviceId': receiverDeviceId,
+        'receiverName': device.name,
+        'receiverAppDeviceId': provisionalAppDeviceId,
+        'receiverPlatform': device.platform,
+      });
 
+      diagnostics.event('client.pairSource.begin', <String, Object?>{
+        'sourceDeviceId': descriptor.sourceDeviceId,
+      });
       await bridge.pairFolder(
         folderId: descriptor.folderId,
         deviceId: descriptor.sourceDeviceId,
         name: '原设备',
+      );
+      diagnostics.event('client.pairSource.ok');
+      final afterPairStatus = await bridge.statusFolder(descriptor.folderId);
+      diagnostics.status(
+        'client.afterPairStatus',
+        afterPairStatus,
+        folderId: descriptor.folderId,
+        force: true,
       );
 
       return SyncthingAccountTransferClientSession._(
@@ -809,6 +840,7 @@ class SyncthingAccountTransferClient {
         payloadFile: payloadFile,
         doneFile: doneFile,
         ackFile: ackFile,
+        diagnostics: diagnostics,
       );
     } catch (_) {
       await _cleanupBootstrapFolder(bridge, descriptor.folderId, folder);
@@ -848,11 +880,13 @@ class SyncthingAccountTransferClientSession {
     required File payloadFile,
     required File doneFile,
     required File ackFile,
+    required _AccountTransferDiagnostics diagnostics,
   }) : _bridge = bridge,
        _folder = folder,
        _payloadFile = payloadFile,
        _doneFile = doneFile,
-       _ackFile = ackFile;
+       _ackFile = ackFile,
+       _diagnostics = diagnostics;
 
   final AccountTransferDescriptor descriptor;
   final AccountTransferResponseCode response;
@@ -861,11 +895,36 @@ class SyncthingAccountTransferClientSession {
   final File _payloadFile;
   final File _doneFile;
   final File _ackFile;
+  final _AccountTransferDiagnostics _diagnostics;
 
   bool _closed = false;
 
+  String get diagnosticReport => _diagnostics.report();
+
+  Future<String> captureDiagnosticReport() async {
+    try {
+      final status = await _bridge.statusFolder(descriptor.folderId);
+      _diagnostics.status(
+        'client.manualSnapshot',
+        status,
+        folderId: descriptor.folderId,
+        force: true,
+      );
+    } catch (error) {
+      _diagnostics.event('client.manualSnapshot.error', <String, Object?>{
+        'error': '$error',
+      });
+    }
+    return _diagnostics.report();
+  }
+
   Future<AccountTransferStatus> transferStatus() async {
     final status = await _bridge.statusFolder(descriptor.folderId);
+    _diagnostics.status(
+      'client.status',
+      status,
+      folderId: descriptor.folderId,
+    );
     final sourceConnected = status.connectedDeviceIds.contains(
       descriptor.sourceDeviceId,
     );
