@@ -339,6 +339,96 @@ class AddDeviceCode {
   }
 }
 
+class _AccountTransferDiagnostics {
+  _AccountTransferDiagnostics({
+    required this.role,
+    required this.folderId,
+  }) {
+    add('diagnostics.created', <String, dynamic>{
+      'role': role,
+      'platform': Platform.operatingSystem,
+      'folderId': folderId,
+    });
+  }
+
+  final String role;
+  final String folderId;
+  final List<Map<String, dynamic>> _events = <Map<String, dynamic>>[];
+  final Map<String, String> _lastSignatures = <String, String>{};
+
+  void add(String event, [Map<String, dynamic>? data]) {
+    _events.add(<String, dynamic>{
+      'at': DateTime.now().toUtc().toIso8601String(),
+      'event': event,
+      if (data != null && data.isNotEmpty) 'data': data,
+    });
+  }
+
+  void addError(String event, Object error) {
+    add(event, <String, dynamic>{'error': error.toString()});
+  }
+
+  void addStatus(String label, EmbeddedSyncthingStatus status) {
+    final data = <String, dynamic>{
+      'available': status.available,
+      'running': status.running,
+      'deviceId': status.deviceId,
+      'version': status.version,
+      'configuredDevices': status.configuredDevices,
+      'connectedDeviceIds': status.connectedDeviceIds,
+      'folderState': status.folderState,
+      'remoteFolderStates': status.remoteFolderStates,
+      'folderErrors': status.folderErrors,
+      'syncProgress': status.syncProgress,
+      'error': status.error,
+    };
+    _addDeduplicated(label, data);
+  }
+
+  void addTransferStatus(String label, AccountTransferStatus status) {
+    final data = <String, dynamic>{
+      'sourceConnected': status.sourceConnected,
+      'folderReady': status.folderReady,
+      'remoteFolderState': status.remoteFolderState,
+      'folderState': status.folderState,
+      'folderErrors': status.folderErrors,
+      'progress': status.progress,
+    };
+    _addDeduplicated(label, data);
+  }
+
+  void _addDeduplicated(String event, Map<String, dynamic> data) {
+    final signature = jsonEncode(data);
+    if (_lastSignatures[event] == signature) return;
+    _lastSignatures[event] = signature;
+    add(event, data);
+  }
+
+  Future<void> captureBridge(
+    EmbeddedSyncthingBridge bridge,
+    String label,
+  ) async {
+    try {
+      final snapshot = await bridge.diagnosticFolderSnapshot(folderId);
+      _addDeduplicated(label, snapshot);
+    } catch (error) {
+      addError('$label.error', error);
+    }
+  }
+
+  String exportText() {
+    return const JsonEncoder.withIndent('  ').convert(<String, dynamic>{
+      'schema': 1,
+      'kind': 'adventurers-guild-account-transfer-diagnostics',
+      'role': role,
+      'platform': Platform.operatingSystem,
+      'folderId': folderId,
+      'note': 'No account password or bootstrap encryption key is recorded.',
+      'events': _events,
+    });
+  }
+}
+
 @visibleForTesting
 bool shouldRefreshBootstrapShare({
   required bool connected,
@@ -375,12 +465,14 @@ class SyncthingAccountTransferServer {
     required File payloadFile,
     required File doneFile,
     required File ackFile,
+    required _AccountTransferDiagnostics diagnostics,
     void Function()? onTransferred,
   }) : _bridge = bridge,
        _folder = folder,
        _payloadFile = payloadFile,
        _doneFile = doneFile,
        _ackFile = ackFile,
+       _diagnostics = diagnostics,
        _onTransferred = onTransferred;
 
   final EmbeddedSyncthingBridge _bridge;
@@ -388,6 +480,7 @@ class SyncthingAccountTransferServer {
   final File _payloadFile;
   final File _doneFile;
   final File _ackFile;
+  final _AccountTransferDiagnostics _diagnostics;
   final void Function()? _onTransferred;
 
   final AccountTransferDescriptor descriptor;
@@ -407,6 +500,11 @@ class SyncthingAccountTransferServer {
   String? get acceptedReceiverAppDeviceId => _acceptedReceiverAppDeviceId;
   String? get acceptedReceiverPlatform => _acceptedReceiverPlatform;
 
+  Future<String> exportDiagnostics() async {
+    await _diagnostics.captureBridge(_bridge, 'server.export.snapshot');
+    return _diagnostics.exportText();
+  }
+
   static Future<SyncthingAccountTransferServer> start({
     required String payload,
     void Function()? onTransferred,
@@ -424,6 +522,13 @@ class SyncthingAccountTransferServer {
       '${Platform.pathSeparator}$folderId',
     );
     await folder.create(recursive: true);
+    final diagnostics = _AccountTransferDiagnostics(
+      role: 'source-server',
+      folderId: folderId,
+    );
+    diagnostics.add('server.start', <String, dynamic>{
+      'payloadBytes': utf8.encode(payload).length,
+    });
 
     try {
       final keyBytes = _randomBytes(32);
@@ -447,6 +552,11 @@ class SyncthingAccountTransferServer {
         folderPath: folder.path,
         force: true,
       );
+      diagnostics.add('server.folder.prepared');
+      await diagnostics.captureBridge(
+        bridge,
+        'server.folder.afterPrepare',
+      );
       await payloadFile.writeAsString(
         await _encryptTransferPayload(payload, keyBytes),
         flush: true,
@@ -454,6 +564,7 @@ class SyncthingAccountTransferServer {
       await bridge.requestScanFolder(folderId);
 
       final status = await bridge.statusFolder(folderId);
+      diagnostics.addStatus('server.status.initial', status);
       final sourceDeviceId = status.deviceId?.trim();
       if (sourceDeviceId == null || sourceDeviceId.length < 20) {
         throw StateError('无法读取本机同步设备身份。');
@@ -470,6 +581,7 @@ class SyncthingAccountTransferServer {
         payloadFile: payloadFile,
         doneFile: doneFile,
         ackFile: ackFile,
+        diagnostics: diagnostics,
         onTransferred: onTransferred,
       );
     } catch (_) {
@@ -479,10 +591,27 @@ class SyncthingAccountTransferServer {
   }
 
   Future<void> acceptResponse(AccountTransferResponseCode response) async {
+    _diagnostics.add('server.acceptResponse.enter', <String, dynamic>{
+      'receiverDeviceId': response.receiverDeviceId,
+      'receiverName': response.receiverName,
+      'receiverAppDeviceId': response.receiverAppDeviceId,
+      'receiverPlatform': response.receiverPlatform,
+      'folderIdMatches': response.folderId == descriptor.folderId,
+      'sourceDeviceIdMatches': response.sourceDeviceId == descriptor.sourceDeviceId,
+    });
+    await _diagnostics.captureBridge(
+      _bridge,
+      'server.acceptResponse.beforeVerification',
+    );
     if (_closed) {
+      _diagnostics.add('server.acceptResponse.closed');
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
-    if (!await response.verifies(descriptor)) {
+    final verified = await response.verifies(descriptor);
+    _diagnostics.add('server.acceptResponse.verified', <String, dynamic>{
+      'verified': verified,
+    });
+    if (!verified) {
       throw const FormatException('回应码不属于当前添加设备会话，请重新扫描。');
     }
 
@@ -498,18 +627,47 @@ class SyncthingAccountTransferServer {
 
     // Device-level connectivity is not enough. Wait until Syncthing confirms
     // that the receiver shares THIS bootstrap folder back (remoteState=valid).
+    _diagnostics.add('server.acceptResponse.authorized', <String, dynamic>{
+      'receiverDeviceId': response.receiverDeviceId,
+    });
+    await _diagnostics.captureBridge(
+      _bridge,
+      'server.acceptResponse.beforePair',
+    );
+
     var deadline = DateTime.now().add(const Duration(seconds: 45));
+    var pairAttempt = 0;
     String? lastRemoteState;
     String? lastFolderError;
     var refreshedBootstrapShare = false;
     var rebuiltWindowsProfile = false;
     var consecutiveNotSharingAfterRefresh = 0;
     while (!_closed && DateTime.now().isBefore(deadline)) {
-      await _bridge.pairFolder(
-        folderId: descriptor.folderId,
-        deviceId: response.receiverDeviceId,
-        name: response.receiverName,
-      );
+      pairAttempt++;
+      _diagnostics.add('server.pair.attempt', <String, dynamic>{
+        'attempt': pairAttempt,
+        'receiverDeviceId': response.receiverDeviceId,
+      });
+      try {
+        await _bridge.pairFolder(
+          folderId: descriptor.folderId,
+          deviceId: response.receiverDeviceId,
+          name: response.receiverName,
+        );
+      } catch (error) {
+        _diagnostics.addError('server.pair.error', error);
+        await _diagnostics.captureBridge(
+          _bridge,
+          'server.pair.errorSnapshot',
+        );
+        rethrow;
+      }
+      if (pairAttempt == 1) {
+        await _diagnostics.captureBridge(
+          _bridge,
+          'server.pair.afterFirstWrite',
+        );
+      }
       await _bridge.setFolderPaused(
         folderId: descriptor.folderId,
         paused: false,
@@ -517,6 +675,7 @@ class SyncthingAccountTransferServer {
       await _bridge.requestScanFolder(descriptor.folderId);
 
       final status = await _bridge.statusFolder(descriptor.folderId);
+      _diagnostics.addStatus('server.acceptResponse.status', status);
       lastRemoteState =
           status.remoteFolderStates[response.receiverDeviceId]?.trim();
       if (status.folderErrors.isNotEmpty) {
@@ -527,6 +686,13 @@ class SyncthingAccountTransferServer {
         response.receiverDeviceId,
       );
       if (connected && lastRemoteState == 'valid') {
+        _diagnostics.add('server.acceptResponse.folderValid', <String, dynamic>{
+          'pairAttempt': pairAttempt,
+        });
+        await _diagnostics.captureBridge(
+          _bridge,
+          'server.acceptResponse.validSnapshot',
+        );
         await _bridge.requestScanFolder(descriptor.folderId);
         return;
       }
@@ -537,6 +703,11 @@ class SyncthingAccountTransferServer {
         alreadyRefreshed: refreshedBootstrapShare,
       )) {
         refreshedBootstrapShare = true;
+        _diagnostics.add('server.repair.refreshMembership.begin');
+        await _diagnostics.captureBridge(
+          _bridge,
+          'server.repair.refreshMembership.before',
+        );
         // pairFolder() is intentionally idempotent and becomes a no-op when
         // the device is already listed in the local folder config. That is
         // insufficient for the stale cluster-config state where the peer is
@@ -560,6 +731,10 @@ class SyncthingAccountTransferServer {
         );
         await _bridge.requestScanFolder(descriptor.folderId);
         await Future<void>.delayed(const Duration(milliseconds: 500));
+        await _diagnostics.captureBridge(
+          _bridge,
+          'server.repair.refreshMembership.after',
+        );
         continue;
       }
 
@@ -581,7 +756,21 @@ class SyncthingAccountTransferServer {
         consecutiveNotSharingChecks: consecutiveNotSharingAfterRefresh,
       )) {
         rebuiltWindowsProfile = true;
-        await _bridge.rebuildWindowsProfilePreservingIdentity();
+        _diagnostics.add('server.repair.rebuildWindowsProfile.begin');
+        await _diagnostics.captureBridge(
+          _bridge,
+          'server.repair.rebuildWindowsProfile.before',
+        );
+        try {
+          await _bridge.rebuildWindowsProfilePreservingIdentity();
+        } catch (error) {
+          _diagnostics.addError(
+            'server.repair.rebuildWindowsProfile.error',
+            error,
+          );
+          rethrow;
+        }
+        _diagnostics.add('server.repair.rebuildWindowsProfile.completed');
         deadline = DateTime.now().add(const Duration(seconds: 90));
         await _bridge.prepareFolder(
           folderId: descriptor.folderId,
@@ -600,6 +789,10 @@ class SyncthingAccountTransferServer {
         );
         await _bridge.requestScanFolder(descriptor.folderId);
         await Future<void>.delayed(const Duration(seconds: 1));
+        await _diagnostics.captureBridge(
+          _bridge,
+          'server.repair.rebuildWindowsProfile.after',
+        );
         continue;
       }
 
@@ -613,6 +806,15 @@ class SyncthingAccountTransferServer {
       await Future<void>.delayed(const Duration(milliseconds: 750));
     }
 
+    _diagnostics.add('server.acceptResponse.deadlineReached', <String, dynamic>{
+      'lastRemoteState': lastRemoteState,
+      'lastFolderError': lastFolderError,
+      'pairAttempts': pairAttempt,
+    });
+    await _diagnostics.captureBridge(
+      _bridge,
+      'server.acceptResponse.deadlineSnapshot',
+    );
     if (_closed) {
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
@@ -641,6 +843,11 @@ class SyncthingAccountTransferServer {
 
     if (!_receiverFinished && await _doneFile.exists()) {
       _receiverFinished = true;
+      _diagnostics.add('server.receiverFinished.detected');
+      await _diagnostics.captureBridge(
+        _bridge,
+        'server.receiverFinished.snapshot',
+      );
     }
   }
 
@@ -654,16 +861,24 @@ class SyncthingAccountTransferServer {
     }
 
     await _ackFile.writeAsString('ack', flush: true);
+    _diagnostics.add('server.ack.written');
     await _bridge.requestScanFolder(descriptor.folderId);
     _transferred = true;
+    _diagnostics.add('server.transfer.completed');
     _onTransferred?.call();
   }
 
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _diagnostics.add('client.close.begin');
+    await _diagnostics.captureBridge(
+      _bridge,
+      'client.close.beforeCleanup',
+    );
     try {
       await _bridge.removeFolderById(descriptor.folderId);
+      _diagnostics.add('client.close.folderRemoved');
     } finally {
       try {
         if (await _payloadFile.exists()) await _payloadFile.delete();
@@ -692,6 +907,13 @@ class SyncthingAccountTransferClient {
       '${Platform.pathSeparator}${descriptor.folderId}',
     );
     await folder.create(recursive: true);
+    final diagnostics = _AccountTransferDiagnostics(
+      role: 'receiver-client',
+      folderId: descriptor.folderId,
+    );
+    diagnostics.add('client.start', <String, dynamic>{
+      'sourceDeviceId': descriptor.sourceDeviceId,
+    });
     try {
       final payloadFile = File(
         '${folder.path}${Platform.pathSeparator}transfer.json',
@@ -709,7 +931,13 @@ class SyncthingAccountTransferClient {
         folderPath: folder.path,
         force: true,
       );
+      diagnostics.add('client.folder.prepared');
+      await diagnostics.captureBridge(
+        bridge,
+        'client.folder.afterPrepare',
+      );
       final status = await bridge.statusFolder(descriptor.folderId);
+      diagnostics.addStatus('client.status.initial', status);
       final receiverDeviceId = status.deviceId?.trim();
       if (receiverDeviceId == null || receiverDeviceId.length < 20) {
         throw const FormatException('无法读取新设备的同步身份。');
@@ -724,11 +952,27 @@ class SyncthingAccountTransferClient {
         receiverAppDeviceId: provisionalAppDeviceId,
         receiverPlatform: device.platform,
       );
+      diagnostics.add('client.response.generated', <String, dynamic>{
+        'receiverDeviceId': receiverDeviceId,
+        'receiverName': device.name,
+        'receiverAppDeviceId': provisionalAppDeviceId,
+        'receiverPlatform': device.platform,
+        'sourceDeviceId': descriptor.sourceDeviceId,
+      });
+      await diagnostics.captureBridge(
+        bridge,
+        'client.beforePairSource',
+      );
 
       await bridge.pairFolder(
         folderId: descriptor.folderId,
         deviceId: descriptor.sourceDeviceId,
         name: '原设备',
+      );
+      diagnostics.add('client.sourcePairedLocally');
+      await diagnostics.captureBridge(
+        bridge,
+        'client.afterPairSource',
       );
 
       return SyncthingAccountTransferClientSession._(
@@ -739,6 +983,7 @@ class SyncthingAccountTransferClient {
         payloadFile: payloadFile,
         doneFile: doneFile,
         ackFile: ackFile,
+        diagnostics: diagnostics,
       );
     } catch (_) {
       await _cleanupBootstrapFolder(bridge, descriptor.folderId, folder);
@@ -778,11 +1023,13 @@ class SyncthingAccountTransferClientSession {
     required File payloadFile,
     required File doneFile,
     required File ackFile,
+    required _AccountTransferDiagnostics diagnostics,
   }) : _bridge = bridge,
        _folder = folder,
        _payloadFile = payloadFile,
        _doneFile = doneFile,
-       _ackFile = ackFile;
+       _ackFile = ackFile,
+       _diagnostics = diagnostics;
 
   final AccountTransferDescriptor descriptor;
   final AccountTransferResponseCode response;
@@ -791,8 +1038,14 @@ class SyncthingAccountTransferClientSession {
   final File _payloadFile;
   final File _doneFile;
   final File _ackFile;
+  final _AccountTransferDiagnostics _diagnostics;
 
   bool _closed = false;
+
+  Future<String> exportDiagnostics() async {
+    await _diagnostics.captureBridge(_bridge, 'client.export.snapshot');
+    return _diagnostics.exportText();
+  }
 
   Future<AccountTransferStatus> transferStatus() async {
     final status = await _bridge.statusFolder(descriptor.folderId);
@@ -819,6 +1072,9 @@ class SyncthingAccountTransferClientSession {
     Duration timeout = const Duration(minutes: 5),
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
+    _diagnostics.add('client.receive.start', <String, dynamic>{
+      'timeoutSeconds': timeout.inSeconds,
+    });
     final authorizationDeadline = DateTime.now().add(timeout);
     DateTime? payloadDeadline;
     var folderReady = false;
@@ -827,10 +1083,16 @@ class SyncthingAccountTransferClientSession {
       await _bridge.requestScanFolder(descriptor.folderId);
 
       var status = await transferStatus();
+      _diagnostics.addTransferStatus('client.receive.status', status);
       onStatus?.call(status);
 
       if (status.folderReady && !folderReady) {
         folderReady = true;
+        _diagnostics.add('client.folder.valid');
+        await _diagnostics.captureBridge(
+          _bridge,
+          'client.folder.validSnapshot',
+        );
         payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
       }
 
@@ -841,6 +1103,7 @@ class SyncthingAccountTransferClientSession {
       }
 
       if (await _payloadFile.exists()) {
+        _diagnostics.add('client.payload.detected');
         final encrypted = await _payloadFile.readAsString();
         final clear = await _decryptTransferPayload(
           encrypted,
@@ -848,12 +1111,16 @@ class SyncthingAccountTransferClientSession {
         );
 
         await _doneFile.writeAsString('done', flush: true);
+        _diagnostics.add('client.done.written');
         await _bridge.requestScanFolder(descriptor.folderId);
 
         final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
         while (!_closed && DateTime.now().isBefore(ackDeadline)) {
           await _bridge.requestScanFolder(descriptor.folderId);
-          if (await _ackFile.exists()) return clear;
+          if (await _ackFile.exists()) {
+            _diagnostics.add('client.ack.detected');
+            return clear;
+          }
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
         if (_closed) {
@@ -867,6 +1134,11 @@ class SyncthingAccountTransferClientSession {
 
       if (!folderReady &&
           !DateTime.now().isBefore(authorizationDeadline)) {
+        _diagnostics.add('client.authorization.timeout');
+        await _diagnostics.captureBridge(
+          _bridge,
+          'client.authorization.timeoutSnapshot',
+        );
         throw const FormatException(
           '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
           '并已经扫描或粘贴了这台设备的回应码。',
@@ -876,6 +1148,11 @@ class SyncthingAccountTransferClientSession {
       if (folderReady &&
           payloadDeadline != null &&
           !DateTime.now().isBefore(payloadDeadline)) {
+        _diagnostics.add('client.payload.timeout');
+        await _diagnostics.captureBridge(
+          _bridge,
+          'client.payload.timeoutSnapshot',
+        );
         throw const FormatException(
           '临时账号同步目录已经对接成功，但账号数据仍没有传过来。'
           '请让原设备继续停留在“添加设备”页面后重试。',
