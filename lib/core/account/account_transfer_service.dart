@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../sync/embedded_syncthing_bridge.dart';
+import '../sync/sync_join_diagnostics.dart';
 import 'device_descriptor.dart';
 
 class AccountTransferDescriptor {
@@ -416,6 +417,9 @@ class SyncthingAccountTransferServer {
       throw StateError('当前平台不支持无局域网设备加入。');
     }
 
+    await SyncJoinDiagnostics.reset(role: 'source');
+    await SyncJoinDiagnostics.record('server.start.begin');
+
     final token = _randomToken();
     final folderId = 'artist-workbench-bootstrap-$token';
     final support = await getApplicationSupportDirectory();
@@ -459,6 +463,11 @@ class SyncthingAccountTransferServer {
         throw StateError('无法读取本机同步设备身份。');
       }
 
+      await SyncJoinDiagnostics.record('server.start.ready', <String, Object?>{
+        'folderId': folderId,
+        'sourceDeviceId': sourceDeviceId,
+      });
+
       return SyncthingAccountTransferServer._(
         descriptor: AccountTransferDescriptor(
           encryptionKey: _encodeBase64Url(keyBytes),
@@ -472,7 +481,11 @@ class SyncthingAccountTransferServer {
         ackFile: ackFile,
         onTransferred: onTransferred,
       );
-    } catch (_) {
+    } catch (error) {
+      await SyncJoinDiagnostics.record('server.start.error', <String, Object?>{
+        'folderId': folderId,
+        'error': error.toString(),
+      });
       await _cleanupBootstrapFolder(bridge, folderId, folder);
       rethrow;
     }
