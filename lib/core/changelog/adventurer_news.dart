@@ -333,6 +333,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '临时账号目录卡死修复',
     description: '修复设备已经连接、临时账号目录却长期停在 notSharing 时“自动修复”实际只是重复无效配对的问题。新版仅对本次随机生成的临时账号目录做一次强制成员刷新：移除并重新加入对端，重新广播目录共享关系；正式账号目录、设备身份与 181/190 的正常加入流程保持不变。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 197,
+    title: 'Windows 同步核心状态自愈',
+    description: '当新设备加入时已经连接、临时目录仍持续 notSharing，且单次目录成员刷新也无效，Windows 原设备会保留 Syncthing cert.pem/key.pem 与原 Device ID，仅重建其余同步核心配置和索引后重新建立本次临时目录共享。账号、排单、成品、桌宠与 OCR 数据不会删除；若重建后 Device ID 发生变化会自动回滚。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
