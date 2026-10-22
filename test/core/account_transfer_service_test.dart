@@ -54,4 +54,39 @@ void main() {
 
     expect(await tampered.verifies(descriptor), isFalse);
   });
+  test('bootstrap share refresh runs only for connected notSharing once', () {
+    expect(
+      shouldRefreshBootstrapShare(
+        connected: true,
+        remoteFolderState: 'notSharing',
+        alreadyRefreshed: false,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldRefreshBootstrapShare(
+        connected: true,
+        remoteFolderState: 'valid',
+        alreadyRefreshed: false,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRefreshBootstrapShare(
+        connected: false,
+        remoteFolderState: 'notSharing',
+        alreadyRefreshed: false,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRefreshBootstrapShare(
+        connected: true,
+        remoteFolderState: 'notSharing',
+        alreadyRefreshed: true,
+      ),
+      isFalse,
+    );
+  });
+
 }
