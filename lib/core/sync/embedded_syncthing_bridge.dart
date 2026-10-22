@@ -215,6 +215,12 @@ class EmbeddedSyncthingBridge {
     });
   }
 
+  Future<bool> rebuildWindowsProfilePreservingIdentity() async {
+    if (!Platform.isWindows) return false;
+    await WindowsSyncthingTransport.instance.rebuildProfilePreservingIdentity();
+    return true;
+  }
+
   Future<void> removeFolderById(String folderId) async {
     if (!supported) return;
     if (Platform.isWindows) {
