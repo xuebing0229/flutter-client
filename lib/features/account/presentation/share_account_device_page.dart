@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/account/account_models.dart';
 import '../../../core/account/account_transfer_service.dart';
 import '../../../core/account/qr_image_decoder.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
@@ -41,11 +42,67 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   bool _pairingBusy = false;
   bool _pollBusy = false;
   bool _finalizingPermanentPeer = false;
+  bool _loadingRevokedResidue = true;
+  bool _cleaningRevokedResidue = false;
+  List<AccountDevice> _unacknowledgedRevokedDevices = const <AccountDevice>[];
 
   @override
   void initState() {
     super.initState();
+    unawaited(_loadRevokedResidue());
     unawaited(_start());
+  }
+
+  Future<void> _loadRevokedResidue() async {
+    try {
+      final devices =
+          await widget.syncCoordinator.unacknowledgedRevokedDevices();
+      if (!mounted) return;
+      setState(() {
+        _unacknowledgedRevokedDevices = devices;
+        _loadingRevokedResidue = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingRevokedResidue = false);
+    }
+  }
+
+  Future<void> _forceCleanRevokedResidue(AccountDevice device) async {
+    if (_cleaningRevokedResidue) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认清理旧设备残留？'),
+        content: Text(
+          '仅当“${device.name}”上的冒险者公会已经被卸载、设备丢失，'
+          '或确定永远不会再打开旧安装时使用。\n\n'
+          '清理后会立即停止向旧安装共享同步目录；如果它只是暂时离线，'
+          '请取消并让它以后正常上线接收解绑记录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认清理'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cleaningRevokedResidue = true);
+    try {
+      await widget.syncCoordinator.forceFinalizeRevokedDevice(device.id);
+      await _loadRevokedResidue();
+      if (mounted) _message('旧设备残留已清理，可以继续添加新设备。');
+    } catch (error) {
+      if (mounted) _message('清理旧设备残留失败：$error');
+    } finally {
+      if (mounted) setState(() => _cleaningRevokedResidue = false);
+    }
   }
 
   Future<void> _start() async {
@@ -147,9 +204,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     setState(() => _responseBusy = true);
     try {
       final response = AccountTransferResponseCode.decode(source);
-      await widget.syncCoordinator.prepareBootstrapRejoinTransport(
-        response.receiverDeviceId,
-      );
       await server.acceptResponse(response);
 
       if (!mounted) return;
@@ -309,6 +363,50 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
               right: 18,
             ),
             children: [
+              if (_loadingRevokedResidue ||
+                  _unacknowledgedRevokedDevices.isNotEmpty) ...[
+                _AddDeviceCard(
+                  icon: Icons.phonelink_erase_rounded,
+                  title: '已解绑设备残留',
+                  child: _loadingRevokedResidue
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '检测到下面这些设备已经解绑，但还没有回传解绑确认。'
+                              '如果旧 App 已经被卸载/设备已丢失，它将永远无法确认，'
+                              '可以在这里明确清理；只是暂时离线则不要清理。',
+                              style: TextStyle(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            for (final device
+                                in _unacknowledgedRevokedDevices) ...[
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(
+                                  Icons.devices_other_rounded,
+                                ),
+                                title: Text(device.name),
+                                subtitle: Text(device.platform),
+                                trailing: OutlinedButton(
+                                  onPressed: _cleaningRevokedResidue
+                                      ? null
+                                      : () => _forceCleanRevokedResidue(device),
+                                  child: const Text('清理旧残留'),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 12),
+              ],
               _AddDeviceCard(
                 icon: Icons.qr_code_2_rounded,
                 title: '第一步：让新设备扫描',
