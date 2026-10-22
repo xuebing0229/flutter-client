@@ -272,6 +272,78 @@ class WindowsSyncthingTransport {
     }
   }
 
+  Future<Map<String, dynamic>> diagnosticSnapshot(
+    String folderId,
+  ) async {
+    if (!Platform.isWindows) return <String, dynamic>{'platform': 'not-windows'};
+    await _ensureReady();
+    final apiKey = await _ensureApiKey();
+
+    final system = _jsonMap(
+      await _request('GET', '/rest/system/status', apiKey: apiKey),
+    );
+    final configured = _jsonList(
+      await _request('GET', '/rest/config/devices', apiKey: apiKey),
+    );
+    final folders = _jsonList(
+      await _request('GET', '/rest/config/folders', apiKey: apiKey),
+    );
+    final connectionRoot = _jsonMap(
+      await _request('GET', '/rest/system/connections', apiKey: apiKey),
+    );
+    final connections = _asMap(connectionRoot['connections']);
+
+    Map<String, dynamic>? folder;
+    for (final item in folders) {
+      final map = _asMap(item);
+      if (map['id']?.toString() == folderId) {
+        folder = map;
+        break;
+      }
+    }
+
+    final configuredDevices = <Map<String, dynamic>>[];
+    for (final item in configured) {
+      final map = _asMap(item);
+      final id = map['deviceID']?.toString().trim() ?? '';
+      if (id.isEmpty) continue;
+      configuredDevices.add(<String, dynamic>{
+        'deviceId': id,
+        'name': map['name']?.toString() ?? '',
+      });
+    }
+
+    final connectedDeviceIds = <String>[];
+    for (final entry in connections.entries) {
+      final map = _asMap(entry.value);
+      if (map['connected'] == true) connectedDeviceIds.add(entry.key);
+    }
+
+    final folderDevices = <String>[];
+    final rawFolderDevices = folder?['devices'];
+    if (rawFolderDevices is List) {
+      for (final item in rawFolderDevices) {
+        final id = _asMap(item)['deviceID']?.toString().trim() ?? '';
+        if (id.isNotEmpty) folderDevices.add(id);
+      }
+    }
+
+    return <String, dynamic>{
+      'platform': 'windows',
+      'myDeviceId': system['myID']?.toString(),
+      'folder': <String, dynamic>{
+        'exists': folder != null,
+        'id': folderId,
+        if (folder != null) 'label': folder['label']?.toString(),
+        if (folder != null) 'type': folder['type']?.toString(),
+        if (folder != null) 'paused': folder['paused'] == true,
+        'deviceIds': folderDevices,
+      },
+      'configuredDevices': configuredDevices,
+      'connectedDeviceIds': connectedDeviceIds,
+    };
+  }
+
   Future<void> pairDevice({
     required String folderId,
     required String deviceId,
