@@ -871,12 +871,13 @@ class SyncCoordinator extends ChangeNotifier {
         );
       }
 
+      if (!_transportPrepared) {
+        await _prepareTransport(force: true);
+      }
+
       final transportId = device.syncTransportId?.trim();
-      if (transportId != null && transportId.isNotEmpty) {
-        if (!_transportPrepared) {
-          await _prepareTransport(force: true);
-        }
-        if (_transportPrepared) {
+      if (_transportPrepared) {
+        if (transportId != null && transportId.isNotEmpty) {
           await _clearTransportReauthorization(transportId);
           try {
             await _bridge.unshareDevice(
@@ -887,11 +888,11 @@ class SyncCoordinator extends ChangeNotifier {
             // The ACK is durable in the shared account state; normal
             // revocation enforcement will retry the transport cleanup.
           }
-          try {
-            await _bridge.requestScan(accountId: accountId);
-          } catch (_) {}
-          await _refreshTransportStatus();
         }
+        try {
+          await _bridge.requestScan(accountId: accountId);
+        } catch (_) {}
+        await _refreshTransportStatus();
       }
     });
   }
