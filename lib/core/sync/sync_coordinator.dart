@@ -57,18 +57,6 @@ bool shouldRetainRevokedTransportShare({
           reauthorizedTransportIds.contains(id));
 }
 
-@visibleForTesting
-bool shouldResetStaleRevokedTransportBeforeBootstrap({
-  required String transportId,
-  required Set<String> activeTransportIds,
-  required Set<String> revokedTransportIds,
-}) {
-  final id = transportId.trim();
-  return id.isNotEmpty &&
-      revokedTransportIds.contains(id) &&
-      !activeTransportIds.contains(id);
-}
-
 class PortableWorkspaceSnapshot {
   const PortableWorkspaceSnapshot({
     required this.exportedAt,
@@ -828,55 +816,83 @@ class SyncCoordinator extends ChangeNotifier {
     });
   }
 
-  Future<void> prepareBootstrapRejoinTransport(String deviceId) {
-    return _enqueue(() async {
-      final remoteId = deviceId.trim();
-      if (remoteId.length < 20) return;
+  Future<List<AccountDevice>> unacknowledgedRevokedDevices() async {
+    final state = accountStore.syncSnapshot;
+    if (state == null || state.accountId != accountId) {
+      return const <AccountDevice>[];
+    }
 
-      final state = accountStore.syncSnapshot;
-      if (state == null || state.accountId != accountId) return;
-
-      final activeTransportIds = <String>{
-        for (final device in state.activeDevices)
-          if (device.syncTransportId?.trim().isNotEmpty == true)
-            device.syncTransportId!.trim(),
-      };
-      final revokedTransportIds = <String>{
-        for (final entry in state.revocations.entries)
-          if (state.devices[entry.key]?.syncTransportId?.trim().isNotEmpty ==
-              true)
-            state.devices[entry.key]!.syncTransportId!.trim(),
-      };
-
-      if (!shouldResetStaleRevokedTransportBeforeBootstrap(
-        transportId: remoteId,
-        activeTransportIds: activeTransportIds,
-        revokedTransportIds: revokedTransportIds,
-      )) {
-        return;
-      }
-
-      // A directly uninstalled app can never acknowledge its revocation. If
-      // Android later restores/reuses the same Syncthing identity, the source
-      // may still be sharing the permanent account folder with that stale
-      // transport. Reset ONLY that stale revoked share before the normal,
-      // already-validated bootstrap flow starts. Normal first joins and joins
-      // using a fresh transport ID are untouched.
-      await _authorizeTransportRejoin(remoteId);
-
-      if (!_transportPrepared) {
-        await _prepareTransport(force: true);
-      }
-      if (!_transportPrepared) {
-        throw StateError(_lastError ?? '同步核心尚未准备好，请稍后重试。');
-      }
-
-      await _bridge.unshareDevice(
+    final result = <AccountDevice>[];
+    for (final entry in state.revocations.entries) {
+      if (entry.key == deviceId) continue;
+      final device = state.devices[entry.key];
+      if (device == null) continue;
+      final acknowledged = await _accountSyncStore.hasRevocationAck(
         accountId: accountId,
-        deviceId: remoteId,
+        deviceId: entry.key,
+        revokedAt: entry.value.revokedAt,
       );
-      await _bridge.requestScan(accountId: accountId);
-      await _refreshTransportStatus();
+      if (!acknowledged) result.add(device);
+    }
+    result.sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    return result;
+  }
+
+  Future<void> forceFinalizeRevokedDevice(String appDeviceId) {
+    return _enqueue(() async {
+      final state = accountStore.syncSnapshot;
+      if (state == null || state.accountId != accountId) {
+        throw StateError('当前账号状态不可用。');
+      }
+      if (appDeviceId == deviceId) {
+        throw const FormatException('不能强制清理当前设备。');
+      }
+
+      final revocation = state.revocations[appDeviceId];
+      final device = state.devices[appDeviceId];
+      if (revocation == null || device == null) {
+        throw const FormatException('这台设备没有待完成的解绑记录。');
+      }
+
+      final alreadyAcknowledged = await _accountSyncStore.hasRevocationAck(
+        accountId: accountId,
+        deviceId: appDeviceId,
+        revokedAt: revocation.revokedAt,
+      );
+      if (!alreadyAcknowledged) {
+        // The user explicitly confirmed that this installation has already
+        // been uninstalled/lost and can never come back to acknowledge its
+        // tombstone. Finalize that exact revocation on its behalf so every
+        // surviving peer can stop sharing to the dead transport.
+        await _accountSyncStore.writeRevocationAck(
+          accountId: accountId,
+          deviceId: appDeviceId,
+          revokedAt: revocation.revokedAt,
+        );
+      }
+
+      final transportId = device.syncTransportId?.trim();
+      if (transportId != null && transportId.isNotEmpty) {
+        if (!_transportPrepared) {
+          await _prepareTransport(force: true);
+        }
+        if (_transportPrepared) {
+          await _clearTransportReauthorization(transportId);
+          try {
+            await _bridge.unshareDevice(
+              accountId: accountId,
+              deviceId: transportId,
+            );
+          } catch (_) {
+            // The ACK is durable in the shared account state; normal
+            // revocation enforcement will retry the transport cleanup.
+          }
+          try {
+            await _bridge.requestScan(accountId: accountId);
+          } catch (_) {}
+          await _refreshTransportStatus();
+        }
+      }
     });
   }
 
