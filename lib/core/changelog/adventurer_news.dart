@@ -343,6 +343,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '回应码确认前状态修复',
     description: '修复新设备尚未把回应码交回原设备时，仅因 Syncthing 底层设备已提前连接就错误进入 notSharing 自动修复的问题。新设备端现在只等待原设备确认回应码，不再在授权前修改临时目录共享，也不会提前启动 45 秒握手失败倒计时；真正的目录建立与自愈只由原设备在确认回应码之后执行。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 199,
+    title: '设备加入诊断记录',
+    description: '为设备加入流程增加可复制的同步诊断记录，不继续猜测根因。记录回应码是否真正到达原设备、acceptResponse 校验/授权时点、临时目录 prepare/pair/unshare/scan/pause 操作，以及两端实际 configuredDevices、connectedDeviceIds、remoteState、folderState、folderErrors 和异常退出。不会记录账号密码或排单等业务数据内容。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
