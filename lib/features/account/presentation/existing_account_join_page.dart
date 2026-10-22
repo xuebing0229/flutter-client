@@ -202,29 +202,6 @@ class _ExistingAccountJoinPageState extends State<ExistingAccountJoinPage> {
     }
   }
 
-  Future<void> _copyDiagnostics() async {
-    final session = _session;
-    if (session == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('诊断日志还没准备好'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    final report = await session.captureDiagnosticReport();
-    await Clipboard.setData(ClipboardData(text: report));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('新设备诊断日志已复制'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _pairingCodeController.dispose();
@@ -455,6 +432,29 @@ class _ReceiveAccountTransferPageState
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('回应码已复制，请粘贴到原设备'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _copyDiagnostics() async {
+    final session = _session;
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('诊断日志还没准备好'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final report = await session.captureDiagnosticReport();
+    await Clipboard.setData(ClipboardData(text: report));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('新设备诊断日志已复制'),
         behavior: SnackBarBehavior.floating,
       ),
     );
