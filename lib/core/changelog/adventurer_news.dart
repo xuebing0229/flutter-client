@@ -328,6 +328,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '卸载后重新加入设备修复',
     description: '恢复 190/181 已验证的新设备加入流程，不再改写临时账号传输状态机。解绑设备时新增“已卸载/丢失”处理：对已经无法再上线回传确认的旧安装，可明确结束其撤销等待并停止旧同步目录共享；此前已经解绑但未确认的旧设备，也可在“添加设备”页清理残留后按原流程重新加入。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 196,
+    title: '临时账号目录卡死修复',
+    description: '修复设备已经连接、临时账号目录却长期停在 notSharing 时“自动修复”实际只是重复无效配对的问题。新版仅对本次随机生成的临时账号目录做一次强制成员刷新：移除并重新加入对端，重新广播目录共享关系；正式账号目录、设备身份与 181/190 的正常加入流程保持不变。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
