@@ -167,6 +167,21 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     );
   }
 
+  Future<void> _copyTransferDiagnostics() async {
+    final server = _server;
+    if (server == null) {
+      _message('设备加入通道还没有准备好，暂时没有诊断信息。');
+      return;
+    }
+    try {
+      final source = await server.exportDiagnostics();
+      await Clipboard.setData(ClipboardData(text: source));
+      if (mounted) _message('设备加入诊断信息已复制。');
+    } catch (error) {
+      if (mounted) _message('复制诊断信息失败：$error');
+    }
+  }
+
   Future<void> _scanResponseCode() async {
     if (_responseBusy || _transferred) return;
     try {
@@ -558,6 +573,26 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                           ? null
                           : _acceptTypedResponse,
                       child: const Text('确认回应码'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _AddDeviceCard(
+                icon: Icons.bug_report_outlined,
+                title: '设备加入诊断',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '199 诊断版会记录本次临时目录的真实 Syncthing 状态，不包含账号密码或一次性加密密钥。',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: server == null ? null : _copyTransferDiagnostics,
+                      icon: const Icon(Icons.copy_all_rounded),
+                      label: const Text('复制诊断信息'),
                     ),
                   ],
                 ),
