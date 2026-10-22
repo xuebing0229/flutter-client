@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../sync/embedded_syncthing_bridge.dart';
@@ -339,34 +338,6 @@ class AddDeviceCode {
   }
 }
 
-@visibleForTesting
-bool shouldRefreshBootstrapShare({
-  required bool connected,
-  required String? remoteFolderState,
-  required bool alreadyRefreshed,
-}) {
-  return connected &&
-      remoteFolderState?.trim() == 'notSharing' &&
-      !alreadyRefreshed;
-}
-
-@visibleForTesting
-bool shouldRebuildWindowsBootstrapProfile({
-  required bool isWindows,
-  required bool connected,
-  required String? remoteFolderState,
-  required bool bootstrapShareRefreshed,
-  required bool alreadyRebuilt,
-  required int consecutiveNotSharingChecks,
-}) {
-  return isWindows &&
-      connected &&
-      remoteFolderState?.trim() == 'notSharing' &&
-      bootstrapShareRefreshed &&
-      !alreadyRebuilt &&
-      consecutiveNotSharingChecks >= 4;
-}
-
 class SyncthingAccountTransferServer {
   SyncthingAccountTransferServer._({
     required this.descriptor,
@@ -498,12 +469,9 @@ class SyncthingAccountTransferServer {
 
     // Device-level connectivity is not enough. Wait until Syncthing confirms
     // that the receiver shares THIS bootstrap folder back (remoteState=valid).
-    var deadline = DateTime.now().add(const Duration(seconds: 45));
+    final deadline = DateTime.now().add(const Duration(seconds: 45));
     String? lastRemoteState;
     String? lastFolderError;
-    var refreshedBootstrapShare = false;
-    var rebuiltWindowsProfile = false;
-    var consecutiveNotSharingAfterRefresh = 0;
     while (!_closed && DateTime.now().isBefore(deadline)) {
       await _bridge.pairFolder(
         folderId: descriptor.folderId,
@@ -529,78 +497,6 @@ class SyncthingAccountTransferServer {
       if (connected && lastRemoteState == 'valid') {
         await _bridge.requestScanFolder(descriptor.folderId);
         return;
-      }
-
-      if (shouldRefreshBootstrapShare(
-        connected: connected,
-        remoteFolderState: lastRemoteState,
-        alreadyRefreshed: refreshedBootstrapShare,
-      )) {
-        refreshedBootstrapShare = true;
-        // pairFolder() is intentionally idempotent and becomes a no-op when
-        // the device is already listed in the local folder config. That is
-        // insufficient for the stale cluster-config state where the peer is
-        // connected but reports remoteState=notSharing. For THIS temporary
-        // bootstrap folder only, remove and re-add the peer once so Syncthing
-        // publishes fresh folder membership without touching the permanent
-        // account folder or the global device identity.
-        await _bridge.unshareFolderDevice(
-          folderId: descriptor.folderId,
-          deviceId: response.receiverDeviceId,
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-        await _bridge.pairFolder(
-          folderId: descriptor.folderId,
-          deviceId: response.receiverDeviceId,
-          name: response.receiverName,
-        );
-        await _bridge.setFolderPaused(
-          folderId: descriptor.folderId,
-          paused: false,
-        );
-        await _bridge.requestScanFolder(descriptor.folderId);
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        continue;
-      }
-
-      if (connected &&
-          lastRemoteState == 'notSharing' &&
-          refreshedBootstrapShare &&
-          !rebuiltWindowsProfile) {
-        consecutiveNotSharingAfterRefresh++;
-      } else {
-        consecutiveNotSharingAfterRefresh = 0;
-      }
-
-      if (shouldRebuildWindowsBootstrapProfile(
-        isWindows: Platform.isWindows,
-        connected: connected,
-        remoteFolderState: lastRemoteState,
-        bootstrapShareRefreshed: refreshedBootstrapShare,
-        alreadyRebuilt: rebuiltWindowsProfile,
-        consecutiveNotSharingChecks: consecutiveNotSharingAfterRefresh,
-      )) {
-        rebuiltWindowsProfile = true;
-        await _bridge.rebuildWindowsProfilePreservingIdentity();
-        deadline = DateTime.now().add(const Duration(seconds: 90));
-        await _bridge.prepareFolder(
-          folderId: descriptor.folderId,
-          label: '临时账号加入',
-          folderPath: _folder.path,
-          force: true,
-        );
-        await _bridge.pairFolder(
-          folderId: descriptor.folderId,
-          deviceId: response.receiverDeviceId,
-          name: response.receiverName,
-        );
-        await _bridge.setFolderPaused(
-          folderId: descriptor.folderId,
-          paused: false,
-        );
-        await _bridge.requestScanFolder(descriptor.folderId);
-        await Future<void>.delayed(const Duration(seconds: 1));
-        continue;
       }
 
       if (lastRemoteState == 'paused') {
@@ -819,9 +715,12 @@ class SyncthingAccountTransferClientSession {
     Duration timeout = const Duration(minutes: 5),
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
-    final authorizationDeadline = DateTime.now().add(timeout);
+    final connectionDeadline = DateTime.now().add(timeout);
+    DateTime? folderHandshakeDeadline;
     DateTime? payloadDeadline;
+    var sourceConnected = false;
     var folderReady = false;
+    var repairTick = 0;
 
     while (!_closed) {
       await _bridge.requestScanFolder(descriptor.folderId);
@@ -829,9 +728,35 @@ class SyncthingAccountTransferClientSession {
       var status = await transferStatus();
       onStatus?.call(status);
 
+      if (status.sourceConnected && !sourceConnected) {
+        sourceConnected = true;
+        folderHandshakeDeadline = DateTime.now().add(
+          const Duration(seconds: 45),
+        );
+      }
+
       if (status.folderReady && !folderReady) {
         folderReady = true;
         payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+      }
+
+      if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
+        await _bridge.pairFolder(
+          folderId: descriptor.folderId,
+          deviceId: descriptor.sourceDeviceId,
+          name: '原设备',
+        );
+        await _bridge.setFolderPaused(
+          folderId: descriptor.folderId,
+          paused: false,
+        );
+        await _bridge.requestScanFolder(descriptor.folderId);
+        status = await transferStatus();
+        onStatus?.call(status);
+        if (status.folderReady) {
+          folderReady = true;
+          payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+        }
       }
 
       if (status.folderErrors.isNotEmpty) {
@@ -865,11 +790,34 @@ class SyncthingAccountTransferClientSession {
         );
       }
 
-      if (!folderReady &&
-          !DateTime.now().isBefore(authorizationDeadline)) {
+      if (!sourceConnected &&
+          !DateTime.now().isBefore(connectionDeadline)) {
         throw const FormatException(
           '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
           '并已经扫描或粘贴了这台设备的回应码。',
+        );
+      }
+
+      if (sourceConnected &&
+          !folderReady &&
+          folderHandshakeDeadline != null &&
+          !DateTime.now().isBefore(folderHandshakeDeadline)) {
+        final state = status.remoteFolderState;
+        if (state == 'paused') {
+          throw const FormatException(
+            '已经连接原设备，但临时账号同步目录在原设备上处于暂停状态。'
+            '请让原设备重新打开“添加设备”后再试。',
+          );
+        }
+        if (state == 'notSharing') {
+          throw const FormatException(
+            '已经连接原设备，但原设备没有真正共享临时账号目录。'
+            '请让原设备保持在“添加设备”页面并重新确认回应码。',
+          );
+        }
+        throw FormatException(
+          '已经连接原设备，但临时账号目录没有完成同步握手'
+          '${state == null || state.isEmpty ? '' : '（状态：$state）'}。',
         );
       }
 
