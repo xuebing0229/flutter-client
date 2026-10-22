@@ -34,4 +34,37 @@ void main() {
       isFalse,
     );
   });
+
+  test('reinstall may reset only a stale revoked transport before bootstrap', () {
+    expect(
+      shouldResetStaleRevokedTransportBeforeBootstrap(
+        transportId: 'TRANSPORT-DEVICE-ID',
+        activeTransportIds: const <String>{},
+        revokedTransportIds: const <String>{'TRANSPORT-DEVICE-ID'},
+      ),
+      isTrue,
+    );
+  });
+
+  test('normal first join never resets a transport', () {
+    expect(
+      shouldResetStaleRevokedTransportBeforeBootstrap(
+        transportId: 'NEW-TRANSPORT-DEVICE-ID',
+        activeTransportIds: const <String>{},
+        revokedTransportIds: const <String>{'OLD-TRANSPORT-DEVICE-ID'},
+      ),
+      isFalse,
+    );
+  });
+
+  test('active transport is never treated as stale revoked rejoin', () {
+    expect(
+      shouldResetStaleRevokedTransportBeforeBootstrap(
+        transportId: 'TRANSPORT-DEVICE-ID',
+        activeTransportIds: const <String>{'TRANSPORT-DEVICE-ID'},
+        revokedTransportIds: const <String>{'TRANSPORT-DEVICE-ID'},
+      ),
+      isFalse,
+    );
+  });
 }
