@@ -454,6 +454,7 @@ class _ReceiveAccountTransferPageState
     final sourceConnected = transferStatus?.sourceConnected == true;
     final folderReady = transferStatus?.folderReady == true;
     final peerConfirmed = _folderReadyOnce || folderReady;
+    final remoteFolderState = transferStatus?.remoteFolderState;
     final folderState = transferStatus?.folderState;
     final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
         .clamp(0, 100)
@@ -572,11 +573,16 @@ class _ReceiveAccountTransferPageState
                           : folderReady
                               ? '临时账号目录已经双方确认，正在等待账号数据到达……'
                               : sourceConnected
-                                  ? '底层设备已经连接。请继续让原设备扫描或粘贴上面的回应码；'
-                                      '确认完成前临时账号目录不会共享，这是正常状态。'
-                                  : folderState == 'scanning'
-                                      ? '同步通道已准备。请让原设备扫描或粘贴上面的回应码确认。'
-                                      : '等待原设备扫描或粘贴上面的回应码确认……',
+                                  ? remoteFolderState == 'notSharing'
+                                      ? '设备已经连接，但临时账号目录尚未被原设备共享，正在自动修复……'
+                                      : remoteFolderState == 'paused'
+                                          ? '设备已经连接，但临时账号目录处于暂停状态……'
+                                          : '设备已经连接，正在完成临时账号目录握手……'
+                                  : peerConfirmed
+                                      ? '临时账号目录已确认，正在恢复同步连接……'
+                                      : folderState == 'scanning'
+                                          ? '同步通道已准备，正在连接原设备……'
+                                          : '等待原设备确认并建立连接……',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
