@@ -733,10 +733,10 @@ class SyncthingAccountTransferServer {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    _diagnostics.event('client.close.begin');
+    _diagnostics.event('server.close.begin');
     try {
       await _bridge.removeFolderById(descriptor.folderId);
-      _diagnostics.event('client.close.removeFolder.ok');
+      _diagnostics.event('server.close.removeFolder.ok');
     } finally {
       try {
         if (await _payloadFile.exists()) await _payloadFile.delete();
@@ -1117,8 +1117,10 @@ class SyncthingAccountTransferClientSession {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _diagnostics.event('client.close.begin');
     try {
       await _bridge.removeFolderById(descriptor.folderId);
+      _diagnostics.event('client.close.removeFolder.ok');
     } finally {
       try {
         if (await _folder.exists()) await _folder.delete(recursive: true);
