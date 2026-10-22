@@ -11,6 +11,7 @@ import '../../../core/account/account_transfer_service.dart';
 import '../../../core/account/qr_image_decoder.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_join_diagnostics.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 class ShareAccountDevicePage extends StatefulWidget {
@@ -327,6 +328,12 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     ).encode();
   }
 
+  Future<void> _copySyncDiagnostics() async {
+    final text = await SyncJoinDiagnostics.readText();
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) _message('同步诊断已复制');
+  }
+
   void _message(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
@@ -348,7 +355,16 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     final server = _server;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('添加设备')),
+      appBar: AppBar(
+        title: const Text('添加设备'),
+        actions: [
+          IconButton(
+            tooltip: '复制同步诊断',
+            onPressed: _copySyncDiagnostics,
+            icon: const Icon(Icons.bug_report_outlined),
+          ),
+        ],
+      ),
       body: AnimatedBuilder(
         animation: widget.syncCoordinator,
         builder: (context, _) {
