@@ -540,12 +540,22 @@ class SyncthingAccountTransferServer {
   }
 
   Future<void> acceptResponse(AccountTransferResponseCode response) async {
+    _diagnostics.event('server.acceptResponse.begin', <String, Object?>{
+      'folderId': response.folderId,
+      'sourceDeviceId': response.sourceDeviceId,
+      'receiverDeviceId': response.receiverDeviceId,
+      'receiverName': response.receiverName,
+      'receiverAppDeviceId': response.receiverAppDeviceId,
+      'receiverPlatform': response.receiverPlatform,
+    });
     if (_closed) {
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
     if (!await response.verifies(descriptor)) {
+      _diagnostics.event('server.acceptResponse.verify.failed');
       throw const FormatException('回应码不属于当前添加设备会话，请重新扫描。');
     }
+    _diagnostics.event('server.acceptResponse.verify.ok');
 
     final existing = _acceptedReceiverDeviceId;
     if (existing != null && existing != response.receiverDeviceId) {
@@ -562,19 +572,62 @@ class SyncthingAccountTransferServer {
     final deadline = DateTime.now().add(const Duration(seconds: 45));
     String? lastRemoteState;
     String? lastFolderError;
+    var attempt = 0;
     while (!_closed && DateTime.now().isBefore(deadline)) {
-      await _bridge.pairFolder(
+      attempt++;
+      try {
+        await _bridge.pairFolder(
         folderId: descriptor.folderId,
         deviceId: response.receiverDeviceId,
-        name: response.receiverName,
-      );
-      await _bridge.setFolderPaused(
+          name: response.receiverName,
+        );
+        if (attempt == 1) {
+          _diagnostics.event('server.pairFolder.ok', <String, Object?>{
+            'attempt': attempt,
+            'receiverDeviceId': response.receiverDeviceId,
+          });
+        }
+      } catch (error) {
+        _diagnostics.event('server.pairFolder.error', <String, Object?>{
+          'attempt': attempt,
+          'error': '$error',
+        });
+        rethrow;
+      }
+      try {
+        await _bridge.setFolderPaused(
         folderId: descriptor.folderId,
-        paused: false,
-      );
-      await _bridge.requestScanFolder(descriptor.folderId);
+          paused: false,
+        );
+        if (attempt == 1) {
+          _diagnostics.event('server.unpauseFolder.ok');
+        }
+      } catch (error) {
+        _diagnostics.event('server.unpauseFolder.error', <String, Object?>{
+          'attempt': attempt,
+          'error': '$error',
+        });
+        rethrow;
+      }
+      try {
+        await _bridge.requestScanFolder(descriptor.folderId);
+        if (attempt == 1) {
+          _diagnostics.event('server.scanAfterAccept.ok');
+        }
+      } catch (error) {
+        _diagnostics.event('server.scanAfterAccept.error', <String, Object?>{
+          'attempt': attempt,
+          'error': '$error',
+        });
+        rethrow;
+      }
 
       final status = await _bridge.statusFolder(descriptor.folderId);
+      _diagnostics.status(
+        'server.acceptResponse.status',
+        status,
+        folderId: descriptor.folderId,
+      );
       lastRemoteState =
           status.remoteFolderStates[response.receiverDeviceId]?.trim();
       if (status.folderErrors.isNotEmpty) {
@@ -585,11 +638,18 @@ class SyncthingAccountTransferServer {
         response.receiverDeviceId,
       );
       if (connected && lastRemoteState == 'valid') {
+        _diagnostics.event('server.acceptResponse.folder.valid', <String, Object?>{
+          'attempt': attempt,
+          'receiverDeviceId': response.receiverDeviceId,
+        });
         await _bridge.requestScanFolder(descriptor.folderId);
         return;
       }
 
       if (lastRemoteState == 'paused') {
+        _diagnostics.event('server.acceptResponse.folder.paused', <String, Object?>{
+          'attempt': attempt,
+        });
         throw const FormatException(
           '新设备已经连接，但临时账号同步目录在对端处于暂停状态。'
           '请让新设备保持在“确认新设备”页面后重新尝试。',
@@ -600,8 +660,14 @@ class SyncthingAccountTransferServer {
     }
 
     if (_closed) {
+      _diagnostics.event('server.acceptResponse.closed');
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
+    _diagnostics.event('server.acceptResponse.timeout', <String, Object?>{
+      'attempts': attempt,
+      'lastRemoteState': lastRemoteState,
+      'lastFolderError': lastFolderError,
+    });
     if (lastFolderError != null && lastFolderError.isNotEmpty) {
       throw FormatException('临时账号同步目录建立失败：$lastFolderError');
     }
@@ -640,6 +706,7 @@ class SyncthingAccountTransferServer {
 
     if (!_receiverFinished && await _doneFile.exists()) {
       _receiverFinished = true;
+      _diagnostics.event('server.receiverFinished.detected');
     }
   }
 
