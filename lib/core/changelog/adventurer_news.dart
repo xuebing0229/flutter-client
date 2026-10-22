@@ -338,6 +338,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Windows 同步核心状态自愈',
     description: '当新设备加入时已经连接、临时目录仍持续 notSharing，且单次目录成员刷新也无效，Windows 原设备会保留 Syncthing cert.pem/key.pem 与原 Device ID，仅重建其余同步核心配置和索引后重新建立本次临时目录共享。账号、排单、成品、桌宠与 OCR 数据不会删除；若重建后 Device ID 发生变化会自动回滚。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 198,
+    title: '回应码确认前状态修复',
+    description: '修复新设备尚未把回应码交回原设备时，仅因 Syncthing 底层设备已提前连接就错误进入 notSharing 自动修复的问题。新设备端现在只等待原设备确认回应码，不再在授权前修改临时目录共享，也不会提前启动 45 秒握手失败倒计时；真正的目录建立与自愈只由原设备在确认回应码之后执行。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
