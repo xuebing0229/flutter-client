@@ -147,6 +147,37 @@ class EmbeddedSyncthingBridge {
     }
   }
 
+  Future<Map<String, dynamic>> diagnosticFolderSnapshot(
+    String folderId,
+  ) async {
+    if (!supported) {
+      return <String, dynamic>{
+        'platform': Platform.operatingSystem,
+        'supported': false,
+      };
+    }
+    if (Platform.isWindows) {
+      return WindowsSyncthingTransport.instance.diagnosticSnapshot(folderId);
+    }
+
+    final status = await statusFolder(folderId);
+    return <String, dynamic>{
+      'platform': Platform.operatingSystem,
+      'supported': true,
+      'available': status.available,
+      'running': status.running,
+      'deviceId': status.deviceId,
+      'version': status.version,
+      'configuredDevices': status.configuredDevices,
+      'connectedDeviceIds': status.connectedDeviceIds,
+      'folderState': status.folderState,
+      'remoteFolderStates': status.remoteFolderStates,
+      'folderErrors': status.folderErrors,
+      'syncProgress': status.syncProgress,
+      'error': status.error,
+    };
+  }
+
   Future<void> pairFolder({
     required String folderId,
     required String deviceId,
