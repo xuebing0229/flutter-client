@@ -450,17 +450,19 @@ class _ReceiveAccountTransferPageState
     final colors = Theme.of(context).colorScheme;
     final response = _session?.response.encode();
     final transferStatus = _transferStatus;
+    final progress = transferStatus?.progress;
     final sourceConnected = transferStatus?.sourceConnected == true;
     final folderReady = transferStatus?.folderReady == true;
-    final payloadReceived = transferStatus?.payloadReceived == true;
-    // Device connectivity happens before the original device authenticates
-    // the response code. Do NOT treat a connected Syncthing peer as proof that
-    // the original device has confirmed this join; otherwise the response QR
-    // disappears before the user can scan it and the source never shares the
-    // bootstrap folder.
-    final responseConfirmed = _folderReadyOnce || folderReady;
+    final peerConfirmed = _folderReadyOnce || folderReady;
     final remoteFolderState = transferStatus?.remoteFolderState;
     final folderState = transferStatus?.folderState;
+    final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
+        .clamp(0, 100)
+        .toDouble();
+    final progressBytes = (progress?['globalBytes'] as num?)?.toInt() ?? 0;
+    final progressItems = (progress?['globalItems'] as num?)?.toInt() ?? 0;
+    final hasMeasuredProgress = progress != null &&
+        (progressBytes > 0 || progressItems > 0);
 
     return Scaffold(
       appBar: AppBar(title: const Text('确认新设备')),
@@ -506,7 +508,7 @@ class _ReceiveAccountTransferPageState
                       textAlign: TextAlign.center,
                     ),
                   ] else ...[
-                    if (!responseConfirmed) ...[
+                    if (!peerConfirmed) ...[
                       const Text(
                         '请让原设备扫描下面的回应二维码',
                         style: TextStyle(fontWeight: FontWeight.w800),
@@ -526,9 +528,7 @@ class _ReceiveAccountTransferPageState
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        sourceConnected
-                            ? '两台设备已经连上，但还没有完成账号授权。请让原设备扫描上面的回应二维码，或复制回应码回原设备确认。'
-                            : '如果不方便扫码，也可以复制回应码，在原设备「添加设备」页面粘贴确认。',
+                        '如果不方便扫码，也可以复制回应码，在原设备「添加设备」页面粘贴确认。',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: colors.onSurfaceVariant),
                       ),
@@ -543,41 +543,43 @@ class _ReceiveAccountTransferPageState
                       ),
                     ] else ...[
                       Icon(
-                        payloadReceived
+                        folderReady
                             ? Icons.check_circle_rounded
                             : Icons.sync_rounded,
                         size: 46,
-                        color: payloadReceived
+                        color: folderReady
                             ? colors.primary
                             : colors.onSurfaceVariant,
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        payloadReceived
-                            ? '账号信息已收到'
-                            : folderReady
-                                ? '账号传输通道已对接'
-                                : sourceConnected
-                                    ? '已连接原设备，正在确认临时账号目录'
-                                    : '原设备已确认，正在建立同步连接',
+                        folderReady
+                            ? '账号传输通道已对接'
+                            : sourceConnected
+                                ? '已连接原设备，正在确认临时账号目录'
+                                : '原设备已确认，正在建立同步连接',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                         textAlign: TextAlign.center,
                       ),
                     ],
                     const SizedBox(height: 16),
-                    const LinearProgressIndicator(),
+                    LinearProgressIndicator(
+                      value: hasMeasuredProgress ? completion / 100 : null,
+                    ),
                     const SizedBox(height: 8),
                     Text(
-                      payloadReceived
-                          ? '账号信息已经接收完成，正在等待原设备完成正式同步绑定……'
+                      folderReady && hasMeasuredProgress
+                          ? '账号传输通道已对接 · 正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
                           : folderReady
-                              ? '临时账号目录已经双方确认，正在接收账号信息……'
+                              ? '临时账号目录已经双方确认，正在等待账号数据到达……'
                               : sourceConnected
-                                  ? remoteFolderState == 'paused'
-                                      ? '设备已经连接，但临时账号目录处于暂停状态。请先让原设备扫描上面的回应二维码完成授权。'
-                                      : '两台设备已经连接，但还没有完成账号授权。请让原设备扫描上面的回应二维码；确认后会继续自动建立临时账号目录。'
-                                  : responseConfirmed
-                                      ? '原设备已确认，正在恢复同步连接……'
+                                  ? remoteFolderState == 'notSharing'
+                                      ? '设备已经连接，但临时账号目录尚未被原设备共享，正在自动修复……'
+                                      : remoteFolderState == 'paused'
+                                          ? '设备已经连接，但临时账号目录处于暂停状态……'
+                                          : '设备已经连接，正在完成临时账号目录握手……'
+                                  : peerConfirmed
+                                      ? '临时账号目录已确认，正在恢复同步连接……'
                                       : folderState == 'scanning'
                                           ? '同步通道已准备，正在连接原设备……'
                                           : '等待原设备确认并建立连接……',
