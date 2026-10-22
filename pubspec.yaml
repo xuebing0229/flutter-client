@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+195
-# beta-195: restore beta-190 join flow and explicitly finalize uninstalled-device revocations
+# beta-195: finalized beta PWA/native build with explicit uninstalled-device revocation cleanup
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
