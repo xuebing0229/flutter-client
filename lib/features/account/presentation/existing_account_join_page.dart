@@ -202,6 +202,29 @@ class _ExistingAccountJoinPageState extends State<ExistingAccountJoinPage> {
     }
   }
 
+  Future<void> _copyDiagnostics() async {
+    final session = _session;
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('诊断日志还没准备好'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final report = await session.captureDiagnosticReport();
+    await Clipboard.setData(ClipboardData(text: report));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('新设备诊断日志已复制'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _pairingCodeController.dispose();
@@ -590,6 +613,12 @@ class _ReceiveAccountTransferPageState
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _session == null ? null : _copyDiagnostics,
+            icon: const Icon(Icons.bug_report_outlined),
+            label: const Text('复制本次加入诊断日志'),
           ),
         ],
       ),
