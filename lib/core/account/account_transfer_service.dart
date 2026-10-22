@@ -819,13 +819,10 @@ class SyncthingAccountTransferClientSession {
     Duration timeout = const Duration(minutes: 5),
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
-    final connectionDeadline = DateTime.now().add(timeout);
-    DateTime? folderHandshakeDeadline;
+    final authorizationDeadline = DateTime.now().add(timeout);
     DateTime? payloadDeadline;
     var sourceConnected = false;
     var folderReady = false;
-    var repairTick = 0;
-    var refreshedBootstrapShare = false;
 
     while (!_closed) {
       await _bridge.requestScanFolder(descriptor.folderId);
@@ -835,45 +832,11 @@ class SyncthingAccountTransferClientSession {
 
       if (status.sourceConnected && !sourceConnected) {
         sourceConnected = true;
-        folderHandshakeDeadline = DateTime.now().add(
-          const Duration(seconds: 45),
-        );
       }
 
       if (status.folderReady && !folderReady) {
         folderReady = true;
         payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
-      }
-
-      if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
-        if (shouldRefreshBootstrapShare(
-          connected: status.sourceConnected,
-          remoteFolderState: status.remoteFolderState,
-          alreadyRefreshed: refreshedBootstrapShare,
-        )) {
-          refreshedBootstrapShare = true;
-          await _bridge.unshareFolderDevice(
-            folderId: descriptor.folderId,
-            deviceId: descriptor.sourceDeviceId,
-          );
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-        }
-        await _bridge.pairFolder(
-          folderId: descriptor.folderId,
-          deviceId: descriptor.sourceDeviceId,
-          name: '原设备',
-        );
-        await _bridge.setFolderPaused(
-          folderId: descriptor.folderId,
-          paused: false,
-        );
-        await _bridge.requestScanFolder(descriptor.folderId);
-        status = await transferStatus();
-        onStatus?.call(status);
-        if (status.folderReady) {
-          folderReady = true;
-          payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
-        }
       }
 
       if (status.folderErrors.isNotEmpty) {
@@ -907,34 +870,11 @@ class SyncthingAccountTransferClientSession {
         );
       }
 
-      if (!sourceConnected &&
-          !DateTime.now().isBefore(connectionDeadline)) {
+      if (!folderReady &&
+          !DateTime.now().isBefore(authorizationDeadline)) {
         throw const FormatException(
           '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
           '并已经扫描或粘贴了这台设备的回应码。',
-        );
-      }
-
-      if (sourceConnected &&
-          !folderReady &&
-          folderHandshakeDeadline != null &&
-          !DateTime.now().isBefore(folderHandshakeDeadline)) {
-        final state = status.remoteFolderState;
-        if (state == 'paused') {
-          throw const FormatException(
-            '已经连接原设备，但临时账号同步目录在原设备上处于暂停状态。'
-            '请让原设备重新打开“添加设备”后再试。',
-          );
-        }
-        if (state == 'notSharing') {
-          throw const FormatException(
-            '已经连接原设备，但原设备没有真正共享临时账号目录。'
-            '请让原设备保持在“添加设备”页面并重新确认回应码。',
-          );
-        }
-        throw FormatException(
-          '已经连接原设备，但临时账号目录没有完成同步握手'
-          '${state == null || state.isEmpty ? '' : '（状态：$state）'}。',
         );
       }
 
