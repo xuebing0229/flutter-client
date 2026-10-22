@@ -401,12 +401,14 @@ class SyncthingAccountTransferServer {
     required File payloadFile,
     required File doneFile,
     required File ackFile,
+    required _AccountTransferDiagnostics diagnostics,
     void Function()? onTransferred,
   }) : _bridge = bridge,
        _folder = folder,
        _payloadFile = payloadFile,
        _doneFile = doneFile,
        _ackFile = ackFile,
+       _diagnostics = diagnostics,
        _onTransferred = onTransferred;
 
   final EmbeddedSyncthingBridge _bridge;
@@ -414,6 +416,7 @@ class SyncthingAccountTransferServer {
   final File _payloadFile;
   final File _doneFile;
   final File _ackFile;
+  final _AccountTransferDiagnostics _diagnostics;
   final void Function()? _onTransferred;
 
   final AccountTransferDescriptor descriptor;
@@ -432,6 +435,24 @@ class SyncthingAccountTransferServer {
   String? get acceptedReceiverName => _acceptedReceiverName;
   String? get acceptedReceiverAppDeviceId => _acceptedReceiverAppDeviceId;
   String? get acceptedReceiverPlatform => _acceptedReceiverPlatform;
+  String get diagnosticReport => _diagnostics.report();
+
+  Future<String> captureDiagnosticReport() async {
+    try {
+      final status = await _bridge.statusFolder(descriptor.folderId);
+      _diagnostics.status(
+        'server.manualSnapshot',
+        status,
+        folderId: descriptor.folderId,
+        force: true,
+      );
+    } catch (error) {
+      _diagnostics.event('server.manualSnapshot.error', <String, Object?>{
+        'error': '$error',
+      });
+    }
+    return _diagnostics.report();
+  }
 
   static Future<SyncthingAccountTransferServer> start({
     required String payload,
@@ -444,6 +465,11 @@ class SyncthingAccountTransferServer {
 
     final token = _randomToken();
     final folderId = 'artist-workbench-bootstrap-$token';
+    final diagnostics = _AccountTransferDiagnostics(role: 'source');
+    diagnostics.event('server.start', <String, Object?>{
+      'folderId': folderId,
+      'platform': Platform.operatingSystem,
+    });
     final support = await getApplicationSupportDirectory();
     final folder = Directory(
       '${support.path}${Platform.pathSeparator}account-bootstrap'
@@ -473,13 +499,21 @@ class SyncthingAccountTransferServer {
         folderPath: folder.path,
         force: true,
       );
+      diagnostics.event('server.prepareFolder.ok');
       await payloadFile.writeAsString(
         await _encryptTransferPayload(payload, keyBytes),
         flush: true,
       );
       await bridge.requestScanFolder(folderId);
+      diagnostics.event('server.initialScan.ok');
 
       final status = await bridge.statusFolder(folderId);
+      diagnostics.status(
+        'server.initialStatus',
+        status,
+        folderId: folderId,
+        force: true,
+      );
       final sourceDeviceId = status.deviceId?.trim();
       if (sourceDeviceId == null || sourceDeviceId.length < 20) {
         throw StateError('无法读取本机同步设备身份。');
@@ -496,6 +530,7 @@ class SyncthingAccountTransferServer {
         payloadFile: payloadFile,
         doneFile: doneFile,
         ackFile: ackFile,
+        diagnostics: diagnostics,
         onTransferred: onTransferred,
       );
     } catch (_) {
@@ -586,6 +621,19 @@ class SyncthingAccountTransferServer {
   Future<void> poll() async {
     if (_closed || _transferred) return;
 
+    try {
+      final status = await _bridge.statusFolder(descriptor.folderId);
+      _diagnostics.status(
+        'server.poll.status',
+        status,
+        folderId: descriptor.folderId,
+      );
+    } catch (error) {
+      _diagnostics.event('server.poll.status.error', <String, Object?>{
+        'error': '$error',
+      });
+    }
+
     if (_acceptedReceiverDeviceId != null) {
       await _bridge.requestScanFolder(descriptor.folderId);
     }
@@ -604,9 +652,13 @@ class SyncthingAccountTransferServer {
       throw StateError('新设备身份尚未确认。');
     }
 
+    _diagnostics.event('server.completeTransfer.begin');
     await _ackFile.writeAsString('ack', flush: true);
+    _diagnostics.event('server.ackFile.write.ok');
     await _bridge.requestScanFolder(descriptor.folderId);
+    _diagnostics.event('server.completeTransfer.scan.ok');
     _transferred = true;
+    _diagnostics.event('server.completeTransfer.done');
     _onTransferred?.call();
   }
 
