@@ -100,6 +100,26 @@ class WindowsSyncthingTransport {
       );
       final connections = _asMap(connectionRoot['connections']);
 
+      final allConfiguredDevices = <Map<String, dynamic>>[];
+      for (final item in configured) {
+        final map = _asMap(item);
+        if (map.isEmpty) continue;
+        final id = map['deviceID']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        allConfiguredDevices.add(<String, dynamic>{
+          'deviceId': id,
+          'name': map['name']?.toString() ?? '',
+        });
+      }
+
+      final allConnectedDeviceIds = <String>[];
+      for (final entry in connections.entries) {
+        final map = _asMap(entry.value);
+        if (map['connected'] == true) {
+          allConnectedDeviceIds.add(entry.key);
+        }
+      }
+
       final folderDeviceIds = <String>{};
       for (final item in folders) {
         final folder = _asMap(item);
@@ -258,6 +278,8 @@ class WindowsSyncthingTransport {
         'version': version['version']?.toString(),
         'connectedDeviceIds': connectedDeviceIds,
         'configuredDevices': configuredDevices,
+        'allConnectedDeviceIds': allConnectedDeviceIds,
+        'allConfiguredDevices': allConfiguredDevices,
         'folderState': folderState,
         'remoteFolderStates': remoteFolderStates,
         'folderErrors': folderErrors,
