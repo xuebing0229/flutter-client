@@ -168,4 +168,9 @@ void main() {
     final picked = newsBetweenBuilds(194, 195);
     expect(picked.map((e) => e.title).toList(), ['卸载后重新加入设备修复']);
   });
+
+  test('196 包含临时账号目录卡死修复见闻', () {
+    final picked = newsBetweenBuilds(195, 196);
+    expect(picked.map((e) => e.title).toList(), ['临时账号目录卡死修复']);
+  });
 }
