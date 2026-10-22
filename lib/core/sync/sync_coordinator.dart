@@ -57,6 +57,18 @@ bool shouldRetainRevokedTransportShare({
           reauthorizedTransportIds.contains(id));
 }
 
+@visibleForTesting
+bool shouldResetStaleRevokedTransportBeforeBootstrap({
+  required String transportId,
+  required Set<String> activeTransportIds,
+  required Set<String> revokedTransportIds,
+}) {
+  final id = transportId.trim();
+  return id.isNotEmpty &&
+      revokedTransportIds.contains(id) &&
+      !activeTransportIds.contains(id);
+}
+
 class PortableWorkspaceSnapshot {
   const PortableWorkspaceSnapshot({
     required this.exportedAt,
@@ -813,6 +825,58 @@ class SyncCoordinator extends ChangeNotifier {
         _removingLocalAccount = false;
         rethrow;
       }
+    });
+  }
+
+  Future<void> prepareBootstrapRejoinTransport(String deviceId) {
+    return _enqueue(() async {
+      final remoteId = deviceId.trim();
+      if (remoteId.length < 20) return;
+
+      final state = accountStore.syncSnapshot;
+      if (state == null || state.accountId != accountId) return;
+
+      final activeTransportIds = <String>{
+        for (final device in state.activeDevices)
+          if (device.syncTransportId?.trim().isNotEmpty == true)
+            device.syncTransportId!.trim(),
+      };
+      final revokedTransportIds = <String>{
+        for (final entry in state.revocations.entries)
+          if (state.devices[entry.key]?.syncTransportId?.trim().isNotEmpty ==
+              true)
+            state.devices[entry.key]!.syncTransportId!.trim(),
+      };
+
+      if (!shouldResetStaleRevokedTransportBeforeBootstrap(
+        transportId: remoteId,
+        activeTransportIds: activeTransportIds,
+        revokedTransportIds: revokedTransportIds,
+      )) {
+        return;
+      }
+
+      // A directly uninstalled app can never acknowledge its revocation. If
+      // Android later restores/reuses the same Syncthing identity, the source
+      // may still be sharing the permanent account folder with that stale
+      // transport. Reset ONLY that stale revoked share before the normal,
+      // already-validated bootstrap flow starts. Normal first joins and joins
+      // using a fresh transport ID are untouched.
+      await _authorizeTransportRejoin(remoteId);
+
+      if (!_transportPrepared) {
+        await _prepareTransport(force: true);
+      }
+      if (!_transportPrepared) {
+        throw StateError(_lastError ?? '同步核心尚未准备好，请稍后重试。');
+      }
+
+      await _bridge.unshareDevice(
+        accountId: accountId,
+        deviceId: remoteId,
+      );
+      await _bridge.requestScan(accountId: accountId);
+      await _refreshTransportStatus();
     });
   }
 
