@@ -338,6 +338,61 @@ class AddDeviceCode {
   }
 }
 
+class _AccountTransferDiagnostics {
+  _AccountTransferDiagnostics({required this.role});
+
+  final String role;
+  final List<String> _lines = <String>[];
+  String? _lastStatusFingerprint;
+
+  void event(String name, [Map<String, Object?> details = const <String, Object?>{}]) {
+    final stamp = DateTime.now().toUtc().toIso8601String();
+    final payload = details.isEmpty ? '' : ' ' + jsonEncode(details);
+    _lines.add('$stamp$name'.replaceFirst(stamp, '$stamp') + payload);
+    if (_lines.length > 500) {
+      _lines.removeRange(0, _lines.length - 500);
+    }
+  }
+
+  void status(
+    String name,
+    EmbeddedSyncthingStatus status, {
+    required String folderId,
+    bool force = false,
+  }) {
+    final data = <String, Object?>{
+      'folderId': folderId,
+      'platform': Platform.operatingSystem,
+      'available': status.available,
+      'running': status.running,
+      'localDeviceId': status.deviceId,
+      'version': status.version,
+      'folderConfiguredDevices': status.configuredDevices,
+      'folderConnectedDeviceIds': status.connectedDeviceIds,
+      'allConfiguredDevices': status.allConfiguredDevices,
+      'allConnectedDeviceIds': status.allConnectedDeviceIds,
+      'folderState': status.folderState,
+      'remoteFolderStates': status.remoteFolderStates,
+      'folderErrors': status.folderErrors,
+      'syncProgress': status.syncProgress,
+      'error': status.error,
+    };
+    final fingerprint = jsonEncode(data);
+    if (!force && fingerprint == _lastStatusFingerprint) return;
+    _lastStatusFingerprint = fingerprint;
+    event(name, data);
+  }
+
+  String report() {
+    return <String>[
+      '冒险者公会设备加入诊断',
+      'role=$role',
+      'generatedAt=${DateTime.now().toUtc().toIso8601String()}',
+      ..._lines,
+    ].join('\n');
+  }
+}
+
 class SyncthingAccountTransferServer {
   SyncthingAccountTransferServer._({
     required this.descriptor,
