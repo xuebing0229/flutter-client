@@ -173,4 +173,9 @@ void main() {
     final picked = newsBetweenBuilds(195, 196);
     expect(picked.map((e) => e.title).toList(), ['临时账号目录卡死修复']);
   });
+
+  test('197 包含 Windows 同步核心状态自愈见闻', () {
+    final picked = newsBetweenBuilds(196, 197);
+    expect(picked.map((e) => e.title).toList(), ['Windows 同步核心状态自愈']);
+  });
 }
