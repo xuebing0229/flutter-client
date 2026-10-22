@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+195
-# beta-195: finalized beta PWA/native build with explicit uninstalled-device revocation cleanup
+version: 0.0.1+196
+# beta-196: force-refresh stale temporary bootstrap folder membership
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
