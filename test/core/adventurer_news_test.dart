@@ -178,4 +178,9 @@ void main() {
     final picked = newsBetweenBuilds(196, 197);
     expect(picked.map((e) => e.title).toList(), ['Windows 同步核心状态自愈']);
   });
+
+  test('198 包含回应码确认前状态修复见闻', () {
+    final picked = newsBetweenBuilds(197, 198);
+    expect(picked.map((e) => e.title).toList(), ['回应码确认前状态修复']);
+  });
 }
