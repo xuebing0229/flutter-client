@@ -573,6 +573,11 @@ class SyncthingAccountTransferServer {
         remoteFolderState: lastRemoteState,
         alreadyRefreshed: refreshedBootstrapShare,
       )) {
+        await SyncJoinDiagnostics.record('server.repair.refreshShare', <String, Object?>{
+          'folderId': descriptor.folderId,
+          'receiverDeviceId': response.receiverDeviceId,
+          'remoteState': lastRemoteState,
+        });
         refreshedBootstrapShare = true;
         // pairFolder() is intentionally idempotent and becomes a no-op when
         // the device is already listed in the local folder config. That is
@@ -617,6 +622,12 @@ class SyncthingAccountTransferServer {
         alreadyRebuilt: rebuiltWindowsProfile,
         consecutiveNotSharingChecks: consecutiveNotSharingAfterRefresh,
       )) {
+        await SyncJoinDiagnostics.record('server.repair.profileRebuild', <String, Object?>{
+          'folderId': descriptor.folderId,
+          'receiverDeviceId': response.receiverDeviceId,
+          'remoteState': lastRemoteState,
+          'checks': consecutiveNotSharingAfterRefresh,
+        });
         rebuiltWindowsProfile = true;
         await _bridge.rebuildWindowsProfilePreservingIdentity();
         deadline = DateTime.now().add(const Duration(seconds: 90));
@@ -651,6 +662,9 @@ class SyncthingAccountTransferServer {
     }
 
     if (_closed) {
+      await SyncJoinDiagnostics.record('server.handshake.closed', <String, Object?>{
+        'folderId': descriptor.folderId,
+      });
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
     if (lastFolderError != null && lastFolderError.isNotEmpty) {
