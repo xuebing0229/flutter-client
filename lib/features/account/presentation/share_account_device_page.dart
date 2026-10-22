@@ -147,6 +147,24 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     setState(() => _responseBusy = true);
     try {
       final response = AccountTransferResponseCode.decode(source);
+
+      // Keep the proven 190 bootstrap transfer unchanged. The only extra work
+      // here is a targeted cleanup for the reinstall edge case: if this
+      // Syncthing identity belongs only to a device that was already revoked,
+      // remove its stale ACCOUNT-folder share before the normal bootstrap
+      // handshake starts.
+      if (!await response.verifies(server.descriptor)) {
+        throw const FormatException('回应码不属于当前添加设备会话，请重新扫描。');
+      }
+      final acceptedDeviceId = server.acceptedReceiverDeviceId;
+      if (acceptedDeviceId != null &&
+          acceptedDeviceId != response.receiverDeviceId) {
+        throw const FormatException('当前二维码已经确认了另一台新设备，请重新生成二维码。');
+      }
+      await widget.syncCoordinator.prepareStaleTransportForAccountRejoin(
+        response.receiverDeviceId,
+      );
+
       await server.acceptResponse(response);
 
       if (!mounted) return;
