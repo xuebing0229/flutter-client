@@ -737,6 +737,12 @@ class SyncthingAccountTransferClient {
       throw const FormatException('当前平台不支持无局域网设备加入。');
     }
 
+    await SyncJoinDiagnostics.reset(role: 'receiver');
+    await SyncJoinDiagnostics.record('client.start.begin', <String, Object?>{
+      'folderId': descriptor.folderId,
+      'sourceDeviceId': descriptor.sourceDeviceId,
+    });
+
     final support = await getApplicationSupportDirectory();
     final folder = Directory(
       '${support.path}${Platform.pathSeparator}account-bootstrap'
@@ -775,12 +781,26 @@ class SyncthingAccountTransferClient {
         receiverAppDeviceId: provisionalAppDeviceId,
         receiverPlatform: device.platform,
       );
+      await SyncJoinDiagnostics.record('client.response.created', <String, Object?>{
+        'folderId': descriptor.folderId,
+        'sourceDeviceId': descriptor.sourceDeviceId,
+        'receiverDeviceId': receiverDeviceId,
+        'receiverAppDeviceId': provisionalAppDeviceId,
+        'receiverPlatform': device.platform,
+        'receiverName': device.name,
+      });
 
       await bridge.pairFolder(
         folderId: descriptor.folderId,
         deviceId: descriptor.sourceDeviceId,
         name: '原设备',
       );
+
+      await SyncJoinDiagnostics.record('client.start.ready', <String, Object?>{
+        'folderId': descriptor.folderId,
+        'sourceDeviceId': descriptor.sourceDeviceId,
+        'receiverDeviceId': receiverDeviceId,
+      });
 
       return SyncthingAccountTransferClientSession._(
         descriptor: descriptor,
@@ -791,7 +811,12 @@ class SyncthingAccountTransferClient {
         doneFile: doneFile,
         ackFile: ackFile,
       );
-    } catch (_) {
+    } catch (error) {
+      await SyncJoinDiagnostics.record('client.start.error', <String, Object?>{
+        'folderId': descriptor.folderId,
+        'sourceDeviceId': descriptor.sourceDeviceId,
+        'error': error.toString(),
+      });
       await _cleanupBootstrapFolder(bridge, descriptor.folderId, folder);
       rethrow;
     }
