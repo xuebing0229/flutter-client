@@ -481,6 +481,95 @@ class WindowsSyncthingTransport {
     });
   }
 
+  Future<void> rebuildProfilePreservingIdentity() async {
+    if (!Platform.isWindows) return;
+
+    await _ensureReady();
+    final apiKey = await _ensureApiKey();
+    final beforeSystem = _jsonMap(
+      await _request('GET', '/rest/system/status', apiKey: apiKey),
+    );
+    final beforeDeviceId = beforeSystem['myID']?.toString().trim() ?? '';
+    if (beforeDeviceId.isEmpty) {
+      throw StateError('重建同步核心前无法读取当前设备身份。');
+    }
+
+    final support = await getApplicationSupportDirectory();
+    final configDir = Directory(
+      '${support.path}${Platform.pathSeparator}syncthing-config',
+    );
+    final certFile = File(
+      '${configDir.path}${Platform.pathSeparator}cert.pem',
+    );
+    final keyFile = File(
+      '${configDir.path}${Platform.pathSeparator}key.pem',
+    );
+    if (!await certFile.exists() || !await keyFile.exists()) {
+      throw StateError('同步核心身份文件不完整，已取消自动重建。');
+    }
+
+    final backupDir = Directory(
+      '${configDir.path}.repair-${DateTime.now().microsecondsSinceEpoch}',
+    );
+
+    await shutdown();
+    await _terminateStaleBundledProcesses();
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+
+    var movedOriginal = false;
+    try {
+      await configDir.rename(backupDir.path);
+      movedOriginal = true;
+      await configDir.create(recursive: true);
+      await File(
+        '${backupDir.path}${Platform.pathSeparator}cert.pem',
+      ).copy(
+        '${configDir.path}${Platform.pathSeparator}cert.pem',
+      );
+      await File(
+        '${backupDir.path}${Platform.pathSeparator}key.pem',
+      ).copy(
+        '${configDir.path}${Platform.pathSeparator}key.pem',
+      );
+
+      _starting = null;
+      await _ensureReady();
+
+      final afterApiKey = await _ensureApiKey();
+      final afterSystem = _jsonMap(
+        await _request('GET', '/rest/system/status', apiKey: afterApiKey),
+      );
+      final afterDeviceId = afterSystem['myID']?.toString().trim() ?? '';
+      if (afterDeviceId != beforeDeviceId) {
+        throw StateError('同步核心重建后设备身份发生变化，已回滚。');
+      }
+
+      try {
+        await backupDir.delete(recursive: true);
+      } catch (_) {}
+    } catch (error) {
+      try {
+        await shutdown();
+      } catch (_) {}
+      await _terminateStaleBundledProcesses();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      if (movedOriginal && await backupDir.exists()) {
+        try {
+          if (await configDir.exists()) {
+            await configDir.delete(recursive: true);
+          }
+        } catch (_) {}
+        try {
+          await backupDir.rename(configDir.path);
+          _starting = null;
+          await _ensureReady();
+        } catch (_) {}
+      }
+      rethrow;
+    }
+  }
+
   /// Stops the detached embedded process without changing any account's
   /// auto-start preference. The Windows self-updater calls this immediately
   /// before handing the installation directory to its replacement script.
