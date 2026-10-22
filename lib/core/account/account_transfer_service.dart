@@ -338,6 +338,17 @@ class AddDeviceCode {
   }
 }
 
+@visibleForTesting
+bool shouldRefreshBootstrapShare({
+  required bool connected,
+  required String? remoteFolderState,
+  required bool alreadyRefreshed,
+}) {
+  return connected &&
+      remoteFolderState?.trim() == 'notSharing' &&
+      !alreadyRefreshed;
+}
+
 class SyncthingAccountTransferServer {
   SyncthingAccountTransferServer._({
     required this.descriptor,
@@ -472,6 +483,7 @@ class SyncthingAccountTransferServer {
     final deadline = DateTime.now().add(const Duration(seconds: 45));
     String? lastRemoteState;
     String? lastFolderError;
+    var refreshedBootstrapShare = false;
     while (!_closed && DateTime.now().isBefore(deadline)) {
       await _bridge.pairFolder(
         folderId: descriptor.folderId,
@@ -497,6 +509,38 @@ class SyncthingAccountTransferServer {
       if (connected && lastRemoteState == 'valid') {
         await _bridge.requestScanFolder(descriptor.folderId);
         return;
+      }
+
+      if (shouldRefreshBootstrapShare(
+        connected: connected,
+        remoteFolderState: lastRemoteState,
+        alreadyRefreshed: refreshedBootstrapShare,
+      )) {
+        refreshedBootstrapShare = true;
+        // pairFolder() is intentionally idempotent and becomes a no-op when
+        // the device is already listed in the local folder config. That is
+        // insufficient for the stale cluster-config state where the peer is
+        // connected but reports remoteState=notSharing. For THIS temporary
+        // bootstrap folder only, remove and re-add the peer once so Syncthing
+        // publishes fresh folder membership without touching the permanent
+        // account folder or the global device identity.
+        await _bridge.unshareFolderDevice(
+          folderId: descriptor.folderId,
+          deviceId: response.receiverDeviceId,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await _bridge.pairFolder(
+          folderId: descriptor.folderId,
+          deviceId: response.receiverDeviceId,
+          name: response.receiverName,
+        );
+        await _bridge.setFolderPaused(
+          folderId: descriptor.folderId,
+          paused: false,
+        );
+        await _bridge.requestScanFolder(descriptor.folderId);
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        continue;
       }
 
       if (lastRemoteState == 'paused') {
@@ -721,6 +765,7 @@ class SyncthingAccountTransferClientSession {
     var sourceConnected = false;
     var folderReady = false;
     var repairTick = 0;
+    var refreshedBootstrapShare = false;
 
     while (!_closed) {
       await _bridge.requestScanFolder(descriptor.folderId);
@@ -741,6 +786,18 @@ class SyncthingAccountTransferClientSession {
       }
 
       if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
+        if (shouldRefreshBootstrapShare(
+          connected: status.sourceConnected,
+          remoteFolderState: status.remoteFolderState,
+          alreadyRefreshed: refreshedBootstrapShare,
+        )) {
+          refreshedBootstrapShare = true;
+          await _bridge.unshareFolderDevice(
+            folderId: descriptor.folderId,
+            deviceId: descriptor.sourceDeviceId,
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
         await _bridge.pairFolder(
           folderId: descriptor.folderId,
           deviceId: descriptor.sourceDeviceId,
