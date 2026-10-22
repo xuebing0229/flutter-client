@@ -871,21 +871,23 @@ class SyncthingAccountTransferServer {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    _diagnostics.add('client.close.begin');
+    _diagnostics.add('server.close.begin');
     await _diagnostics.captureBridge(
       _bridge,
-      'client.close.beforeCleanup',
+      'server.close.beforeCleanup',
     );
     try {
       await _bridge.removeFolderById(descriptor.folderId);
-      _diagnostics.add('client.close.folderRemoved');
+      _diagnostics.add('server.close.folderRemoved');
     } finally {
       try {
         if (await _payloadFile.exists()) await _payloadFile.delete();
         if (await _doneFile.exists()) await _doneFile.delete();
         if (await _ackFile.exists()) await _ackFile.delete();
         if (await _folder.exists()) await _folder.delete(recursive: true);
-      } catch (_) {}
+      } catch (error) {
+        _diagnostics.addError('server.close.cleanupError', error);
+      }
     }
   }
 }
@@ -1168,12 +1170,20 @@ class SyncthingAccountTransferClientSession {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _diagnostics.add('client.close.begin');
+    await _diagnostics.captureBridge(
+      _bridge,
+      'client.close.beforeCleanup',
+    );
     try {
       await _bridge.removeFolderById(descriptor.folderId);
+      _diagnostics.add('client.close.folderRemoved');
     } finally {
       try {
         if (await _folder.exists()) await _folder.delete(recursive: true);
-      } catch (_) {}
+      } catch (error) {
+        _diagnostics.addError('client.close.cleanupError', error);
+      }
     }
   }
 }
