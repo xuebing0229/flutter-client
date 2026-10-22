@@ -147,6 +147,9 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     setState(() => _responseBusy = true);
     try {
       final response = AccountTransferResponseCode.decode(source);
+      await widget.syncCoordinator.prepareBootstrapRejoinTransport(
+        response.receiverDeviceId,
+      );
       await server.acceptResponse(response);
 
       if (!mounted) return;
