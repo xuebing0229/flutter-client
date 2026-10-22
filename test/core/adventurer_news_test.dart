@@ -164,8 +164,8 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['电脑确认回应码卡死修复']);
   });
 
-  test('194 包含卸载后重新加入设备修复见闻', () {
-    final picked = newsBetweenBuilds(193, 194);
+  test('195 包含卸载后重新加入设备修复见闻', () {
+    final picked = newsBetweenBuilds(194, 195);
     expect(picked.map((e) => e.title).toList(), ['卸载后重新加入设备修复']);
   });
 }
