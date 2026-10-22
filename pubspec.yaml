@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+197
-# beta-197: rebuild stale Windows Syncthing profile while preserving device identity
+# beta-197: finalized Windows Syncthing profile self-heal with renewed bootstrap deadline
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
