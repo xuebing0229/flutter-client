@@ -454,7 +454,6 @@ class _ReceiveAccountTransferPageState
     final sourceConnected = transferStatus?.sourceConnected == true;
     final folderReady = transferStatus?.folderReady == true;
     final peerConfirmed = _folderReadyOnce || folderReady;
-    final remoteFolderState = transferStatus?.remoteFolderState;
     final folderState = transferStatus?.folderState;
     final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
         .clamp(0, 100)
