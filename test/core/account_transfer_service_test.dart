@@ -89,4 +89,51 @@ void main() {
     );
   });
 
+  test('Windows profile rebuild waits until bootstrap refresh truly failed', () {
+    expect(
+      shouldRebuildWindowsBootstrapProfile(
+        isWindows: true,
+        connected: true,
+        remoteFolderState: 'notSharing',
+        bootstrapShareRefreshed: true,
+        alreadyRebuilt: false,
+        consecutiveNotSharingChecks: 4,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldRebuildWindowsBootstrapProfile(
+        isWindows: true,
+        connected: true,
+        remoteFolderState: 'notSharing',
+        bootstrapShareRefreshed: true,
+        alreadyRebuilt: false,
+        consecutiveNotSharingChecks: 3,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRebuildWindowsBootstrapProfile(
+        isWindows: false,
+        connected: true,
+        remoteFolderState: 'notSharing',
+        bootstrapShareRefreshed: true,
+        alreadyRebuilt: false,
+        consecutiveNotSharingChecks: 10,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRebuildWindowsBootstrapProfile(
+        isWindows: true,
+        connected: true,
+        remoteFolderState: 'valid',
+        bootstrapShareRefreshed: true,
+        alreadyRebuilt: false,
+        consecutiveNotSharingChecks: 10,
+      ),
+      isFalse,
+    );
+  });
+
 }
