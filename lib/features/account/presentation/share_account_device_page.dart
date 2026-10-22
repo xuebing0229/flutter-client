@@ -327,6 +327,17 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     ).encode();
   }
 
+  Future<void> _copyDiagnostics() async {
+    final server = _server;
+    if (server == null) {
+      _message('诊断日志还没准备好');
+      return;
+    }
+    final report = await server.captureDiagnosticReport();
+    await Clipboard.setData(ClipboardData(text: report));
+    if (mounted) _message('原设备诊断日志已复制');
+  }
+
   void _message(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
@@ -561,6 +572,12 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: server == null ? null : _copyDiagnostics,
+                icon: const Icon(Icons.bug_report_outlined),
+                label: const Text('复制本次加入诊断日志'),
               ),
               const SizedBox(height: 12),
               _AddDeviceCard(
