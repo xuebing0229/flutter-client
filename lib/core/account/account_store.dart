@@ -958,7 +958,9 @@ class AccountStore extends ChangeNotifier {
 
   Future<void> revokeDevice(String deviceId) async {
     final record = _selectedRecord;
-    if (record == null) return;
+    if (record == null || !record.syncState.devices.containsKey(deviceId)) {
+      return;
+    }
     _accounts[record.syncState.accountId] = record.copyWith(
       syncState: revokeAccountDeviceState(
         record.syncState,
