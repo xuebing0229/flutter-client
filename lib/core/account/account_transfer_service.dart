@@ -470,12 +470,6 @@ class SyncthingAccountTransferServer {
       'folderId': folderId,
       'platform': Platform.operatingSystem,
     });
-    final diagnostics = _AccountTransferDiagnostics(role: 'receiver');
-    diagnostics.event('client.start', <String, Object?>{
-      'folderId': descriptor.folderId,
-      'sourceDeviceId': descriptor.sourceDeviceId,
-      'platform': Platform.operatingSystem,
-    });
 
     final support = await getApplicationSupportDirectory();
     final folder = Directory(
@@ -762,6 +756,13 @@ class SyncthingAccountTransferClient {
     if (!bridge.supported) {
       throw const FormatException('当前平台不支持无局域网设备加入。');
     }
+
+    final diagnostics = _AccountTransferDiagnostics(role: 'receiver');
+    diagnostics.event('client.start', <String, Object?>{
+      'folderId': descriptor.folderId,
+      'sourceDeviceId': descriptor.sourceDeviceId,
+      'platform': Platform.operatingSystem,
+    });
 
     final support = await getApplicationSupportDirectory();
     final folder = Directory(
