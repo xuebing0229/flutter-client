@@ -183,4 +183,9 @@ void main() {
     final picked = newsBetweenBuilds(197, 198);
     expect(picked.map((e) => e.title).toList(), ['回应码确认前状态修复']);
   });
+
+  test('199 包含设备加入诊断版见闻', () {
+    final picked = newsBetweenBuilds(198, 199);
+    expect(picked.map((e) => e.title).toList(), ['设备加入诊断版']);
+  });
 }
