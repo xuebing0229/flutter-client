@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../account/account_models.dart';
+import 'sync_join_diagnostics.dart';
 import 'windows_syncthing_transport.dart';
 
 class EmbeddedSyncthingStatus {
@@ -99,21 +100,47 @@ class EmbeddedSyncthingBridge {
     bool force = false,
   }) async {
     if (!supported) return false;
-    if (Platform.isWindows) {
-      return WindowsSyncthingTransport.instance.prepare(
-        folderId: folderId,
-        label: label,
-        folderPath: folderPath,
-        force: force,
-      );
+    final diagnostic = _isJoinDiagnosticFolder(folderId);
+    if (diagnostic) {
+      await SyncJoinDiagnostics.record('bridge.prepare.begin', <String, Object?>{
+        'folderId': folderId,
+        'force': force,
+      });
     }
-    await _channel.invokeMapMethod<Object?, Object?>('ensureStarted');
-    await _channel.invokeMethod<void>('configureFolder', <String, dynamic>{
-      'folderId': folderId,
-      'label': label,
-      'path': folderPath,
-    });
-    return true;
+    try {
+      bool prepared;
+      if (Platform.isWindows) {
+        prepared = await WindowsSyncthingTransport.instance.prepare(
+          folderId: folderId,
+          label: label,
+          folderPath: folderPath,
+          force: force,
+        );
+      } else {
+        await _channel.invokeMapMethod<Object?, Object?>('ensureStarted');
+        await _channel.invokeMethod<void>('configureFolder', <String, dynamic>{
+          'folderId': folderId,
+          'label': label,
+          'path': folderPath,
+        });
+        prepared = true;
+      }
+      if (diagnostic) {
+        await SyncJoinDiagnostics.record('bridge.prepare.success', <String, Object?>{
+          'folderId': folderId,
+          'prepared': prepared,
+        });
+      }
+      return prepared;
+    } catch (error) {
+      if (diagnostic) {
+        await SyncJoinDiagnostics.record('bridge.prepare.error', <String, Object?>{
+          'folderId': folderId,
+          'error': error.toString(),
+        });
+      }
+      rethrow;
+    }
   }
 
   Future<EmbeddedSyncthingStatus> statusFolder(String folderId) async {
@@ -124,27 +151,36 @@ class EmbeddedSyncthingBridge {
         error: '当前平台暂未接入内置同步核心',
       );
     }
+    EmbeddedSyncthingStatus status;
     try {
       if (Platform.isWindows) {
-        return EmbeddedSyncthingStatus.fromMap(
+        status = EmbeddedSyncthingStatus.fromMap(
           await WindowsSyncthingTransport.instance.status(folderId),
         );
+      } else {
+        final raw = await _channel.invokeMapMethod<Object?, Object?>(
+          'status',
+          <String, dynamic>{'folderId': folderId},
+        );
+        if (raw == null) {
+          throw StateError('同步核心没有返回状态。');
+        }
+        status = EmbeddedSyncthingStatus.fromMap(raw);
       }
-      final raw = await _channel.invokeMapMethod<Object?, Object?>(
-        'status',
-        <String, dynamic>{'folderId': folderId},
-      );
-      if (raw == null) {
-        throw StateError('同步核心没有返回状态。');
-      }
-      return EmbeddedSyncthingStatus.fromMap(raw);
     } on PlatformException catch (error) {
-      return EmbeddedSyncthingStatus(
+      status = EmbeddedSyncthingStatus(
         available: false,
         running: false,
         error: error.message ?? error.code,
       );
     }
+    if (_isJoinDiagnosticFolder(folderId)) {
+      await SyncJoinDiagnostics.record(
+        'bridge.status',
+        _statusDiagnosticFields(folderId, status),
+      );
+    }
+    return status;
   }
 
   Future<void> pairFolder({
@@ -153,19 +189,44 @@ class EmbeddedSyncthingBridge {
     required String name,
   }) async {
     if (!supported) return;
-    if (Platform.isWindows) {
-      await WindowsSyncthingTransport.instance.pairDevice(
-        folderId: folderId,
-        deviceId: deviceId,
-        name: name,
-      );
-      return;
+    final diagnostic = _isJoinDiagnosticFolder(folderId);
+    if (diagnostic) {
+      await SyncJoinDiagnostics.record('bridge.pair.begin', <String, Object?>{
+        'folderId': folderId,
+        'deviceId': deviceId.trim(),
+        'name': name.trim(),
+      });
     }
-    await _channel.invokeMethod<void>('pairDevice', <String, dynamic>{
-      'folderId': folderId,
-      'deviceId': deviceId.trim(),
-      'name': name.trim(),
-    });
+    try {
+      if (Platform.isWindows) {
+        await WindowsSyncthingTransport.instance.pairDevice(
+          folderId: folderId,
+          deviceId: deviceId,
+          name: name,
+        );
+      } else {
+        await _channel.invokeMethod<void>('pairDevice', <String, dynamic>{
+          'folderId': folderId,
+          'deviceId': deviceId.trim(),
+          'name': name.trim(),
+        });
+      }
+      if (diagnostic) {
+        await SyncJoinDiagnostics.record('bridge.pair.success', <String, Object?>{
+          'folderId': folderId,
+          'deviceId': deviceId.trim(),
+        });
+      }
+    } catch (error) {
+      if (diagnostic) {
+        await SyncJoinDiagnostics.record('bridge.pair.error', <String, Object?>{
+          'folderId': folderId,
+          'deviceId': deviceId.trim(),
+          'error': error.toString(),
+        });
+      }
+      rethrow;
+    }
   }
 
   Future<void> unshareFolderDevice({
@@ -173,28 +234,67 @@ class EmbeddedSyncthingBridge {
     required String deviceId,
   }) async {
     if (!supported) return;
-    if (Platform.isWindows) {
-      await WindowsSyncthingTransport.instance.unshareDevice(
-        folderId: folderId,
-        deviceId: deviceId,
-      );
-      return;
+    final diagnostic = _isJoinDiagnosticFolder(folderId);
+    if (diagnostic) {
+      await SyncJoinDiagnostics.record('bridge.unshare.begin', <String, Object?>{
+        'folderId': folderId,
+        'deviceId': deviceId.trim(),
+      });
     }
-    await _channel.invokeMethod<void>('unshareDevice', <String, dynamic>{
-      'folderId': folderId,
-      'deviceId': deviceId.trim(),
-    });
+    try {
+      if (Platform.isWindows) {
+        await WindowsSyncthingTransport.instance.unshareDevice(
+          folderId: folderId,
+          deviceId: deviceId,
+        );
+      } else {
+        await _channel.invokeMethod<void>('unshareDevice', <String, dynamic>{
+          'folderId': folderId,
+          'deviceId': deviceId.trim(),
+        });
+      }
+      if (diagnostic) {
+        await SyncJoinDiagnostics.record('bridge.unshare.success', <String, Object?>{
+          'folderId': folderId,
+          'deviceId': deviceId.trim(),
+        });
+      }
+    } catch (error) {
+      if (diagnostic) {
+        await SyncJoinDiagnostics.record('bridge.unshare.error', <String, Object?>{
+          'folderId': folderId,
+          'deviceId': deviceId.trim(),
+          'error': error.toString(),
+        });
+      }
+      rethrow;
+    }
   }
 
   Future<void> requestScanFolder(String folderId) async {
     if (!supported) return;
-    if (Platform.isWindows) {
-      await WindowsSyncthingTransport.instance.requestScan(folderId);
-      return;
+    try {
+      if (Platform.isWindows) {
+        await WindowsSyncthingTransport.instance.requestScan(folderId);
+      } else {
+        await _channel.invokeMethod<void>('requestScan', <String, dynamic>{
+          'folderId': folderId,
+        });
+      }
+      if (_isJoinDiagnosticFolder(folderId)) {
+        await SyncJoinDiagnostics.record('bridge.scan.success', <String, Object?>{
+          'folderId': folderId,
+        });
+      }
+    } catch (error) {
+      if (_isJoinDiagnosticFolder(folderId)) {
+        await SyncJoinDiagnostics.record('bridge.scan.error', <String, Object?>{
+          'folderId': folderId,
+          'error': error.toString(),
+        });
+      }
+      rethrow;
     }
-    await _channel.invokeMethod<void>('requestScan', <String, dynamic>{
-      'folderId': folderId,
-    });
   }
 
   Future<void> setFolderPaused({
@@ -202,34 +302,75 @@ class EmbeddedSyncthingBridge {
     required bool paused,
   }) async {
     if (!supported) return;
-    if (Platform.isWindows) {
-      await WindowsSyncthingTransport.instance.setFolderPaused(
-        folderId: folderId,
-        paused: paused,
-      );
-      return;
+    try {
+      if (Platform.isWindows) {
+        await WindowsSyncthingTransport.instance.setFolderPaused(
+          folderId: folderId,
+          paused: paused,
+        );
+      } else {
+        await _channel.invokeMethod<void>('setFolderPaused', <String, dynamic>{
+          'folderId': folderId,
+          'paused': paused,
+        });
+      }
+      if (_isJoinDiagnosticFolder(folderId)) {
+        await SyncJoinDiagnostics.record('bridge.pause.success', <String, Object?>{
+          'folderId': folderId,
+          'paused': paused,
+        });
+      }
+    } catch (error) {
+      if (_isJoinDiagnosticFolder(folderId)) {
+        await SyncJoinDiagnostics.record('bridge.pause.error', <String, Object?>{
+          'folderId': folderId,
+          'paused': paused,
+          'error': error.toString(),
+        });
+      }
+      rethrow;
     }
-    await _channel.invokeMethod<void>('setFolderPaused', <String, dynamic>{
-      'folderId': folderId,
-      'paused': paused,
-    });
   }
 
   Future<bool> rebuildWindowsProfilePreservingIdentity() async {
     if (!Platform.isWindows) return false;
-    await WindowsSyncthingTransport.instance.rebuildProfilePreservingIdentity();
-    return true;
+    await SyncJoinDiagnostics.record('bridge.profileRebuild.begin');
+    try {
+      await WindowsSyncthingTransport.instance.rebuildProfilePreservingIdentity();
+      await SyncJoinDiagnostics.record('bridge.profileRebuild.success');
+      return true;
+    } catch (error) {
+      await SyncJoinDiagnostics.record('bridge.profileRebuild.error', <String, Object?>{
+        'error': error.toString(),
+      });
+      rethrow;
+    }
   }
 
   Future<void> removeFolderById(String folderId) async {
     if (!supported) return;
-    if (Platform.isWindows) {
-      await WindowsSyncthingTransport.instance.removeFolder(folderId);
-      return;
+    try {
+      if (Platform.isWindows) {
+        await WindowsSyncthingTransport.instance.removeFolder(folderId);
+      } else {
+        await _channel.invokeMethod<void>('removeFolder', <String, dynamic>{
+          'folderId': folderId,
+        });
+      }
+      if (_isJoinDiagnosticFolder(folderId)) {
+        await SyncJoinDiagnostics.record('bridge.remove.success', <String, Object?>{
+          'folderId': folderId,
+        });
+      }
+    } catch (error) {
+      if (_isJoinDiagnosticFolder(folderId)) {
+        await SyncJoinDiagnostics.record('bridge.remove.error', <String, Object?>{
+          'folderId': folderId,
+          'error': error.toString(),
+        });
+      }
+      rethrow;
     }
-    await _channel.invokeMethod<void>('removeFolder', <String, dynamic>{
-      'folderId': folderId,
-    });
   }
 
   String folderIdForAccount(String accountId) {
@@ -364,4 +505,28 @@ class EmbeddedSyncthingBridge {
       devicePlatform: devicePlatform.trim(),
     );
   }
+}
+
+bool _isJoinDiagnosticFolder(String folderId) {
+  return folderId.startsWith('artist-workbench-bootstrap-');
+}
+
+Map<String, Object?> _statusDiagnosticFields(
+  String folderId,
+  EmbeddedSyncthingStatus status,
+) {
+  return <String, Object?>{
+    'folderId': folderId,
+    'available': status.available,
+    'running': status.running,
+    'localDeviceId': status.deviceId,
+    'syncthingVersion': status.version,
+    'configuredDevices': status.configuredDevices,
+    'connectedDeviceIds': status.connectedDeviceIds,
+    'folderState': status.folderState,
+    'remoteFolderStates': status.remoteFolderStates,
+    'folderErrors': status.folderErrors,
+    'progress': status.syncProgress,
+    'error': status.error,
+  };
 }
