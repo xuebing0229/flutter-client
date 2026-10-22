@@ -417,9 +417,15 @@ class _ReceiveAccountTransferPageState
       if (!mounted) return;
       Navigator.of(context).pop(adoptedSource);
     } on FormatException catch (error) {
+      await SyncJoinDiagnostics.record('client.ui.receive.formatError', <String, Object?>{
+        'error': error.message,
+      });
       await session?.close();
       if (mounted) setState(() => _error = error.message);
     } catch (error) {
+      await SyncJoinDiagnostics.record('client.ui.receive.error', <String, Object?>{
+        'error': error.toString(),
+      });
       await session?.close();
       if (mounted) setState(() => _error = '设备确认失败：$error');
     }
