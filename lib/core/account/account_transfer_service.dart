@@ -498,7 +498,7 @@ class SyncthingAccountTransferServer {
 
     // Device-level connectivity is not enough. Wait until Syncthing confirms
     // that the receiver shares THIS bootstrap folder back (remoteState=valid).
-    final deadline = DateTime.now().add(const Duration(seconds: 45));
+    var deadline = DateTime.now().add(const Duration(seconds: 45));
     String? lastRemoteState;
     String? lastFolderError;
     var refreshedBootstrapShare = false;
@@ -582,6 +582,7 @@ class SyncthingAccountTransferServer {
       )) {
         rebuiltWindowsProfile = true;
         await _bridge.rebuildWindowsProfilePreservingIdentity();
+        deadline = DateTime.now().add(const Duration(seconds: 90));
         await _bridge.prepareFolder(
           folderId: descriptor.folderId,
           label: '临时账号加入',
