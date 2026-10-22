@@ -184,31 +184,47 @@ class AccountPage extends StatelessWidget {
     BuildContext context,
     AccountDevice device,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('解绑这台设备？'),
         content: Text(
-          '“${device.name}”会从使用中设备移除。在线设备收到解绑记录后会退出账号，'
-          '并回传确认；确认到达后才会停止向它共享同步目录。'
-          '如果设备离线，会在下次上线收到解绑记录后退出。'
-          '之后重新加入账号时仍不需要再次输入激活码。',
+          '“${device.name}”会从使用中设备移除。\n\n'
+          '如果这台设备只是暂时离线，请选择“普通解绑”：'
+          '它下次上线会收到解绑记录并退出账号，确认后才停止共享同步目录。\n\n'
+          '如果这台设备上的 App 已经卸载、设备丢失或确定不会再打开旧安装，'
+          '请选择“已卸载/丢失”：旧安装不可能再回传确认，会直接结束这条旧同步关系。',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('取消'),
           ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('normal'),
+            child: const Text('普通解绑'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('解绑'),
+            onPressed: () => Navigator.of(context).pop('force'),
+            child: const Text('已卸载/丢失'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
+    if (action == null) return;
+
+    try {
       await onRevokeDevice(device.id);
+      if (action == 'force') {
+        await syncCoordinator.forceFinalizeRevokedDevice(device.id);
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('解绑设备失败：$error')),
+        );
+      }
     }
   }
 }
