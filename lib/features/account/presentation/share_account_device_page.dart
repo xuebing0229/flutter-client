@@ -214,8 +214,14 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       });
       _message('新设备已确认，正在传输账号信息。请继续保持本页打开直到显示完成。');
     } on FormatException catch (error) {
+      await SyncJoinDiagnostics.record('server.ui.acceptResponse.formatError', <String, Object?>{
+        'error': error.message,
+      });
       if (mounted) _message(error.message);
     } catch (error) {
+      await SyncJoinDiagnostics.record('server.ui.acceptResponse.error', <String, Object?>{
+        'error': error.toString(),
+      });
       if (mounted) _message('确认新设备失败：$error');
     } finally {
       if (mounted) setState(() => _responseBusy = false);
