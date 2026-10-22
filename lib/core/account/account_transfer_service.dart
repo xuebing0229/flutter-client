@@ -821,7 +821,6 @@ class SyncthingAccountTransferClientSession {
   }) async {
     final authorizationDeadline = DateTime.now().add(timeout);
     DateTime? payloadDeadline;
-    var sourceConnected = false;
     var folderReady = false;
 
     while (!_closed) {
@@ -829,10 +828,6 @@ class SyncthingAccountTransferClientSession {
 
       var status = await transferStatus();
       onStatus?.call(status);
-
-      if (status.sourceConnected && !sourceConnected) {
-        sourceConnected = true;
-      }
 
       if (status.folderReady && !folderReady) {
         folderReady = true;
