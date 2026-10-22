@@ -895,6 +895,11 @@ class SyncthingAccountTransferClientSession {
     Duration timeout = const Duration(minutes: 5),
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
+    await SyncJoinDiagnostics.record('client.receive.begin', <String, Object?>{
+      'folderId': descriptor.folderId,
+      'sourceDeviceId': descriptor.sourceDeviceId,
+      'receiverDeviceId': response.receiverDeviceId,
+    });
     final authorizationDeadline = DateTime.now().add(timeout);
     DateTime? payloadDeadline;
     var folderReady = false;
@@ -907,6 +912,10 @@ class SyncthingAccountTransferClientSession {
 
       if (status.folderReady && !folderReady) {
         folderReady = true;
+        await SyncJoinDiagnostics.record('client.handshake.valid', <String, Object?>{
+          'folderId': descriptor.folderId,
+          'sourceDeviceId': descriptor.sourceDeviceId,
+        });
         payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
       }
 
@@ -917,6 +926,9 @@ class SyncthingAccountTransferClientSession {
       }
 
       if (await _payloadFile.exists()) {
+        await SyncJoinDiagnostics.record('client.payload.detected', <String, Object?>{
+          'folderId': descriptor.folderId,
+        });
         final encrypted = await _payloadFile.readAsString();
         final clear = await _decryptTransferPayload(
           encrypted,
@@ -924,12 +936,20 @@ class SyncthingAccountTransferClientSession {
         );
 
         await _doneFile.writeAsString('done', flush: true);
+        await SyncJoinDiagnostics.record('client.payload.doneWritten', <String, Object?>{
+          'folderId': descriptor.folderId,
+        });
         await _bridge.requestScanFolder(descriptor.folderId);
 
         final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
         while (!_closed && DateTime.now().isBefore(ackDeadline)) {
           await _bridge.requestScanFolder(descriptor.folderId);
-          if (await _ackFile.exists()) return clear;
+          if (await _ackFile.exists()) {
+            await SyncJoinDiagnostics.record('client.ack.detected', <String, Object?>{
+              'folderId': descriptor.folderId,
+            });
+            return clear;
+          }
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
         if (_closed) {
