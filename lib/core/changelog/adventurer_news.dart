@@ -323,6 +323,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '电脑确认回应码卡死修复',
     description: '修复 Windows 原设备收到新设备回应码后，把“确认成功”同步等待在 Syncthing 临时目录修复上，导致页面长时间无响应、手机仍停在等待授权的问题。回应码现在会先立即完成认证，临时目录共享改为独立后台轮询持续重试，单次同步核心异常不再卡住确认页面。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 194,
+    title: '卸载后重新加入设备修复',
+    description: '恢复 190/181 已验证的新设备加入流程，不再改写临时账号传输状态机。解绑设备时新增“已卸载/丢失”处理：对已经无法再上线回传确认的旧安装，可明确结束其撤销等待并停止旧同步目录共享；此前已经解绑但未确认的旧设备，也可在“添加设备”页清理残留后按原流程重新加入。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
