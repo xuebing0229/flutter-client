@@ -10,6 +10,7 @@ import '../../../core/account/account_transfer_service.dart';
 import '../../../core/account/qr_image_decoder.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
+import '../../../core/sync/sync_join_diagnostics.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import 'scan_account_transfer_page.dart';
 
@@ -424,6 +425,18 @@ class _ReceiveAccountTransferPageState
     }
   }
 
+  Future<void> _copySyncDiagnostics() async {
+    final text = await SyncJoinDiagnostics.readText();
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('同步诊断已复制'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _copyResponse() async {
     final response = _session?.response.encode();
     if (response == null) return;
@@ -464,7 +477,16 @@ class _ReceiveAccountTransferPageState
         (progressBytes > 0 || progressItems > 0);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('确认新设备')),
+      appBar: AppBar(
+        title: const Text('确认新设备'),
+        actions: [
+          IconButton(
+            tooltip: '复制同步诊断',
+            onPressed: _copySyncDiagnostics,
+            icon: const Icon(Icons.bug_report_outlined),
+          ),
+        ],
+      ),
       body: ListView(
         padding: AppLayoutSpacing.pageScrollPadding(
           context,
