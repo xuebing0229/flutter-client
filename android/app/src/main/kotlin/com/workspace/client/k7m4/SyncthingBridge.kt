@@ -640,6 +640,12 @@ class SyncthingBridge(
             activity.startService(intent)
             true
         } catch (error: IllegalStateException) {
+            val message = error.message.orEmpty()
+            val backgroundBlocked =
+                message.contains("Not allowed to start service") &&
+                    message.contains("app is in background")
+            if (!backgroundBlocked) throw error
+
             // Android 8+ can reject a brand-new normal service start while the
             // app is backgrounded. Surface a stable deferred state so the
             // Flutter join loop can keep the session intact and retry after
