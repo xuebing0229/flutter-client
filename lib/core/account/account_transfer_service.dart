@@ -347,7 +347,7 @@ class _AccountTransferDiagnostics {
 
   void event(String name, [Map<String, Object?> details = const <String, Object?>{}]) {
     final stamp = DateTime.now().toUtc().toIso8601String();
-    final payload = details.isEmpty ? '' : ' ' + jsonEncode(details);
+    final payload = details.isEmpty ? '' : ' ${jsonEncode(details)}';
     _lines.add('$stamp $name$payload');
     if (_lines.length > 500) {
       _lines.removeRange(0, _lines.length - 500);
