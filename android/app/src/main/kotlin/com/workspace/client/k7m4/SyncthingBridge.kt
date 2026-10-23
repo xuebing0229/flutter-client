@@ -159,12 +159,17 @@ class SyncthingBridge(
         }
 
         ensureApiKey()
-        startService()
+        val startRequested = startService()
 
-        val ready = waitForReady()
+        val ready = waitForReady(maxAttempts = if (startRequested) 32 else 2)
         return linkedMapOf(
             "available" to true,
             "running" to ready,
+            "error" to if (!ready && !startRequested) {
+                "APP_BACKGROUND_START_DEFERRED"
+            } else {
+                null
+            },
         )
     }
 
@@ -174,7 +179,9 @@ class SyncthingBridge(
             throw IllegalStateException(state["error"]?.toString() ?: "同步核心不可用")
         }
         if (state["running"] != true) {
-            throw IllegalStateException("同步核心启动超时")
+            throw IllegalStateException(
+                state["error"]?.toString() ?: "同步核心启动超时",
+            )
         }
     }
 
@@ -615,14 +622,35 @@ class SyncthingBridge(
         if (!hasActiveFolder) stopService()
     }
 
-    private fun startService() {
+    private fun startService(): Boolean {
+        // Calling startService() again while the process is already alive is
+        // unnecessary, and Android rejects that call when the app briefly
+        // moves to the background (for example while exchanging the join
+        // response code with another device). Keep the existing core alive
+        // instead of turning a harmless background transition into a failed
+        // device-join session.
+        if (SyncthingService.isRunning) return true
+
         val intent = Intent(activity, SyncthingService::class.java).apply {
             action = SyncthingService.ACTION_START
         }
-        // This is intentionally a normal started service. The Flutter layer
-        // stops it as soon as the app leaves the foreground, so a permanent
-        // foreground-service notification is unnecessary.
-        activity.startService(intent)
+        return try {
+            // This remains a normal started service: there is still no
+            // permanent foreground-service notification.
+            activity.startService(intent)
+            true
+        } catch (error: IllegalStateException) {
+            // Android 8+ can reject a brand-new normal service start while the
+            // app is backgrounded. Surface a stable deferred state so the
+            // Flutter join loop can keep the session intact and retry after
+            // the app returns to the foreground.
+            Log.i(
+                "EmbeddedSyncthing",
+                "Deferring Syncthing start until app returns to foreground",
+                error,
+            )
+            false
+        }
     }
 
     private fun stopService() {
