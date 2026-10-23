@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_app/core/account/account_transfer_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -53,6 +54,38 @@ void main() {
     );
 
     expect(await tampered.verifies(descriptor), isFalse);
+  });
+
+
+  test('Android background service start rejection is retryable', () {
+    expect(
+      isDeferredSyncthingBackgroundStartError(
+        PlatformException(
+          code: 'SYNCTHING_ERROR',
+          message: 'APP_BACKGROUND_START_DEFERRED',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      isDeferredSyncthingBackgroundStartError(
+        PlatformException(
+          code: 'SYNCTHING_ERROR',
+          message:
+              'Not allowed to start service Intent {...}: app is in background',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      isDeferredSyncthingBackgroundStartError(
+        PlatformException(
+          code: 'SYNCTHING_ERROR',
+          message: '同步核心启动超时',
+        ),
+      ),
+      isFalse,
+    );
   });
 
 
