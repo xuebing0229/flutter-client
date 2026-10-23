@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+199
-# beta-199: restore 181/190 bootstrap behavior and add read-only join diagnostics
+version: 0.0.1+200
+# beta-200: restore 181/190 bootstrap behavior and add read-only join diagnostics
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
