@@ -188,4 +188,12 @@ void main() {
     final picked = newsBetweenBuilds(199, 200);
     expect(picked.map((e) => e.title).toList(), ['设备加入诊断版']);
   });
+
+  test('201 包含 Android 新设备加入后台切换修复见闻', () {
+    final picked = newsBetweenBuilds(200, 201);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['Android 新设备加入后台切换修复'],
+    );
+  });
 }
