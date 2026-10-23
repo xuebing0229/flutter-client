@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+199
-# beta-199: final rerun of read-only account-transfer diagnostics
+# beta-199: rerun finalized read-only account-transfer diagnostics after concurrency cleared
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
