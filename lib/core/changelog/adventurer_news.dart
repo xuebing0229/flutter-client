@@ -348,6 +348,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '设备加入诊断版',
     description: '为排查重装后新设备加入长期卡住的问题，本版把临时账号传输恢复到 181/190 原流程，不再叠加 196～198 的 bootstrap 猜测性修复；新增只读诊断日志，可分别在原设备和新设备复制本次加入的 folderId、Syncthing Device ID、本次临时目录成员、全局历史设备与连接状态、remoteState、folderState、目录错误，以及回应码是否真正进入原设备确认流程。诊断不会删除账号或业务数据。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 201,
+    title: 'Android 新设备加入后台切换修复',
+    description: '修复手机在首次加入账号时，为了把回应码交给电脑而短暂切到后台后，Android 拒绝重复启动普通同步服务，导致新设备会话被直接关闭、电脑随后确认回应码仍必然超时的问题。Syncthing 已运行时不再重复启动；如果核心确实在后台被系统停止，会保留本次加入会话并等待 App 回到前台后继续握手。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
