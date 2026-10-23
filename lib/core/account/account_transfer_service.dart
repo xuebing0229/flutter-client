@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../sync/embedded_syncthing_bridge.dart';
@@ -874,6 +875,19 @@ typedef AccountTransferStatus = ({
   Map<String, dynamic>? progress,
 });
 
+bool isDeferredSyncthingBackgroundStartError(Object error) {
+  final message = error is PlatformException
+      ? '${error.message ?? ''} ${error.details ?? ''}'
+      : '$error';
+  if (error is PlatformException && error.code != 'SYNCTHING_ERROR') {
+    return false;
+  }
+  return message.contains('APP_BACKGROUND_START_DEFERRED') ||
+      (message.contains('Not allowed to start service') &&
+          message.contains('app is in background'));
+}
+
+
 class SyncthingAccountTransferClientSession {
   SyncthingAccountTransferClientSession._({
     required this.descriptor,
@@ -947,6 +961,29 @@ class SyncthingAccountTransferClientSession {
     return (await transferStatus()).progress;
   }
 
+  Future<void> _runBridgeOperation(
+    String operation,
+    Future<void> Function() action,
+  ) async {
+    while (!_closed) {
+      try {
+        await action();
+        return;
+      } catch (error) {
+        if (!isDeferredSyncthingBackgroundStartError(error)) rethrow;
+        _diagnostics.event(
+          'client.backgroundStart.deferred',
+          <String, Object?>{
+            'operation': operation,
+            'error': '$error',
+          },
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+    throw const FormatException('设备加入已取消。');
+  }
+
   Future<String> receive({
     Duration timeout = const Duration(minutes: 5),
     void Function(AccountTransferStatus status)? onStatus,
@@ -960,14 +997,10 @@ class SyncthingAccountTransferClientSession {
 
     _diagnostics.event('client.receive.begin');
     while (!_closed) {
-      try {
-        await _bridge.requestScanFolder(descriptor.folderId);
-      } catch (error) {
-        _diagnostics.event('client.scan.error', <String, Object?>{
-          'error': '$error',
-        });
-        rethrow;
-      }
+      await _runBridgeOperation(
+        'receive.scan',
+        () => _bridge.requestScanFolder(descriptor.folderId),
+      );
 
       var status = await transferStatus();
       onStatus?.call(status);
@@ -994,18 +1027,27 @@ class SyncthingAccountTransferClientSession {
           'remoteFolderState': status.remoteFolderState,
         });
         try {
-          await _bridge.pairFolder(
-            folderId: descriptor.folderId,
-            deviceId: descriptor.sourceDeviceId,
-            name: '原设备',
+          await _runBridgeOperation(
+            'repair.pairFolder',
+            () => _bridge.pairFolder(
+              folderId: descriptor.folderId,
+              deviceId: descriptor.sourceDeviceId,
+              name: '原设备',
+            ),
           );
           _diagnostics.event('client.repair.pairFolder.ok');
-          await _bridge.setFolderPaused(
-            folderId: descriptor.folderId,
-            paused: false,
+          await _runBridgeOperation(
+            'repair.unpause',
+            () => _bridge.setFolderPaused(
+              folderId: descriptor.folderId,
+              paused: false,
+            ),
           );
           _diagnostics.event('client.repair.unpause.ok');
-          await _bridge.requestScanFolder(descriptor.folderId);
+          await _runBridgeOperation(
+            'repair.scan',
+            () => _bridge.requestScanFolder(descriptor.folderId),
+          );
           _diagnostics.event('client.repair.scan.ok');
         } catch (error) {
           _diagnostics.event('client.repair.error', <String, Object?>{
@@ -1040,12 +1082,18 @@ class SyncthingAccountTransferClientSession {
 
         await _doneFile.writeAsString('done', flush: true);
         _diagnostics.event('client.doneFile.write.ok');
-        await _bridge.requestScanFolder(descriptor.folderId);
+        await _runBridgeOperation(
+          'done.scan',
+          () => _bridge.requestScanFolder(descriptor.folderId),
+        );
         _diagnostics.event('client.doneFile.scan.ok');
 
         final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
         while (!_closed && DateTime.now().isBefore(ackDeadline)) {
-          await _bridge.requestScanFolder(descriptor.folderId);
+          await _runBridgeOperation(
+            'ack.scan',
+            () => _bridge.requestScanFolder(descriptor.folderId),
+          );
           if (await _ackFile.exists()) {
             _diagnostics.event('client.ack.detected');
             return clear;
