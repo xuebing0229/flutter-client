@@ -3,6 +3,7 @@ package com.workspace.client.k7m4
 import android.content.Context
 import android.content.Intent
 import android.util.Base64
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
