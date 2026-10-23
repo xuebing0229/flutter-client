@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+198
-# beta-198: keep client bootstrap repair behind original-device response authorization
+version: 0.0.1+199
+# beta-199: add end-to-end device join diagnostics without changing transfer behavior
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
