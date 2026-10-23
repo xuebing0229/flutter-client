@@ -344,7 +344,7 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     description: '修复新设备尚未把回应码交回原设备时，仅因 Syncthing 底层设备已提前连接就错误进入 notSharing 自动修复的问题。新设备端现在只等待原设备确认回应码，不再在授权前修改临时目录共享，也不会提前启动 45 秒握手失败倒计时；真正的目录建立与自愈只由原设备在确认回应码之后执行。',
   ),
   AdventurerNewsEntry(
-    introducedBuild: 199,
+    introducedBuild: 200,
     title: '设备加入诊断版',
     description: '为排查重装后新设备加入长期卡住的问题，本版把临时账号传输恢复到 181/190 原流程，不再叠加 196～198 的 bootstrap 猜测性修复；新增只读诊断日志，可分别在原设备和新设备复制本次加入的 folderId、Syncthing Device ID、本次临时目录成员、全局历史设备与连接状态、remoteState、folderState、目录错误，以及回应码是否真正进入原设备确认流程。诊断不会删除账号或业务数据。',
   ),
