@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_client/features/orders/domain/queue_order.dart';
-import 'package:flutter_client/features/shared/presentation/receipt_page.dart';
+import 'package:flutter_app/features/orders/domain/queue_order.dart';
+import 'package:flutter_app/features/shared/presentation/receipt_page.dart';
 
 void main() {
   const preset = NodePreset(
