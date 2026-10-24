@@ -313,7 +313,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 ' | 稿价=${candidate.price?.toString() ?? "未识别"}'
                 ' | 截稿=${candidate.detectedDate?.toIso8601String() ?? "未识别"}'
                 ' | 时间明确=${candidate.deadlineHasTime}'
-                ' | 进度=${candidate.progressPercent?.toString() ?? "未识别"}',
+                ' | 进度=${candidate.progressPercent?.toString() ?? "未识别"}'
+                ' | 节点=${candidate.recognizedNodeLabel ?? "未识别"}',
               );
               generated.add(_draft(
                 imageId: imageId,
