@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+203
-# beta-203: guard OCR import-kind mismatches and keep order UI out of product titles
+# beta-203: guard OCR import-kind mismatches; clear mixed preview on switch
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
