@@ -253,8 +253,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ? ScreenshotImportContentKind.products
               : ScreenshotImportContentKind.orders;
           if (detectedKind != null && detectedKind != currentContentKind) {
-            await _offerImportKindSwitch(detectedKind);
+            final switched = await _offerImportKindSwitch(detectedKind);
             if (!mounted) return;
+            if (switched) generated.clear();
           }
 
           final guess = preselectImportPlatform(
