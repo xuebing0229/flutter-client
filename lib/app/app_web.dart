@@ -819,8 +819,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   bool get _productOverviewView => _collectionViews.productOverviewView;
   int get _productOverviewColumns => _collectionViews.productOverviewColumns;
 
-  String _orderSortMode = 'defaultOrder';
-  String _productSortMode = 'defaultOrder';
+  String get _orderSortMode => _collectionViews.orderSortMode;
+  String get _productSortMode => _collectionViews.productSortMode;
   bool _desktopNavigationOpen = true;
   bool _nativeDeadlineReminderPreference = false;
   Map<String, dynamic> _retainedSettings = <String, dynamic>{};
@@ -1078,8 +1078,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             ? _nativeDeadlineReminderPreference
             : entry.value,
       ..._collectionViews.toSettings(),
-      'orderSortMode': _orderSortMode,
-      'productSortMode': _productSortMode,
       'desktopNavigationOpen': _desktopNavigationOpen,
     };
   }
@@ -1141,17 +1139,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     await widget.featureStore.applyJson(nextFeatures);
 
     _collectionViews = _collectionViews.applySettings(settings);
-    final orderSort = settings['orderSortMode'];
-    final productSort = settings['productSortMode'];
     final desktopOpen = settings['desktopNavigationOpen'];
-    if (orderSort is String &&
-        const {'defaultOrder', 'income', 'deadline'}.contains(orderSort)) {
-      _orderSortMode = orderSort;
-    }
-    if (productSort is String &&
-        const {'defaultOrder', 'income', 'soldCount'}.contains(productSort)) {
-      _productSortMode = productSort;
-    }
     if (desktopOpen is bool) _desktopNavigationOpen = desktopOpen;
   }
 
@@ -1241,7 +1229,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           },
           sortModeName: _productSortMode,
           onSortModeChanged: (value) {
-            setState(() => _productSortMode = value);
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productSortMode: value);
+            });
             _scheduleSave();
           },
         ),
@@ -1295,7 +1286,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           },
           sortModeName: _orderSortMode,
           onSortModeChanged: (value) {
-            setState(() => _orderSortMode = value);
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderSortMode: value);
+            });
             _scheduleSave();
           },
         ),
