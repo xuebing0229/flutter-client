@@ -8,7 +8,6 @@ import '../../../core/finance/pricing_preset_store.dart';
 import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../shared/presentation/pricing_preset_selector.dart';
-import '../../shared/presentation/receipt_page.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/adjustment_widgets.dart';
@@ -52,7 +51,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   final _pricingAdjustments = <PricingAdjustment>[];
   final _sessionAddedReferenceImages = <OrderReferenceImage>[];
   late final PricingPresetStore _effectivePricingPresetStore;
-  late final ReceiptStyleStore _effectiveReceiptStyleStore;
 
   bool _editing = false;
   bool _pickingReferenceImages = false;
@@ -82,8 +80,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     super.initState();
     _effectivePricingPresetStore =
         widget.pricingPresetStore ?? PricingPresetStore();
-    _effectiveReceiptStyleStore =
-        widget.receiptStyleStore ?? ReceiptStyleStore();
     final order = _order;
     _titleController = TextEditingController();
     _clientController = TextEditingController();
@@ -114,9 +110,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _offlineController.dispose();
     if (widget.pricingPresetStore == null) {
       _effectivePricingPresetStore.dispose();
-    }
-    if (widget.receiptStyleStore == null) {
-      _effectiveReceiptStyleStore.dispose();
     }
     super.dispose();
   }
@@ -810,23 +803,6 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   multiline: true,
                 ),
                 const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ReceiptPage(
-                            data: ReceiptData.fromOrder(order),
-                            styleStore: _effectiveReceiptStyleStore,
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.receipt_long_rounded),
-                    label: const Text('生成小票'),
-                  ),
-                ),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
