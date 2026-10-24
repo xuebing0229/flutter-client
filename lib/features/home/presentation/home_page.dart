@@ -1743,8 +1743,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final current = tabs[_index];
     final title = switch (_desktopToolSelection) {
-      AppToolMenu.nodePresetTool => '节点预设',
-      AppToolMenu.pricingPresetTool => '加价预设',
+      AppToolMenu.presetTool => '节点＆加价预设',
+      AppToolMenu.receiptTool => '生成小票',
       AppToolMenu.featureToggleTool => '附加功能开关',
       AppToolMenu.desktopPetTool =>
         Platform.isWindows &&
