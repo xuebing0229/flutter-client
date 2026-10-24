@@ -239,6 +239,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             ),
             const SizedBox(height: 12),
             _SummaryCard(
+              month: _selectedMonth,
               incomeCount: monthOrders.length + monthSales.length,
               incomeTotal: total,
               pendingCount: pendingOrders.length,
@@ -344,12 +345,14 @@ class _PeriodMetric extends StatelessWidget {
 
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
+    required this.month,
     required this.incomeCount,
     required this.incomeTotal,
     required this.pendingCount,
     required this.pendingTotal,
   });
 
+  final DateTime month;
   final int incomeCount;
   final double incomeTotal;
   final int pendingCount;
@@ -364,7 +367,6 @@ class _SummaryCard extends StatelessWidget {
       required String label,
       required int count,
       required double amount,
-      bool emphasize = false,
     }) {
       return Row(
         children: [
@@ -379,10 +381,9 @@ class _SummaryCard extends StatelessWidget {
           ),
           Text(
             '¥ ${_money(amount)}',
-            style: (emphasize
-                    ? theme.textTheme.titleLarge
-                    : theme.textTheme.titleMedium)
-                ?.copyWith(fontWeight: FontWeight.w900),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       );
@@ -393,7 +394,7 @@ class _SummaryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '收入总计',
+            '${month.year}年${month.month}月月度收入',
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
             ),
@@ -403,7 +404,6 @@ class _SummaryCard extends StatelessWidget {
             label: '已收入',
             count: incomeCount,
             amount: incomeTotal,
-            emphasize: true,
           ),
           const SizedBox(height: 12),
           Divider(
