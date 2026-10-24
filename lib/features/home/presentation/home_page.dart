@@ -38,6 +38,7 @@ import '../../products/state/product_store.dart';
 import '../../schedule/presentation/schedule_page.dart';
 import '../../statistics/presentation/statistics_page.dart';
 import '../../shared/domain/receipt_style_store.dart';
+import '../../shared/domain/collection_view_preferences.dart';
 import '../../shared/presentation/pricing_preset_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
@@ -92,12 +93,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final NativeSyncCoordinatorViewAdapter _syncCoordinatorView;
   PublicPeerSyncService? _publicPeerSync;
 
-  static const _orderCardViewSettingKey = 'orderCardView';
-  static const _orderOverviewViewSettingKey = 'orderOverviewView';
-  static const _orderOverviewColumnsSettingKey = 'orderOverviewColumns';
-  static const _productCardViewSettingKey = 'productCardView';
-  static const _productOverviewViewSettingKey = 'productOverviewView';
-  static const _productOverviewColumnsSettingKey = 'productOverviewColumns';
   static const _pricingPresetsSettingKey = 'pricingAdjustmentPresets';
   static const _receiptStyleSettingKey = 'receiptStyle';
   static const _orderSortModeSettingKey = 'orderSortMode';
@@ -107,12 +102,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   int _index = 0;
   bool _ready = false;
-  bool _orderCardView = false;
-  bool _orderOverviewView = false;
-  int _orderOverviewColumns = 3;
-  bool _productCardView = false;
-  bool _productOverviewView = false;
-  int _productOverviewColumns = 3;
+  CollectionViewPreferences _collectionViews =
+      const CollectionViewPreferences();
+
+  bool get _orderCardView => _collectionViews.orderCardView;
+  bool get _orderOverviewView => _collectionViews.orderOverviewView;
+  int get _orderOverviewColumns => _collectionViews.orderOverviewColumns;
+  bool get _productCardView => _collectionViews.productCardView;
+  bool get _productOverviewView => _collectionViews.productOverviewView;
+  int get _productOverviewColumns => _collectionViews.productOverviewColumns;
   String _orderSortMode = 'defaultOrder';
   String _productSortMode = 'defaultOrder';
   bool _desktopNavigationOpen = true;
@@ -916,12 +914,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'uiStyle': widget.themeStore.style.id,
       for (final entry in features.entries)
         '$_featureSettingPrefix${entry.key}': entry.value,
-      _orderCardViewSettingKey: _orderCardView,
-      _orderOverviewViewSettingKey: _orderOverviewView,
-      _orderOverviewColumnsSettingKey: _orderOverviewColumns,
-      _productCardViewSettingKey: _productCardView,
-      _productOverviewViewSettingKey: _productOverviewView,
-      _productOverviewColumnsSettingKey: _productOverviewColumns,
+      ..._collectionViews.toSettings(),
       _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
       _receiptStyleSettingKey: _receiptStyleStore.toJson(),
       _orderSortModeSettingKey: _orderSortMode,
@@ -1024,52 +1017,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     var layoutChanged = false;
-    final nextOrderCardView = settings[_orderCardViewSettingKey];
-    if (nextOrderCardView is bool && nextOrderCardView != _orderCardView) {
-      _orderCardView = nextOrderCardView;
+    final nextCollectionViews = _collectionViews.applySettings(settings);
+    if (nextCollectionViews != _collectionViews) {
+      _collectionViews = nextCollectionViews;
       layoutChanged = true;
-    }
-    final nextOverviewView = settings[_orderOverviewViewSettingKey];
-    if (nextOverviewView is bool && nextOverviewView != _orderOverviewView) {
-      _orderOverviewView = nextOverviewView;
-      layoutChanged = true;
-    }
-    final nextOverviewColumns = settings[_orderOverviewColumnsSettingKey];
-    if (nextOverviewColumns is num && nextOverviewColumns.isFinite) {
-      final rounded = nextOverviewColumns.round();
-      final normalized = rounded < 1 ? 1 : rounded;
-      if (normalized != _orderOverviewColumns) {
-        _orderOverviewColumns = normalized;
-        layoutChanged = true;
-      }
-    } else if (nextOverviewColumns != null) {
-      throw const FormatException('同步总概览列数格式无效。');
-    }
-    final nextProductCardView = settings[_productCardViewSettingKey];
-    if (nextProductCardView is bool &&
-        nextProductCardView != _productCardView) {
-      _productCardView = nextProductCardView;
-      layoutChanged = true;
-    }
-    final nextProductOverviewView =
-        settings[_productOverviewViewSettingKey];
-    if (nextProductOverviewView is bool &&
-        nextProductOverviewView != _productOverviewView) {
-      _productOverviewView = nextProductOverviewView;
-      layoutChanged = true;
-    }
-    final nextProductOverviewColumns =
-        settings[_productOverviewColumnsSettingKey];
-    if (nextProductOverviewColumns is num &&
-        nextProductOverviewColumns.isFinite) {
-      final rounded = nextProductOverviewColumns.round();
-      final normalized = rounded < 1 ? 1 : rounded;
-      if (normalized != _productOverviewColumns) {
-        _productOverviewColumns = normalized;
-        layoutChanged = true;
-      }
-    } else if (nextProductOverviewColumns != null) {
-      throw const FormatException('同步成品总概览列数格式无效。');
     }
     final nextOrderSortMode = _normalizeOrderSortMode(
       settings[_orderSortModeSettingKey],
@@ -1515,7 +1466,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _setOrderCardView(bool value) {
     if (_orderCardView == value) return;
     setState(() {
-      _orderCardView = value;
+      _collectionViews =
+          _collectionViews.copyWith(orderCardView: value);
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1525,7 +1477,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _setOrderOverviewView(bool value) {
     if (_orderOverviewView == value) return;
     setState(() {
-      _orderOverviewView = value;
+      _collectionViews =
+          _collectionViews.copyWith(orderOverviewView: value);
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1533,10 +1486,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _setOrderOverviewColumns(int value) {
-    final normalized = value < 1 ? 1 : value;
-    if (_orderOverviewColumns == normalized) return;
+    final next = _collectionViews.copyWith(orderOverviewColumns: value);
+    if (next == _collectionViews) return;
     setState(() {
-      _orderOverviewColumns = normalized;
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1546,7 +1499,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _setProductCardView(bool value) {
     if (_productCardView == value) return;
     setState(() {
-      _productCardView = value;
+      _collectionViews =
+          _collectionViews.copyWith(productCardView: value);
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1556,7 +1510,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _setProductOverviewView(bool value) {
     if (_productOverviewView == value) return;
     setState(() {
-      _productOverviewView = value;
+      _collectionViews =
+          _collectionViews.copyWith(productOverviewView: value);
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1564,10 +1519,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _setProductOverviewColumns(int value) {
-    final normalized = value < 1 ? 1 : value;
-    if (_productOverviewColumns == normalized) return;
+    final next = _collectionViews.copyWith(productOverviewColumns: value);
+    if (next == _collectionViews) return;
     setState(() {
-      _productOverviewColumns = normalized;
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
