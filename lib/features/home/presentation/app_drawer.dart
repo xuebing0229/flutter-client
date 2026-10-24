@@ -13,12 +13,12 @@ import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../account/presentation/account_page.dart';
 import '../../orders/data/node_presets.dart';
-import '../../orders/presentation/node_preset_page.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
 import '../../shared/domain/receipt_style_store.dart';
-import '../../shared/presentation/pricing_preset_page.dart';
+import '../../shared/presentation/preset_center_page.dart';
+import '../../shared/presentation/receipt_center_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
@@ -132,8 +132,8 @@ class AppDrawer extends StatelessWidget {
 }
 
 class AppToolMenu extends StatelessWidget {
-  static const nodePresetTool = 'nodePreset';
-  static const pricingPresetTool = 'pricingPreset';
+  static const presetTool = 'presetCenter';
+  static const receiptTool = 'receiptCenter';
   static const featureToggleTool = 'featureToggle';
   static const archiveTool = 'archive';
   static const syncTool = 'sync';
@@ -240,23 +240,30 @@ class AppToolMenu extends StatelessWidget {
       padding: padding,
       children: [
         _item(
-          icon: Icons.account_tree_outlined,
-          title: '节点预设',
-          tool: nodePresetTool,
+          icon: Icons.tune_rounded,
+          title: '节点＆加价预设',
+          tool: presetTool,
           onTap: () => _open(
             context,
-            nodePresetTool,
-            NodePresetPage(store: nodePresetStore),
+            presetTool,
+            PresetCenterPage(
+              nodePresetStore: nodePresetStore,
+              pricingPresetStore: pricingPresetStore,
+            ),
           ),
         ),
         _item(
-          icon: Icons.calculate_outlined,
-          title: '加价预设',
-          tool: pricingPresetTool,
+          icon: Icons.receipt_long_outlined,
+          title: '生成小票',
+          tool: receiptTool,
           onTap: () => _open(
             context,
-            pricingPresetTool,
-            PricingPresetPage(store: pricingPresetStore),
+            receiptTool,
+            ReceiptCenterPage(
+              orderStore: orderStore,
+              productStore: productStore,
+              receiptStyleStore: receiptStyleStore,
+            ),
           ),
         ),
         if (showFeatureToggle)
