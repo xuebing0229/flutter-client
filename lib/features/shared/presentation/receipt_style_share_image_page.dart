@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../../core/portability/data_portability_file_bridge.dart';
+import '../data/receipt_style_image_bridge.dart';
 import '../domain/receipt_style_store.dart';
 import '../domain/receipt_style_transfer.dart';
 
@@ -23,7 +23,7 @@ class ReceiptStyleShareImagePage extends StatefulWidget {
 
 class _ReceiptStyleShareImagePageState
     extends State<ReceiptStyleShareImagePage> {
-  static const _fileBridge = DataPortabilityFileBridge();
+  static const _imageBridge = ReceiptStyleImageBridge();
   static const _transfer = ReceiptStyleTransfer();
 
   final GlobalKey _cardKey = GlobalKey();
@@ -113,7 +113,7 @@ class _ReceiptStyleShareImagePageState
       }
 
       final bytes = _transfer.attachPresetToPng(png, widget.preset);
-      final saved = await _fileBridge.exportImage(
+      final saved = await _imageBridge.exportImage(
         fileName: '${_safeName(widget.preset.name)}-小票预设.png',
         bytes: bytes,
       );
