@@ -138,6 +138,26 @@ class ReceiptStyleStore extends ChangeNotifier {
     if (_presets.length != before) notifyListeners();
   }
 
+  ReceiptStylePreset importPreset(
+    ReceiptStylePreset source, {
+    bool apply = true,
+  }) {
+    final imported = ReceiptStylePreset(
+      id: 'receipt-style-${DateTime.now().microsecondsSinceEpoch}',
+      name: source.name,
+      fontColorValue: source.fontColorValue,
+      backgroundImageBase64: source.backgroundImageBase64,
+      backgroundImageName: source.backgroundImageName,
+    );
+    _presets.add(imported);
+    if (apply) {
+      _fontColorValue = imported.fontColorValue;
+      _backgroundImageBase64 = imported.backgroundImageBase64;
+      _backgroundImageName = imported.backgroundImageName;
+    }
+    notifyListeners();
+    return imported;
+  }
   Map<String, dynamic> toJson() => <String, dynamic>{
         'fontColorValue': _fontColorValue,
         if (_backgroundImageBase64 != null)
