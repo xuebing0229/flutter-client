@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
-import '../../shared/presentation/receipt_page.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/finance/pricing_preset_store.dart';
@@ -78,7 +77,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   final Set<String> _selectedTags = <String>{};
   final Map<String, _TerminationDraft> _bulkTerminationDrafts =
       <String, _TerminationDraft>{};
-  late final ReceiptStyleStore _effectiveReceiptStyleStore;
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -88,8 +86,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   @override
   void initState() {
     super.initState();
-    _effectiveReceiptStyleStore =
-        widget.receiptStyleStore ?? ReceiptStyleStore();
     _overviewColumnsController = TextEditingController(
       text: widget.overviewColumns.toString(),
     );
@@ -116,151 +112,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     _searchController.dispose();
     _overviewColumnsController.dispose();
     _overviewColumnsFocusNode.dispose();
-    if (widget.receiptStyleStore == null) {
-      _effectiveReceiptStyleStore.dispose();
-    }
     super.dispose();
-  }
-
-  Map<String, List<int>> _annualReceiptOptions() {
-    final yearsByClient = <String, Set<int>>{};
-    final displayNames = <String, String>{};
-
-    for (final order in widget.store.orders) {
-      final client = order.clientName.trim();
-      final date = order.settledAt ?? order.completedAt;
-      if (client.isEmpty || date == null) continue;
-
-      final key = client.toLowerCase();
-      displayNames.putIfAbsent(key, () => client);
-      yearsByClient.putIfAbsent(key, () => <int>{}).add(date.year);
-    }
-
-    final result = <String, List<int>>{};
-    final keys = yearsByClient.keys.toList()
-      ..sort((left, right) =>
-          displayNames[left]!.compareTo(displayNames[right]!));
-    for (final key in keys) {
-      final years = yearsByClient[key]!.toList()
-        ..sort((left, right) => right.compareTo(left));
-      result[displayNames[key]!] = years;
-    }
-    return result;
-  }
-
-  Future<void> _showAnnualReceiptPicker() async {
-    final options = _annualReceiptOptions();
-    if (options.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('暂无可生成年度小票的已完成业务。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final clients = options.keys.toList();
-    var selectedClient = clients.first;
-    var selectedYear = options[selectedClient]!.first;
-
-    final selection = await showDialog<_AnnualReceiptSelection>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, refreshDialog) {
-          final years = options[selectedClient]!;
-          return AlertDialog(
-            title: const Text('生成单主年度小票'),
-            content: SizedBox(
-              width: 340,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: selectedClient,
-                    decoration: const InputDecoration(labelText: '单主'),
-                    items: [
-                      for (final client in clients)
-                        DropdownMenuItem(
-                          value: client,
-                          child: Text(
-                            client,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      refreshDialog(() {
-                        selectedClient = value;
-                        selectedYear = options[value]!.first;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<int>(
-                    value: selectedYear,
-                    decoration: const InputDecoration(labelText: '年份'),
-                    items: [
-                      for (final year in years)
-                        DropdownMenuItem(
-                          value: year,
-                          child: Text('$year 年'),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      refreshDialog(() => selectedYear = value);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(
-                  _AnnualReceiptSelection(
-                    clientName: selectedClient,
-                    year: selectedYear,
-                  ),
-                ),
-                child: const Text('生成'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (!mounted || selection == null) return;
-
-    final data = AnnualReceiptData.fromOrders(
-      clientName: selection.clientName,
-      year: selection.year,
-      orders: widget.store.orders,
-    );
-    if (data.entries.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('这个年份没有可生成小票的业务。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => ReceiptPage.annual(
-          data: data,
-          styleStore: _effectiveReceiptStyleStore,
-        ),
-      ),
-    );
   }
 
   Future<void> _showTagFilterDialog(List<String> tags) async {
@@ -1262,32 +1114,16 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   ],
                 ),
               ),
-            if (widget.featureStore.sorting ||
-                widget.featureStore.viewSwitch ||
-                widget.featureStore.clientInfo)
+            if (widget.featureStore.sorting || widget.featureStore.viewSwitch)
               CollectionToolbar(
                 title: '排单',
                 count: orders.length,
                 summaryText:
                     '待收入 ¥${_formatMoney(orders.fold<double>(0, (sum, order) => sum + order.realIncome))}',
                 helpMessage: '长按卡片，可快速进行置顶、归档、删除操作',
-                sortControl:
-                    (widget.featureStore.sorting ||
-                            widget.featureStore.clientInfo)
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.featureStore.clientInfo)
-                                IconButton(
-                                  tooltip: '单主年度小票',
-                                  onPressed: _showAnnualReceiptPicker,
-                                  icon: const Icon(
-                                    Icons.receipt_long_outlined,
-                                  ),
-                                ),
-                              if (widget.featureStore.sorting)
-                                PopupMenuButton<_OrderSortMode>(
-                                  tooltip: '选择排序方式',
+                sortControl: widget.featureStore.sorting
+                    ? PopupMenuButton<_OrderSortMode>(
+                        tooltip: '选择排序方式',
                         initialValue: _sortMode,
                         onSelected: (value) {
                           widget.onSortModeChanged(value.name);
@@ -1314,11 +1150,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                               ),
                           ];
                         },
-                                  icon: const Icon(Icons.sort_rounded),
-                                ),
-                            ],
-                          )
-                        : null,
+                        icon: const Icon(Icons.sort_rounded),
+                      )
+                    : null,
                 cardView: widget.cardView,
                 viewControl: widget.featureStore.viewSwitch
                     ? PopupMenuButton<String>(
@@ -1577,16 +1411,6 @@ int _compareDeadline(DateTime? left, DateTime? right) {
   if (left == null) return 1;
   if (right == null) return -1;
   return left.compareTo(right);
-}
-
-class _AnnualReceiptSelection {
-  const _AnnualReceiptSelection({
-    required this.clientName,
-    required this.year,
-  });
-
-  final String clientName;
-  final int year;
 }
 
 class _TerminationDraft {
