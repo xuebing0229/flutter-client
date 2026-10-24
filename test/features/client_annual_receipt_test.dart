@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
+import 'package:flutter_app/features/products/domain/finished_product.dart';
 import 'package:flutter_app/features/shared/presentation/receipt_page.dart';
 
 void main() {
@@ -69,6 +70,7 @@ void main() {
           client: 'Alice',
           price: 999,
           completedAt: DateTime(2027, 1, 1),
+          settledAt: DateTime(2027, 1, 1),
         ),
         order(
           id: '2',
@@ -76,6 +78,7 @@ void main() {
           client: 'alice',
           price: 200,
           completedAt: DateTime(2026, 8, 2),
+          settledAt: DateTime(2026, 8, 2),
         ),
         order(
           id: '1',
@@ -83,6 +86,7 @@ void main() {
           client: 'Alice',
           price: 100,
           completedAt: DateTime(2026, 2, 1),
+          settledAt: DateTime(2026, 2, 1),
         ),
         order(
           id: '4',
@@ -90,6 +94,7 @@ void main() {
           client: 'Bob',
           price: 888,
           completedAt: DateTime(2026, 3, 1),
+          settledAt: DateTime(2026, 3, 1),
         ),
       ],
     );
@@ -97,6 +102,42 @@ void main() {
     expect(data.clientName, 'Alice');
     expect(data.entries.map((entry) => entry.title), ['第一张', '第二张']);
     expect(data.total, 300);
+  });
+
+  test('annual receipt excludes unarchived orders and includes attributed archived product sales', () {
+    final soldAt = DateTime(2026, 7, 8, 12, 30);
+    final archivedProduct = FinishedProduct(
+      id: 'product-1',
+      title: '成品图',
+      platform: CommissionPlatform.huajia,
+      saleType: ProductSaleType.multiple,
+      price: 150,
+      soldCount: 1,
+      saleRecords: [soldAt],
+      saleClientNames: {
+        soldAt.toUtc().toIso8601String(): 'Alice',
+      },
+      archivedAt: DateTime(2026, 8, 1),
+      isArchived: true,
+    );
+
+    final data = AnnualReceiptData.fromSources(
+      clientName: 'Alice',
+      year: 2026,
+      orders: [
+        order(
+          id: 'active',
+          title: '未归档完成单',
+          client: 'Alice',
+          price: 400,
+          completedAt: DateTime(2026, 4, 1),
+        ),
+      ],
+      products: [archivedProduct],
+    );
+
+    expect(data.entries.map((entry) => entry.title), ['成品图']);
+    expect(data.total, 150);
   });
 
   test('annual receipt uses customer-facing amount for terminated orders', () {
