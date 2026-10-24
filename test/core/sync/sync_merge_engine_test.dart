@@ -548,4 +548,60 @@ void main() {
     expect(compacted.operations, isNotEmpty);
     expect(compacted.operations.values.every((operation) => operation.compacted), isTrue);
   });
+
+  test('concurrent sale client attribution merges by sale timestamp', () {
+    final engine = SyncMergeEngine();
+    const values = <String, dynamic>{
+      'id': 'product-clients',
+      'saleType': 'multiple',
+      'soldCount': 0,
+      'saleRecords': <String>[],
+      'saleClientNames': <String, dynamic>{},
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'product-clients',
+      values: values,
+      deviceId: 'seed',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'saleClientNames': <String, dynamic>{
+          '2026-10-24T10:00:00.000Z': 'Alice',
+        },
+      },
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: values,
+      nextValues: <String, dynamic>{
+        ...values,
+        'saleClientNames': <String, dynamic>{
+          '2026-10-24T11:00:00.000Z': 'Bob',
+        },
+      },
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    expect(
+      engine.materialize(merged)!['saleClientNames'],
+      <String, dynamic>{
+        '2026-10-24T10:00:00.000Z': 'Alice',
+        '2026-10-24T11:00:00.000Z': 'Bob',
+      },
+    );
+    expect(
+      merged.conflicts.values.where(
+        (conflict) => conflict.field == 'saleClientNames',
+      ),
+      isEmpty,
+    );
+  });
+
 }
