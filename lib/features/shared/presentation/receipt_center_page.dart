@@ -113,10 +113,11 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
 
     for (final product in widget.productStore.products) {
       final date = _productDate(product);
-      final saleClients = <String>[
-        for (final soldAt in product.saleRecords)
-          if (product.clientNameForSale(soldAt) case final name?) name,
-      ];
+      final saleClients = <String>[];
+      for (final soldAt in product.saleRecords) {
+        final name = product.clientNameForSale(soldAt);
+        if (name != null) saleClients.add(name);
+      }
       final haystack = [
         product.title,
         product.platform.label,
