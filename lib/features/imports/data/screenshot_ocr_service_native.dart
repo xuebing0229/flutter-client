@@ -15,6 +15,10 @@ class ScreenshotOcrService {
 
   bool get supported => Platform.isAndroid || Platform.isWindows;
 
+  String get engineLabel => Platform.isAndroid
+      ? '官方 PaddleOCR PP-OCRv6 Small'
+      : 'RapidOCR ONNX Windows';
+
   /// Reads local Android process-exit diagnostics. No image or OCR text is sent.
   Future<String?> lastNativeCrashReport() async {
     if (!Platform.isAndroid) return null;
