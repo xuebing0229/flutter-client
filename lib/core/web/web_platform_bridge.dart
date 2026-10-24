@@ -18,6 +18,9 @@ external void _downloadBytes(
   JSString base64Data,
 );
 
+@JS('adventurersGuildPickImage')
+external JSPromise<JSString> _pickImage();
+
 @JS('adventurersGuildAssetRead')
 external JSPromise<JSString> _assetRead(JSString key);
 
@@ -46,6 +49,31 @@ void webDownloadBytes({
     fileName.toJS,
     mimeType.toJS,
     base64Encode(bytes).toJS,
+  );
+}
+
+class WebPickedImage {
+  const WebPickedImage({
+    required this.name,
+    required this.bytes,
+  });
+
+  final String name;
+  final Uint8List bytes;
+}
+
+Future<WebPickedImage?> webPickImage() async {
+  final source = (await _pickImage().toDart).toDart;
+  if (source.trim().isEmpty) return null;
+  final decoded = jsonDecode(source);
+  if (decoded is! Map ||
+      decoded['name'] is! String ||
+      decoded['data'] is! String) {
+    throw const FormatException('浏览器返回的图片数据无效。');
+  }
+  return WebPickedImage(
+    name: decoded['name'] as String,
+    bytes: Uint8List.fromList(base64Decode(decoded['data'] as String)),
   );
 }
 
