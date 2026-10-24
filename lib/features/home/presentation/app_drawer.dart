@@ -134,6 +134,10 @@ class AppDrawer extends StatelessWidget {
 class AppToolMenu extends StatelessWidget {
   static const presetTool = 'presetCenter';
   static const receiptTool = 'receiptCenter';
+  // Kept for source compatibility with older callers; the drawer no longer
+  // exposes these as separate destinations.
+  static const nodePresetTool = 'nodePreset';
+  static const pricingPresetTool = 'pricingPreset';
   static const featureToggleTool = 'featureToggle';
   static const archiveTool = 'archive';
   static const syncTool = 'sync';
