@@ -28,7 +28,6 @@ import '../../orders/data/node_presets.dart';
 import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
-import '../../orders/presentation/node_preset_page.dart';
 import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_queue_page.dart';
 import '../../orders/state/order_store.dart';
@@ -39,7 +38,8 @@ import '../../schedule/presentation/schedule_page.dart';
 import '../../statistics/presentation/statistics_page.dart';
 import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/domain/collection_view_preferences.dart';
-import '../../shared/presentation/pricing_preset_page.dart';
+import '../../shared/presentation/preset_center_page.dart';
+import '../../shared/presentation/receipt_center_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
@@ -1564,9 +1564,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildDesktopToolPage(String tool) {
     return switch (tool) {
-      AppToolMenu.nodePresetTool => NodePresetPage(store: _nodePresetStore),
-      AppToolMenu.pricingPresetTool =>
-        PricingPresetPage(store: _pricingPresetStore),
+      AppToolMenu.presetTool => PresetCenterPage(
+        nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
+      ),
+      AppToolMenu.receiptTool => ReceiptCenterPage(
+        orderStore: _orderStore,
+        productStore: _productStore,
+        receiptStyleStore: _receiptStyleStore,
+      ),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
         store: widget.featureStore,
         onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
