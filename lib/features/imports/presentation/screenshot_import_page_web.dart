@@ -15,14 +15,16 @@ import '../data/screenshot_ocr_diagnostic.dart';
 import '../data/screenshot_import_history.dart';
 import '../domain/screenshot_duplicate_review.dart';
 import '../domain/screenshot_import_draft.dart';
+import '../domain/screenshot_import_kind.dart';
+import '../domain/screenshot_import_kind_detection.dart';
 import '../domain/screenshot_import_rules.dart';
 import '../domain/screenshot_layout_parser.dart';
 import '../domain/screenshot_mihuashi_badge.dart';
 import '../domain/screenshot_huajia_detail_parser.dart';
 import '../domain/screenshot_title_reconciliation.dart';
 import '../domain/screenshot_product_layout_parser.dart';
+import 'screenshot_import_kind_switch.dart';
 
-enum ScreenshotImportKind { orders, products }
 
 /// One preview across many images. The OCR engine never writes business data.
 /// Every record is validated before one atomic store replacement.
@@ -63,12 +65,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   bool _releaseTemporaryImagesWhenIdle = false;
   String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
+  late ScreenshotImportKind _kind;
 
-  bool get _products => widget.kind == ScreenshotImportKind.products;
+  bool get _products => _kind == ScreenshotImportKind.products;
 
   @override
   void initState() {
     super.initState();
+    _kind = widget.kind;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_resumeOrSelectScreenshot());
     });
@@ -180,6 +184,32 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           final recognized = await _ocr.recognize(image.path);
           ocrTimer.stop();
           final parsedForReport = <String>[];
+          final detectedKind = detectScreenshotImportContentKind(
+            lines: recognized.lines,
+            imageWidth: recognized.width,
+            imageHeight: recognized.height,
+          );
+          final currentContentKind = _products
+              ? ScreenshotImportContentKind.products
+              : ScreenshotImportContentKind.orders;
+          if (detectedKind != null && detectedKind != currentContentKind) {
+            final target = await offerScreenshotImportKindSwitch(
+              context: context,
+              currentKind: _kind,
+              detected: detectedKind,
+              existingCount: _rows.length,
+            );
+            if (!mounted) return;
+            if (target != null) {
+              setState(() {
+                _kind = target;
+                _rows.clear();
+                _ocrDiagnostics.clear();
+              });
+              generated.clear();
+            }
+          }
+
           final guess = preselectImportPlatform(
             recognized.lines.map((line) => line.text),
           );
