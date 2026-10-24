@@ -93,6 +93,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
       ReceiptStyleImageBridge();
   static const ReceiptStyleTransfer _styleTransfer = ReceiptStyleTransfer();
   bool _exporting = false;
+  bool _transparentBackground = false;
   String? _cachedBackgroundBase64;
   MemoryImage? _cachedBackgroundImage;
 
@@ -369,7 +370,8 @@ class _ReceiptPageState extends State<ReceiptPage> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final backgroundImage = _backgroundImage();
+      final backgroundImage =
+          _transparentBackground ? null : _backgroundImage();
       if (backgroundImage != null) {
         await precacheImage(backgroundImage, context);
       }
@@ -416,7 +418,8 @@ class _ReceiptPageState extends State<ReceiptPage> {
       animation: widget.styleStore,
       builder: (context, _) {
         final style = widget.styleStore;
-        final backgroundImage = _backgroundImage();
+        final backgroundImage =
+            _transparentBackground ? null : _backgroundImage();
 
         return Scaffold(
           appBar: AppBar(
@@ -463,7 +466,24 @@ class _ReceiptPageState extends State<ReceiptPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _transparentBackground,
+                onChanged: _exporting
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _transparentBackground = value ?? false;
+                        });
+                      },
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('透明底导出'),
+                subtitle: const Text(
+                  '导出 PNG 时不包含背景图、底色和阴影，只保留小票文字与分隔线。',
+                ),
+              ),
+              const SizedBox(height: 10),
               Center(
                 child: RepaintBoundary(
                   key: _receiptKey,
@@ -471,6 +491,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                     data: widget.data,
                     fontColor: Color(style.fontColorValue),
                     backgroundImage: backgroundImage,
+                    transparentBackground: _transparentBackground,
                   ),
                 ),
               ),
@@ -498,11 +519,13 @@ class _ReceiptPaper extends StatelessWidget {
     required this.data,
     required this.fontColor,
     required this.backgroundImage,
+    required this.transparentBackground,
   });
 
   final ReceiptData data;
   final Color fontColor;
   final ImageProvider? backgroundImage;
+  final bool transparentBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -514,20 +537,25 @@ class _ReceiptPaper extends StatelessWidget {
       width: 360,
       constraints: const BoxConstraints(minHeight: 500),
       padding: const EdgeInsets.fromLTRB(26, 30, 26, 34),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        image: backgroundImage == null
-            ? null
-            : DecorationImage(image: backgroundImage!, fit: BoxFit.cover),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 16,
-            spreadRadius: 1,
-            offset: Offset(0, 6),
-            color: Color(0x22000000),
-          ),
-        ],
-      ),
+      decoration: transparentBackground
+          ? null
+          : BoxDecoration(
+              color: Colors.white,
+              image: backgroundImage == null
+                  ? null
+                  : DecorationImage(
+                      image: backgroundImage!,
+                      fit: BoxFit.cover,
+                    ),
+              boxShadow: const [
+                BoxShadow(
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                  offset: Offset(0, 6),
+                  color: Color(0x22000000),
+                ),
+              ],
+            ),
       child: DefaultTextStyle(
         style: TextStyle(
           color: fontColor,
