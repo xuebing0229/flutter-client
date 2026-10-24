@@ -729,8 +729,11 @@ class ScreenshotLayoutParser {
     }
     const ignore = [
       '当前交付节点', '截稿时间', '购买时间', '添加备注',
-      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '全额支付', '已全额支付', '定向企划', '待支付', '我卖出的', '已完成',
       '进行中', '待交稿', '等待对方收稿', '企划方名称',
+      '上传稿件', '联系企划方', '验收节点', '创作节点',
+      '稿件夹', '进程动态', '参考信息', '订单', '工作板',
+      '约稿完成', '已支付', '已付', '已结算', '总额',
     ];
     if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
       return false;
@@ -839,6 +842,22 @@ bool isMiHuashiOrderDetailScreenshot({
       (RegExp(r'\.(png|jpe?g|webp)\b', caseSensitive: false)
           .hasMatch(line.text) ||
        line.text.contains('企划方已下载')));
+  final nodeSection = prepared.any((line) {
+    final text = line.text.trim();
+    return text.contains('创作节点') || text.contains('验收节点');
+  });
+  final bottomAction = prepared.any((line) {
+    final text = line.text.trim();
+    return text == '上传稿件' || text == '联系企划方';
+  });
+  // The current MiHuashi detail/workbench layout can lose the small centered
+  // header and even the deadline in OCR, while still clearly exposing the
+  // node section, payment block and bottom actions. Treat that combination as
+  // one detail page before generic card splitting gets a chance to manufacture
+  // fake orders from labels such as "已全额支付 / 上传稿件 / 验收节点".
+  if (paymentRow && nodeSection && (strongTab || bottomAction || attachment)) {
+    return true;
+  }
   // Header + order date + one independent confirmation suffices. If the
   // "订单" glyph is lost, require BOTH the payment line and attachment/tab.
   if (centeredHeader && deadlineTop &&
