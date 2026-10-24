@@ -1269,14 +1269,23 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       ),
                     )
                   : useOverviewView
-                  ? _OrderOverviewGrid(
-                      orders: orders,
+                  ? CollectionOverviewGrid(
+                      itemCount: orders.length,
                       columns: widget.overviewColumns,
-                      conflictedOrderIds:
-                          widget.syncCoordinator.conflictedOrderIds,
-                      onTap: _openOrder,
-                      onLongPress: _showQuickActions,
-                      showClient: widget.featureStore.clientInfo,
+                      childAspectRatio: OrderOverviewSummaryCard.aspectRatio,
+                      itemBuilder: (context, index) {
+                        final order = orders[index];
+                        return OrderOverviewSummaryCard(
+                          order: order,
+                          hasSyncConflict: widget
+                              .syncCoordinator
+                              .conflictedOrderIds
+                              .contains(order.id),
+                          showClient: widget.featureStore.clientInfo,
+                          onTap: () => _openOrder(order),
+                          onLongPress: () => _showQuickActions(order),
+                        );
+                      },
                     )
                   : useCardView
                   ? CollectionCardGrid(
@@ -1394,52 +1403,6 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         );
       },
     );
-  }
-}
-
-class _OrderOverviewGrid extends StatelessWidget {
-  const _OrderOverviewGrid({
-    required this.orders,
-    required this.columns,
-    required this.conflictedOrderIds,
-    required this.onTap,
-    required this.onLongPress,
-    required this.showClient,
-  });
-
-  final List<QueueOrder> orders;
-  final int columns;
-  final Set<String> conflictedOrderIds;
-  final ValueChanged<QueueOrder> onTap;
-  final ValueChanged<QueueOrder> onLongPress;
-  final bool showClient;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: AppLayoutSpacing.tabScrollPaddingWithFab(
-        left: 12,
-        top: 0,
-        right: 12,
-      ),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns < 1 ? 1 : columns,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: OrderOverviewSummaryCard.aspectRatio,
-      ),
-          itemCount: orders.length,
-          itemBuilder: (context, index) {
-            final order = orders[index];
-            return OrderOverviewSummaryCard(
-              order: order,
-              hasSyncConflict: conflictedOrderIds.contains(order.id),
-              showClient: showClient,
-              onTap: () => onTap(order),
-              onLongPress: () => onLongPress(order),
-            );
-          },
-        );
   }
 }
 
