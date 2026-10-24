@@ -628,6 +628,8 @@ class _ProductPageState extends State<ProductPage> {
         );
       },
     );
+  }
+}
 
 class _ProductOverviewGrid extends StatelessWidget {
   const _ProductOverviewGrid({
@@ -666,8 +668,5 @@ class _ProductOverviewGrid extends StatelessWidget {
         );
       },
     );
-  }
-}
-
   }
 }
