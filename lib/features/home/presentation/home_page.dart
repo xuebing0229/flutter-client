@@ -95,8 +95,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   static const _pricingPresetsSettingKey = 'pricingAdjustmentPresets';
   static const _receiptStyleSettingKey = 'receiptStyle';
-  static const _orderSortModeSettingKey = 'orderSortMode';
-  static const _productSortModeSettingKey = 'productSortMode';
   static const _desktopNavigationOpenSettingKey = 'desktopNavigationOpen';
   static const _featureSettingPrefix = 'feature.';
 
@@ -111,8 +109,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool get _productCardView => _collectionViews.productCardView;
   bool get _productOverviewView => _collectionViews.productOverviewView;
   int get _productOverviewColumns => _collectionViews.productOverviewColumns;
-  String _orderSortMode = 'defaultOrder';
-  String _productSortMode = 'defaultOrder';
+  String get _orderSortMode => _collectionViews.orderSortMode;
+  String get _productSortMode => _collectionViews.productSortMode;
   bool _desktopNavigationOpen = true;
   String? _desktopToolSelection;
   GlobalKey<NavigatorState> _desktopContentNavigatorKey =
@@ -917,8 +915,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ..._collectionViews.toSettings(),
       _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
       _receiptStyleSettingKey: _receiptStyleStore.toJson(),
-      _orderSortModeSettingKey: _orderSortMode,
-      _productSortModeSettingKey: _productSortMode,
       _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
     };
   }
@@ -1022,24 +1018,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _collectionViews = nextCollectionViews;
       layoutChanged = true;
     }
-    final nextOrderSortMode = _normalizeOrderSortMode(
-      settings[_orderSortModeSettingKey],
-    );
-    if (nextOrderSortMode != null && nextOrderSortMode != _orderSortMode) {
-      _orderSortMode = nextOrderSortMode;
-      layoutChanged = true;
-    }
-    final nextProductSortMode = settings[_productSortModeSettingKey];
-    if (nextProductSortMode is String &&
-        const <String>{
-          'defaultOrder',
-          'income',
-          'soldCount',
-        }.contains(nextProductSortMode) &&
-        nextProductSortMode != _productSortMode) {
-      _productSortMode = nextProductSortMode;
-      layoutChanged = true;
-    }
     final nextNavigationOpen = settings[_desktopNavigationOpenSettingKey];
     if (nextNavigationOpen is bool &&
         nextNavigationOpen != _desktopNavigationOpen) {
@@ -1053,16 +1031,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       });
       _scheduleSave();
     }
-  }
-
-  String? _normalizeOrderSortMode(Object? value) {
-    if (value is! String) return null;
-    return switch (value) {
-      'defaultOrder' => 'defaultOrder',
-      'income' => 'income',
-      'deadline' || 'remainingTime' => 'deadline',
-      _ => null,
-    };
   }
 
   void _scheduleSave() {
@@ -1530,9 +1498,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _setOrderSortMode(String value) {
-    if (_orderSortMode == value) return;
+    final next = _collectionViews.copyWith(orderSortMode: value);
+    if (next == _collectionViews) return;
     setState(() {
-      _orderSortMode = value;
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1540,9 +1509,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _setProductSortMode(String value) {
-    if (_productSortMode == value) return;
+    final next = _collectionViews.copyWith(productSortMode: value);
+    if (next == _collectionViews) return;
     setState(() {
-      _productSortMode = value;
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
