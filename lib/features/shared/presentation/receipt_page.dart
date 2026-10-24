@@ -11,7 +11,9 @@ import '../../orders/domain/queue_order.dart';
 import '../../products/domain/finished_product.dart';
 import '../../home/presentation/theme_color_picker.dart';
 import '../domain/receipt_style_store.dart';
+import '../domain/receipt_style_transfer.dart';
 import 'layout_spacing.dart';
+import 'receipt_style_share_image_page.dart';
 
 class ReceiptData {
   const ReceiptData({
@@ -90,6 +92,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
   final GlobalKey _receiptKey = GlobalKey();
   final DataPortabilityFileBridge _fileBridge =
       const DataPortabilityFileBridge();
+  static const ReceiptStyleTransfer _styleTransfer = ReceiptStyleTransfer();
   bool _exporting = false;
   String? _cachedBackgroundBase64;
   MemoryImage? _cachedBackgroundImage;
@@ -193,6 +196,87 @@ class _ReceiptPageState extends State<ReceiptPage> {
     widget.styleStore.saveCurrentPreset(name);
   }
 
+  Future<void> _shareStylePreset(ReceiptStylePreset preset) async {
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ReceiptStyleShareImagePage(preset: preset),
+      ),
+    );
+  }
+
+  Future<void> _importStylePresetFromImage() async {
+    String? path;
+    try {
+      path = await _fileBridge.pickQrImage();
+      if (path == null) return;
+      final preset = _styleTransfer.decodePresetFromImage(
+        await File(path).readAsBytes(),
+      );
+      if (!mounted) return;
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('导入这个小票预设？'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                preset.name,
+                style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                preset.backgroundImageBase64 == null
+                    ? '包含字体颜色，不含自定义背景。'
+                    : '包含字体颜色和自定义背景：${preset.backgroundImageName ?? '背景图'}',
+              ),
+              const SizedBox(height: 8),
+              const Text('导入后会保存到样式预设并立即应用。'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('导入并使用'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      widget.styleStore.importPreset(preset);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('“${preset.name}”已经导入并启用。')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is FormatException
+          ? error.message
+          : '导入小票预设失败：$error';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (path != null && Platform.isAndroid) {
+        try {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+      }
+    }
+  }
+
   Future<void> _showStylePresets() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -240,16 +324,43 @@ class _ReceiptPageState extends State<ReceiptPage> {
                             radius: 13,
                           ),
                           title: Text(preset.name),
-                          trailing: IconButton(
-                            tooltip: '删除',
-                            onPressed: () =>
-                                widget.styleStore.deletePreset(preset.id),
-                            icon: const Icon(Icons.delete_outline_rounded),
+                          trailing: PopupMenuButton<String>(
+                            tooltip: '预设操作',
+                            onSelected: (value) {
+                              if (value == 'share') {
+                                Navigator.of(sheetContext).pop();
+                                _shareStylePreset(preset);
+                              } else if (value == 'delete') {
+                                widget.styleStore.deletePreset(preset.id);
+                              }
+                            },
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'share',
+                                child: Text('生成分享图片'),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Text('删除'),
+                              ),
+                            ],
                           ),
                         );
                       },
                     ),
                   ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(sheetContext).pop();
+                      _importStylePresetFromImage();
+                    },
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('从分享图片导入'),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.tonalIcon(
@@ -454,7 +565,7 @@ class _ReceiptPaper extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${data.kindLabel} · ${data.platform}',
+              data.platform,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 18),
