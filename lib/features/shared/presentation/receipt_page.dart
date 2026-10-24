@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -476,7 +477,14 @@ class _ReceiptPageState extends State<ReceiptPage> {
       if (boundary is! RenderRepaintBoundary) {
         throw StateError('小票预览还没有准备好');
       }
-      final image = await boundary.toImage(pixelRatio: 3);
+      final longestSide = math.max(
+        boundary.size.width,
+        boundary.size.height,
+      );
+      final pixelRatio = longestSide <= 0
+          ? 3.0
+          : (12000 / longestSide).clamp(1.0, 3.0).toDouble();
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) throw StateError('无法生成小票图片');
       final bytes = data.buffer.asUint8List();
