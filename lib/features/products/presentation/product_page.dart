@@ -32,6 +32,10 @@ class ProductPage extends StatefulWidget {
     required this.syncCoordinator,
     required this.cardView,
     required this.onCardViewChanged,
+    this.overviewView = false,
+    this.onOverviewViewChanged,
+    this.overviewColumns = 3,
+    this.onOverviewColumnsChanged,
     required this.sortModeName,
     required this.onSortModeChanged,
     super.key,
@@ -45,6 +49,10 @@ class ProductPage extends StatefulWidget {
   final SyncCoordinatorView syncCoordinator;
   final bool cardView;
   final ValueChanged<bool> onCardViewChanged;
+  final bool overviewView;
+  final ValueChanged<bool>? onOverviewViewChanged;
+  final int overviewColumns;
+  final ValueChanged<int>? onOverviewColumnsChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
 
@@ -54,6 +62,8 @@ class ProductPage extends StatefulWidget {
 
 class _ProductPageState extends State<ProductPage> {
   final TextEditingController _searchController = TextEditingController();
+  late final TextEditingController _overviewColumnsController;
+  late final FocusNode _overviewColumnsFocusNode;
   String _query = '';
   String _searchField = 'all';
 
@@ -63,8 +73,34 @@ class _ProductPageState extends State<ProductPage> {
       );
 
   @override
+  void initState() {
+    super.initState();
+    _overviewColumnsController = TextEditingController(
+      text: widget.overviewColumns.toString(),
+    );
+    _overviewColumnsFocusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.overviewColumns == widget.overviewColumns) return;
+
+    final current = int.tryParse(_overviewColumnsController.text.trim());
+    if (current == widget.overviewColumns) return;
+
+    final text = widget.overviewColumns.toString();
+    _overviewColumnsController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _overviewColumnsController.dispose();
+    _overviewColumnsFocusNode.dispose();
     super.dispose();
   }
 
