@@ -263,6 +263,42 @@ void main() {
     expect(found.single.deadlineHasTime, isFalse);
   });
 
+  test('detail page without header or deadline never turns UI labels into orders', () {
+    final lines = [
+      box('【常驻】黑白摸鱼头3.0', 190, x: 205),
+      box('y照', 340, x: 116),
+      box('验收节点', 490, x: 32),
+      box('已全额支付', 500, x: 437),
+      box('60%', 545, x: 83),
+      box('￥94', 548, x: 437),
+      // Current screenshots can lose the small centered header, deadline and
+      // middle tab labels while keeping the bottom action.
+      box('上传稿件', 1430, x: 505),
+    ];
+
+    expect(isMiHuashiOrderDetailScreenshot(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    ), isTrue);
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.title, '【常驻】黑白摸鱼头3.0');
+    expect(found.single.clientName, 'y照');
+    expect(found.single.price, 94);
+    expect(found.single.progressPercent, 60);
+    expect(
+      found.map((row) => row.title),
+      isNot(contains(anyOf('已全额支付', '上传稿件', '验收节点'))),
+    );
+  });
+
   test('normal vertically stacked commission list is not a detail page', () {
     final lines = [
       box('进行中', 115, x: 167),
