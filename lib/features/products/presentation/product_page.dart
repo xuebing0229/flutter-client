@@ -299,34 +299,51 @@ class _ProductPageState extends State<ProductPage> {
   Future<void> _confirmSale(FinishedProduct product) async {
     FocusManager.instance.primaryFocus?.unfocus();
     final isMultiple = product.saleType == ProductSaleType.multiple;
-    final confirmed = await showDialog<bool>(
+    final clientController = TextEditingController();
+    final clientName = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('确认售出'),
-          content: Text(
-            isMultiple
-                ? '确认“${product.title}”新增 1 次售出？\n\n'
-                    '售出数量将从 ${product.soldCount} 次变为 ${product.soldCount + 1} 次，'
-                    '并记录到本次售出时间对应的日程。'
-                : '确认将“${product.title}”标记为已售出？\n\n'
-                    '确认后会记录本次售出时间，并显示在日程中。',
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isMultiple
+                    ? '确认“${product.title}”新增 1 次售出？\n'
+                        '售出数量将从 ${product.soldCount} 次变为 ${product.soldCount + 1} 次，'
+                        '并记录到本次售出时间对应的日程。'
+                    : '确认将“${product.title}”标记为已售出？\n'
+                        '确认后会记录本次售出时间，并显示在日程中。',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: clientController,
+                decoration: const InputDecoration(
+                  labelText: '单主（可选）',
+                  hintText: '填写后可计入该单主的年度小票',
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () => Navigator.of(dialogContext).pop(
+                clientController.text.trim(),
+              ),
               child: const Text('确认售出'),
             ),
           ],
         );
       },
     );
+    clientController.dispose();
 
-    if (confirmed != true || !mounted) return;
+    if (clientName == null || !mounted) return;
 
     if (!widget.store.contains(product.id)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -348,7 +365,10 @@ class _ProductPageState extends State<ProductPage> {
       return;
     }
 
-    widget.store.markSold(product.id);
+    widget.store.markSold(
+      product.id,
+      clientName: clientName,
+    );
 
     if (!mounted || !widget.store.contains(product.id)) return;
     final updated = widget.store.byId(product.id);
