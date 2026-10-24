@@ -1,15 +1,14 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../../core/finance/pricing_adjustments.dart';
-import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../products/domain/finished_product.dart';
 import '../../home/presentation/theme_color_picker.dart';
+import '../data/receipt_style_image_bridge.dart';
 import '../domain/receipt_style_store.dart';
 import '../domain/receipt_style_transfer.dart';
 import 'layout_spacing.dart';
@@ -90,8 +89,8 @@ class ReceiptPage extends StatefulWidget {
 
 class _ReceiptPageState extends State<ReceiptPage> {
   final GlobalKey _receiptKey = GlobalKey();
-  final DataPortabilityFileBridge _fileBridge =
-      const DataPortabilityFileBridge();
+  static const ReceiptStyleImageBridge _imageBridge =
+      ReceiptStyleImageBridge();
   static const ReceiptStyleTransfer _styleTransfer = ReceiptStyleTransfer();
   bool _exporting = false;
   String? _cachedBackgroundBase64;
@@ -99,12 +98,10 @@ class _ReceiptPageState extends State<ReceiptPage> {
 
   Future<void> _pickBackground() async {
     try {
-      final path = await _fileBridge.pickImage();
-      if (path == null) return;
-      final file = File(path);
-      final bytes = await file.readAsBytes();
+      final picked = await _imageBridge.pickImage();
+      if (picked == null) return;
       if (!mounted) return;
-      if (bytes.length > 5 * 1024 * 1024) {
+      if (picked.bytes.length > 5 * 1024 * 1024) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('背景图请控制在 5 MB 以内'),
@@ -113,10 +110,9 @@ class _ReceiptPageState extends State<ReceiptPage> {
         );
         return;
       }
-      final normalized = path.replaceAll('\\', '/');
       widget.styleStore.setBackgroundImage(
-        base64: base64Encode(bytes),
-        name: normalized.split('/').last,
+        base64: base64Encode(picked.bytes),
+        name: picked.name,
       );
     } catch (error) {
       if (!mounted) return;
@@ -206,13 +202,10 @@ class _ReceiptPageState extends State<ReceiptPage> {
   }
 
   Future<void> _importStylePresetFromImage() async {
-    String? path;
     try {
-      path = await _fileBridge.pickQrImage();
-      if (path == null) return;
-      final preset = _styleTransfer.decodePresetFromImage(
-        await File(path).readAsBytes(),
-      );
+      final picked = await _imageBridge.pickImage();
+      if (picked == null) return;
+      final preset = _styleTransfer.decodePresetFromImage(picked.bytes);
       if (!mounted) return;
 
       final confirmed = await showDialog<bool>(
@@ -267,16 +260,8 @@ class _ReceiptPageState extends State<ReceiptPage> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-    } finally {
-      if (path != null && Platform.isAndroid) {
-        try {
-          final file = File(path);
-          if (await file.exists()) await file.delete();
-        } catch (_) {}
-      }
     }
   }
-
   Future<void> _showStylePresets() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -401,7 +386,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
           .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
           .trim();
       final fileName = '${safeTitle.isEmpty ? '小票' : safeTitle}-小票.png';
-      final saved = await _fileBridge.exportImage(
+      final saved = await _imageBridge.exportImage(
         fileName: fileName,
         bytes: bytes,
       );
