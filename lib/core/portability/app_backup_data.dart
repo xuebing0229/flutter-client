@@ -306,6 +306,7 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
+  json['saleClientNames'] ??= <String, dynamic>{};
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
   return json;
@@ -538,6 +539,7 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
       for (final soldAt in product.saleRecords)
         soldAt.toUtc().toIso8601String(),
     ],
+    'saleClientNames': product.saleClientNames,
     'archivedAt': product.archivedAt?.toUtc().toIso8601String(),
     'isArchived': product.isArchived,
     'isPinned': product.isPinned,
@@ -614,6 +616,10 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       for (final item in _asList(json['saleRecords'], 'product.saleRecords'))
         _asDateTime(item, 'product.saleRecords'),
     ],
+    saleClientNames: _asStringMap(
+      json['saleClientNames'] ?? const <String, dynamic>{},
+      'product.saleClientNames',
+    ),
     archivedAt: _asNullableDateTime(json['archivedAt'], 'product.archivedAt'),
     isArchived: _asBool(json['isArchived'], 'product.isArchived'),
     isPinned: _asBool(json['isPinned'], 'product.isPinned'),
@@ -694,6 +700,22 @@ String _asString(Object? value, String field) {
 String _asText(Object? value, String field) {
   if (value is String) return value;
   throw FormatException('$field 缺失或格式无效。');
+}
+
+Map<String, String> _asStringMap(Object? value, String field) {
+  if (value is! Map) {
+    throw FormatException('$field 格式无效。');
+  }
+  final result = <String, String>{};
+  for (final entry in value.entries) {
+    final key = entry.key.toString();
+    final item = entry.value;
+    if (item is! String) {
+      throw FormatException('$field 格式无效。');
+    }
+    result[key] = item;
+  }
+  return result;
 }
 
 String? _asNullableString(Object? value, String field) {
