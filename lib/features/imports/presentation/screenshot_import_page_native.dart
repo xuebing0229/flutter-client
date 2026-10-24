@@ -16,6 +16,7 @@ import '../data/screenshot_ocr_diagnostic.dart';
 import '../data/screenshot_import_history.dart';
 import '../domain/screenshot_duplicate_review.dart';
 import '../domain/screenshot_import_draft.dart';
+import '../domain/screenshot_import_kind_detection.dart';
 import '../domain/screenshot_import_rules.dart';
 import '../domain/screenshot_layout_parser.dart';
 import '../domain/screenshot_mihuashi_badge.dart';
@@ -65,12 +66,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   bool _releaseTemporaryImagesWhenIdle = false;
   String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
+  late ScreenshotImportKind _kind;
 
-  bool get _products => widget.kind == ScreenshotImportKind.products;
+  bool get _products => _kind == ScreenshotImportKind.products;
 
   @override
   void initState() {
     super.initState();
+    _kind = widget.kind;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_resumeOrSelectScreenshot());
     });
@@ -104,6 +107,48 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     );
   }
 
+  Future<bool> _offerImportKindSwitch(
+    ScreenshotImportContentKind detected,
+  ) async {
+    final target = detected == ScreenshotImportContentKind.orders
+        ? ScreenshotImportKind.orders
+        : ScreenshotImportKind.products;
+    if (target == _kind) return false;
+
+    final targetLabel =
+        target == ScreenshotImportKind.orders ? '排单' : '成品';
+    final currentLabel =
+        _kind == ScreenshotImportKind.orders ? '排单' : '成品';
+    final existing = _rows.length;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('检测到更像$targetLabel截图'),
+        content: Text(
+          '当前正在$currentLabel导入，但这张截图具有明确的$targetLabel页面特征。'
+          "${existing == 0 ? '' : '切换后会清空当前预览中的 $existing 条记录。'}"
+          '是否切换到$targetLabel导入并继续处理这批截图？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('继续按$currentLabel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('切换到$targetLabel'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || accepted != true) return false;
+    setState(() {
+      _kind = target;
+      _rows.clear();
+      _ocrDiagnostics.clear();
+    });
+    return true;
+  }
   Future<void> _copyOcrDiagnostic() async {
     if (_ocrDiagnostics.isEmpty) {
       _message('请先选择截图并等待识别结束');
@@ -199,6 +244,19 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           final recognized = await _ocr.recognize(image.path);
           ocrTimer.stop();
           final parsedForReport = <String>[];
+          final detectedKind = detectScreenshotImportContentKind(
+            lines: recognized.lines,
+            imageWidth: recognized.width,
+            imageHeight: recognized.height,
+          );
+          final currentContentKind = _products
+              ? ScreenshotImportContentKind.products
+              : ScreenshotImportContentKind.orders;
+          if (detectedKind != null && detectedKind != currentContentKind) {
+            await _offerImportKindSwitch(detectedKind);
+            if (!mounted) return;
+          }
+
           final guess = preselectImportPlatform(
             recognized.lines.map((line) => line.text),
           );
