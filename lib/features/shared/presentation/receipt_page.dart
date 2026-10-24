@@ -73,14 +73,110 @@ class ReceiptData {
   final double total;
 }
 
-class ReceiptPage extends StatefulWidget {
-  const ReceiptPage({
-    required this.data,
-    required this.styleStore,
-    super.key,
+
+class AnnualReceiptEntry {
+  const AnnualReceiptEntry({
+    required this.title,
+    required this.platform,
+    required this.amount,
+    required this.date,
   });
 
-  final ReceiptData data;
+  final String title;
+  final String platform;
+  final double amount;
+  final DateTime date;
+}
+
+class AnnualReceiptData {
+  const AnnualReceiptData({
+    required this.clientName,
+    required this.year,
+    required this.entries,
+  });
+
+  factory AnnualReceiptData.fromOrders({
+    required String clientName,
+    required int year,
+    required Iterable<QueueOrder> orders,
+  }) {
+    final normalizedClient = clientName.trim().toLowerCase();
+    final entries = <AnnualReceiptEntry>[];
+
+    for (final order in orders) {
+      final date = order.settledAt ?? order.completedAt;
+      if (date == null ||
+          date.year != year ||
+          order.clientName.trim().toLowerCase() != normalizedClient) {
+        continue;
+      }
+      entries.add(
+        AnnualReceiptEntry(
+          title: order.title,
+          platform: order.platform.label,
+          amount: annualReceiptAmountForOrder(order),
+          date: date,
+        ),
+      );
+    }
+
+    entries.sort((left, right) {
+      final byDate = left.date.compareTo(right.date);
+      if (byDate != 0) return byDate;
+      return left.title.compareTo(right.title);
+    });
+
+    return AnnualReceiptData(
+      clientName: clientName.trim(),
+      year: year,
+      entries: List<AnnualReceiptEntry>.unmodifiable(entries),
+    );
+  }
+
+  final String clientName;
+  final int year;
+  final List<AnnualReceiptEntry> entries;
+
+  double get total =>
+      entries.fold<double>(0, (sum, entry) => sum + entry.amount);
+}
+
+double annualReceiptAmountForOrder(QueueOrder order) {
+  if (order.archiveOutcome != OrderArchiveOutcome.terminated) {
+    return order.originalTotal;
+  }
+
+  final refund = order.customRefundAmount;
+  if (refund != null) {
+    return (order.originalTotal - refund).clamp(0, double.infinity).toDouble();
+  }
+
+  final settlementNode = order.settlementNode;
+  if (settlementNode != null) {
+    final ratio = settlementNode.progressPercent.clamp(0, 100) / 100;
+    return order.originalTotal * ratio;
+  }
+
+  return order.originalTotal;
+}
+
+class ReceiptPage extends StatefulWidget {
+  const ReceiptPage({
+    required ReceiptData data,
+    required this.styleStore,
+    super.key,
+  })  : data = data,
+        annualData = null;
+
+  const ReceiptPage.annual({
+    required AnnualReceiptData data,
+    required this.styleStore,
+    super.key,
+  })  : data = null,
+        annualData = data;
+
+  final ReceiptData? data;
+  final AnnualReceiptData? annualData;
   final ReceiptStyleStore styleStore;
 
   @override
@@ -384,7 +480,10 @@ class _ReceiptPageState extends State<ReceiptPage> {
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) throw StateError('无法生成小票图片');
       final bytes = data.buffer.asUint8List();
-      final safeTitle = widget.data.title
+      final documentTitle = widget.annualData == null
+          ? widget.data!.title
+          : '${widget.annualData!.clientName}-${widget.annualData!.year}年度';
+      final safeTitle = documentTitle
           .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
           .trim();
       final fileName = '${safeTitle.isEmpty ? '小票' : safeTitle}-小票.png';
@@ -487,12 +586,19 @@ class _ReceiptPageState extends State<ReceiptPage> {
               Center(
                 child: RepaintBoundary(
                   key: _receiptKey,
-                  child: _ReceiptPaper(
-                    data: widget.data,
-                    fontColor: Color(style.fontColorValue),
-                    backgroundImage: backgroundImage,
-                    transparentBackground: _transparentBackground,
-                  ),
+                  child: widget.annualData == null
+                      ? _ReceiptPaper(
+                          data: widget.data!,
+                          fontColor: Color(style.fontColorValue),
+                          backgroundImage: backgroundImage,
+                          transparentBackground: _transparentBackground,
+                        )
+                      : _AnnualReceiptPaper(
+                          data: widget.annualData!,
+                          fontColor: Color(style.fontColorValue),
+                          backgroundImage: backgroundImage,
+                          transparentBackground: _transparentBackground,
+                        ),
                 ),
               ),
               const SizedBox(height: 18),
@@ -514,25 +620,22 @@ class _ReceiptPageState extends State<ReceiptPage> {
   }
 }
 
-class _ReceiptPaper extends StatelessWidget {
-  const _ReceiptPaper({
-    required this.data,
+
+class _ReceiptPaperFrame extends StatelessWidget {
+  const _ReceiptPaperFrame({
     required this.fontColor,
     required this.backgroundImage,
     required this.transparentBackground,
+    required this.child,
   });
 
-  final ReceiptData data;
   final Color fontColor;
   final ImageProvider? backgroundImage;
   final bool transparentBackground;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final pricedBase = applyPricingAdjustments(
-      data.basePrice,
-      data.pricingAdjustments,
-    );
     return Container(
       width: 360,
       constraints: const BoxConstraints(minHeight: 500),
@@ -563,7 +666,172 @@ class _ReceiptPaper extends StatelessWidget {
           height: 1.45,
           fontFamily: 'monospace',
         ),
-        child: Column(
+        child: child,
+      ),
+    );
+  }
+}
+
+class _AnnualReceiptPaper extends StatelessWidget {
+  const _AnnualReceiptPaper({
+    required this.data,
+    required this.fontColor,
+    required this.backgroundImage,
+    required this.transparentBackground,
+  });
+
+  final AnnualReceiptData data;
+  final Color fontColor;
+  final ImageProvider? backgroundImage;
+  final bool transparentBackground;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ReceiptPaperFrame(
+      fontColor: fontColor,
+      backgroundImage: backgroundImage,
+      transparentBackground: transparentBackground,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '冒险者公会',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: fontColor,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${data.year} 年度业务小票',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 18),
+          _DashedDivider(color: fontColor),
+          const SizedBox(height: 14),
+          _ReceiptTextRow(label: '单主', value: data.clientName),
+          _ReceiptTextRow(label: '业务数', value: '${data.entries.length} 单'),
+          const SizedBox(height: 12),
+          for (var index = 0; index < data.entries.length; index++) ...[
+            if (index > 0) const SizedBox(height: 13),
+            _AnnualReceiptEntryRow(
+              index: index + 1,
+              entry: data.entries[index],
+            ),
+          ],
+          const SizedBox(height: 16),
+          _DashedDivider(color: fontColor),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '全年总额',
+                  style: TextStyle(
+                    color: fontColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                '¥ ${_money(data.total)}',
+                style: TextStyle(
+                  color: fontColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Text(
+            'THANK YOU',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: fontColor,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnnualReceiptEntryRow extends StatelessWidget {
+  const _AnnualReceiptEntryRow({
+    required this.index,
+    required this.entry,
+  });
+
+  final int index;
+  final AnnualReceiptEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 28,
+              child: Text(index.toString().padLeft(2, '0')),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                entry.title,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Padding(
+          padding: const EdgeInsets.only(left: 34),
+          child: Row(
+            children: [
+              Expanded(child: Text(entry.platform)),
+              Text('¥ ${_money(entry.amount)}'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReceiptPaper extends StatelessWidget {
+  const _ReceiptPaper({
+    required this.data,
+    required this.fontColor,
+    required this.backgroundImage,
+    required this.transparentBackground,
+  });
+
+  final ReceiptData data;
+  final Color fontColor;
+  final ImageProvider? backgroundImage;
+  final bool transparentBackground;
+
+  @override
+  Widget build(BuildContext context) {
+    final pricedBase = applyPricingAdjustments(
+      data.basePrice,
+      data.pricingAdjustments,
+    );
+    return _ReceiptPaperFrame(
+      fontColor: fontColor,
+      backgroundImage: backgroundImage,
+      transparentBackground: transparentBackground,
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
@@ -644,7 +912,6 @@ class _ReceiptPaper extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }
