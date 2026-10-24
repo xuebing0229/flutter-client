@@ -50,7 +50,7 @@ class ProductStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void markSold(String id, {DateTime? soldAt}) {
+  void markSold(String id, {DateTime? soldAt, String? clientName}) {
     final index = _products.indexWhere((product) => product.id == id);
     if (index == -1) return;
 
@@ -64,12 +64,23 @@ class ProductStore extends ChangeNotifier {
         ? 1
         : product.soldCount + 1;
 
+    final timestamp = soldAt ?? DateTime.now();
+    final normalizedClient = clientName?.trim() ?? '';
+    final nextSaleClientNames = <String, String>{
+      ...product.saleClientNames,
+    };
+    if (normalizedClient.isNotEmpty) {
+      nextSaleClientNames[timestamp.toUtc().toIso8601String()] =
+          normalizedClient;
+    }
+
     _products[index] = product.copyWith(
       soldCount: nextSoldCount,
       saleRecords: [
         ...product.saleRecords,
-        soldAt ?? DateTime.now(),
+        timestamp,
       ],
+      saleClientNames: nextSaleClientNames,
     );
     notifyListeners();
   }
