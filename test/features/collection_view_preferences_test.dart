@@ -10,6 +10,8 @@ void main() {
       productCardView: false,
       productOverviewView: true,
       productOverviewColumns: 4,
+      orderSortMode: 'deadline',
+      productSortMode: 'soldCount',
     );
 
     final restored =
@@ -40,15 +42,15 @@ void main() {
     expect(restored.productOverviewColumns, 1);
   });
 
-  test('invalid shared view settings are rejected', () {
-    expect(
-      () => const CollectionViewPreferences().applySettings(
-        const <String, dynamic>{
-          CollectionViewPreferences.orderOverviewViewKey: 'yes',
-        },
-      ),
-      throwsFormatException,
+  test('invalid booleans keep current value but invalid columns are rejected', () {
+    const source = CollectionViewPreferences(orderOverviewView: true);
+    final restored = source.applySettings(
+      const <String, dynamic>{
+        CollectionViewPreferences.orderOverviewViewKey: 'yes',
+      },
     );
+    expect(restored.orderOverviewView, isTrue);
+
     expect(
       () => const CollectionViewPreferences().applySettings(
         const <String, dynamic>{
@@ -57,5 +59,17 @@ void main() {
       ),
       throwsFormatException,
     );
+  });
+
+  test('legacy order sort and invalid sort values normalize in one place', () {
+    final restored = const CollectionViewPreferences().applySettings(
+      const <String, dynamic>{
+        CollectionViewPreferences.orderSortModeKey: 'remainingTime',
+        CollectionViewPreferences.productSortModeKey: 'not-a-mode',
+      },
+    );
+
+    expect(restored.orderSortMode, 'deadline');
+    expect(restored.productSortMode, 'defaultOrder');
   });
 }
