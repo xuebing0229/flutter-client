@@ -365,6 +365,23 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
         builder: (context, _) {
           final pairingReady =
               widget.syncCoordinator.pairingPayload?.isNotEmpty == true;
+          final currentDevice = widget.syncCoordinator.accountStore
+              .syncSnapshot?.devices[widget.syncCoordinator.deviceId];
+
+          bool isCurrentInstallationResidue(AccountDevice device) {
+            final currentInstallationId = currentDevice?.installationId?.trim();
+            final candidateInstallationId = device.installationId?.trim();
+            if (currentInstallationId != null &&
+                currentInstallationId.isNotEmpty &&
+                candidateInstallationId == currentInstallationId) {
+              return true;
+            }
+            final currentTransportId = currentDevice?.syncTransportId?.trim();
+            final candidateTransportId = device.syncTransportId?.trim();
+            return currentTransportId != null &&
+                currentTransportId.isNotEmpty &&
+                candidateTransportId == currentTransportId;
+          }
 
           return ListView(
             padding: AppLayoutSpacing.pageScrollPadding(
@@ -403,8 +420,16 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                                 leading: const Icon(
                                   Icons.devices_other_rounded,
                                 ),
-                                title: Text(device.name),
-                                subtitle: Text(device.platform),
+                                title: Text(
+                                  isCurrentInstallationResidue(device)
+                                      ? '${device.name}（本机旧安装）'
+                                      : device.name,
+                                ),
+                                subtitle: Text(
+                                  isCurrentInstallationResidue(device)
+                                      ? '${device.platform} · 当前这台设备的历史残留'
+                                      : device.platform,
+                                ),
                                 trailing: OutlinedButton(
                                   onPressed: _cleaningRevokedResidue
                                       ? null
