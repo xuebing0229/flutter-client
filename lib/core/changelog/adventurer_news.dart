@@ -358,6 +358,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '截图识别结构化回归修复',
     description: '修复新版米画师详情页在 OCR 漏掉小标题或截稿行时被误拆成多条记录的问题，不再把“已全额支付、上传稿件、验收节点、创作节点、工作板”等界面文案当作图名；保留新版工作板、节点文字和总额识别能力。添加设备页同时会把与当前安装身份一致的解绑残留标记为“本机旧安装”。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 203,
+    title: '截图导入类型误选保护',
+    description: '排单与成品继续共用同一套 PP-OCRv6 识别引擎，但会在解析前检查页面类型。成品导入遇到明确的米画师/画加排单详情页时提示切换到排单导入；排单导入遇到明确的成品橱窗页时也会提示切换。用户可选择继续当前类型，且成品解析器不再把“已全额支付、验收节点、上传稿件”等排单界面文案当作成品标题。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
