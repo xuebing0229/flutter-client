@@ -6,6 +6,8 @@ class CollectionViewPreferences {
     this.productCardView = false,
     this.productOverviewView = false,
     this.productOverviewColumns = 3,
+    this.orderSortMode = 'defaultOrder',
+    this.productSortMode = 'defaultOrder',
   });
 
   static const orderCardViewKey = 'orderCardView';
@@ -14,6 +16,8 @@ class CollectionViewPreferences {
   static const productCardViewKey = 'productCardView';
   static const productOverviewViewKey = 'productOverviewView';
   static const productOverviewColumnsKey = 'productOverviewColumns';
+  static const orderSortModeKey = 'orderSortMode';
+  static const productSortModeKey = 'productSortMode';
 
   final bool orderCardView;
   final bool orderOverviewView;
@@ -21,6 +25,8 @@ class CollectionViewPreferences {
   final bool productCardView;
   final bool productOverviewView;
   final int productOverviewColumns;
+  final String orderSortMode;
+  final String productSortMode;
 
   Map<String, dynamic> toSettings() => <String, dynamic>{
         orderCardViewKey: orderCardView,
@@ -29,6 +35,8 @@ class CollectionViewPreferences {
         productCardViewKey: productCardView,
         productOverviewViewKey: productOverviewView,
         productOverviewColumnsKey: productOverviewColumns,
+        orderSortModeKey: orderSortMode,
+        productSortModeKey: productSortMode,
       };
 
   CollectionViewPreferences applySettings(Map<String, dynamic> settings) {
@@ -65,6 +73,14 @@ class CollectionViewPreferences {
         productOverviewColumns,
         '同步成品总概览列数格式无效。',
       ),
+      orderSortMode: _orderSortValue(
+        settings[orderSortModeKey],
+        orderSortMode,
+      ),
+      productSortMode: _productSortValue(
+        settings[productSortModeKey],
+        productSortMode,
+      ),
     );
   }
 
@@ -75,6 +91,8 @@ class CollectionViewPreferences {
     bool? productCardView,
     bool? productOverviewView,
     int? productOverviewColumns,
+    String? orderSortMode,
+    String? productSortMode,
   }) {
     return CollectionViewPreferences(
       orderCardView: orderCardView ?? this.orderCardView,
@@ -86,6 +104,14 @@ class CollectionViewPreferences {
       productOverviewColumns: _normalizeColumns(
         productOverviewColumns ?? this.productOverviewColumns,
       ),
+      orderSortMode: _orderSortValue(
+        orderSortMode,
+        this.orderSortMode,
+      ),
+      productSortMode: _productSortValue(
+        productSortMode,
+        this.productSortMode,
+      ),
     );
   }
 
@@ -96,10 +122,7 @@ class CollectionViewPreferences {
   ) {
     final raw = settings[key];
     if (raw == null) return fallback;
-    if (raw is! bool) {
-      throw FormatException('同步视图设置 $key 格式无效。');
-    }
-    return raw;
+    return raw is bool ? raw : fallback;
   }
 
   static int _columnsValue(
@@ -118,6 +141,25 @@ class CollectionViewPreferences {
 
   static int _normalizeColumns(int value) => value < 1 ? 1 : value;
 
+  static String _orderSortValue(Object? raw, String fallback) {
+    return switch (raw) {
+      'defaultOrder' => 'defaultOrder',
+      'income' => 'income',
+      'deadline' || 'remainingTime' => 'deadline',
+      _ => fallback,
+    };
+  }
+
+  static String _productSortValue(Object? raw, String fallback) {
+    return switch (raw) {
+      'defaultOrder' => 'defaultOrder',
+      'income' => 'income',
+      'soldCount' => 'soldCount',
+      _ => fallback,
+    };
+  }
+
+
   @override
   bool operator ==(Object other) {
     return other is CollectionViewPreferences &&
@@ -126,7 +168,9 @@ class CollectionViewPreferences {
         other.orderOverviewColumns == orderOverviewColumns &&
         other.productCardView == productCardView &&
         other.productOverviewView == productOverviewView &&
-        other.productOverviewColumns == productOverviewColumns;
+        other.productOverviewColumns == productOverviewColumns &&
+        other.orderSortMode == orderSortMode &&
+        other.productSortMode == productSortMode;
   }
 
   @override
@@ -137,5 +181,7 @@ class CollectionViewPreferences {
         productCardView,
         productOverviewView,
         productOverviewColumns,
+        orderSortMode,
+        productSortMode,
       );
 }
