@@ -96,15 +96,17 @@ class AnnualReceiptData {
     required this.entries,
   });
 
-  factory AnnualReceiptData.fromOrders({
+  factory AnnualReceiptData.fromSources({
     required String clientName,
     required int year,
     required Iterable<QueueOrder> orders,
+    required Iterable<FinishedProduct> products,
   }) {
     final normalizedClient = clientName.trim().toLowerCase();
     final entries = <AnnualReceiptEntry>[];
 
     for (final order in orders) {
+      if (!order.isArchived) continue;
       final date = order.settledAt ?? order.completedAt;
       if (date == null ||
           date.year != year ||
@@ -121,6 +123,26 @@ class AnnualReceiptData {
       );
     }
 
+    for (final product in products) {
+      if (!product.isArchived) continue;
+      for (final soldAt in product.saleRecords) {
+        if (soldAt.year != year) continue;
+        final saleClient = product.clientNameForSale(soldAt);
+        if (saleClient == null ||
+            saleClient.trim().toLowerCase() != normalizedClient) {
+          continue;
+        }
+        entries.add(
+          AnnualReceiptEntry(
+            title: product.title,
+            platform: product.platform.label,
+            amount: product.originalTotal,
+            date: soldAt,
+          ),
+        );
+      }
+    }
+
     entries.sort((left, right) {
       final byDate = left.date.compareTo(right.date);
       if (byDate != 0) return byDate;
@@ -131,6 +153,19 @@ class AnnualReceiptData {
       clientName: clientName.trim(),
       year: year,
       entries: List<AnnualReceiptEntry>.unmodifiable(entries),
+    );
+  }
+
+  factory AnnualReceiptData.fromOrders({
+    required String clientName,
+    required int year,
+    required Iterable<QueueOrder> orders,
+  }) {
+    return AnnualReceiptData.fromSources(
+      clientName: clientName,
+      year: year,
+      orders: orders,
+      products: const <FinishedProduct>[],
     );
   }
 
