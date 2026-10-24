@@ -54,10 +54,11 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
   }
 
   DateTime? _productDate(FinishedProduct product) {
-    if (product.archivedAt != null) return product.archivedAt;
-    if (product.saleRecords.isEmpty) return null;
-    final records = [...product.saleRecords]..sort();
-    return records.last;
+    if (product.saleRecords.isNotEmpty) {
+      final records = [...product.saleRecords]..sort();
+      return records.last;
+    }
+    return product.archivedAt;
   }
 
   bool _matchesRange(DateTime? value) {
