@@ -721,14 +721,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   label: '售出状态',
                   value: product.saleStatusLabel,
                 ),
-                if (product.saleType == ProductSaleType.multiple)
+                if (product.saleRecords.isNotEmpty)
                   _SaleHistoryDetailRow(
                     count: product.saleRecords.length,
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => ProductSaleHistoryPage(
-                            product: product,
+                            store: widget.store,
+                            productId: product.id,
                           ),
                         ),
                       );
