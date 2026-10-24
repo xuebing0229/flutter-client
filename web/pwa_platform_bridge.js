@@ -102,6 +102,49 @@
     }
   };
 
+  window.adventurersGuildPickImage = () =>
+    new Promise((resolve, reject) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png,image/jpeg,image/webp';
+      input.style.display = 'none';
+
+      const cleanup = () => {
+        input.remove();
+      };
+
+      input.onchange = async () => {
+        try {
+          const file = input.files && input.files[0];
+          if (!file) {
+            cleanup();
+            resolve('');
+            return;
+          }
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          cleanup();
+          resolve(
+            JSON.stringify({
+              name: file.name || 'image.png',
+              data: bytesToBase64(bytes),
+            }),
+          );
+        } catch (error) {
+          cleanup();
+          reject(error);
+        }
+      };
+
+      input.oncancel = () => {
+        cleanup();
+        resolve('');
+      };
+
+      document.body.appendChild(input);
+      input.click();
+    });
+
+
   window.adventurersGuildAssetRead = async (key) => {
     const db = await openAssetDb();
     const transaction = db.transaction(STORE_NAME, 'readonly');
