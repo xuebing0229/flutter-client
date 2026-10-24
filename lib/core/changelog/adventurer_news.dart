@@ -363,6 +363,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '截图导入类型误选保护',
     description: '排单与成品继续共用同一套 PP-OCRv6 识别引擎，但会在解析前检查页面类型。成品导入遇到明确的米画师/画加排单详情页时提示切换到排单导入；排单导入遇到明确的成品橱窗页时也会提示切换。用户可选择继续当前类型，且成品解析器不再把“已全额支付、验收节点、上传稿件”等排单界面文案当作成品标题。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 204,
+    title: '成品总概览与小票预设分享',
+    description: '成品新增与排单一致的列表、卡片、总概览三视图，总概览只显示平台、图名、售卖方式与售出数量，并与排单共用总概览网格逻辑；统计页月度收入标题与已收入/待收入排版统一；小票标题区只显示平台，并支持把字体颜色与自定义背景一起封装进分享图片，在样式预设中从原图导入恢复。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
