@@ -40,6 +40,7 @@ import '../features/products/presentation/product_page.dart';
 import '../features/products/state/product_store.dart';
 import '../features/schedule/presentation/schedule_page.dart';
 import '../features/statistics/presentation/statistics_page.dart';
+import '../features/shared/domain/collection_view_preferences.dart';
 import '../features/shared/domain/receipt_style_store.dart';
 import '../features/shared/presentation/pricing_preset_page.dart';
 
@@ -808,8 +809,16 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   bool _ready = false;
   bool _busy = false;
   String _selectedTab = 'orders';
-  bool _orderCardView = false;
-  bool _productCardView = false;
+  CollectionViewPreferences _collectionViews =
+      const CollectionViewPreferences();
+
+  bool get _orderCardView => _collectionViews.orderCardView;
+  bool get _orderOverviewView => _collectionViews.orderOverviewView;
+  int get _orderOverviewColumns => _collectionViews.orderOverviewColumns;
+  bool get _productCardView => _collectionViews.productCardView;
+  bool get _productOverviewView => _collectionViews.productOverviewView;
+  int get _productOverviewColumns => _collectionViews.productOverviewColumns;
+
   String _orderSortMode = 'defaultOrder';
   String _productSortMode = 'defaultOrder';
   bool _desktopNavigationOpen = true;
@@ -1068,8 +1077,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         'feature.${entry.key}': entry.key == AppFeature.deadlineReminders.name
             ? _nativeDeadlineReminderPreference
             : entry.value,
-      'orderCardView': _orderCardView,
-      'productCardView': _productCardView,
+      ..._collectionViews.toSettings(),
       'orderSortMode': _orderSortMode,
       'productSortMode': _productSortMode,
       'desktopNavigationOpen': _desktopNavigationOpen,
@@ -1132,13 +1140,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     nextFeatures[AppFeature.deadlineReminders.name] = false;
     await widget.featureStore.applyJson(nextFeatures);
 
-    final orderCard = settings['orderCardView'];
-    final productCard = settings['productCardView'];
+    _collectionViews = _collectionViews.applySettings(settings);
     final orderSort = settings['orderSortMode'];
     final productSort = settings['productSortMode'];
     final desktopOpen = settings['desktopNavigationOpen'];
-    if (orderCard is bool) _orderCardView = orderCard;
-    if (productCard is bool) _productCardView = productCard;
     if (orderSort is String &&
         const {'defaultOrder', 'income', 'deadline'}.contains(orderSort)) {
       _orderSortMode = orderSort;
@@ -1212,7 +1217,26 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           syncCoordinator: _syncUi,
           cardView: _productCardView,
           onCardViewChanged: (value) {
-            setState(() => _productCardView = value);
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productCardView: value);
+            });
+            _scheduleSave();
+          },
+          overviewView: _productOverviewView,
+          onOverviewViewChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productOverviewView: value);
+            });
+            _scheduleSave();
+          },
+          overviewColumns: _productOverviewColumns,
+          onOverviewColumnsChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productOverviewColumns: value);
+            });
             _scheduleSave();
           },
           sortModeName: _productSortMode,
@@ -1247,7 +1271,26 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           syncCoordinator: _syncUi,
           cardView: _orderCardView,
           onCardViewChanged: (value) {
-            setState(() => _orderCardView = value);
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderCardView: value);
+            });
+            _scheduleSave();
+          },
+          overviewView: _orderOverviewView,
+          onOverviewViewChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderOverviewView: value);
+            });
+            _scheduleSave();
+          },
+          overviewColumns: _orderOverviewColumns,
+          onOverviewColumnsChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderOverviewColumns: value);
+            });
             _scheduleSave();
           },
           sortModeName: _orderSortMode,
