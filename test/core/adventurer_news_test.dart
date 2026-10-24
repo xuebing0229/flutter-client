@@ -212,4 +212,12 @@ void main() {
       ['截图导入类型误选保护'],
     );
   });
+
+  test('204 包含成品总概览与小票预设分享见闻', () {
+    final picked = newsBetweenBuilds(203, 204);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['成品总概览与小票预设分享'],
+    );
+  });
 }
