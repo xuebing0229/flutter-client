@@ -196,4 +196,12 @@ void main() {
       ['Android 新设备加入后台切换修复'],
     );
   });
+
+  test('202 包含截图识别结构化回归修复见闻', () {
+    final picked = newsBetweenBuilds(201, 202);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['截图识别结构化回归修复'],
+    );
+  });
 }
