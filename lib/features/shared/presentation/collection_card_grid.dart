@@ -128,6 +128,45 @@ class CollectionCardGrid extends StatelessWidget {
   }
 }
 
+/// Shared fixed-column overview grid used by collection summary views.
+///
+/// Order and product overview cards intentionally keep different inner
+/// content, but column count, spacing, scroll padding and aspect-ratio layout
+/// live here so the two collection pages cannot drift apart.
+class CollectionOverviewGrid extends StatelessWidget {
+  const CollectionOverviewGrid({
+    required this.itemCount,
+    required this.columns,
+    required this.childAspectRatio,
+    required this.itemBuilder,
+    super.key,
+  });
+
+  final int itemCount;
+  final int columns;
+  final double childAspectRatio;
+  final IndexedWidgetBuilder itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: AppLayoutSpacing.tabScrollPaddingWithFab(
+        left: 12,
+        top: 0,
+        right: 12,
+      ),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns < 1 ? 1 : columns,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: childAspectRatio,
+      ),
+      itemCount: itemCount,
+      itemBuilder: itemBuilder,
+    );
+  }
+}
+
 class _EqualHeightRow extends MultiChildRenderObjectWidget {
   const _EqualHeightRow({
     required this.spacing,
