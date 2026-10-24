@@ -353,6 +353,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: 'Android 新设备加入后台切换修复',
     description: '修复手机在首次加入账号时，为了把回应码交给电脑而短暂切到后台后，Android 拒绝重复启动普通同步服务，导致新设备会话被直接关闭、电脑随后确认回应码仍必然超时的问题。Syncthing 已运行时不再重复启动；如果核心确实在后台被系统停止，会保留本次加入会话并等待 App 回到前台后继续握手。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 202,
+    title: '截图识别结构化回归修复',
+    description: '修复新版米画师详情页在 OCR 漏掉小标题或截稿行时被误拆成多条记录的问题，不再把“已全额支付、上传稿件、验收节点、创作节点、工作板”等界面文案当作图名；保留新版工作板、节点文字和总额识别能力。添加设备页同时会把与当前安装身份一致的解绑残留标记为“本机旧安装”。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
