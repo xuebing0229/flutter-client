@@ -564,11 +564,20 @@ class _ProductPageState extends State<ProductPage> {
                       ),
                     )
                   : useOverviewView
-                      ? _ProductOverviewGrid(
-                          products: products,
+                      ? CollectionOverviewGrid(
+                          itemCount: products.length,
                           columns: widget.overviewColumns,
-                          onTap: _openProduct,
-                          onLongPress: _showQuickActions,
+                          childAspectRatio:
+                              ProductOverviewSummaryCard.aspectRatio,
+                          itemBuilder: (context, index) {
+                            final product = products[index];
+                            return ProductOverviewSummaryCard(
+                              product: product,
+                              onTap: () => _openProduct(product),
+                              onLongPress: () =>
+                                  _showQuickActions(product),
+                            );
+                          },
                         )
                       : useCardView
                       ? CollectionCardGrid(
@@ -625,46 +634,6 @@ class _ProductPageState extends State<ProductPage> {
                         ),
             ),
           ],
-        );
-      },
-    );
-  }
-}
-
-class _ProductOverviewGrid extends StatelessWidget {
-  const _ProductOverviewGrid({
-    required this.products,
-    required this.columns,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  final List<FinishedProduct> products;
-  final int columns;
-  final ValueChanged<FinishedProduct> onTap;
-  final ValueChanged<FinishedProduct> onLongPress;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: AppLayoutSpacing.tabScrollPaddingWithFab(
-        left: 12,
-        top: 0,
-        right: 12,
-      ),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns < 1 ? 1 : columns,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: ProductOverviewSummaryCard.aspectRatio,
-      ),
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final product = products[index];
-        return ProductOverviewSummaryCard(
-          product: product,
-          onTap: () => onTap(product),
-          onLongPress: () => onLongPress(product),
         );
       },
     );
