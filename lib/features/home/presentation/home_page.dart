@@ -96,6 +96,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   static const _orderOverviewViewSettingKey = 'orderOverviewView';
   static const _orderOverviewColumnsSettingKey = 'orderOverviewColumns';
   static const _productCardViewSettingKey = 'productCardView';
+  static const _productOverviewViewSettingKey = 'productOverviewView';
+  static const _productOverviewColumnsSettingKey = 'productOverviewColumns';
   static const _pricingPresetsSettingKey = 'pricingAdjustmentPresets';
   static const _receiptStyleSettingKey = 'receiptStyle';
   static const _orderSortModeSettingKey = 'orderSortMode';
@@ -109,6 +111,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _orderOverviewView = false;
   int _orderOverviewColumns = 3;
   bool _productCardView = false;
+  bool _productOverviewView = false;
+  int _productOverviewColumns = 3;
   String _orderSortMode = 'defaultOrder';
   String _productSortMode = 'defaultOrder';
   bool _desktopNavigationOpen = true;
@@ -916,6 +920,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _orderOverviewViewSettingKey: _orderOverviewView,
       _orderOverviewColumnsSettingKey: _orderOverviewColumns,
       _productCardViewSettingKey: _productCardView,
+      _productOverviewViewSettingKey: _productOverviewView,
+      _productOverviewColumnsSettingKey: _productOverviewColumns,
       _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
       _receiptStyleSettingKey: _receiptStyleStore.toJson(),
       _orderSortModeSettingKey: _orderSortMode,
@@ -1044,6 +1050,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         nextProductCardView != _productCardView) {
       _productCardView = nextProductCardView;
       layoutChanged = true;
+    }
+    final nextProductOverviewView =
+        settings[_productOverviewViewSettingKey];
+    if (nextProductOverviewView is bool &&
+        nextProductOverviewView != _productOverviewView) {
+      _productOverviewView = nextProductOverviewView;
+      layoutChanged = true;
+    }
+    final nextProductOverviewColumns =
+        settings[_productOverviewColumnsSettingKey];
+    if (nextProductOverviewColumns is num &&
+        nextProductOverviewColumns.isFinite) {
+      final rounded = nextProductOverviewColumns.round();
+      final normalized = rounded < 1 ? 1 : rounded;
+      if (normalized != _productOverviewColumns) {
+        _productOverviewColumns = normalized;
+        layoutChanged = true;
+      }
+    } else if (nextProductOverviewColumns != null) {
+      throw const FormatException('同步成品总概览列数格式无效。');
     }
     final nextOrderSortMode = _normalizeOrderSortMode(
       settings[_orderSortModeSettingKey],
@@ -1527,6 +1553,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _syncCoordinator.notifySettingsChanged();
   }
 
+  void _setProductOverviewView(bool value) {
+    if (_productOverviewView == value) return;
+    setState(() {
+      _productOverviewView = value;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _setProductOverviewColumns(int value) {
+    final normalized = value < 1 ? 1 : value;
+    if (_productOverviewColumns == normalized) return;
+    setState(() {
+      _productOverviewColumns = normalized;
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
   void _setOrderSortMode(String value) {
     if (_orderSortMode == value) return;
     setState(() {
@@ -1729,6 +1776,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             syncCoordinator: _syncCoordinatorView,
             cardView: _productCardView,
             onCardViewChanged: _setProductCardView,
+            overviewView: _productOverviewView,
+            onOverviewViewChanged: _setProductOverviewView,
+            overviewColumns: _productOverviewColumns,
+            onOverviewColumnsChanged: _setProductOverviewColumns,
             sortModeName: _productSortMode,
             onSortModeChanged: _setProductSortMode,
           ),
