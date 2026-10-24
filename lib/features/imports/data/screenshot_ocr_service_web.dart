@@ -16,6 +16,8 @@ class ScreenshotOcrService {
 
   bool get supported => true;
 
+  String get engineLabel => '官方 PaddleOCR.js PP-OCRv6 Small';
+
   Future<String?> lastNativeCrashReport() async => null;
 
   Future<void> release() async {
