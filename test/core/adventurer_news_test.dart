@@ -204,4 +204,12 @@ void main() {
       ['截图识别结构化回归修复'],
     );
   });
+
+  test('203 包含截图导入类型误选保护见闻', () {
+    final picked = newsBetweenBuilds(202, 203);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['截图导入类型误选保护'],
+    );
+  });
 }
