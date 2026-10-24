@@ -31,7 +31,6 @@ import '../features/orders/data/node_presets.dart';
 import '../features/orders/data/order_reference_image_store_web.dart';
 import '../features/orders/domain/queue_order.dart';
 import '../features/orders/presentation/add_order_page.dart';
-import '../features/orders/presentation/node_preset_page.dart';
 import '../features/orders/presentation/order_detail_page.dart';
 import '../features/orders/presentation/order_queue_page.dart';
 import '../features/orders/state/order_store.dart';
@@ -42,7 +41,8 @@ import '../features/schedule/presentation/schedule_page.dart';
 import '../features/statistics/presentation/statistics_page.dart';
 import '../features/shared/domain/collection_view_preferences.dart';
 import '../features/shared/domain/receipt_style_store.dart';
-import '../features/shared/presentation/pricing_preset_page.dart';
+import '../features/shared/presentation/preset_center_page.dart';
+import '../features/shared/presentation/receipt_center_page.dart';
 
 Set<String> _desktopPetAssetPaths(Object? rawManifest) {
   if (rawManifest == null) return const <String>{};
@@ -1770,19 +1770,26 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.account_tree_outlined),
-                title: const Text('节点预设'),
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('节点＆加价预设'),
                 onTap: () => _openTool(
                   context,
-                  NodePresetPage(store: _nodePresetStore),
+                  PresetCenterPage(
+                    nodePresetStore: _nodePresetStore,
+                    pricingPresetStore: _pricingPresetStore,
+                  ),
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.calculate_outlined),
-                title: const Text('加价预设'),
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('生成小票'),
                 onTap: () => _openTool(
                   context,
-                  PricingPresetPage(store: _pricingPresetStore),
+                  ReceiptCenterPage(
+                    orderStore: _orderStore,
+                    productStore: _productStore,
+                    receiptStyleStore: _receiptStyleStore,
+                  ),
                 ),
               ),
               ListTile(
