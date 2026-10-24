@@ -384,8 +384,10 @@ class _ProductPageState extends State<ProductPage> {
       ]),
       builder: (context, _) {
         final products = _visibleProducts();
+        final useOverviewView =
+            widget.featureStore.viewSwitch && widget.overviewView;
         final useCardView =
-            widget.featureStore.viewSwitch && widget.cardView;
+            widget.featureStore.viewSwitch && widget.cardView && !useOverviewView;
 
         return Column(
           children: [
@@ -417,48 +419,141 @@ class _ProductPageState extends State<ProductPage> {
             if (widget.featureStore.sorting ||
                 widget.featureStore.viewSwitch)
               CollectionToolbar(
-              title: '成品',
-              count: products.length,
-              helpMessage: '长按卡片，可快速进行置顶、归档、删除操作',
-              sortControl: widget.featureStore.sorting
-                  ? PopupMenuButton<_ProductSortMode>(
-                tooltip: '选择排序方式',
-                initialValue: _sortMode,
-                onSelected: (value) {
-                  widget.onSortModeChanged(value.name);
-                },
-                itemBuilder: (context) {
-                  return [
-                    for (final mode in _ProductSortMode.values)
-                      PopupMenuItem<_ProductSortMode>(
-                        value: mode,
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 28,
-                              child: _sortMode == mode
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      size: 19,
-                                    )
-                                  : null,
-                            ),
-                            Expanded(child: Text(mode.label)),
-                          ],
+                title: '成品',
+                count: products.length,
+                helpMessage: '长按卡片，可快速进行置顶、归档、删除操作',
+                sortControl: widget.featureStore.sorting
+                    ? PopupMenuButton<_ProductSortMode>(
+                        tooltip: '选择排序方式',
+                        initialValue: _sortMode,
+                        onSelected: (value) {
+                          widget.onSortModeChanged(value.name);
+                        },
+                        itemBuilder: (context) {
+                          return [
+                            for (final mode in _ProductSortMode.values)
+                              PopupMenuItem<_ProductSortMode>(
+                                value: mode,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 28,
+                                      child: _sortMode == mode
+                                          ? const Icon(
+                                              Icons.check_rounded,
+                                              size: 19,
+                                            )
+                                          : null,
+                                    ),
+                                    Expanded(child: Text(mode.label)),
+                                  ],
+                                ),
+                              ),
+                          ];
+                        },
+                        icon: const Icon(Icons.sort_rounded),
+                      )
+                    : null,
+                cardView: widget.cardView,
+                viewControl: widget.featureStore.viewSwitch
+                    ? PopupMenuButton<String>(
+                        tooltip: '切换视图',
+                        initialValue: useOverviewView
+                            ? 'overview'
+                            : useCardView
+                                ? 'card'
+                                : 'list',
+                        onSelected: (value) {
+                          if (value == 'overview') {
+                            widget.onCardViewChanged(false);
+                            widget.onOverviewViewChanged?.call(true);
+                          } else if (value == 'card') {
+                            widget.onOverviewViewChanged?.call(false);
+                            widget.onCardViewChanged(true);
+                          } else {
+                            widget.onOverviewViewChanged?.call(false);
+                            widget.onCardViewChanged(false);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'list',
+                            child: Text('列表视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'card',
+                            child: Text('卡片视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'overview',
+                            child: Text('总概览视图'),
+                          ),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                useOverviewView
+                                    ? Icons.view_compact_alt_rounded
+                                    : useCardView
+                                        ? Icons.grid_view_rounded
+                                        : Icons.view_agenda_outlined,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                useOverviewView
+                                    ? '总概览'
+                                    : useCardView
+                                        ? '卡片视图'
+                                        : '列表视图',
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.arrow_drop_down_rounded,
+                                size: 20,
+                              ),
+                            ],
+                          ),
                         ),
+                      )
+                    : null,
+              ),
+            if (useOverviewView)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    const Text('每行'),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 44,
+                      child: TextFormField(
+                        controller: _overviewColumnsController,
+                        focusNode: _overviewColumnsFocusNode,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                        ),
+                        onChanged: (raw) {
+                          final parsed = int.tryParse(raw.trim());
+                          if (parsed == null) return;
+                          widget.onOverviewColumnsChanged
+                              ?.call(parsed < 1 ? 1 : parsed);
+                        },
                       ),
-                  ];
-                },
-                icon: const Icon(Icons.sort_rounded),
-              )
-                  : null,
-              cardView: widget.cardView,
-              onToggleView: widget.featureStore.viewSwitch
-                  ? () {
-                      widget.onCardViewChanged(!widget.cardView);
-                    }
-                  : null,
-            ),
+                    ),
+                    const SizedBox(width: 5),
+                    const Text('列'),
+                  ],
+                ),
+              ),
             Expanded(
               child: products.isEmpty
                   ? Center(
@@ -468,7 +563,14 @@ class _ProductPageState extends State<ProductPage> {
                             : '还没有成品，点右下角「新增成品」开始记录',
                       ),
                     )
-                  : useCardView
+                  : useOverviewView
+                      ? _ProductOverviewGrid(
+                          products: products,
+                          columns: widget.overviewColumns,
+                          onTap: _openProduct,
+                          onLongPress: _showQuickActions,
+                        )
+                      : useCardView
                       ? CollectionCardGrid(
                           itemCount: products.length,
                           mobileAspectRatio: 0.70,
@@ -526,5 +628,46 @@ class _ProductPageState extends State<ProductPage> {
         );
       },
     );
+
+class _ProductOverviewGrid extends StatelessWidget {
+  const _ProductOverviewGrid({
+    required this.products,
+    required this.columns,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final List<FinishedProduct> products;
+  final int columns;
+  final ValueChanged<FinishedProduct> onTap;
+  final ValueChanged<FinishedProduct> onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: AppLayoutSpacing.tabScrollPaddingWithFab(
+        left: 12,
+        top: 0,
+        right: 12,
+      ),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns < 1 ? 1 : columns,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: ProductOverviewSummaryCard.aspectRatio,
+      ),
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        final product = products[index];
+        return ProductOverviewSummaryCard(
+          product: product,
+          onTap: () => onTap(product),
+          onLongPress: () => onLongPress(product),
+        );
+      },
+    );
+  }
+}
+
   }
 }
