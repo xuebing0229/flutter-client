@@ -59,6 +59,33 @@ class SyncMergeEngine {
       }
 
       if (left.kind == SyncEntityKind.product &&
+          fieldName == 'saleClientNames' &&
+          a.value is Map &&
+          b.value is Map) {
+        final leftMap = Map<String, dynamic>.from(a.value as Map);
+        final rightMap = Map<String, dynamic>.from(b.value as Map);
+        var hasKeyConflict = false;
+        for (final entry in rightMap.entries) {
+          if (leftMap.containsKey(entry.key) &&
+              !syncJsonEquals(leftMap[entry.key], entry.value)) {
+            hasKeyConflict = true;
+            break;
+          }
+        }
+        if (!hasKeyConflict) {
+          fields[fieldName] = SyncFieldValue(
+            value: <String, dynamic>{
+              ...leftMap,
+              ...rightMap,
+            },
+            clock: a.clock.merge(b.clock),
+            updatedBy: _deterministicDevice(a.updatedBy, b.updatedBy),
+          );
+          continue;
+        }
+      }
+
+      if (left.kind == SyncEntityKind.product &&
           fieldName == 'saleRecords' &&
           left.fields['saleType']?.value == 'single' &&
           right.fields['saleType']?.value == 'single' &&
