@@ -231,9 +231,6 @@ class SyncCoordinator extends ChangeNotifier {
   bool _awaitingInitialRemoteWorkspace = false;
   Timer? _changeDebounce;
   Timer? _pollTimer;
-  String? _lastTransferFingerprint;
-  DateTime? _transferLastAdvancedAt;
-  DateTime? _lastTransferRepairAt;
   Future<void> _tail = Future<void>.value();
 
   // Every workspace entity, including UI settings, goes through the same
@@ -749,6 +746,25 @@ class SyncCoordinator extends ChangeNotifier {
     }, showBusy: false);
   }
 
+  Future<void> deactivateTransportForAccountExit() {
+    _foregroundTransportEnabled = false;
+    return _enqueue(() async {
+      try {
+        // Signing out is a local session boundary, not a device revocation.
+        // Stop the local core even when this account's folder was paused, but
+        // leave the paired account/device records untouched.
+        await _bridge.stop(accountId: accountId);
+      } finally {
+        _transportPrepared = false;
+        _transportStatus = const EmbeddedSyncthingStatus(
+          available: true,
+          running: false,
+        );
+        if (!_disposed) notifyListeners();
+      }
+    }, showBusy: false);
+  }
+
   Future<void> pauseTransport() {
     return _pauseLock.synchronized(() async {
       return _enqueue(() async {
@@ -1152,6 +1168,7 @@ class SyncCoordinator extends ChangeNotifier {
       _transportPrepared = prepared;
       await _refreshTransportStatus();
       if (prepared) {
+        _lastError = null;
         final current = accountStore.syncSnapshot;
         if (current != null &&
             current.accountId == accountId &&
@@ -1163,7 +1180,13 @@ class SyncCoordinator extends ChangeNotifier {
       }
     } catch (error) {
       if (_disposed) return;
-      _lastError = '同步核心启动失败：$error';
+      final message = error.toString();
+      if (message.contains('仍在继续启动') ||
+          message.contains('正在启动，请稍后重试')) {
+        _lastError = '同步核心启动时间较长，仍在继续尝试。';
+      } else {
+        _lastError = '同步核心启动失败：$error';
+      }
     }
     if (!_disposed) notifyListeners();
   }
@@ -1310,7 +1333,6 @@ class SyncCoordinator extends ChangeNotifier {
       expectedRemoteIds.add(remoteTransportId);
     }
     if (expectedRemoteIds.isEmpty) {
-      _resetTransferStallTracking();
       return;
     }
 
@@ -1341,90 +1363,20 @@ class SyncCoordinator extends ChangeNotifier {
 
     final missingConfiguredPeer =
         !expectedRemoteIds.every(configuredRemoteIds.contains);
-    if (missingConfiguredPeer || brokenFolderHandshake.isNotEmpty) {
-      await _bridge.setAccountFolderPaused(
-        accountId: accountId,
-        paused: false,
-      );
+    if (missingConfiguredPeer) {
+      // Repair only configuration that is actually missing on this device.
+      // Remote "notSharing" / "paused" states belong to the peer and cannot be
+      // fixed by repeatedly rewriting our local Syncthing configuration.
       await _pairKnownTransportPeers(state);
-      await _bridge.requestScan(accountId: accountId);
       await _refreshTransportStatus();
-
-      if (brokenFolderHandshake.isNotEmpty) {
-        final stillBroken = brokenFolderHandshake.where((id) {
-          final remoteState = _transportStatus.remoteFolderStates[id]?.trim();
-          return remoteState == 'notSharing' || remoteState == 'paused';
-        });
-        if (stillBroken.isNotEmpty) {
-          _lastError =
-              '设备已经连接，但同步目录尚未完成双向共享，正在自动修复。'
-              '请让另一台设备保持打开。';
-        }
-      }
       return;
     }
 
-    await _repairStalledTransferIfNeeded();
-  }
-
-  Future<void> _repairStalledTransferIfNeeded() async {
-    final progress = _transportStatus.syncProgress;
-    if (progress == null) {
-      _resetTransferStallTracking();
-      return;
+    if (brokenFolderHandshake.isNotEmpty) {
+      _lastError =
+          '设备已经连接，但另一台设备的同步目录尚未共享或已暂停。'
+          '请让另一台设备保持打开并恢复同步。';
     }
-
-    final completion = ((progress['completion'] as num?)?.toDouble() ?? 100)
-        .clamp(0, 100)
-        .toDouble();
-    final needBytes = (progress['needBytes'] as num?)?.toInt() ?? 0;
-    final needItems = (progress['needItems'] as num?)?.toInt() ?? 0;
-    final unfinished = completion < 99.95 || needBytes > 0 || needItems > 0;
-    if (!unfinished) {
-      _resetTransferStallTracking();
-      return;
-    }
-
-    final fingerprint = <Object?>[
-      completion.toStringAsFixed(3),
-      needBytes,
-      needItems,
-      progress['deviceId'],
-      progress['direction'],
-    ].join('|');
-    final now = DateTime.now();
-
-    if (_lastTransferFingerprint != fingerprint) {
-      _lastTransferFingerprint = fingerprint;
-      _transferLastAdvancedAt = now;
-      return;
-    }
-
-    final stalledSince = _transferLastAdvancedAt ??= now;
-    if (now.difference(stalledSince) < const Duration(seconds: 20)) return;
-    final lastRepair = _lastTransferRepairAt;
-    if (lastRepair != null &&
-        now.difference(lastRepair) < const Duration(seconds: 20)) {
-      return;
-    }
-
-    _lastTransferRepairAt = now;
-    await _bridge.setAccountFolderPaused(
-      accountId: accountId,
-      paused: false,
-    );
-    final state = accountStore.syncSnapshot;
-    if (state != null && state.accountId == accountId) {
-      await _pairKnownTransportPeers(state);
-    }
-    await _bridge.requestScan(accountId: accountId);
-    await _refreshTransportStatus();
-  }
-
-  void _resetTransferStallTracking() {
-    _lastTransferFingerprint = null;
-    _transferLastAdvancedAt = null;
-    _lastTransferRepairAt = null;
   }
 
   Future<void> _refreshTransportStatus() async {
