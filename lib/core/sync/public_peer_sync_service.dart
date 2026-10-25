@@ -610,7 +610,9 @@ class _PendingSnapshot {
   final bool requestReply;
 }
 
-$incomingClass
+class _IncomingTransfer {
+  _IncomingTransfer({required this.sender, required this.total})
+      : lastUpdatedAt = DateTime.now();
 
   final String sender;
   final int total;
