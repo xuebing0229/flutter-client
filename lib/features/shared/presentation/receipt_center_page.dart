@@ -302,37 +302,47 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
             onChanged: (value) => setState(() => _singleQuery = value),
           ),
         ),
-        SizedBox(
-          height: 48,
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final filter in _ArchiveFilter.values) ...[
-                ChoiceChip(
-                  label: Text(filter.label),
-                  selected: _archiveFilter == filter,
-                  onSelected: (_) => setState(() => _archiveFilter = filter),
-                ),
-                const SizedBox(width: 8),
-              ],
-              ActionChip(
-                avatar: const Icon(Icons.date_range_outlined, size: 18),
-                label: Text(
-                  _singleDateRange == null
-                      ? '筛选时间'
-                      : '${_date(_singleDateRange!.start)} ～ '
-                          '${_date(_singleDateRange!.end)}',
-                ),
-                onPressed: _pickSingleRange,
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final filter in _ArchiveFilter.values)
+                    ChoiceChip(
+                      label: Text(filter.label),
+                      selected: _archiveFilter == filter,
+                      onSelected: (_) =>
+                          setState(() => _archiveFilter = filter),
+                    ),
+                ],
               ),
-              if (_singleDateRange != null) ...[
-                const SizedBox(width: 6),
-                ActionChip(
-                  label: const Text('清除时间'),
-                  onPressed: () => setState(() => _singleDateRange = null),
-                ),
-              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.date_range_outlined, size: 18),
+                    label: Text(
+                      _singleDateRange == null
+                          ? '筛选时间'
+                          : '${_date(_singleDateRange!.start)} ～ '
+                              '${_date(_singleDateRange!.end)}',
+                    ),
+                    onPressed: _pickSingleRange,
+                  ),
+                  if (_singleDateRange != null)
+                    ActionChip(
+                      label: const Text('清除时间'),
+                      onPressed: () =>
+                          setState(() => _singleDateRange = null),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
