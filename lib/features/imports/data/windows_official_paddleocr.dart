@@ -18,7 +18,7 @@ class WindowsOfficialPaddleOcr {
 
   Future<ScreenshotOcrResult> recognize(String imageFile) async {
     if (!Platform.isWindows) {
-      throw UnsupportedError('Windows OCR only');
+      throw UnsupportedError('当前平台暂不支持截图识别');
     }
 
     final root = File(Platform.resolvedExecutable).parent.path;
@@ -154,7 +154,7 @@ ScreenshotOcrResult parseOfficialPaddleOcrJson(
   required double imageHeight,
 }) {
   if (imageWidth <= 0 || imageHeight <= 0) {
-    throw const FormatException('OCR 图片尺寸无效');
+    throw const FormatException('截图尺寸无效');
   }
   final decoded = jsonDecode(source);
   if (decoded is! Map) {
