@@ -38,13 +38,13 @@ class ScreenshotOcrService {
       return const WindowsOfficialPaddleOcr().recognize(imagePath);
     }
     if (!supported) {
-      throw UnsupportedError('当前平台尚未接入本地截图识别引擎');
+      throw UnsupportedError('当前平台暂不支持截图识别');
     }
     final result = await _channel.invokeMapMethod<String, Object?>(
       'recognize',
       {'path': imagePath},
     );
-    if (result == null) throw const FormatException('OCR 未返回识别结果');
+    if (result == null) throw const FormatException('截图识别未返回结果');
 
     double number(Object? value, String field) {
       if (value is num) return value.toDouble();
@@ -52,7 +52,7 @@ class ScreenshotOcrService {
     }
 
     final raw = result['lines'];
-    if (raw is! List) throw const FormatException('OCR 文字行格式错误');
+    if (raw is! List) throw const FormatException('截图识别结果格式错误');
     final lines = <ScreenshotTextLine>[];
     for (final value in raw) {
       if (value is! Map || value['text'] is! String) continue;
@@ -68,7 +68,7 @@ class ScreenshotOcrService {
     final width = number(result['imageWidth'], 'imageWidth');
     final height = number(result['imageHeight'], 'imageHeight');
     if (width <= 0 || height <= 0) {
-      throw const FormatException('OCR 图片尺寸无效');
+      throw const FormatException('截图尺寸无效');
     }
     return ScreenshotOcrResult(
       width: width,
