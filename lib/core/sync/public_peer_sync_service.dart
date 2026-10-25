@@ -227,7 +227,12 @@ class PublicPeerSyncService extends ChangeNotifier {
             (shouldTargetDevice?.call(device) ?? true))
           device.id,
     ];
-    if (targets.isEmpty) return;
+    if (targets.isEmpty) {
+      if (onlyTarget != null) {
+        _pendingSnapshotByTarget.remove(onlyTarget);
+      }
+      return;
+    }
 
     _syncing = true;
     notifyListeners();
