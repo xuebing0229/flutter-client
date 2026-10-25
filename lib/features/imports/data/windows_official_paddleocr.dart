@@ -31,13 +31,13 @@ class WindowsOfficialPaddleOcr {
     if (!await engine.exists() ||
         !await detModel.exists() ||
         !await recModel.exists()) {
-      throw StateError('官方 PaddleOCR 离线组件缺失，请安装完整 Windows 版本');
+      throw StateError('截图识别组件缺失，请安装完整 Windows 版本');
     }
 
     final sourceBytes = await File(imageFile).readAsBytes();
     final decoded = img.decodeImage(sourceBytes);
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
-      throw const FormatException('OCR 图片尺寸无效');
+      throw const FormatException('截图尺寸无效');
     }
 
     final temp = await Directory.systemTemp.createTemp('ag-paddleocr-');
@@ -105,14 +105,14 @@ class WindowsOfficialPaddleOcr {
         try {
           await process.exitCode.timeout(const Duration(seconds: 5));
         } catch (_) {}
-        throw TimeoutException('PaddleOCR 识别超时');
+        throw TimeoutException('截图识别超时');
       }
 
       final stdoutText = await stdoutFuture;
       final stderrText = await stderrFuture;
       if (exitCode != 0) {
         throw StateError(
-          'PaddleOCR 识别未完成：'
+          '截图识别未完成：'
           '${stderrText.trim().isEmpty ? stdoutText : stderrText}',
         );
       }
@@ -130,7 +130,7 @@ class WindowsOfficialPaddleOcr {
         if (files.length == 1) resultFile = files.single;
       }
       if (resultFile == null) {
-        throw const FormatException('PaddleOCR 未生成可读取的 JSON 结果');
+        throw const FormatException('截图识别未生成可读取结果');
       }
 
       return parseOfficialPaddleOcrJson(
@@ -158,13 +158,13 @@ ScreenshotOcrResult parseOfficialPaddleOcrJson(
   }
   final decoded = jsonDecode(source);
   if (decoded is! Map) {
-    throw const FormatException('PaddleOCR JSON 格式错误');
+    throw const FormatException('截图识别结果格式错误');
   }
 
   final rawTexts = decoded['rec_texts'];
   final rawBoxes = decoded['rec_boxes'];
   if (rawTexts is! List || rawBoxes is! List) {
-    throw const FormatException('PaddleOCR 缺少文字或坐标结果');
+    throw const FormatException('截图识别结果不完整');
   }
 
   final count = math.min(rawTexts.length, rawBoxes.length);
@@ -180,7 +180,7 @@ ScreenshotOcrResult parseOfficialPaddleOcrJson(
 
     double number(Object? value) {
       if (value is num) return value.toDouble();
-      throw const FormatException('PaddleOCR 坐标格式错误');
+      throw const FormatException('截图识别结果格式错误');
     }
 
     final left = number(boxValue[0]).clamp(0, imageWidth).toDouble();
@@ -201,7 +201,7 @@ ScreenshotOcrResult parseOfficialPaddleOcrJson(
   }
 
   if (lines.isEmpty) {
-    throw const FormatException('PaddleOCR 没有输出有效文字');
+    throw const FormatException('截图中没有识别到有效文字');
   }
 
   return ScreenshotOcrResult(
