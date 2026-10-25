@@ -746,6 +746,25 @@ class SyncCoordinator extends ChangeNotifier {
     }, showBusy: false);
   }
 
+  Future<void> deactivateTransportForAccountExit() {
+    _foregroundTransportEnabled = false;
+    return _enqueue(() async {
+      try {
+        // Signing out is a local session boundary, not a device revocation.
+        // Stop the local core even when this account's folder was paused, but
+        // leave the paired account/device records untouched.
+        await _bridge.stop(accountId: accountId);
+      } finally {
+        _transportPrepared = false;
+        _transportStatus = const EmbeddedSyncthingStatus(
+          available: true,
+          running: false,
+        );
+        if (!_disposed) notifyListeners();
+      }
+    }, showBusy: false);
+  }
+
   Future<void> pauseTransport() {
     return _pauseLock.synchronized(() async {
       return _enqueue(() async {
