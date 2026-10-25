@@ -541,8 +541,6 @@ class WindowsSyncthingTransport {
 
     await shutdown();
     await _forceTerminateStaleBundledProcesses();
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-
     var movedOriginal = false;
     try {
       await configDir.rename(backupDir.path);
@@ -579,8 +577,6 @@ class WindowsSyncthingTransport {
         await shutdown();
       } catch (_) {}
       await _forceTerminateStaleBundledProcesses();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-
       if (movedOriginal && await backupDir.exists()) {
         try {
           if (await configDir.exists()) {
@@ -617,25 +613,25 @@ class WindowsSyncthingTransport {
   }
 
   Future<bool> _shutdownGracefully(String apiKey) async {
-    if (!await _ping(apiKey)) {
-      return !await _profileProcessesRunning();
-    }
+    final processWasRunning = await _profileProcessesRunning();
+    if (!processWasRunning) return true;
 
-    try {
-      await _request(
-        'POST',
-        '/rest/system/shutdown',
-        apiKey: apiKey,
-      );
-    } catch (_) {
-      return false;
+    if (await _ping(apiKey)) {
+      try {
+        await _request(
+          'POST',
+          '/rest/system/shutdown',
+          apiKey: apiKey,
+        );
+      } catch (_) {
+        // The API can disappear while the shutdown response is in flight.
+        // Process exit below is the authoritative completion signal.
+      }
     }
 
     final deadline = DateTime.now().add(_gracefulShutdownTimeout);
     while (DateTime.now().isBefore(deadline)) {
-      if (!await _ping(apiKey)) {
-        return !await _profileProcessesRunning();
-      }
+      if (!await _profileProcessesRunning()) return true;
       await Future<void>.delayed(_shutdownPollInterval);
     }
     return !await _profileProcessesRunning();
