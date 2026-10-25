@@ -163,7 +163,7 @@ class SyncthingBridge(
         ensureApiKey()
         val startRequested = startService()
 
-        val ready = waitForReady(maxAttempts = if (startRequested) 32 else 2)
+        val ready = pingReady()
         if (ready) {
             applyIntegrationPolicy()
         }
@@ -212,7 +212,7 @@ class SyncthingBridge(
             )
         }
 
-        if (!waitForReady(maxAttempts = 2)) {
+        if (!pingReady()) {
             return linkedMapOf(
                 "available" to true,
                 "running" to false,
@@ -704,16 +704,11 @@ class SyncthingBridge(
         integrationPolicyApplied = true
     }
 
-    private fun waitForReady(maxAttempts: Int = 32): Boolean {
-        repeat(maxAttempts) {
-            try {
-                request("GET", "/rest/system/ping")
-                return true
-            } catch (_: Exception) {
-                Thread.sleep(250)
-            }
-        }
-        return false
+    private fun pingReady(): Boolean {
+        return runCatching {
+            request("GET", "/rest/system/ping")
+            true
+        }.getOrDefault(false)
     }
 
     private fun request(
