@@ -39,7 +39,7 @@ class ThemeColorPage extends StatelessWidget {
                 '自定义调色',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text('直接复用客户端的完整调色编辑器'),
+              subtitle: const Text('创建和编辑自己的主题配色'),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
