@@ -198,18 +198,16 @@ double annualReceiptAmountForOrder(QueueOrder order) {
 
 class ReceiptPage extends StatefulWidget {
   const ReceiptPage({
-    required ReceiptData data,
+    required this.data,
     required this.styleStore,
     super.key,
-  })  : data = data,
-        annualData = null;
+  }) : annualData = null;
 
   const ReceiptPage.annual({
-    required AnnualReceiptData data,
+    required this.annualData,
     required this.styleStore,
     super.key,
-  })  : data = null,
-        annualData = data;
+  }) : data = null;
 
   final ReceiptData? data;
   final AnnualReceiptData? annualData;
