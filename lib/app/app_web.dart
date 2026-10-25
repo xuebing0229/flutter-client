@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'app_theme.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -110,59 +111,6 @@ class _AppState extends State<App> {
     _featureStore.dispose();
     _accountStore.dispose();
     super.dispose();
-  }
-
-  Color _onColor(Color color) {
-    return color.computeLuminance() > 0.48 ? Colors.black : Colors.white;
-  }
-
-  ColorScheme _paletteScheme(Brightness brightness) {
-    final palette = _themeStore.palette;
-    final colors = palette.previewColors;
-    final primary = colors.first;
-    final secondary = colors.length > 1 ? colors[1] : primary;
-    final tertiary = colors.length > 2 ? colors[2] : secondary;
-    final primaryContainer = colors.length > 3 ? colors[3] : primary;
-    final secondaryContainer = colors.length > 4 ? colors[4] : secondary;
-    final tertiaryContainer = colors.length > 2 ? colors.last : primary;
-    final dark = brightness == Brightness.dark;
-
-    final base = ColorScheme.fromSeed(
-      seedColor: dark ? palette.effectiveDarkSeed : palette.lightSeed,
-      brightness: brightness,
-    );
-
-    return base.copyWith(
-      primary: primary,
-      onPrimary: _onColor(primary),
-      primaryContainer: primaryContainer,
-      onPrimaryContainer: _onColor(primaryContainer),
-      secondary: secondary,
-      onSecondary: _onColor(secondary),
-      secondaryContainer: secondaryContainer,
-      onSecondaryContainer: _onColor(secondaryContainer),
-      tertiary: tertiary,
-      onTertiary: _onColor(tertiary),
-      tertiaryContainer: tertiaryContainer,
-      onTertiaryContainer: _onColor(tertiaryContainer),
-      surface: base.surface,
-      onSurface: base.onSurface,
-      surfaceContainerHighest: base.surfaceContainerHighest,
-      onSurfaceVariant: base.onSurfaceVariant,
-      outline: base.outline,
-      outlineVariant: base.outlineVariant,
-      inversePrimary: primary,
-      surfaceTint: Colors.transparent,
-    );
-  }
-
-  ThemeData _theme(Brightness brightness) {
-    final palette = _themeStore.palette;
-    return GuildVisualTheme.build(
-      _paletteScheme(brightness),
-      style: _themeStore.style,
-      semanticColors: palette.semanticColorsFor(brightness),
-    );
   }
 
   @override
