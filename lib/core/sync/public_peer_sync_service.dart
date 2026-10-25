@@ -19,6 +19,7 @@ typedef PeerAssetReader = Future<Uint8List?> Function(String relativePath);
 typedef PeerAssetWriter =
     Future<void> Function(String relativePath, Uint8List bytes);
 typedef PeerTargetFilter = bool Function(AccountDevice device);
+typedef PeerRelayFactory = PublicRelayClient Function(String clientId);
 
 /// Browser-compatible online sync that keeps the native Syncthing path intact.
 ///
@@ -38,7 +39,11 @@ class PublicPeerSyncService extends ChangeNotifier {
     this.readAsset,
     this.writeAsset,
     this.shouldTargetDevice,
-  });
+    PeerRelayFactory? relayFactory,
+    Duration heartbeatInterval = _defaultHeartbeat,
+  })  : _relayFactory =
+            relayFactory ?? ((clientId) => PublicRelayClient(clientId: clientId)),
+        _heartbeatInterval = heartbeatInterval;
 
   static const String _topicRoot = 'adventurers-guild-peer/v1';
   static const String _syncChannel = String.fromEnvironment(
@@ -46,7 +51,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     defaultValue: 'release',
   );
   static const int _chunkCharacters = 22000;
-  static const Duration _heartbeat = Duration(seconds: 30);
+  static const Duration _defaultHeartbeat = Duration(seconds: 30);
 
   final String accountId;
   final String deviceId;
@@ -59,12 +64,16 @@ class PublicPeerSyncService extends ChangeNotifier {
   final PeerAssetReader? readAsset;
   final PeerAssetWriter? writeAsset;
   final PeerTargetFilter? shouldTargetDevice;
+  final PeerRelayFactory _relayFactory;
+  final Duration _heartbeatInterval;
 
   final AesGcm _cipher = AesGcm.with256bits();
   final Random _random = Random.secure();
   final Map<String, _IncomingTransfer> _incoming =
       <String, _IncomingTransfer>{};
   final Map<String, String> _lastIncomingFingerprintByPeer =
+      <String, String>{};
+  final Map<String, String> _pendingSnapshotByTarget =
       <String, String>{};
 
   PublicRelayClient? _relay;
@@ -90,13 +99,13 @@ class PublicPeerSyncService extends ChangeNotifier {
     _starting = true;
     try {
       await _prepareRoom();
-      final relay = PublicRelayClient(clientId: _relayClientId());
+      final relay = _relayFactory(_relayClientId());
       _relay = relay;
       _relaySubscription = relay.messages.listen(
         (message) => unawaited(_handleRelayMessage(message)),
       );
       await _connectRelay();
-      _heartbeatTimer = Timer.periodic(_heartbeat, (_) {
+      _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) {
         unawaited(_heartbeatTick());
       });
       requestSync(immediate: true);
@@ -171,10 +180,19 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (_relay?.connected != true) {
       await _connectRelay();
       if (_relay?.connected == true) {
-        // Reconnecting is itself enough reason to offer a fresh snapshot.
-        // While the socket remains healthy we intentionally stay idle so the
-        // Durable Object can hibernate instead of processing periodic traffic.
         requestSync(immediate: true);
+      }
+      return;
+    }
+
+    // The relay intentionally has no offline queue. A successful WebSocket
+    // write therefore does not prove that the target device was online.
+    // Retry only snapshots that have not been acknowledged by the peer.
+    if (_pendingSnapshotByTarget.isNotEmpty) {
+      final targets = _pendingSnapshotByTarget.keys.toList(growable: false);
+      for (final target in targets) {
+        if (_disposed || _relay?.connected != true) return;
+        await _publishSnapshot(onlyTarget: target);
       }
     }
   }
@@ -220,8 +238,12 @@ class PublicPeerSyncService extends ChangeNotifier {
       }.toList(growable: false)
         ..sort();
 
+      final snapshotId =
+          '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+          '${_random.nextInt(0x7fffffff).toRadixString(36)}';
       final payload = <String, dynamic>{
         'type': 'snapshot',
+        'snapshotId': snapshotId,
         'accountId': accountId,
         'sender': deviceId,
         'account': state.toJson(),
@@ -229,9 +251,9 @@ class PublicPeerSyncService extends ChangeNotifier {
         'assets': assets,
       };
       for (final target in targets) {
+        _pendingSnapshotByTarget[target] = snapshotId;
         await _sendEncrypted(target, payload);
       }
-      _lastSuccessfulSyncAt = DateTime.now();
       _lastError = null;
     } catch (error) {
       _lastError = '发送同步数据失败：$error';
@@ -371,9 +393,25 @@ class PublicPeerSyncService extends ChangeNotifier {
 
       switch (payload['type'] as String) {
         case 'snapshot':
-          if (_lastIncomingFingerprintByPeer[sender] == fingerprint) return;
+          final snapshotId = payload['snapshotId'];
+          if (snapshotId is! String || snapshotId.isEmpty) return;
+          if (_lastIncomingFingerprintByPeer[sender] == fingerprint) {
+            await _ackSnapshot(sender, snapshotId);
+            return;
+          }
           _lastIncomingFingerprintByPeer[sender] = fingerprint;
           await _receiveSnapshot(sender, payload);
+          await _ackSnapshot(sender, snapshotId);
+          break;
+        case 'snapshot-ack':
+          final snapshotId = payload['snapshotId'];
+          if (snapshotId is! String || snapshotId.isEmpty) return;
+          if (_pendingSnapshotByTarget[sender] == snapshotId) {
+            _pendingSnapshotByTarget.remove(sender);
+            _lastSuccessfulSyncAt = DateTime.now();
+            _lastError = null;
+            if (!_disposed) notifyListeners();
+          }
           break;
         case 'asset-request':
           await _receiveAssetRequest(sender, payload);
@@ -386,6 +424,15 @@ class PublicPeerSyncService extends ChangeNotifier {
       // Wrong rooms, stale chunks and tampered public-relay messages are
       // intentionally ignored without surfacing their contents.
     }
+  }
+
+  Future<void> _ackSnapshot(String sender, String snapshotId) async {
+    await _sendEncrypted(sender, <String, dynamic>{
+      'type': 'snapshot-ack',
+      'snapshotId': snapshotId,
+      'accountId': accountId,
+      'sender': deviceId,
+    });
   }
 
   Future<void> _receiveSnapshot(
@@ -505,6 +552,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     _disposed = true;
     _syncDebounce?.cancel();
     _heartbeatTimer?.cancel();
+    _pendingSnapshotByTarget.clear();
     unawaited(_relaySubscription?.cancel());
     _relaySubscription = null;
     final relay = _relay;
