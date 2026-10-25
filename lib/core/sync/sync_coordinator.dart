@@ -1344,29 +1344,20 @@ class SyncCoordinator extends ChangeNotifier {
 
     final missingConfiguredPeer =
         !expectedRemoteIds.every(configuredRemoteIds.contains);
-    if (missingConfiguredPeer || brokenFolderHandshake.isNotEmpty) {
-      await _bridge.setAccountFolderPaused(
-        accountId: accountId,
-        paused: false,
-      );
+    if (missingConfiguredPeer) {
+      // Repair only configuration that is actually missing on this device.
+      // Remote "notSharing" / "paused" states belong to the peer and cannot be
+      // fixed by repeatedly rewriting our local Syncthing configuration.
       await _pairKnownTransportPeers(state);
-      await _bridge.requestScan(accountId: accountId);
       await _refreshTransportStatus();
-
-      if (brokenFolderHandshake.isNotEmpty) {
-        final stillBroken = brokenFolderHandshake.where((id) {
-          final remoteState = _transportStatus.remoteFolderStates[id]?.trim();
-          return remoteState == 'notSharing' || remoteState == 'paused';
-        });
-        if (stillBroken.isNotEmpty) {
-          _lastError =
-              '设备已经连接，但同步目录尚未完成双向共享，正在自动修复。'
-              '请让另一台设备保持打开。';
-        }
-      }
       return;
     }
 
+    if (brokenFolderHandshake.isNotEmpty) {
+      _lastError =
+          '设备已经连接，但另一台设备的同步目录尚未共享或已暂停。'
+          '请让另一台设备保持打开并恢复同步。';
+    }
   }
 
   Future<void> _refreshTransportStatus() async {
