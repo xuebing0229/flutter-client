@@ -159,7 +159,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _StatusRow(
-                      label: '内置同步核心',
+                      label: '同步服务',
                       value: coordinator.syncPaused
                           ? '已暂停'
                           : status.available
@@ -176,12 +176,15 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                       label: '传输状态',
                       value: coordinator.syncPaused
                           ? '已暂停'
-                          : status.connectedDeviceIds.isNotEmpty
-                              ? '已连接 ${status.connectedDeviceIds.length} 台设备'
-                              : status.available
-                                  ? '等待其他设备'
-                                  : '尚未建立',
+                          : !status.available
+                              ? '尚未建立'
+                              : !status.running
+                                  ? '等待同步服务启动'
+                                  : status.connectedDeviceIds.isNotEmpty
+                                      ? '已连接 ${status.connectedDeviceIds.length} 台设备'
+                                      : '等待其他设备',
                       good: !coordinator.syncPaused &&
+                          status.running &&
                           status.connectedDeviceIds.isNotEmpty,
                     ),
                     if (status.folderState != null) ...[
