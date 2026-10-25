@@ -1751,291 +1751,136 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
     final tabs = _tabs();
+    if (tabs.isEmpty) {
+      return const Scaffold(body: SizedBox.shrink());
+    }
     if (!tabs.any((tab) => tab.id == _selectedTab)) {
-      _selectedTab = 'orders';
+      _selectedTab = tabs.first.id;
     }
     final selectedIndex = tabs.indexWhere((tab) => tab.id == _selectedTab);
-    final selected = tabs[selectedIndex];
+    final current = tabs[selectedIndex];
+    final showFocus = widget.featureStore.enabled(AppFeature.focus);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          selected.label,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          IconButton(
-            tooltip: '设备同步 / 备份',
-            onPressed: _busy
-                ? null
-                : () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => _WebDataPage(
-                          linkedAccountName: _accountState.accountName,
-                          busy: () => _busy,
-                          onExport: _exportBackup,
-                          onImport: _importBackup,
-                          peerSync: _peerSync,
-                        ),
-                      ),
-                    ),
-            icon: const Icon(Icons.sync_alt_rounded),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      drawer: Drawer(
-        child: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    final title = switch (_desktopToolSelection) {
+      AppToolMenu.presetTool => '节点＆加价预设',
+      AppToolMenu.receiptTool => '生成小票',
+      AppToolMenu.featureToggleTool => '附加功能开关',
+      AppToolMenu.desktopPetTool => '专注',
+      AppToolMenu.archiveTool => '归档',
+      AppToolMenu.syncTool => '设备同步',
+      AppToolMenu.accountTool => '账号与设备',
+      AppToolMenu.settingsTool => '设置',
+      _ => current.label,
+    };
+
+    final tabBody = IndexedStack(
+      index: selectedIndex,
+      children: [
+        for (final tab in tabs)
+          KeyedSubtree(key: ValueKey(tab.id), child: tab.page),
+      ],
+    );
+
+    final desktopBody = _desktopToolSelection == null
+        ? tabBody
+        : KeyedSubtree(
+            key: ValueKey('desktop-tool-$_desktopToolSelection'),
+            child: _buildWebToolPage(_desktopToolSelection!),
+          );
+
+    final drawer = AppDrawer(
+      onSelectTool: _openMobileTool,
+      onShowTutorial: _showTutorial,
+      showFeatureToggle: true,
+      showPetFocusEntry: showFocus,
+      showDesktopPet: false,
+      showFeedback: false,
+      accountSubtitle: widget.accountStore.accountName ?? '当前账号',
+    );
+
+    final desktopMenu = AppToolMenu(
+      onSelectTool: _selectDesktopTool,
+      onShowTutorial: _showTutorial,
+      showFeatureToggle: true,
+      showPetFocusEntry: showFocus,
+      showDesktopPet: false,
+      showFeedback: false,
+      accountSubtitle: widget.accountStore.accountName ?? '当前账号',
+      selectedTool: _desktopToolSelection,
+      showTrailing: false,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+    );
+
+    final floatingAction = _busy || _desktopToolSelection != null
+        ? null
+        : switch (current.id) {
+            'orders' => FloatingActionButton.extended(
+                onPressed: () => unawaited(
+                  _chooseAddMethod(products: false),
+                ),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('新增排单'),
+              ),
+            'products' => FloatingActionButton.extended(
+                onPressed: () => unawaited(
+                  _chooseAddMethod(products: true),
+                ),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('新增成品'),
+              ),
+            _ => null,
+          };
+
+    final shell = GuildWorkspaceShell(
+      tabs: tabs,
+      selectedIndex: selectedIndex,
+      onTabSelected: _selectTab,
+      title: title,
+      ready: _ready,
+      contentAvailable: true,
+      mobileBody: tabBody,
+      desktopBody: desktopBody,
+      drawer: drawer,
+      desktopToolMenu: desktopMenu,
+      desktopNavigationOpen: _desktopNavigationOpen,
+      onDesktopNavigationChanged: (value) {
+        setState(() => _desktopNavigationOpen = value);
+        _scheduleSave();
+      },
+      toolSelected: _desktopToolSelection != null,
+      floatingActionButton: floatingAction,
+      showAppBar: _desktopToolSelection == null,
+    );
+
+    if (!_busy) return shell;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        shell,
+        ColoredBox(
+          color: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.08),
+          child: const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '冒险者公会',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
-                          ),
+                    SizedBox.square(
+                      dimension: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '网页版',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                    SizedBox(width: 14),
+                    Text('正在处理备份…'),
                   ],
                 ),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: Text(
-                  widget.accountStore.accountName ?? '当前账号',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: const Text('当前账号'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout_rounded),
-                title: const Text('退出登录'),
-                onTap: () async {
-                  Navigator.of(context).pop();
-                  await _persistWorkspace();
-                  await widget.accountStore.lock();
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.document_scanner_outlined),
-                title: const Text('截图识别批量导入'),
-                subtitle: const Text('批量识别截图内容'),
-                onTap: () => _openScreenshotImport(context),
-              ),
-              ListTile(
-                leading: const Icon(Icons.archive_outlined),
-                title: const Text('归档'),
-                onTap: () => _openTool(
-                  context,
-                  ArchivePage(
-                    accountId: _accountId,
-                    orderStore: _orderStore,
-                    productStore: _productStore,
-                    nodePresetStore: _nodePresetStore,
-                    pricingPresetStore: _pricingPresetStore,
-                    receiptStyleStore: _receiptStyleStore,
-                    featureStore: widget.featureStore,
-                    syncCoordinator: _syncUi,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.tune_rounded),
-                title: const Text('节点＆加价预设'),
-                onTap: () => _openTool(
-                  context,
-                  PresetCenterPage(
-                    nodePresetStore: _nodePresetStore,
-                    pricingPresetStore: _pricingPresetStore,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.receipt_long_outlined),
-                title: const Text('生成小票'),
-                onTap: () => _openTool(
-                  context,
-                  ReceiptCenterPage(
-                    orderStore: _orderStore,
-                    productStore: _productStore,
-                    receiptStyleStore: _receiptStyleStore,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.tune_rounded),
-                title: const Text('附加功能开关'),
-                onTap: () => _openTool(
-                  context,
-                  FeatureTogglePage(store: widget.featureStore),
-                ),
-              ),
-              SwitchListTile(
-                secondary: const Icon(Icons.auto_awesome_outlined),
-                title: const Text('抽象版'),
-                subtitle: const Text('切换普通版与抽象版'),
-                value: widget.featureStore.abstractMode,
-                onChanged: (value) =>
-                    widget.featureStore.setEnabled(AppFeature.abstractMode, value),
-              ),
-              ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('UI主题色'),
-                onTap: () => _openTool(
-                  context,
-                  ThemeColorPage(store: widget.themeStore),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.school_outlined),
-                title: const Text('使用教程'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      unawaited(showFirstRunGuide(context, detailed: true));
-                    }
-                  });
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.manage_accounts_outlined),
-                title: const Text('账号与设备'),
-                subtitle: Text(widget.accountStore.accountName ?? '当前账号'),
-                onTap: () => _openTool(
-                  context,
-                  _WebAccountPage(
-                    store: widget.accountStore,
-                    peerSync: _peerSync,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.sync_alt_rounded),
-                title: const Text('设备同步 / 备份'),
-                subtitle: Text(_peerSync?.connected == true ? '在线同步已连接 · 另有完整备份' : '在线同步正在连接 · 另有完整备份'),
-                onTap: () => _openTool(
-                  context,
-                  _WebDataPage(
-                    linkedAccountName: _accountState.accountName,
-                    busy: () => _busy,
-                    onExport: _exportBackup,
-                    onImport: _importBackup,
-                    peerSync: _peerSync,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.info_outline_rounded),
-                title: const Text('关于冒险者公会'),
-                onTap: () async {
-                  final navigator = Navigator.of(context);
-                  navigator.pop();
-                  final info = await PackageInfo.fromPlatform();
-                  if (!mounted) return;
-                  await navigator.push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => AppAboutPage(
-                        version: info.version,
-                        buildNumber: int.tryParse(info.buildNumber) ?? 0,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-                child: Text(
-                  '设备同时打开时会自动同步数据；'
-                  ''
-                  '完整备份也可用于手动恢复。',
-                  style: TextStyle(
-                    height: 1.45,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
-      body: Stack(
-        children: [
-          Positioned.fill(child: _tabBody(_selectedTab)),
-          if (_busy)
-            Positioned.fill(
-              child: ColoredBox(
-                color: Theme.of(context)
-                    .colorScheme
-                    .scrim
-                    .withValues(alpha: 0.08),
-                child: const Center(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 22,
-                        vertical: 18,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox.square(
-                            dimension: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
-                          ),
-                          SizedBox(width: 14),
-                          Text('正在处理备份…'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-      floatingActionButton: _selectedTab == 'orders' ||
-              _selectedTab == 'products'
-          ? FloatingActionButton.extended(
-              onPressed: _busy ? null : _openAdd,
-              icon: const Icon(Icons.add_rounded),
-              label: Text(_selectedTab == 'orders' ? '新增排单' : '新增成品'),
-            )
-          : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() => _selectedTab = tabs[index].id);
-        },
-        destinations: [
-          for (final tab in tabs)
-            NavigationDestination(
-              icon: Icon(tab.icon),
-              label: tab.label,
-            ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -2459,12 +2304,4 @@ class _WebDataPage extends StatelessWidget {
       ),
     );
   }
-}
-
-class _WebTab {
-  const _WebTab(this.id, this.label, this.icon);
-
-  final String id;
-  final String label;
-  final IconData icon;
 }
