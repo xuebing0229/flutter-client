@@ -5,6 +5,7 @@ class ReceiptStylePreset {
     required this.id,
     required this.name,
     required this.fontColorValue,
+    this.headerText,
     this.backgroundImageBase64,
     this.backgroundImageName,
   });
@@ -12,6 +13,7 @@ class ReceiptStylePreset {
   final String id;
   final String name;
   final int fontColorValue;
+  final String? headerText;
   final String? backgroundImageBase64;
   final String? backgroundImageName;
 
@@ -19,6 +21,7 @@ class ReceiptStylePreset {
         'id': id,
         'name': name,
         'fontColorValue': fontColorValue,
+        if (headerText != null) 'headerText': headerText,
         if (backgroundImageBase64 != null)
           'backgroundImageBase64': backgroundImageBase64,
         if (backgroundImageName != null)
@@ -29,6 +32,7 @@ class ReceiptStylePreset {
     final id = json['id'];
     final name = json['name'];
     final font = json['fontColorValue'];
+    final headerText = json['headerText'];
     final background = json['backgroundImageBase64'];
     final backgroundName = json['backgroundImageName'];
 
@@ -41,6 +45,9 @@ class ReceiptStylePreset {
     if (font is! int) {
       throw const FormatException('小票样式预设字体颜色无效。');
     }
+    if (headerText != null && headerText is! String) {
+      throw const FormatException('小票样式预设抬头文字无效。');
+    }
     if (background != null && background is! String) {
       throw const FormatException('小票样式预设背景无效。');
     }
@@ -52,6 +59,7 @@ class ReceiptStylePreset {
       id: id,
       name: name.trim(),
       fontColorValue: font,
+      headerText: headerText as String?,
       backgroundImageBase64: background as String?,
       backgroundImageName: backgroundName as String?,
     );
@@ -62,23 +70,36 @@ class ReceiptStyleStore extends ChangeNotifier {
   static const int defaultFontColorValue = 0xFF000000;
 
   int _fontColorValue = defaultFontColorValue;
+  String? _headerText;
   String? _backgroundImageBase64;
   String? _backgroundImageName;
   final List<ReceiptStylePreset> _presets = <ReceiptStylePreset>[];
 
   int get fontColorValue => _fontColorValue;
+  String? get headerText => _headerText;
   String? get backgroundImageBase64 => _backgroundImageBase64;
   String? get backgroundImageName => _backgroundImageName;
   List<ReceiptStylePreset> get presets =>
       List<ReceiptStylePreset>.unmodifiable(_presets);
 
+  String effectiveHeaderText(String defaultHeaderText) =>
+      _headerText ?? defaultHeaderText.trim();
+
   bool get isDefault =>
       _fontColorValue == defaultFontColorValue &&
+      _headerText == null &&
       _backgroundImageBase64 == null;
 
   void setFontColorValue(int value) {
     if (_fontColorValue == value) return;
     _fontColorValue = value;
+    notifyListeners();
+  }
+
+  /// null follows the account username; an empty string intentionally hides it.
+  void setHeaderText(String? value) {
+    if (_headerText == value) return;
+    _headerText = value;
     notifyListeners();
   }
 
@@ -101,12 +122,16 @@ class ReceiptStyleStore extends ChangeNotifier {
   void resetDefault() {
     final changed = !isDefault || _backgroundImageName != null;
     _fontColorValue = defaultFontColorValue;
+    _headerText = null;
     _backgroundImageBase64 = null;
     _backgroundImageName = null;
     if (changed) notifyListeners();
   }
 
-  ReceiptStylePreset saveCurrentPreset(String name) {
+  ReceiptStylePreset saveCurrentPreset(
+    String name, {
+    required String resolvedHeaderText,
+  }) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
       throw const FormatException('小票样式预设名称不能为空。');
@@ -115,6 +140,7 @@ class ReceiptStyleStore extends ChangeNotifier {
       id: 'receipt-style-${DateTime.now().microsecondsSinceEpoch}',
       name: trimmed,
       fontColorValue: _fontColorValue,
+      headerText: resolvedHeaderText,
       backgroundImageBase64: _backgroundImageBase64,
       backgroundImageName: _backgroundImageName,
     );
@@ -127,6 +153,9 @@ class ReceiptStyleStore extends ChangeNotifier {
     final preset = _presets.where((item) => item.id == id).firstOrNull;
     if (preset == null) return;
     _fontColorValue = preset.fontColorValue;
+    if (preset.headerText != null) {
+      _headerText = preset.headerText;
+    }
     _backgroundImageBase64 = preset.backgroundImageBase64;
     _backgroundImageName = preset.backgroundImageName;
     notifyListeners();
@@ -146,20 +175,26 @@ class ReceiptStyleStore extends ChangeNotifier {
       id: 'receipt-style-${DateTime.now().microsecondsSinceEpoch}',
       name: source.name,
       fontColorValue: source.fontColorValue,
+      headerText: source.headerText,
       backgroundImageBase64: source.backgroundImageBase64,
       backgroundImageName: source.backgroundImageName,
     );
     _presets.add(imported);
     if (apply) {
       _fontColorValue = imported.fontColorValue;
+      if (imported.headerText != null) {
+        _headerText = imported.headerText;
+      }
       _backgroundImageBase64 = imported.backgroundImageBase64;
       _backgroundImageName = imported.backgroundImageName;
     }
     notifyListeners();
     return imported;
   }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'fontColorValue': _fontColorValue,
+        if (_headerText != null) 'headerText': _headerText,
         if (_backgroundImageBase64 != null)
           'backgroundImageBase64': _backgroundImageBase64,
         if (_backgroundImageName != null)
@@ -172,6 +207,7 @@ class ReceiptStyleStore extends ChangeNotifier {
   void applyJson(Object? raw) {
     if (raw == null) {
       _fontColorValue = defaultFontColorValue;
+      _headerText = null;
       _backgroundImageBase64 = null;
       _backgroundImageName = null;
       _presets.clear();
@@ -183,8 +219,12 @@ class ReceiptStyleStore extends ChangeNotifier {
     }
     final json = raw.map((key, value) => MapEntry(key.toString(), value));
     final font = json['fontColorValue'];
+    final headerText = json['headerText'];
     if (font != null && font is! int) {
       throw const FormatException('同步小票字体颜色格式无效。');
+    }
+    if (headerText != null && headerText is! String) {
+      throw const FormatException('同步小票抬头文字格式无效。');
     }
     final background = json['backgroundImageBase64'];
     final name = json['backgroundImageName'];
@@ -214,6 +254,7 @@ class ReceiptStyleStore extends ChangeNotifier {
     }
 
     _fontColorValue = font is int ? font : defaultFontColorValue;
+    _headerText = headerText as String?;
     _backgroundImageBase64 = background as String?;
     _backgroundImageName = name as String?;
     _presets
