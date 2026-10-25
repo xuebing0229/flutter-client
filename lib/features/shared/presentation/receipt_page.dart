@@ -620,7 +620,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                 controlAffinity: ListTileControlAffinity.leading,
                 title: const Text('透明底导出'),
                 subtitle: const Text(
-                  '导出 PNG 时不包含背景图、底色和阴影，只保留小票文字与分隔线。',
+                  '导出不包含背景图的纯内容',
                 ),
               ),
               const SizedBox(height: 10),
