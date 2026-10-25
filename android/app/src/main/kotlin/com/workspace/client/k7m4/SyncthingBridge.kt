@@ -221,6 +221,7 @@ class SyncthingBridge(
                 "running" to false,
             )
         }
+        applyIntegrationPolicy()
 
         val system = JSONObject(request("GET", "/rest/system/status"))
         val version = JSONObject(request("GET", "/rest/system/version"))
