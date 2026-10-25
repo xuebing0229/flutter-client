@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "v2.1.5",
+    [string]$Version = "v2.1.7",
     [string]$Destination = ""
 )
 
@@ -14,7 +14,7 @@ $versionWithoutV = $Version.TrimStart("v")
 $archiveName = "syncthing-windows-amd64-$Version.zip"
 $url = "https://github.com/syncthing/syncthing/releases/download/$Version/$archiveName"
 $expectedSha256 = switch ($Version) {
-    "v2.1.5" { "39571e4d0900c2a2cab14c0b170f49751340a869e49734ccc8079d9b98a7974b" }
+    "v2.1.7" { "3ce7da770f546a8d02b65b2e7ee31f2a3b8b7c3f990ede045590cca4172ecfe1" }
     default { throw "No trusted Syncthing checksum is pinned for $Version." }
 }
 
