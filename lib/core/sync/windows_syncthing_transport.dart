@@ -613,10 +613,11 @@ class WindowsSyncthingTransport {
   }
 
   Future<bool> _shutdownGracefully(String apiKey) async {
+    final apiWasReady = await _ping(apiKey);
     final processWasRunning = await _profileProcessesRunning();
-    if (!processWasRunning) return true;
+    if (!apiWasReady && !processWasRunning) return true;
 
-    if (await _ping(apiKey)) {
+    if (apiWasReady) {
       try {
         await _request(
           'POST',
@@ -625,16 +626,18 @@ class WindowsSyncthingTransport {
         );
       } catch (_) {
         // The API can disappear while the shutdown response is in flight.
-        // Process exit below is the authoritative completion signal.
+        // Process/API disappearance below is the authoritative completion.
       }
     }
 
     final deadline = DateTime.now().add(_gracefulShutdownTimeout);
     while (DateTime.now().isBefore(deadline)) {
-      if (!await _profileProcessesRunning()) return true;
+      final processRunning = await _profileProcessesRunning();
+      if (!processRunning && !await _ping(apiKey)) return true;
       await Future<void>.delayed(_shutdownPollInterval);
     }
-    return !await _profileProcessesRunning();
+
+    return !await _profileProcessesRunning() && !await _ping(apiKey);
   }
 
   Future<void> _configureFolder({
