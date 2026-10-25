@@ -1,7 +1,7 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+206
+version: 0.0.1+208
 # beta-206: receipt center, annual client receipts, transparent PNG export, combined preset entry
 
 environment:
