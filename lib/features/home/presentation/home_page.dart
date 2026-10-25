@@ -54,6 +54,26 @@ import 'reminder_background_guide.dart';
 import 'settings_page.dart';
 import 'theme_color_page.dart';
 
+Future<String> _buildAccountTransferPackage(
+  AccountStore accountStore,
+) async {
+  final account = accountStore.syncSnapshot;
+  if (account == null || !account.hasCredentials) {
+    throw StateError('当前账号信息尚未准备好，不能添加设备。');
+  }
+
+  final backup = AppBackupData(
+    exportedAt: DateTime.now(),
+    orders: const [],
+    products: const [],
+    nodePresets: const [],
+    accountSyncState: account,
+    syncRecords: const <Map<String, dynamic>>[],
+    settings: const <String, dynamic>{'bootstrapOnly': true},
+  );
+  return backup.encode(pretty: false);
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({
     required this.accountId,
@@ -1580,7 +1600,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.accountTool => AccountPage(
         store: widget.accountStore,
         buildTransferPackage: () =>
-            buildAccountTransferPackage(widget.accountStore),
+            _buildAccountTransferPackage(widget.accountStore),
         syncCoordinator: _syncCoordinator,
         onBeforeSignOut: _prepareForSignOut,
         onRevokeDevice: _syncCoordinator.revokeDevice,
