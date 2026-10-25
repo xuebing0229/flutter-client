@@ -969,7 +969,6 @@ class WindowsSyncthingTransport {
         'urAccepted': -1,
         'crashReportingEnabled': false,
         'autoUpgradeIntervalH': 0,
-        'releasesURL': '',
       }),
     );
     _runtimePolicyApplied = true;
@@ -991,8 +990,8 @@ class WindowsSyncthingTransport {
       await Process.run(
         binary.path,
         <String>[
-          'cli',
           '--home=${configDir.path}',
+          'cli',
           '--gui-address=http://127.0.0.1:$port',
           '--gui-apikey=$apiKey',
           'operations',
