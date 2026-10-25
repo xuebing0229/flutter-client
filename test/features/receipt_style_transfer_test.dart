@@ -16,6 +16,7 @@ void main() {
       id: 'source-preset',
       name: '测试分享预设',
       fontColorValue: 0xFF336699,
+      headerText: '雪饼画师',
       backgroundImageBase64: background,
       backgroundImageName: 'background.webp',
     );
@@ -31,6 +32,7 @@ void main() {
 
     expect(restored.name, preset.name);
     expect(restored.fontColorValue, preset.fontColorValue);
+    expect(restored.headerText, '雪饼画师');
     expect(restored.backgroundImageBase64, background);
     expect(restored.backgroundImageName, 'background.webp');
   });
