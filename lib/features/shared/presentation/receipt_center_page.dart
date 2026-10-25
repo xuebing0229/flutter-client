@@ -235,7 +235,7 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ReceiptPage.annual(
-          data: data,
+          annualData: data,
           styleStore: widget.receiptStyleStore,
         ),
       ),
