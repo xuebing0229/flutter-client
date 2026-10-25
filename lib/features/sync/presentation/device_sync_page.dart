@@ -187,7 +187,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                     if (status.folderState != null) ...[
                       const SizedBox(height: 8),
                       _StatusRow(
-                        label: '数据目录',
+                        label: '数据状态',
                         value: _folderStateLabel(status.folderState!),
                         good: status.folderState == 'idle',
                       ),
