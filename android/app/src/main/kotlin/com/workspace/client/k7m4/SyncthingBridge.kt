@@ -670,10 +670,11 @@ class SyncthingBridge(
             // Syncthing's Windows service guidance uses a ten-second graceful
             // shutdown window. Use the same conservative lifecycle boundary on
             // Android before tearing down the wrapper service.
+            val deadlineNanos = System.nanoTime() + 10_000_000_000L
             runCatching {
                 request("POST", "/rest/system/shutdown")
             }
-            repeat(100) {
+            while (System.nanoTime() < deadlineNanos) {
                 val stillReady = runCatching {
                     request("GET", "/rest/system/ping")
                     true
@@ -683,7 +684,10 @@ class SyncthingBridge(
                     stopService()
                     return
                 }
-                Thread.sleep(100)
+                val remainingMillis =
+                    ((deadlineNanos - System.nanoTime()) / 1_000_000L)
+                        .coerceAtLeast(1L)
+                Thread.sleep(minOf(100L, remainingMillis))
             }
         }
         integrationPolicyApplied = false
