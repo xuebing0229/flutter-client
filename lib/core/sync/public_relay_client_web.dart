@@ -39,7 +39,7 @@ class PublicRelayClient {
   Future<void> connect(Iterable<String> topics) async {
     final topicList = topics.toList(growable: false);
     if (topicList.length != 1) {
-      throw StateError('Cloudflare 同步中转要求每个连接只绑定一个设备收件箱');
+      throw StateError('在线同步连接参数异常');
     }
     final topic = topicList.single;
     if (connected && _connectedTopic == topic) return;
@@ -63,7 +63,7 @@ class PublicRelayClient {
     });
     _closeSubscription = socket.onClose.listen((_) {
       if (!ready.isCompleted) {
-        ready.completeError(StateError('Cloudflare 同步中转连接已关闭'));
+        ready.completeError(StateError('在线同步连接已关闭'));
       }
       if (identical(_socket, socket)) {
         _socket = null;
@@ -72,7 +72,7 @@ class PublicRelayClient {
     });
     _errorSubscription = socket.onError.listen((_) {
       if (!ready.isCompleted) {
-        ready.completeError(StateError('Cloudflare 同步中转连接失败'));
+        ready.completeError(StateError('在线同步连接失败'));
       }
     });
     final openSubscription = socket.onOpen.listen((_) {
@@ -89,7 +89,7 @@ class PublicRelayClient {
   void publish(String topic, String payload) {
     final socket = _socket;
     if (socket == null || socket.readyState != html.WebSocket.OPEN) {
-      throw StateError('Cloudflare 同步中转尚未连接');
+      throw StateError('在线同步尚未连接');
     }
     socket.sendString(jsonEncode(<String, dynamic>{
       'type': 'publish',
@@ -168,7 +168,7 @@ Uri _relayUri({
     'https' => 'wss',
     'http' => 'ws',
     'wss' || 'ws' => parsed.scheme,
-    _ => throw const FormatException('Cloudflare 同步中转地址必须使用 HTTPS/WSS'),
+    _ => throw const FormatException('在线同步地址配置无效'),
   };
   final path = raw.isEmpty || parsed.path.isEmpty || parsed.path == '/'
       ? '/sync'
