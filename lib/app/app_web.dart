@@ -928,7 +928,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         final backup = AppBackupData.decode(source);
         final backupAccount = backup.accountSyncState;
         if (backupAccount != null && backupAccount.accountId != _accountId) {
-          throw const FormatException('浏览器本地数据属于另一个账号。');
+          throw const FormatException('当前本机数据属于另一个账号。');
         }
         if (backupAccount != null) {
           await widget.accountStore.mergeCurrentAccountState(backupAccount);
@@ -961,7 +961,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('浏览器本地数据读取失败：$error'),
+              content: Text('本机数据读取失败：$error'),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -989,11 +989,11 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('没有找到旧版数据'),
         content: const Text(
-          '新版已经自动尝试读取当前浏览器里的旧数据，但没有找到这个账号的工作区。'
-          '如果你是刚换了新版 HTML，可以导入旧版导出的完整备份继续使用。\n\n'
-          '以后升级时，建议把“冒险者公会.html”固定放在“文件”里的同一个文件夹，'
-          '并用新版覆盖同名文件。这样浏览器如果仍把它识别为同一个本地来源，'
-          '数据会直接继承；识别失败时再用完整备份恢复。',
+          '新版没有找到这个账号的旧数据。'
+          '如果之前导出过完整备份，可以直接导入继续使用。\n\n'
+          '建议定期导出完整备份，'
+          '这样在更换浏览器、清理数据或迁移设备时，'
+          '都可以用备份恢复。',
         ),
         actions: [
           TextButton(
@@ -1040,8 +1040,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('今天备份了吗？'),
         content: const Text(
-          'PWA 数据只保存在当前浏览器的站点存储里。建议每天导出一次完整备份，'
-          '这样即使浏览器清理了本地数据，也能恢复排单、成品、节点和参考图。',
+          '网页版数据保存在当前设备。建议定期导出完整备份，'
+          '这样更换浏览器、清理数据或迁移设备时也能恢复排单、成品、节点和参考图。',
         ),
         actions: [
           TextButton(
@@ -1173,7 +1173,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('浏览器本地保存失败：$error'),
+          content: Text('本机数据保存失败：$error'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1501,7 +1501,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             '节点预设 ${backup.nodePresets.length} 个\n'
             '账号：${accountName ?? '当前账号'}\n'
             '备份时间：${_formatDateTime(backup.exportedAt.toLocal())}\n\n'
-            '导入后会用这份备份替换当前账号的 PWA 工作区。'
+            '导入后会用这份备份替换当前账号的数据。'
             '${imported.includesAssets ? '' : '\n这份文件不含参考图原文件，已有参考图可能显示为缺失。'}',
           ),
           actions: [
@@ -1596,7 +1596,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       setState(() => _selectedTab = 'orders');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('导入完成，当前账号的 PWA 工作区已经替换。'),
+          content: Text('导入完成，当前账号的数据已经替换。'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1719,7 +1719,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '网页版 · 本地优先',
+                      '网页版',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -1734,7 +1734,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                   widget.accountStore.accountName ?? '当前账号',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                subtitle: const Text('网页本地账号'),
+                subtitle: const Text('当前账号'),
               ),
               ListTile(
                 leading: const Icon(Icons.logout_rounded),
@@ -1749,7 +1749,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
               ListTile(
                 leading: const Icon(Icons.document_scanner_outlined),
                 title: const Text('截图识别批量导入'),
-                subtitle: const Text('PP-OCRv6 · 浏览器本地识别'),
+                subtitle: const Text('批量识别截图内容'),
                 onTap: () => _openScreenshotImport(context),
               ),
               ListTile(
@@ -1877,9 +1877,9 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
                 child: Text(
-                  'PWA 会在两端同时打开时自动同步：优先建立 WebRTC 点对点通道，'
-                  '公共网络只负责加密配对信令，并在直连失败时作为加密兜底；'
-                  '不使用冒险者公会自己的服务器。完整备份仍可用于手动恢复。',
+                  '设备同时打开时会自动同步数据；'
+                  ''
+                  '完整备份也可用于手动恢复。',
                   style: TextStyle(
                     height: 1.45,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -2279,8 +2279,8 @@ class _WebDataPage extends StatelessWidget {
                   Expanded(
                     child: Text(
                       linked
-                          ? '当前网页工作区来自账号“$linkedAccountName”。导出的完整备份可回到安卓或 Windows 客户端导入。'
-                          : '当前是独立PWA 工作区。若要和安卓 / Windows 手动同步，建议先在客户端导出完整备份，再导入这里。',
+                          ? '当前网页版已关联账号“$linkedAccountName”。完整备份可在其他设备上导入恢复。'
+                          : '当前网页版尚未关联其他设备。若要导入已有数据，可以使用之前导出的完整备份。',
                       style: const TextStyle(height: 1.45),
                     ),
                   ),
@@ -2300,12 +2300,12 @@ class _WebDataPage extends StatelessWidget {
               title: Text(
                 peerSync?.connected == true
                     ? '在线设备同步已连接'
-                    : '正在连接公共同步网络',
+                    : '正在连接在线同步',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               subtitle: Text(
                 peerSync?.lastError ??
-                    '两端同时打开时会自动交换排单、成品、节点、设置和参考图；优先 WebRTC 点对点直连，直连失败才走加密公共中继。',
+                    '两端同时打开时会自动同步排单、成品、节点、设置和参考图。',
               ),
               trailing: TextButton(
                 onPressed: peerSync == null
@@ -2326,7 +2326,7 @@ class _WebDataPage extends StatelessWidget {
                     '导出完整备份',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: const Text('排单、成品、节点、设置和参考图会一起打包成 .zip'),
+                  subtitle: const Text('排单、成品、节点、设置和参考图会一起保存'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: busy() ? null : () => onExport(context),
                 ),
@@ -2337,7 +2337,7 @@ class _WebDataPage extends StatelessWidget {
                     '导入完整备份',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: const Text('支持客户端导出的 .zip，也兼容旧版 .json'),
+                  subtitle: const Text('支持导入完整备份，也兼容旧版备份'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: busy() ? null : () => onImport(context),
                 ),
@@ -2358,8 +2358,8 @@ class _WebDataPage extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            '在线同步只在设备打开时进行；公共中继只看到端到端加密后的临时数据。'
-            '网页本地数据仍使用浏览器存储，清除站点数据前建议保留完整备份。',
+            '在线同步只在设备打开时进行。'
+            '若要更换浏览器、清理数据或迁移设备，建议先保留一份完整备份。',
             style: TextStyle(
               height: 1.5,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
