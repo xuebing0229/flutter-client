@@ -36,7 +36,7 @@ class PublicRelayClient {
   Future<void> connect(Iterable<String> topics) async {
     final topicList = topics.toList(growable: false);
     if (topicList.length != 1) {
-      throw StateError('Cloudflare 同步中转要求每个连接只绑定一个设备收件箱');
+      throw StateError('在线同步连接参数异常');
     }
     final topic = topicList.single;
     if (connected && _connectedTopic == topic) return;
@@ -74,7 +74,7 @@ class PublicRelayClient {
   void publish(String topic, String payload) {
     final socket = _socket;
     if (socket == null || socket.readyState != WebSocket.open) {
-      throw StateError('Cloudflare 同步中转尚未连接');
+      throw StateError('在线同步尚未连接');
     }
     socket.add(jsonEncode(<String, dynamic>{
       'type': 'publish',
@@ -144,7 +144,7 @@ Uri _relayUri({
   final raw = configured.trim();
   if (raw.isEmpty) {
     throw StateError(
-      '尚未配置 Cloudflare 同步中转地址（PUBLIC_SYNC_RELAY_URL）',
+      '在线同步地址尚未配置',
     );
   }
 
@@ -153,7 +153,7 @@ Uri _relayUri({
     'https' => 'wss',
     'http' => 'ws',
     'wss' || 'ws' => parsed.scheme,
-    _ => throw const FormatException('Cloudflare 同步中转地址必须使用 HTTPS/WSS'),
+    _ => throw const FormatException('在线同步地址配置无效'),
   };
   final path = parsed.path.isEmpty || parsed.path == '/'
       ? '/sync'
