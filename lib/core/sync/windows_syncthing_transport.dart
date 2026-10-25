@@ -744,7 +744,12 @@ class WindowsSyncthingTransport {
     if (await _ensureStarted()) return;
     final start = _starting;
     if (start != null) {
-      await start;
+      try {
+        await start;
+      } catch (_) {
+        _startupFailure = null;
+        rethrow;
+      }
     }
     final apiKey = await _ensureApiKey();
     if (!await _ping(apiKey)) {
