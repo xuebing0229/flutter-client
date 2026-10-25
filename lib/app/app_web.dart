@@ -2170,6 +2170,69 @@ class _WebAccountPageState extends State<_WebAccountPage> {
   }
 }
 
+class _WebSettingsPage extends StatelessWidget {
+  const _WebSettingsPage({
+    required this.themeStore,
+    required this.dataPage,
+  });
+
+  final AppThemeStore themeStore;
+  final Widget dataPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '设置',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('UI主题色'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ThemeColorPage(store: themeStore),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sync_alt_rounded),
+            title: const Text('设备同步与完整备份'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => dataPage),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline_rounded),
+            title: const Text('关于冒险者公会'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () async {
+              final navigator = Navigator.of(context);
+              final info = await PackageInfo.fromPlatform();
+              if (!context.mounted) return;
+              await navigator.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => AppAboutPage(
+                    version: info.version,
+                    buildNumber: int.tryParse(info.buildNumber) ?? 0,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WebDataPage extends StatelessWidget {
   const _WebDataPage({
     required this.linkedAccountName,
