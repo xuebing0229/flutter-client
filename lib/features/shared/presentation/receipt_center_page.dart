@@ -17,6 +17,15 @@ enum _ArchiveFilter {
   final String label;
 }
 
+enum _ContentFilter {
+  all('全部'),
+  orders('排单'),
+  products('成品');
+
+  const _ContentFilter(this.label);
+  final String label;
+}
+
 class ReceiptCenterPage extends StatefulWidget {
   const ReceiptCenterPage({
     required this.orderStore,
@@ -38,6 +47,7 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
   final TextEditingController _clientSearchController = TextEditingController();
 
   _ArchiveFilter _archiveFilter = _ArchiveFilter.all;
+  _ContentFilter _contentFilter = _ContentFilter.all;
   DateTimeRange? _singleDateRange;
   String _singleQuery = '';
   String _singleSearchField = 'all';
@@ -118,8 +128,9 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
   List<_SingleReceiptItem> _singleItems() {
     final items = <_SingleReceiptItem>[];
 
-    for (final order in widget.orderStore.orders) {
-      final date = _orderDate(order);
+    if (_contentFilter != _ContentFilter.products) {
+      for (final order in widget.orderStore.orders) {
+        final date = _orderDate(order);
       if (!_matchesArchive(order.isArchived) ||
           !_matchesRange(date) ||
           !_matchesSingleQuery(
@@ -130,15 +141,17 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
           )) {
         continue;
       }
-      items.add(
-        _SingleReceiptItem.order(
-          order: order,
-          date: date,
-        ),
-      );
+        items.add(
+          _SingleReceiptItem.order(
+            order: order,
+            date: date,
+          ),
+        );
+      }
     }
 
-    for (final product in widget.productStore.products) {
+    if (_contentFilter != _ContentFilter.orders) {
+      for (final product in widget.productStore.products) {
       final date = _productDate(product);
       final saleClients = <String>[];
       for (final soldAt in product.saleRecords) {
@@ -155,12 +168,13 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
           )) {
         continue;
       }
-      items.add(
-        _SingleReceiptItem.product(
-          product: product,
-          date: date,
-        ),
-      );
+        items.add(
+          _SingleReceiptItem.product(
+            product: product,
+            date: date,
+          ),
+        );
+      }
     }
 
     items.sort((left, right) {
@@ -330,17 +344,51 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
+              Row(
                 children: [
-                  for (final filter in _ArchiveFilter.values)
-                    ChoiceChip(
-                      label: Text(filter.label),
-                      selected: _archiveFilter == filter,
-                      onSelected: (_) =>
-                          setState(() => _archiveFilter = filter),
+                  Expanded(
+                    child: DropdownButtonFormField<_ArchiveFilter>(
+                      value: _archiveFilter,
+                      decoration: const InputDecoration(
+                        labelText: '归档状态',
+                        isDense: true,
+                      ),
+                      items: [
+                        for (final filter in _ArchiveFilter.values)
+                          DropdownMenuItem(
+                            value: filter,
+                            child: Text(filter.label),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _archiveFilter = value);
+                        }
+                      },
                     ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropdownButtonFormField<_ContentFilter>(
+                      value: _contentFilter,
+                      decoration: const InputDecoration(
+                        labelText: '内容类型',
+                        isDense: true,
+                      ),
+                      items: [
+                        for (final filter in _ContentFilter.values)
+                          DropdownMenuItem(
+                            value: filter,
+                            child: Text(filter.label),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _contentFilter = value);
+                        }
+                      },
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
