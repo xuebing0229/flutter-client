@@ -406,6 +406,30 @@ class QueueOrder {
 }
 
 
+const String urgentOrderTag = '加急';
+
+bool hasUrgentOrderTag(Iterable<String> values) {
+  final target = urgentOrderTag.toLowerCase();
+  return values.any((value) => value.trim().toLowerCase() == target);
+}
+
+List<String> setUrgentOrderTag(
+  Iterable<String> values, {
+  required bool enabled,
+}) {
+  final normalized = normalizeOrderTags(values);
+  if (enabled) {
+    return hasUrgentOrderTag(normalized)
+        ? normalized
+        : normalizeOrderTags(<String>[...normalized, urgentOrderTag]);
+  }
+  return normalizeOrderTags(
+    normalized.where(
+      (value) => value.trim().toLowerCase() != urgentOrderTag.toLowerCase(),
+    ),
+  );
+}
+
 /// Canonicalize labels while keeping the original display spelling/order.
 List<String> normalizeOrderTags(Iterable<String> values) {
   final seen = <String>{};
