@@ -200,18 +200,21 @@ class ReceiptPage extends StatefulWidget {
   const ReceiptPage({
     required this.data,
     required this.styleStore,
+    required this.defaultHeaderText,
     super.key,
   }) : annualData = null;
 
   const ReceiptPage.annual({
     required this.annualData,
     required this.styleStore,
+    required this.defaultHeaderText,
     super.key,
   }) : data = null;
 
   final ReceiptData? data;
   final AnnualReceiptData? annualData;
   final ReceiptStyleStore styleStore;
+  final String defaultHeaderText;
 
   @override
   State<ReceiptPage> createState() => _ReceiptPageState();
@@ -267,6 +270,51 @@ class _ReceiptPageState extends State<ReceiptPage> {
     }
   }
 
+  Future<void> _editHeaderText() async {
+    final current = widget.styleStore.effectiveHeaderText(
+      widget.defaultHeaderText,
+    );
+    final controller = TextEditingController(text: current);
+    final result = await showDialog<_ReceiptHeaderEditResult>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('编辑小票抬头'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          decoration: const InputDecoration(
+            labelText: '抬头文字',
+            hintText: '可填写画师名、工作室名，也可留空',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(
+              const _ReceiptHeaderEditResult.followAccount(),
+            ),
+            child: const Text('使用账号名'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(
+              _ReceiptHeaderEditResult.custom(controller.text.trim()),
+            ),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null || !mounted) return;
+    widget.styleStore.setHeaderText(
+      result.followAccount ? null : result.text,
+    );
+  }
+
   MemoryImage? _backgroundImage() {
     final raw = widget.styleStore.backgroundImageBase64;
     if (raw == null || raw.isEmpty) {
@@ -320,7 +368,12 @@ class _ReceiptPageState extends State<ReceiptPage> {
     );
     controller.dispose();
     if (name == null || name.trim().isEmpty || !mounted) return;
-    widget.styleStore.saveCurrentPreset(name);
+    widget.styleStore.saveCurrentPreset(
+      name,
+      resolvedHeaderText: widget.styleStore.effectiveHeaderText(
+        widget.defaultHeaderText,
+      ),
+    );
   }
 
   Future<void> _shareStylePreset(ReceiptStylePreset preset) async {
@@ -595,6 +648,11 @@ class _ReceiptPageState extends State<ReceiptPage> {
                     label: const Text('字体颜色'),
                   ),
                   OutlinedButton.icon(
+                    onPressed: _editHeaderText,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('抬头文字'),
+                  ),
+                  OutlinedButton.icon(
                     onPressed: _showStylePresets,
                     icon: const Icon(Icons.bookmarks_outlined),
                     label: const Text('样式预设'),
@@ -630,12 +688,18 @@ class _ReceiptPageState extends State<ReceiptPage> {
                   child: widget.annualData == null
                       ? _ReceiptPaper(
                           data: widget.data!,
+                          headerText: style.effectiveHeaderText(
+                            widget.defaultHeaderText,
+                          ),
                           fontColor: Color(style.fontColorValue),
                           backgroundImage: backgroundImage,
                           transparentBackground: _transparentBackground,
                         )
                       : _AnnualReceiptPaper(
                           data: widget.annualData!,
+                          headerText: style.effectiveHeaderText(
+                            widget.defaultHeaderText,
+                          ),
                           fontColor: Color(style.fontColorValue),
                           backgroundImage: backgroundImage,
                           transparentBackground: _transparentBackground,
@@ -662,7 +726,17 @@ class _ReceiptPageState extends State<ReceiptPage> {
 }
 
 
-class _ReceiptPaperFrame extends StatelessWidget {
+class _ReceiptHeaderEditResult {
+  const _ReceiptHeaderEditResult.custom(this.text) : followAccount = false;
+  const _ReceiptHeaderEditResult.followAccount()
+      : followAccount = true,
+        text = '';
+
+  final bool followAccount;
+  final String text;
+}
+
+$helperAnchor
   const _ReceiptPaperFrame({
     required this.fontColor,
     required this.backgroundImage,
@@ -716,12 +790,14 @@ class _ReceiptPaperFrame extends StatelessWidget {
 class _AnnualReceiptPaper extends StatelessWidget {
   const _AnnualReceiptPaper({
     required this.data,
+    required this.headerText,
     required this.fontColor,
     required this.backgroundImage,
     required this.transparentBackground,
   });
 
   final AnnualReceiptData data;
+  final String headerText;
   final Color fontColor;
   final ImageProvider? backgroundImage;
   final bool transparentBackground;
@@ -735,17 +811,19 @@ class _AnnualReceiptPaper extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            '冒险者公会',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: fontColor,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2,
+          if (headerText.isNotEmpty) ...[
+            Text(
+              headerText,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: fontColor,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
+            const SizedBox(height: 4),
+          ],
           Text(
             '${data.year} 年度业务小票',
             textAlign: TextAlign.center,
@@ -852,12 +930,14 @@ class _AnnualReceiptEntryRow extends StatelessWidget {
 class _ReceiptPaper extends StatelessWidget {
   const _ReceiptPaper({
     required this.data,
+    required this.headerText,
     required this.fontColor,
     required this.backgroundImage,
     required this.transparentBackground,
   });
 
   final ReceiptData data;
+  final String headerText;
   final Color fontColor;
   final ImageProvider? backgroundImage;
   final bool transparentBackground;
@@ -875,17 +955,19 @@ class _ReceiptPaper extends StatelessWidget {
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '冒险者公会',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: fontColor,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2,
+            if (headerText.isNotEmpty) ...[
+              Text(
+                headerText,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: fontColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
+              const SizedBox(height: 4),
+            ],
             Text(
               data.platform,
               textAlign: TextAlign.center,
