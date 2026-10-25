@@ -20,10 +20,12 @@ import '../core/theme/app_ui_style.dart';
 import '../core/theme/guild_visual_theme.dart';
 import '../core/web/web_platform_bridge.dart';
 import '../features/home/presentation/about_page.dart';
+import '../features/home/presentation/app_drawer.dart';
 import '../features/home/presentation/archive_page.dart';
 import '../features/home/presentation/feature_toggle_page.dart';
 import '../features/home/presentation/first_run_guide.dart';
 import '../features/home/presentation/theme_color_page.dart';
+import '../features/home/presentation/workspace_shell.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
 import '../features/focus/presentation/focus_panel.dart';
@@ -809,6 +811,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   bool _ready = false;
   bool _busy = false;
   String _selectedTab = 'orders';
+  String? _desktopToolSelection;
   CollectionViewPreferences _collectionViews =
       const CollectionViewPreferences();
 
