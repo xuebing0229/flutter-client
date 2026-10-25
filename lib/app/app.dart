@@ -15,7 +15,6 @@ import '../core/sync/embedded_syncthing_bridge.dart';
 import '../core/sync/portable_sync_workspace_validator.dart';
 import '../core/sync/pending_device_revocation_service.dart';
 import '../core/theme/app_theme_store.dart';
-import '../core/theme/guild_visual_theme.dart';
 import '../features/account/presentation/account_gate.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/orders/data/node_presets.dart';
