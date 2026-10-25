@@ -736,7 +736,7 @@ class _ReceiptHeaderEditResult {
   final String text;
 }
 
-$helperAnchor
+class _ReceiptPaperFrame extends StatelessWidget {
   const _ReceiptPaperFrame({
     required this.fontColor,
     required this.backgroundImage,
