@@ -11,6 +11,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.net.URI
 import java.net.URLEncoder
 import java.net.URL
@@ -161,6 +163,7 @@ class SyncthingBridge(
         }
 
         ensureApiKey()
+        ensureApiPort()
         val startRequested = startService()
 
         val ready = pingReady()
@@ -716,7 +719,8 @@ class SyncthingBridge(
         path: String,
         body: String? = null,
     ): String {
-        val connection = URL("http://127.0.0.1:${SyncthingService.API_PORT}$path")
+        val apiPort = ensureApiPort()
+        val connection = URL("http://127.0.0.1:$apiPort$path")
             .openConnection() as HttpURLConnection
         connection.requestMethod = method
         connection.connectTimeout = 2500
@@ -752,6 +756,26 @@ class SyncthingBridge(
         }
     }
 
+    private fun ensureApiPort(): Int {
+        val preferences = activity.getSharedPreferences(
+            SyncthingService.PREF_FILE,
+            Context.MODE_PRIVATE,
+        )
+        val existing = preferences.getInt(SyncthingService.PREF_API_PORT, 0)
+        if (existing in 1024..65535) return existing
+
+        val loopback = InetAddress.getByName("127.0.0.1")
+        val port = ServerSocket(0, 1, loopback).use { socket ->
+            socket.localPort
+        }
+        check(port in 1024..65535) { "无法分配本机同步端口" }
+
+        val saved = preferences.edit()
+            .putInt(SyncthingService.PREF_API_PORT, port)
+            .commit()
+        check(saved) { "无法保存本机同步端口" }
+        return port
+    }
     private fun ensureApiKey(): String {
         val preferences = activity.getSharedPreferences(
             SyncthingService.PREF_FILE,
