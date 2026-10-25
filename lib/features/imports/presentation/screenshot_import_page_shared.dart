@@ -112,7 +112,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('复制本机 OCR 诊断？'),
+        title: const Text('复制识别诊断？'),
         content: const Text(
           '报告包含截图里识别到的文字及位置，包括图名、单主、价格、日期。'
           '不包含原始图片、文件路径或账号凭据，也不会自动上传。'
@@ -132,9 +132,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     );
     if (!mounted || accepted != true) return;
     final output = StringBuffer()
-      ..writeln('冒险者公会 · 截图 OCR 本机诊断')
+      ..writeln('冒险者公会 · 截图识别诊断')
       ..writeln('类型：' + (_products ? '成品' : '排单'))
-      ..writeln('以下为本机实际 OCR 输出，不是原始截图。')
+      ..writeln('以下为本次识别输出，不是原始截图。')
       ..writeln();
     for (final item in _ocrDiagnostics) {
       output.writeln(item);
@@ -152,16 +152,16 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     }
     try {
       await Clipboard.setData(ClipboardData(text: output.toString()));
-      _message('OCR 诊断文字已复制，可粘贴到聊天中核对');
+      _message('识别诊断已复制，可粘贴到聊天中核对');
     } catch (error) {
-      _message('复制 OCR 诊断失败：$error');
+      _message('复制识别诊断失败：$error');
     }
   }
 
   Future<void> _pickAndRecognize() async {
     if (_working) return;
     if (!_ocr.supported) {
-      _message('当前平台的离线 OCR 引擎仍在适配中；暂时请使用手动导入。');
+      _message('当前平台暂不支持截图识别，请先使用手动导入。');
       return;
     }
 
@@ -192,7 +192,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         try {
           if (mounted) {
             setState(() => _recognitionStep =
-                'PP-OCRv6：识别截图 $_imageSerial/${selected.length}');
+                '正在识别截图 $_imageSerial/${selected.length}');
           }
           final imageHash = await _history.hashImage(image.path);
           final ocrTimer = Stopwatch()..start();
@@ -768,7 +768,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           child: Column(
             children: [
               ListTile(
-                title: const Text('OCR 原始截图'),
+                title: const Text('原始截图'),
                 subtitle: Text(row.title,
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: IconButton(
@@ -838,7 +838,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ),
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('已框选 OCR 来源文字，可双指缩放核对'),
+                child: Text('已框选识别来源文字，可双指缩放核对'),
               ),
             ],
           ),
@@ -1075,7 +1075,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         title: Text(_products ? '截图导入成品' : '截图导入排单'),
         actions: [
           IconButton(
-            tooltip: '复制 OCR 诊断（不会上传原图）',
+            tooltip: '复制识别诊断',
             onPressed: _working || _committing || _ocrDiagnostics.isEmpty
                 ? null
                 : () => unawaited(_copyOcrDiagnostic()),
