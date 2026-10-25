@@ -1,10 +1,14 @@
-name: Windows Platform Validation
+name: Embedded Sync and Windows Validation
 
 on:
   pull_request:
     paths:
       - 'lib/core/update/**'
       - 'lib/core/sync/**'
+      - 'android/app/build.gradle.kts'
+      - 'android/app/src/main/kotlin/com/workspace/client/k7m4/SyncthingBridge.kt'
+      - 'android/app/src/main/kotlin/com/workspace/client/k7m4/SyncthingService.kt'
+      - 'tool/build_syncthing_android.sh'
       - 'lib/core/desktop_pet/**'
       - 'lib/features/home/presentation/desktop_pet_page.dart'
       - 'lib/features/imports/data/windows_official_paddleocr.dart'
@@ -23,6 +27,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  android-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.2'
+          cache: true
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Bundle PP-OCRv6 Small models
+        run: python3 tool/fetch_official_ppocrv6_models.py
+      - name: Build pinned embedded Syncthing core
+        env:
+          SYNCTHING_VERSION: v2.1.7
+        run: bash tool/build_syncthing_android.sh
+      - name: Compile Android Beta debug
+        run: flutter build apk --debug --flavor beta --no-pub
+
   windows:
     runs-on: windows-2022
     timeout-minutes: 30
@@ -45,6 +78,12 @@ jobs:
       - name: Test Windows updater and installer process shutdown
         shell: powershell
         run: ./tool/test_windows_updater.ps1
+      - name: Verify pinned Windows Syncthing release
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'syncthing-validation'
+          ./tool/fetch_syncthing_windows.ps1 -Version v2.1.7 -Destination $destination
+          & (Join-Path $destination 'syncthing.exe') --version
       - name: Compile Windows debug
         shell: pwsh
         run: flutter build windows --debug
