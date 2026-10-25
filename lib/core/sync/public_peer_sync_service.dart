@@ -101,7 +101,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       });
       requestSync(immediate: true);
     } catch (error) {
-      _lastError = '公共同步网络启动失败：$error';
+      _lastError = '在线同步启动失败：$error';
       _connected = false;
       notifyListeners();
     } finally {
@@ -160,7 +160,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       if (_connected) _lastError = null;
     } catch (error) {
       _connected = false;
-      _lastError = '公共同步网络连接失败：$error';
+      _lastError = '在线同步连接失败：$error';
     }
     if (!_disposed) notifyListeners();
   }
@@ -276,7 +276,7 @@ class PublicPeerSyncService extends ChangeNotifier {
         'data': protected.substring(start, end),
       });
       if (relay == null || !relay.connected) {
-        throw StateError('Cloudflare 同步中转尚未连接');
+        throw StateError('在线同步尚未连接');
       }
       relay.publish(_topicFor(targetDeviceId), frame);
       if (index % 8 == 7) {
