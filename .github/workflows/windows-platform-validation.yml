@@ -5,6 +5,7 @@ on:
     paths:
       - 'lib/core/update/**'
       - 'lib/core/sync/**'
+      - 'android/app/build.gradle.kts'
       - 'android/app/src/main/kotlin/com/workspace/client/k7m4/SyncthingBridge.kt'
       - 'android/app/src/main/kotlin/com/workspace/client/k7m4/SyncthingService.kt'
       - 'tool/build_syncthing_android.sh'
