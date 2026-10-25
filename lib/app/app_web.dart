@@ -1358,6 +1358,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           orderStore: _orderStore,
           productStore: _productStore,
           receiptStyleStore: _receiptStyleStore,
+          accountName: widget.accountStore.accountName ?? '',
         ),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
           store: widget.featureStore,
