@@ -3,6 +3,44 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import 'app_drawer.dart';
 
+enum GuildAddMethod { manual, screenshot }
+
+Future<GuildAddMethod?> showGuildAddMethodPicker(BuildContext context) {
+  FocusManager.instance.primaryFocus?.unfocus();
+  return showModalBottomSheet<GuildAddMethod>(
+    context: context,
+    showDragHandle: true,
+    builder: (dialogContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_note_rounded),
+              title: const Text('手动导入'),
+              subtitle: const Text('逐项填写订单信息'),
+              onTap: () => Navigator.pop(
+                dialogContext,
+                GuildAddMethod.manual,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.document_scanner_outlined),
+              title: const Text('截图导入'),
+              subtitle: const Text('从平台截图识别多条，检查后批量添加'),
+              onTap: () => Navigator.pop(
+                dialogContext,
+                GuildAddMethod.screenshot,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class GuildWorkspaceTab {
   const GuildWorkspaceTab({
     required this.id,
