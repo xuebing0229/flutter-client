@@ -9,6 +9,7 @@ class AppDrawer extends StatelessWidget {
     required this.showFeatureToggle,
     required this.showPetFocusEntry,
     required this.showDesktopPet,
+    this.showFeedback = true,
     this.accountSubtitle,
     this.onHideFeatureToggle,
     super.key,
@@ -19,6 +20,7 @@ class AppDrawer extends StatelessWidget {
   final bool showFeatureToggle;
   final bool showPetFocusEntry;
   final bool showDesktopPet;
+  final bool showFeedback;
   final String? accountSubtitle;
   final VoidCallback? onHideFeatureToggle;
 
@@ -46,6 +48,7 @@ class AppDrawer extends StatelessWidget {
             showFeatureToggle: showFeatureToggle,
             showPetFocusEntry: showPetFocusEntry,
             showDesktopPet: showDesktopPet,
+            showFeedback: showFeedback,
             accountSubtitle: accountSubtitle,
             onHideFeatureToggle: onHideFeatureToggle,
             closeBeforeTutorial: true,
@@ -77,6 +80,7 @@ class AppToolMenu extends StatelessWidget {
     required this.showFeatureToggle,
     required this.showPetFocusEntry,
     required this.showDesktopPet,
+    this.showFeedback = true,
     this.accountSubtitle,
     this.onHideFeatureToggle,
     this.selectedTool,
@@ -91,6 +95,7 @@ class AppToolMenu extends StatelessWidget {
   final bool showFeatureToggle;
   final bool showPetFocusEntry;
   final bool showDesktopPet;
+  final bool showFeedback;
   final String? accountSubtitle;
   final VoidCallback? onHideFeatureToggle;
   final String? selectedTool;
@@ -168,12 +173,13 @@ class AppToolMenu extends StatelessWidget {
             }
           },
         ),
-        _item(
-          icon: Icons.feedback_outlined,
-          title: '问题反馈',
-          tool: feedbackTool,
-          onTap: () => select(feedbackTool),
-        ),
+        if (showFeedback)
+          _item(
+            icon: Icons.feedback_outlined,
+            title: '问题反馈',
+            tool: feedbackTool,
+            onTap: () => select(feedbackTool),
+          ),
         _item(
           icon: Icons.sync_alt_rounded,
           title: '设备同步',
