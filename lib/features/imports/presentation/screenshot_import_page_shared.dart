@@ -1365,23 +1365,38 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                   style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
                 ),
               ),
-            if (!_products && row.tags.isNotEmpty)
+            if (!_products)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Wrap(
                   spacing: 6,
                   runSpacing: 4,
                   children: [
-                    for (final tag in row.tags)
-                      InputChip(
-                        label: Text(tag),
-                        onDeleted: () => setState(() {
-                          row.tags = [
-                            for (final existing in row.tags)
-                              if (existing != tag) existing,
-                          ];
-                        }),
+                    FilterChip(
+                      avatar: const Icon(
+                        Icons.priority_high_rounded,
+                        size: 17,
                       ),
+                      label: const Text(urgentOrderTag),
+                      selected: hasUrgentOrderTag(row.tags),
+                      onSelected: (selected) => setState(() {
+                        row.tags = setUrgentOrderTag(
+                          row.tags,
+                          enabled: selected,
+                        );
+                      }),
+                    ),
+                    for (final tag in row.tags)
+                      if (!hasUrgentOrderTag(<String>[tag]))
+                        InputChip(
+                          label: Text(tag),
+                          onDeleted: () => setState(() {
+                            row.tags = [
+                              for (final existing in row.tags)
+                                if (existing != tag) existing,
+                            ];
+                          }),
+                        ),
                   ],
                 ),
               ),
