@@ -98,6 +98,13 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
       expect(web.lastSuccessfulSyncAt, isNotNull);
+
+      // Once both directions are acknowledged, the protocol must become idle
+      // instead of bouncing snapshots forever.
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      final settledPublishCount = hub.publishCount;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(hub.publishCount, settledPublishCount);
     },
   );
 }
@@ -117,6 +124,8 @@ AccountSyncState _state({
 }
 
 class _RelayHub {
+  int publishCount = 0;
+
   final Map<String, Set<_FakeRelayClient>> _listeners =
       <String, Set<_FakeRelayClient>>{};
 
@@ -142,6 +151,7 @@ class _RelayHub {
     String topic,
     String payload,
   ) {
+    publishCount += 1;
     final targets = List<_FakeRelayClient>.from(
       _listeners[topic] ?? const <_FakeRelayClient>{},
     );
