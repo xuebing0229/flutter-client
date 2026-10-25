@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+204
-# beta-204: product overview view, monthly statistics polish, receipt preset image sharing
+version: 0.0.1+206
+# beta-206: unified receipt center, annual client receipts, transparent PNG export
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
