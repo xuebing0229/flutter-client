@@ -513,7 +513,7 @@ class WindowsSyncthingTransport {
     );
     final beforeDeviceId = beforeSystem['myID']?.toString().trim() ?? '';
     if (beforeDeviceId.isEmpty) {
-      throw StateError('重建同步核心前无法读取当前设备身份。');
+      throw StateError('恢复设备同步前无法读取当前设备身份。');
     }
 
     final support = await getApplicationSupportDirectory();
@@ -527,7 +527,7 @@ class WindowsSyncthingTransport {
       '${configDir.path}${Platform.pathSeparator}key.pem',
     );
     if (!await certFile.exists() || !await keyFile.exists()) {
-      throw StateError('同步核心身份文件不完整，已取消自动重建。');
+      throw StateError('设备同步信息不完整，已取消自动恢复。');
     }
 
     final backupDir = Directory(
@@ -563,7 +563,7 @@ class WindowsSyncthingTransport {
       );
       final afterDeviceId = afterSystem['myID']?.toString().trim() ?? '';
       if (afterDeviceId != beforeDeviceId) {
-        throw StateError('同步核心重建后设备身份发生变化，已回滚。');
+        throw StateError('设备同步恢复后设备身份发生变化，已回滚。');
       }
 
       try {
@@ -672,7 +672,7 @@ class WindowsSyncthingTransport {
   Future<void> _ensureReady() async {
     final binary = _binaryFile();
     if (!await binary.exists()) {
-      throw StateError('安装包中缺少 Windows 同步核心');
+      throw StateError('安装包中缺少设备同步组件');
     }
 
     final apiKey = await _ensureApiKey();
@@ -1001,7 +1001,7 @@ class WindowsSyncthingTransport {
         final responseBody = await utf8.decoder.bind(response).join();
         if (response.statusCode < 200 || response.statusCode >= 300) {
           throw HttpException(
-            'Syncthing API HTTP ${response.statusCode}'
+            '设备同步请求失败（HTTP ${response.statusCode}）'
             '${responseBody.isEmpty ? '' : ': $responseBody'}',
           );
         }
