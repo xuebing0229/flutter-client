@@ -11,9 +11,9 @@ class SyncthingService : Service() {
     companion object {
         const val ACTION_START = "com.workspace.client.k7m4.SYNCTHING_START"
         const val ACTION_STOP = "com.workspace.client.k7m4.SYNCTHING_STOP"
-        const val API_PORT = BuildConfig.SYNCTHING_API_PORT
         const val PREF_FILE = "embedded_syncthing"
         const val PREF_API_KEY = "api_key"
+        const val PREF_API_PORT = "api_port"
         private const val TAG = "EmbeddedSyncthing"
 
         @Volatile
@@ -57,10 +57,16 @@ class SyncthingService : Service() {
             return
         }
 
-        val apiKey = getSharedPreferences(PREF_FILE, MODE_PRIVATE)
-            .getString(PREF_API_KEY, null)
+        val preferences = getSharedPreferences(PREF_FILE, MODE_PRIVATE)
+        val apiKey = preferences.getString(PREF_API_KEY, null)
+        val apiPort = preferences.getInt(PREF_API_PORT, 0)
         if (apiKey.isNullOrBlank()) {
             Log.e(TAG, "Missing local API key")
+            stopSelf()
+            return
+        }
+        if (apiPort !in 1024..65535) {
+            Log.e(TAG, "Missing local API port")
             stopSelf()
             return
         }
@@ -83,16 +89,14 @@ class SyncthingService : Service() {
                     "--home",
                     configDir.absolutePath,
                     "--gui-address",
-                    "127.0.0.1:$API_PORT",
+                    "127.0.0.1:$apiPort",
                     "--gui-apikey",
                     apiKey,
                     "--no-browser",
                     "--no-restart",
-                    "--log-max-old-files=0",
+                    "--no-upgrade",
                 ).apply {
                     redirectErrorStream(true)
-                    environment()["STNORESTART"] = "1"
-                    environment()["STNODEFAULTFOLDER"] = "1"
                 }.start()
 
                 process = started
@@ -119,6 +123,9 @@ class SyncthingService : Service() {
     }
 
     private fun stopSyncthing() {
+        // Normal app-driven shutdown goes through /rest/system/shutdown in
+        // SyncthingBridge. If Android destroys this Service unexpectedly,
+        // Process.destroy() remains only as the final containment fallback.
         runCatching { process?.destroy() }
         process = null
         isRunning = false
