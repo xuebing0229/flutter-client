@@ -30,7 +30,7 @@ class FlutterWindow : public Win32Window {
   static constexpr UINT kTrayCallbackMessage = WM_APP + 1;
   static constexpr UINT kExitPreparedMessage = WM_APP + 2;
   static constexpr UINT_PTR kExitPreparationTimerId = 2;
-  static constexpr UINT kExitPreparationWatchdogMs = 12000;
+  static constexpr UINT kExitPreparationWatchdogMs = 25000;
   static constexpr UINT kTrayIconId = 1;
   static constexpr UINT kTrayOpenCommand = 1001;
   static constexpr UINT kTrayExitCommand = 1002;
