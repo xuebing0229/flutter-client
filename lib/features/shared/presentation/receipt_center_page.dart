@@ -31,12 +31,14 @@ class ReceiptCenterPage extends StatefulWidget {
     required this.orderStore,
     required this.productStore,
     required this.receiptStyleStore,
+    required this.accountName,
     super.key,
   });
 
   final OrderStore orderStore;
   final ProductStore productStore;
   final ReceiptStyleStore receiptStyleStore;
+  final String accountName;
 
   @override
   State<ReceiptCenterPage> createState() => _ReceiptCenterPageState();
@@ -249,6 +251,7 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
         builder: (_) => ReceiptPage(
           data: data,
           styleStore: widget.receiptStyleStore,
+          defaultHeaderText: widget.accountName,
         ),
       ),
     );
@@ -275,6 +278,7 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
         builder: (_) => ReceiptPage.annual(
           annualData: data,
           styleStore: widget.receiptStyleStore,
+          defaultHeaderText: widget.accountName,
         ),
       ),
     );
