@@ -1070,10 +1070,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 onChanged: (value) => setState(() => _query = value),
                 onClear: () {
                   _searchController.clear();
-                  setState(() {
-                    _query = '';
-                    _searchField = 'all';
-                  });
+                  setState(() => _query = '');
                 },
               ),
             if (widget.featureStore.customTags && availableTags.isNotEmpty)
