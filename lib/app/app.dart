@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -289,108 +290,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  Color _onColor(Color color) {
-    return color.computeLuminance() > 0.48 ? Colors.black : Colors.white;
-  }
-
-  ColorScheme _paletteScheme(Brightness brightness) {
-    final palette = _themeStore.palette;
-    final colors = palette.previewColors;
-    final primary = colors.first;
-    final secondary = colors.length > 1 ? colors[1] : primary;
-    final tertiary = colors.length > 2 ? colors[2] : secondary;
-    final primaryContainer =
-        colors.length > 3 ? colors[3] : primary;
-    final secondaryContainer =
-        colors.length > 4 ? colors[4] : secondary;
-    final tertiaryContainer =
-        colors.length > 2 ? colors.last : primary;
-
-    final dark = brightness == Brightness.dark;
-    final semantic = palette.semanticColorsFor(brightness);
-
-    final base = ColorScheme.fromSeed(
-      seedColor: dark ? palette.effectiveDarkSeed : palette.lightSeed,
-      brightness: brightness,
-    );
-
-    if (semantic != null) {
-      final tertiary = Color.lerp(
-            semantic.primary,
-            semantic.accent,
-            0.55,
-          ) ??
-          semantic.accent;
-      return base.copyWith(
-        primary: semantic.primary,
-        onPrimary: _onColor(semantic.primary),
-        primaryContainer: semantic.surfaceAlt,
-        onPrimaryContainer: semantic.foreground,
-        secondary: semantic.accent,
-        onSecondary: _onColor(semantic.accent),
-        secondaryContainer: semantic.surfaceAlt,
-        onSecondaryContainer: semantic.foreground,
-        tertiary: tertiary,
-        onTertiary: _onColor(tertiary),
-        tertiaryContainer: semantic.surfaceAlt,
-        onTertiaryContainer: semantic.foreground,
-        surface: semantic.surface,
-        onSurface: semantic.foreground,
-        surfaceContainerLowest: semantic.background,
-        surfaceContainerLow: semantic.surface,
-        surfaceContainer: semantic.surfaceAlt,
-        surfaceContainerHigh: semantic.surfaceAlt,
-        surfaceContainerHighest: semantic.surfaceAlt,
-        onSurfaceVariant: semantic.mutedForeground,
-        outline: semantic.border,
-        outlineVariant: semantic.border,
-        inversePrimary: semantic.primary,
-        surfaceTint: Colors.transparent,
-      );
-    }
-
-    return base.copyWith(
-      primary: primary,
-      onPrimary: _onColor(primary),
-      primaryContainer: primaryContainer,
-      onPrimaryContainer: _onColor(primaryContainer),
-      secondary: secondary,
-      onSecondary: _onColor(secondary),
-      secondaryContainer: secondaryContainer,
-      onSecondaryContainer: _onColor(secondaryContainer),
-      tertiary: tertiary,
-      onTertiary: _onColor(tertiary),
-      tertiaryContainer: tertiaryContainer,
-      onTertiaryContainer: _onColor(tertiaryContainer),
-      surface: base.surface,
-      onSurface: base.onSurface,
-      surfaceContainerHighest: base.surfaceContainerHighest,
-      onSurfaceVariant: base.onSurfaceVariant,
-      outline: base.outline,
-      outlineVariant: base.outlineVariant,
-      inversePrimary: primary,
-      surfaceTint: Colors.transparent,
-    );
-  }
-
-  ThemeData _lightTheme() {
-    final palette = _themeStore.palette;
-    return GuildVisualTheme.build(
-      _paletteScheme(Brightness.light),
-      style: _themeStore.style,
-      semanticColors: palette.semanticColorsFor(Brightness.light),
-    );
-  }
-
-  ThemeData _darkTheme() {
-    final palette = _themeStore.palette;
-    return GuildVisualTheme.build(
-      _paletteScheme(Brightness.dark),
-      style: _themeStore.style,
-      semanticColors: palette.semanticColorsFor(Brightness.dark),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -410,8 +309,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             GlobalCupertinoLocalizations.delegate,
           ],
           themeMode: _themeStore.mode,
-          theme: _lightTheme(),
-          darkTheme: _darkTheme(),
+          theme: GuildAppTheme.light(_themeStore),
+          darkTheme: GuildAppTheme.dark(_themeStore),
           home: AccountGate(
             store: _accountStore,
             onAdoptBackup: _adoptBackup,
