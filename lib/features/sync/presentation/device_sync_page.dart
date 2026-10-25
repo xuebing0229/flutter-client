@@ -159,7 +159,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _StatusRow(
-                      label: '内置同步核心',
+                      label: '同步服务',
                       value: coordinator.syncPaused
                           ? '已暂停'
                           : status.available
