@@ -18,7 +18,6 @@ import '../core/sync/public_peer_sync_service.dart';
 import '../core/sync/sync_coordinator_web.dart';
 import '../core/theme/app_theme_store.dart';
 import '../core/theme/app_ui_style.dart';
-import '../core/theme/guild_visual_theme.dart';
 import '../core/web/web_platform_bridge.dart';
 import '../features/home/presentation/about_page.dart';
 import '../features/home/presentation/app_drawer.dart';
@@ -132,8 +131,8 @@ class _AppState extends State<App> {
             GlobalCupertinoLocalizations.delegate,
           ],
           themeMode: _themeStore.mode,
-          theme: _theme(Brightness.light),
-          darkTheme: _theme(Brightness.dark),
+          theme: GuildAppTheme.light(_themeStore),
+          darkTheme: GuildAppTheme.dark(_themeStore),
           home: _WebAccountGate(
             accountStore: _accountStore,
             themeStore: _themeStore,
