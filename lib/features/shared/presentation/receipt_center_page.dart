@@ -352,7 +352,7 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<_ArchiveFilter>(
-                      value: _archiveFilter,
+                      initialValue: _archiveFilter,
                       decoration: const InputDecoration(
                         labelText: '归档状态',
                         isDense: true,
@@ -374,7 +374,7 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonFormField<_ContentFilter>(
-                      value: _contentFilter,
+                      initialValue: _contentFilter,
                       decoration: const InputDecoration(
                         labelText: '内容类型',
                         isDense: true,
