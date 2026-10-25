@@ -94,19 +94,16 @@ android {
         create("beta") {
             dimension = "channel"
             applicationIdSuffix = ".beta"
-            buildConfigField("int", "SYNCTHING_API_PORT", "8385")
             signingConfig = signingConfigs.findByName("betaRelease")
         }
         create("stable") {
             dimension = "channel"
-            buildConfigField("int", "SYNCTHING_API_PORT", "8384")
             signingConfig = signingConfigs.findByName("stableRelease")
         }
         create("issuer") {
             dimension = "channel"
             applicationIdSuffix = ".issuer"
             minSdk = 26
-            buildConfigField("int", "SYNCTHING_API_PORT", "8386")
             signingConfig = signingConfigs.findByName("betaRelease")
         }
     }
