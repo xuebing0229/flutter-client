@@ -696,7 +696,6 @@ class SyncthingBridge(
             .put("urAccepted", -1)
             .put("crashReportingEnabled", false)
             .put("autoUpgradeIntervalH", 0)
-            .put("releasesURL", "")
         request("PATCH", "/rest/config/options", payload.toString())
         integrationPolicyApplied = true
     }
