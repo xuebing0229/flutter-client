@@ -1213,6 +1213,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           value: leftAt,
         ),
       );
+      if (Platform.isWindows) {
+        // Closing the window hides it to the tray so sync can continue.
+        // Persist local state without tearing down the transport.
+        _saveDebounce?.cancel();
+        unawaited(_flushSyncThenPersist());
+        return;
+      }
+
       unawaited(_leaveForegroundSync(++_syncLifecycleGeneration));
     }
   }
@@ -1234,6 +1242,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_ready && _localDataHealthy) {
       await _flushSyncThenPersist();
     }
+    await _syncCoordinator.deactivateTransportForAccountExit();
   }
 
   @override
