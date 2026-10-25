@@ -443,7 +443,7 @@ class _ReceiveAccountTransferPageState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('诊断日志还没准备好'),
+          content: Text('同步诊断还没准备好'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -454,7 +454,7 @@ class _ReceiveAccountTransferPageState
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('新设备诊断日志已复制'),
+        content: Text('新设备同步诊断已复制'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -526,7 +526,7 @@ class _ReceiveAccountTransferPageState
                     const SizedBox(height: 12),
                     Text(
                       Platform.isWindows
-                          ? '正在初始化 Windows 同步核心并准备本机回应码……首次使用可能需要 10–30 秒。'
+                          ? '正在准备设备连接并生成回应码……首次使用可能需要一点时间。'
                           : '正在准备本机回应码……',
                       textAlign: TextAlign.center,
                     ),
@@ -600,7 +600,7 @@ class _ReceiveAccountTransferPageState
                                       ? '设备已经连接，但临时账号目录尚未被原设备共享，正在自动修复……'
                                       : remoteFolderState == 'paused'
                                           ? '设备已经连接，但临时账号目录处于暂停状态……'
-                                          : '设备已经连接，正在完成临时账号目录握手……'
+                                          : '设备已经连接，正在完成账号连接……'
                                   : peerConfirmed
                                       ? '临时账号目录已确认，正在恢复同步连接……'
                                       : folderState == 'scanning'
@@ -618,7 +618,7 @@ class _ReceiveAccountTransferPageState
           OutlinedButton.icon(
             onPressed: _session == null ? null : _copyDiagnostics,
             icon: const Icon(Icons.bug_report_outlined),
-            label: const Text('复制本次加入诊断日志'),
+            label: const Text('复制本次加入同步诊断'),
           ),
         ],
       ),
