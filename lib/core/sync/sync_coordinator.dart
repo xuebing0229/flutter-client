@@ -231,9 +231,6 @@ class SyncCoordinator extends ChangeNotifier {
   bool _awaitingInitialRemoteWorkspace = false;
   Timer? _changeDebounce;
   Timer? _pollTimer;
-  String? _lastTransferFingerprint;
-  DateTime? _transferLastAdvancedAt;
-  DateTime? _lastTransferRepairAt;
   Future<void> _tail = Future<void>.value();
 
   // Every workspace entity, including UI settings, goes through the same
@@ -1152,6 +1149,7 @@ class SyncCoordinator extends ChangeNotifier {
       _transportPrepared = prepared;
       await _refreshTransportStatus();
       if (prepared) {
+        _lastError = null;
         final current = accountStore.syncSnapshot;
         if (current != null &&
             current.accountId == accountId &&
@@ -1163,7 +1161,13 @@ class SyncCoordinator extends ChangeNotifier {
       }
     } catch (error) {
       if (_disposed) return;
-      _lastError = '同步核心启动失败：$error';
+      final message = error.toString();
+      if (message.contains('仍在继续启动') ||
+          message.contains('正在启动，请稍后重试')) {
+        _lastError = '同步核心启动时间较长，仍在继续尝试。';
+      } else {
+        _lastError = '同步核心启动失败：$error';
+      }
     }
     if (!_disposed) notifyListeners();
   }
@@ -1310,7 +1314,6 @@ class SyncCoordinator extends ChangeNotifier {
       expectedRemoteIds.add(remoteTransportId);
     }
     if (expectedRemoteIds.isEmpty) {
-      _resetTransferStallTracking();
       return;
     }
 
@@ -1364,67 +1367,6 @@ class SyncCoordinator extends ChangeNotifier {
       return;
     }
 
-    await _repairStalledTransferIfNeeded();
-  }
-
-  Future<void> _repairStalledTransferIfNeeded() async {
-    final progress = _transportStatus.syncProgress;
-    if (progress == null) {
-      _resetTransferStallTracking();
-      return;
-    }
-
-    final completion = ((progress['completion'] as num?)?.toDouble() ?? 100)
-        .clamp(0, 100)
-        .toDouble();
-    final needBytes = (progress['needBytes'] as num?)?.toInt() ?? 0;
-    final needItems = (progress['needItems'] as num?)?.toInt() ?? 0;
-    final unfinished = completion < 99.95 || needBytes > 0 || needItems > 0;
-    if (!unfinished) {
-      _resetTransferStallTracking();
-      return;
-    }
-
-    final fingerprint = <Object?>[
-      completion.toStringAsFixed(3),
-      needBytes,
-      needItems,
-      progress['deviceId'],
-      progress['direction'],
-    ].join('|');
-    final now = DateTime.now();
-
-    if (_lastTransferFingerprint != fingerprint) {
-      _lastTransferFingerprint = fingerprint;
-      _transferLastAdvancedAt = now;
-      return;
-    }
-
-    final stalledSince = _transferLastAdvancedAt ??= now;
-    if (now.difference(stalledSince) < const Duration(seconds: 20)) return;
-    final lastRepair = _lastTransferRepairAt;
-    if (lastRepair != null &&
-        now.difference(lastRepair) < const Duration(seconds: 20)) {
-      return;
-    }
-
-    _lastTransferRepairAt = now;
-    await _bridge.setAccountFolderPaused(
-      accountId: accountId,
-      paused: false,
-    );
-    final state = accountStore.syncSnapshot;
-    if (state != null && state.accountId == accountId) {
-      await _pairKnownTransportPeers(state);
-    }
-    await _bridge.requestScan(accountId: accountId);
-    await _refreshTransportStatus();
-  }
-
-  void _resetTransferStallTracking() {
-    _lastTransferFingerprint = null;
-    _transferLastAdvancedAt = null;
-    _lastTransferRepairAt = null;
   }
 
   Future<void> _refreshTransportStatus() async {
