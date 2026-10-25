@@ -44,6 +44,7 @@ import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
 import 'app_drawer.dart';
+import 'workspace_shell.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
@@ -1668,10 +1669,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  void _openMobileTool(String tool) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _buildDesktopToolPage(tool),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tabs = <_HomeTab>[
-      _HomeTab(
+    final tabs = <GuildWorkspaceTab>[
+      GuildWorkspaceTab(
+        id: 'orders',
         label: '排单',
         icon: Icons.format_list_bulleted_rounded,
         selectedIcon: Icons.view_list_rounded,
@@ -1694,7 +1704,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
       if (widget.featureStore.products)
-        _HomeTab(
+        GuildWorkspaceTab(
+          id: 'products',
           label: '成品',
           icon: Icons.image_outlined,
           selectedIcon: Icons.image_rounded,
@@ -1716,7 +1727,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
       if (widget.featureStore.schedule)
-        _HomeTab(
+        GuildWorkspaceTab(
+          id: 'schedule',
           label: '日程',
           icon: Icons.calendar_month_outlined,
           selectedIcon: Icons.calendar_month_rounded,
@@ -1729,7 +1741,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
       if (widget.featureStore.statistics)
-        _HomeTab(
+        GuildWorkspaceTab(
+          id: 'statistics',
           label: '统计',
           icon: Icons.bar_chart_outlined,
           selectedIcon: Icons.bar_chart_rounded,
@@ -1737,20 +1750,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
     ];
 
-    if (_index >= tabs.length) {
-      _index = 0;
-    }
+    if (_index >= tabs.length) _index = 0;
 
     final current = tabs[_index];
+    final showDesktopPet =
+        Platform.isWindows &&
+        widget.featureStore.enabled(AppFeature.desktopPet);
+    final showFocus = widget.featureStore.enabled(AppFeature.focus);
+    final showFeatureToggle =
+        !widget.featureStore.abstractMode ||
+        !widget.featureStore.abstractEffects ||
+        !_abstractFeatureToggleHidden;
     final title = switch (_desktopToolSelection) {
       AppToolMenu.presetTool => '节点＆加价预设',
       AppToolMenu.receiptTool => '生成小票',
       AppToolMenu.featureToggleTool => '附加功能开关',
-      AppToolMenu.desktopPetTool =>
-        Platform.isWindows &&
-                widget.featureStore.enabled(AppFeature.desktopPet)
-            ? '桌宠'
-            : '专注',
+      AppToolMenu.desktopPetTool => showDesktopPet ? '桌宠' : '专注',
       AppToolMenu.archiveTool => '归档',
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
@@ -1759,15 +1774,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.themeColorTool => 'UI主题色',
       _ => current.label,
     };
-    final width = MediaQuery.sizeOf(context).width;
-    final useDesktopLayout = width >= 900;
-    final uiStyle = GuildStyleTheme.of(context);
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
 
     final tabBody = IndexedStack(
       index: _index,
       children: [
         for (final tab in tabs)
-          KeyedSubtree(key: ValueKey(tab.label), child: tab.page),
+          KeyedSubtree(key: ValueKey(tab.id), child: tab.page),
       ],
     );
 
@@ -1784,230 +1797,85 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
 
-    final scaffold = Scaffold(
-      // The tab pages already reserve bottom-nav clearance. Glass keeps real
-      // content behind the bottom chrome so the document-style blur can show.
-      extendBody: uiStyle.isGlass && !useDesktopLayout,
-      drawer: _ready && _localDataHealthy
-          ? AppDrawer(
-              orderStore: _orderStore,
-              productStore: _productStore,
-              nodePresetStore: _nodePresetStore,
-              pricingPresetStore: _pricingPresetStore,
-              receiptStyleStore: _receiptStyleStore,
-              focusStore: _focusStore,
-              desktopPetSettings: _desktopPetService.settings,
-              onOpenOrder: _openOrderFromFocus,
-              themeStore: widget.themeStore,
-              featureStore: widget.featureStore,
-              accountStore: widget.accountStore,
-              syncCoordinator: _syncCoordinator,
-              onApplyWorkspaceSettings: _applySyncSettings,
-              onBeforeSignOut: _prepareForSignOut,
-              onShowTutorial: () => unawaited(_showTutorial()),
-              showFeatureToggle:
-                  !widget.featureStore.abstractMode ||
-                  !widget.featureStore.abstractEffects ||
-                  !_abstractFeatureToggleHidden,
-              onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
-            )
-          : null,
-      appBar: _desktopToolSelection == null
-          ? AppBar(
-              leading: useDesktopLayout
-                  ? IconButton(
-                      tooltip: _desktopNavigationOpen ? '收起主导航' : '展开主导航',
-                      icon: Icon(
-                        _desktopNavigationOpen
-                            ? Icons.menu_open_rounded
-                            : Icons.menu_rounded,
-                      ),
-                      onPressed: () =>
-                          _setDesktopNavigationOpen(!_desktopNavigationOpen),
-                    )
-                  : null,
-              title: Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            )
-          : null,
-      body: GuildStyleBackdrop(
-        child: !_ready
-          ? const Center(child: CircularProgressIndicator())
-          : !_localDataHealthy
-          ? _buildLocalDataFailure(context)
-          : useDesktopLayout
-          ? Row(
-              children: [
-                ClipRect(
-                  child: AnimatedSize(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeInOut,
-                    alignment: Alignment.centerLeft,
-                    child: _desktopNavigationOpen
-                        ? GuildStyledSurface(
-                            role: GuildSurfaceRole.chrome,
-                            backdropAvailable: false,
-                            backgroundColor: Theme.of(context).colorScheme.surface,
-                            child: SizedBox(
-                            width: 320,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                ListView(
-                                  shrinkWrap: true,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    12,
-                                    12,
-                                    12,
-                                    8,
-                                  ),
-                                  children: [
-                                    for (
-                                      var index = 0;
-                                      index < tabs.length;
-                                      index++
-                                    )
-                                      AppMenuTile(
-                                        icon: tabs[index].icon,
-                                        selectedIcon: tabs[index].selectedIcon,
-                                        title: tabs[index].label,
-                                        selected:
-                                            _desktopToolSelection == null &&
-                                            _index == index,
-                                        onTap: () => _selectDesktopTab(index),
-                                      ),
-                                  ],
-                                ),
-                                const Divider(height: 1),
-                                Expanded(
-                                  child: AppToolMenu(
-                                    orderStore: _orderStore,
-                                    productStore: _productStore,
-                                    nodePresetStore: _nodePresetStore,
-                                    pricingPresetStore: _pricingPresetStore,
-                                    receiptStyleStore: _receiptStyleStore,
-                                    focusStore: _focusStore,
-                                    desktopPetSettings:
-                                        _desktopPetService.settings,
-                                    onOpenOrder: _openOrderFromFocus,
-                                    themeStore: widget.themeStore,
-                                    featureStore: widget.featureStore,
-                                    accountStore: widget.accountStore,
-                                    syncCoordinator: _syncCoordinator,
-                                    onApplyWorkspaceSettings:
-                                        _applySyncSettings,
-                                    onBeforeSignOut: _prepareForSignOut,
-                                    onShowTutorial: () =>
-                                        unawaited(_showTutorial()),
-                                    showFeatureToggle:
-                                        !widget.featureStore.abstractMode ||
-                                        !widget.featureStore.abstractEffects ||
-                                        !_abstractFeatureToggleHidden,
-                                    onHideFeatureToggle:
-                                        _hideFeatureToggleForAbstractSession,
-                                    onSelectTool: _selectDesktopTool,
-                                    selectedTool:
-                                        _desktopToolSelection ==
-                                            AppToolMenu.themeColorTool
-                                        ? AppToolMenu.settingsTool
-                                        : _desktopToolSelection,
-                                    showTrailing: false,
-                                    padding: const EdgeInsets.fromLTRB(
-                                      12,
-                                      8,
-                                      12,
-                                      20,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeInOut,
-                  width: _desktopNavigationOpen ? 1 : 0,
-                  child: const VerticalDivider(width: 1),
-                ),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    child: desktopContent,
-                  ),
-                ),
-              ],
-            )
-          : tabBody,
-      ),
-      floatingActionButton:
-          !_ready ||
-              !_localDataHealthy ||
-              _desktopToolSelection != null ||
-              (useDesktopLayout &&
-                  (_desktopAddEditorOpen ||
-                      _desktopContentHasNestedRoute ||
-                      _desktopRootRefreshPending))
-          ? null
-          : switch (current.label) {
-              '排单' => FloatingActionButton.extended(
+    final drawer = AppDrawer(
+      onSelectTool: _openMobileTool,
+      onShowTutorial: () => unawaited(_showTutorial()),
+      showFeatureToggle: showFeatureToggle,
+      showPetFocusEntry: showDesktopPet || showFocus,
+      showDesktopPet: showDesktopPet,
+      accountSubtitle: widget.accountStore.accountName ?? '本地账号',
+      onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
+    );
+
+    final desktopMenu = AppToolMenu(
+      onSelectTool: _selectDesktopTool,
+      onShowTutorial: () => unawaited(_showTutorial()),
+      showFeatureToggle: showFeatureToggle,
+      showPetFocusEntry: showDesktopPet || showFocus,
+      showDesktopPet: showDesktopPet,
+      accountSubtitle: widget.accountStore.accountName ?? '本地账号',
+      onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
+      selectedTool: _desktopToolSelection == AppToolMenu.themeColorTool
+          ? AppToolMenu.settingsTool
+          : _desktopToolSelection,
+      showTrailing: false,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+    );
+
+    final floatingAction = !_ready ||
+            !_localDataHealthy ||
+            _desktopToolSelection != null ||
+            (useDesktopLayout &&
+                (_desktopAddEditorOpen ||
+                    _desktopContentHasNestedRoute ||
+                    _desktopRootRefreshPending))
+        ? null
+        : switch (current.id) {
+            'orders' => FloatingActionButton.extended(
                 onPressed: () => unawaited(_chooseAddMethod(products: false)),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('新增排单'),
               ),
-              '成品' => FloatingActionButton.extended(
+            'products' => FloatingActionButton.extended(
                 onPressed: () => unawaited(_chooseAddMethod(products: true)),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('新增成品'),
               ),
-              _ => null,
-            },
-      bottomNavigationBar: !_ready || tabs.length <= 1 || useDesktopLayout
-          ? null
-          : GuildStyledSurface(
-              role: GuildSurfaceRole.chrome,
-              backdropAvailable: uiStyle.isGlass,
-              backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-              child: NavigationBar(
-                backgroundColor:
-                    uiStyle.isClassic ? null : Colors.transparent,
-                selectedIndex: _index,
-                onDestinationSelected: (value) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  setState(() => _index = value);
-                },
-                destinations: [
-                  for (final tab in tabs)
-                    NavigationDestination(
-                      icon: Icon(tab.icon),
-                      selectedIcon: Icon(tab.selectedIcon),
-                      label: tab.label,
-                    ),
-                ],
-              ),
-            ),
+            _ => null,
+          };
+
+    final shell = GuildWorkspaceShell(
+      tabs: tabs,
+      selectedIndex: _index,
+      onTabSelected: _selectDesktopTab,
+      title: title,
+      ready: _ready,
+      contentAvailable: _localDataHealthy,
+      unavailableBody: _buildLocalDataFailure(context),
+      mobileBody: tabBody,
+      desktopBody: desktopContent,
+      drawer: drawer,
+      desktopToolMenu: desktopMenu,
+      desktopNavigationOpen: _desktopNavigationOpen,
+      onDesktopNavigationChanged: _setDesktopNavigationOpen,
+      toolSelected: _desktopToolSelection != null,
+      floatingActionButton: floatingAction,
+      showAppBar: _desktopToolSelection == null,
     );
 
     final progress = _syncProgressOverlay;
     final showProgress =
         progress != null &&
         !(useDesktopLayout && _desktopToolSelection == AppToolMenu.syncTool);
-    if (!showProgress) return scaffold;
+    if (!showProgress) return shell;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        scaffold,
+        shell,
         Positioned(
           top: useDesktopLayout ? 8 : null,
-          bottom: useDesktopLayout
-              ? null
-              : (tabs.length > 1 ? 88 : 12),
+          bottom: useDesktopLayout ? null : (tabs.length > 1 ? 88 : 12),
           left: 16,
           right: 16,
           child: SafeArea(
@@ -2136,18 +2004,4 @@ class _DesktopContentNavigatorObserver extends NavigatorObserver {
   }) {
     _notify();
   }
-}
-
-class _HomeTab {
-  const _HomeTab({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-    required this.page,
-  });
-
-  final String label;
-  final IconData icon;
-  final IconData selectedIcon;
-  final Widget page;
 }
