@@ -62,6 +62,7 @@ void main() {
     'defaultOrder',
     'soldCount',
     'saleRecords',
+    'saleClientNames',
     'archivedAt',
     'isArchived',
     'isPinned',
@@ -148,6 +149,10 @@ void main() {
       DateTime.utc(2026, 10, 2, 3, 4),
       DateTime.utc(2026, 10, 3, 4, 5),
     ],
+    saleClientNames: <String, String>{
+      '2026-10-02T03:04:00.000Z': '单主甲',
+      '2026-10-03T04:05:00.000Z': '单主乙',
+    },
     isArchived: true,
     isPinned: true,
   );
@@ -305,6 +310,7 @@ void main() {
       restoredProduct.saleRecords.map((value) => value.toUtc()).toList(),
       product.saleRecords.map((value) => value.toUtc()).toList(),
     );
+    expect(restoredProduct.saleClientNames, product.saleClientNames);
     expect(restoredProduct.isArchived, product.isArchived);
     expect(restoredProduct.isPinned, product.isPinned);
 
