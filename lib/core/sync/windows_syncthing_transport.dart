@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -21,10 +22,14 @@ class WindowsSyncthingTransport {
   static const String _stateFileName = 'embedded-syncthing-windows.json';
   static const Duration _localApiRequestTimeout = Duration(seconds: 8);
   static const Duration _processStartTimeout = Duration(seconds: 10);
+  static const Duration _gracefulShutdownTimeout = Duration(seconds: 10);
+  static const Duration _shutdownPollInterval = Duration(milliseconds: 100);
 
   Future<void>? _starting;
+  Object? _startupFailure;
   Future<int>? _resolvingPort;
   int? _resolvedApiPort;
+  bool _runtimePolicyApplied = false;
   Future<void> _stateTail = Future<void>.value();
 
   Future<bool> isAutoStartEnabled(String folderId) async {
@@ -43,7 +48,8 @@ class WindowsSyncthingTransport {
     if (!Platform.isWindows) return false;
     if (!force && !await isAutoStartEnabled(folderId)) return false;
 
-    await _ensureReady();
+    final ready = await _ensureStarted();
+    if (!ready) return false;
     await _configureFolder(
       folderId: folderId,
       label: label,
@@ -319,26 +325,31 @@ class WindowsSyncthingTransport {
     }
 
     if (existingDevice == null) {
+      final payload = _jsonMap(
+        await _request(
+          'GET',
+          '/rest/config/defaults/device',
+          apiKey: apiKey,
+        ),
+      )
+        ..['deviceID'] = normalizedId
+        ..['name'] = name.trim().isEmpty
+            ? normalizedId.substring(0, 7)
+            : name.trim()
+        ..['addresses'] = <String>['dynamic'];
       await _request(
         'POST',
         '/rest/config/devices',
         apiKey: apiKey,
-        body: jsonEncode(<String, dynamic>{
-          'deviceID': normalizedId,
-          'name': name.trim().isEmpty
-              ? normalizedId.substring(0, 7)
-              : name.trim(),
-          'addresses': <String>['dynamic'],
-        }),
+        body: jsonEncode(payload),
       );
     } else if (name.trim().isNotEmpty &&
         existingDevice['name']?.toString().trim() != name.trim()) {
-      existingDevice['name'] = name.trim();
       await _request(
-        'PUT',
+        'PATCH',
         '/rest/config/devices/${Uri.encodeComponent(normalizedId)}',
         apiKey: apiKey,
-        body: jsonEncode(existingDevice),
+        body: jsonEncode(<String, dynamic>{'name': name.trim()}),
       );
     }
 
@@ -365,12 +376,11 @@ class WindowsSyncthingTransport {
     );
     if (!alreadyShared) {
       sharedDevices.add(<String, dynamic>{'deviceID': normalizedId});
-      folder['devices'] = sharedDevices;
       await _request(
-        'PUT',
+        'PATCH',
         '/rest/config/folders/${Uri.encodeComponent(folderId)}',
         apiKey: apiKey,
-        body: jsonEncode(folder),
+        body: jsonEncode(<String, dynamic>{'devices': sharedDevices}),
       );
     }
 
@@ -414,12 +424,11 @@ class WindowsSyncthingTransport {
     ];
     if (filtered.length == devices.length) return;
 
-    folder['devices'] = filtered;
     await _request(
-      'PUT',
+      'PATCH',
       '/rest/config/folders/${Uri.encodeComponent(folderId)}',
       apiKey: apiKey,
-      body: jsonEncode(folder),
+      body: jsonEncode(<String, dynamic>{'devices': filtered}),
     );
   }
 
@@ -477,24 +486,21 @@ class WindowsSyncthingTransport {
     if (folder == null) return;
 
     if (folder['paused'] == paused) return;
-    folder['paused'] = paused;
     await _request(
-      'PUT',
+      'PATCH',
       '/rest/config/folders/${Uri.encodeComponent(folderId)}',
       apiKey: apiKey,
-      body: jsonEncode(folder),
+      body: jsonEncode(<String, dynamic>{'paused': paused}),
     );
   }
 
   Future<void> stop({required String folderId}) async {
     final apiKey = await _ensureApiKey();
-    if (await _ping(apiKey)) {
-      await _request('POST', '/rest/system/shutdown', apiKey: apiKey);
-      for (var attempt = 0; attempt < 20; attempt++) {
-        if (!await _ping(apiKey)) break;
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
+    final stopped = await _shutdownGracefully(apiKey);
+    if (!stopped) {
+      await _forceTerminateStaleBundledProcesses();
     }
+    _runtimePolicyApplied = false;
 
     await _updateState<void>((state) {
       final autoStart = <String, dynamic>{..._asMap(state['autoStart'])}
@@ -535,9 +541,6 @@ class WindowsSyncthingTransport {
     );
 
     await shutdown();
-    await _terminateStaleBundledProcesses();
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-
     var movedOriginal = false;
     try {
       await configDir.rename(backupDir.path);
@@ -555,6 +558,7 @@ class WindowsSyncthingTransport {
       );
 
       _starting = null;
+      _startupFailure = null;
       await _ensureReady();
 
       final afterApiKey = await _ensureApiKey();
@@ -573,9 +577,6 @@ class WindowsSyncthingTransport {
       try {
         await shutdown();
       } catch (_) {}
-      await _terminateStaleBundledProcesses();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-
       if (movedOriginal && await backupDir.exists()) {
         try {
           if (await configDir.exists()) {
@@ -585,6 +586,7 @@ class WindowsSyncthingTransport {
         try {
           await backupDir.rename(configDir.path);
           _starting = null;
+          _startupFailure = null;
           await _ensureReady();
         } catch (_) {}
       }
@@ -592,28 +594,51 @@ class WindowsSyncthingTransport {
     }
   }
 
-  /// Stops the detached embedded process without changing any account's
-  /// auto-start preference. The Windows self-updater calls this immediately
-  /// before handing the installation directory to its replacement script.
+  /// Stops the embedded process without changing any account's auto-start
+  /// preference. Syncthing's Windows guidance gives graceful shutdown up to
+  /// ten seconds; forced termination is only a last-resort fallback.
   Future<void> shutdown() async {
     if (!Platform.isWindows) return;
 
     try {
       final apiKey = await _ensureApiKey();
-      if (!await _ping(apiKey)) return;
-      await _request(
-        'POST',
-        '/rest/system/shutdown',
-        apiKey: apiKey,
-      );
-      for (var attempt = 0; attempt < 50; attempt++) {
-        if (!await _ping(apiKey)) return;
-        await Future<void>.delayed(const Duration(milliseconds: 100));
+      final stopped = await _shutdownGracefully(apiKey);
+      if (!stopped) {
+        await _forceTerminateStaleBundledProcesses();
       }
     } catch (_) {
-      // The update script performs a path-specific process check as a
-      // fallback. A transient API failure must not prevent an update attempt.
+      await _forceTerminateStaleBundledProcesses();
+    } finally {
+      _runtimePolicyApplied = false;
     }
+  }
+
+  Future<bool> _shutdownGracefully(String apiKey) async {
+    final apiWasReady = await _ping(apiKey);
+    final processWasRunning = await _profileProcessesRunning();
+    if (!apiWasReady && !processWasRunning) return true;
+
+    if (apiWasReady) {
+      try {
+        await _request(
+          'POST',
+          '/rest/system/shutdown',
+          apiKey: apiKey,
+        );
+      } catch (_) {
+        // The API can disappear while the shutdown response is in flight.
+        // Process/API disappearance below is the authoritative completion.
+      }
+    }
+
+    final deadline = DateTime.now().add(_gracefulShutdownTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final processRunning = await _profileProcessesRunning();
+      if (!processRunning && !await _ping(apiKey)) return true;
+      await Future<void>.delayed(_shutdownPollInterval);
+    }
+
+    return !await _profileProcessesRunning() && !await _ping(apiKey);
   }
 
   Future<void> _configureFolder({
@@ -635,17 +660,23 @@ class WindowsSyncthingTransport {
     }
 
     if (existing == null) {
+      final payload = _jsonMap(
+        await _request(
+          'GET',
+          '/rest/config/defaults/folder',
+          apiKey: apiKey,
+        ),
+      )
+        ..['id'] = folderId
+        ..['label'] = label
+        ..['path'] = folderPath
+        ..['type'] = 'sendreceive'
+        ..['devices'] = <dynamic>[];
       await _request(
         'POST',
         '/rest/config/folders',
         apiKey: apiKey,
-        body: jsonEncode(<String, dynamic>{
-          'id': folderId,
-          'label': label,
-          'path': folderPath,
-          'type': 'sendreceive',
-          'devices': <dynamic>[],
-        }),
+        body: jsonEncode(payload),
       );
       return;
     }
@@ -656,60 +687,85 @@ class WindowsSyncthingTransport {
         existing['type']?.toString() == 'sendreceive';
     if (unchanged) return;
 
-    existing
-      ..['label'] = label
-      ..['path'] = folderPath
-      ..['type'] = 'sendreceive';
-
     await _request(
-      'PUT',
+      'PATCH',
       '/rest/config/folders/${Uri.encodeComponent(folderId)}',
       apiKey: apiKey,
-      body: jsonEncode(existing),
+      body: jsonEncode(<String, dynamic>{
+        'label': label,
+        'path': folderPath,
+        'type': 'sendreceive',
+      }),
     );
   }
 
-  Future<void> _ensureReady() async {
+  Future<bool> _ensureStarted() async {
     final binary = _binaryFile();
     if (!await binary.exists()) {
       throw StateError('安装包中缺少设备同步组件');
     }
 
     final apiKey = await _ensureApiKey();
-    if (await _ping(apiKey)) return;
+    if (await _ping(apiKey)) {
+      _startupFailure = null;
+      await _applyIntegrationPolicy(apiKey);
+      return true;
+    }
 
-    // Treat process creation + API readiness as one startup transaction.
-    final existingStart = _starting;
-    if (existingStart != null) {
-      await existingStart;
-      return;
+    final previousFailure = _startupFailure;
+    if (previousFailure != null) {
+      _startupFailure = null;
+      throw previousFailure;
+    }
+
+    if (_starting != null) {
+      return false;
     }
 
     final start = _startAndWaitUntilReady(binary, apiKey);
     _starting = start;
-    try {
-      await start;
-    } finally {
-      if (identical(_starting, start)) _starting = null;
+    unawaited(
+      start.then<void>(
+        (_) {
+          if (identical(_starting, start)) _starting = null;
+        },
+        onError: (Object error, StackTrace _) {
+          _startupFailure = error;
+          if (identical(_starting, start)) _starting = null;
+        },
+      ),
+    );
+    return false;
+  }
+
+  Future<void> _ensureReady() async {
+    if (await _ensureStarted()) return;
+    final start = _starting;
+    if (start != null) {
+      try {
+        await start;
+      } catch (_) {
+        _startupFailure = null;
+        rethrow;
+      }
     }
+    final apiKey = await _ensureApiKey();
+    if (!await _ping(apiKey)) {
+      final failure = _startupFailure;
+      _startupFailure = null;
+      if (failure != null) throw failure;
+      throw StateError('设备同步进程已经结束。');
+    }
+    _startupFailure = null;
+    await _applyIntegrationPolicy(apiKey);
   }
 
   Future<void> _startAndWaitUntilReady(File binary, String apiKey) async {
     if (await _ping(apiKey)) return;
 
     var port = await _ensureApiPort();
+    await _recoverStaleBundledProcesses(binary, apiKey, port);
 
-    // If a previous app-owned Syncthing survived an update/crash but no
-    // longer answers with our current API key, it can keep both the profile
-    // lock and the old GUI port. Stop only a process using this exact private
-    // --home profile. Executable-path matching is intentionally avoided because
-    // separate app channels can temporarily share an install directory.
-    await _terminateStaleBundledProcesses();
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-
-    // Never compete with another service for a GUI/API port. In particular,
-    // 8384 is Syncthing's public default and is commonly occupied by a normal
-    // user installation. Rotate to a free app-private loopback port instead.
     if (!await _portIsAvailable(port)) {
       port = await _rotateApiPort();
     }
@@ -721,22 +777,38 @@ class WindowsSyncthingTransport {
       }
     } catch (_) {}
 
-    await _startProcess(binary, apiKey, port, logFile);
+    _runtimePolicyApplied = false;
+    final process = await _startProcess(binary, apiKey, port, logFile);
+    int? exitCode;
+    Object? exitError;
+    unawaited(
+      process.exitCode.then<void>(
+        (value) => exitCode = value,
+        onError: (Object error, StackTrace _) {
+          exitError = error;
+        },
+      ),
+    );
 
-    // A fresh Windows profile can be delayed by certificate generation,
-    // database setup, or security scanning. Give it room, but no longer hide
-    // the real failure behind an undifferentiated timeout.
-    final deadline = DateTime.now().add(const Duration(seconds: 60));
-    while (DateTime.now().isBefore(deadline)) {
-      if (await _pingAt(apiKey, port)) return;
+    while (true) {
+      if (await _pingAt(apiKey, port)) {
+        await _applyIntegrationPolicy(apiKey);
+        return;
+      }
+      if (exitError != null) {
+        throw StateError('设备同步进程状态读取失败：$exitError');
+      }
+      final code = exitCode;
+      if (code != null) {
+        throw StateError(
+          '${await _startupFailureMessage(logFile, port)}（退出码 $code）',
+        );
+      }
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
-
-    if (await _pingAt(apiKey, port)) return;
-    throw StateError(await _startupFailureMessage(logFile, port));
   }
 
-  Future<void> _startProcess(
+  Future<Process> _startProcess(
     File binary,
     String apiKey,
     int port,
@@ -749,7 +821,7 @@ class WindowsSyncthingTransport {
     await configDir.create(recursive: true);
     await logFile.parent.create(recursive: true);
 
-    await Process.start(
+    final process = await Process.start(
       binary.path,
       <String>[
         '--home',
@@ -759,19 +831,18 @@ class WindowsSyncthingTransport {
         '--gui-apikey',
         apiKey,
         '--no-browser',
+        '--no-console',
         '--no-restart',
+        '--no-upgrade',
         '--log-file=${logFile.path}',
-        '--log-max-old-files=0',
       ],
-      mode: ProcessStartMode.detached,
-      environment: <String, String>{
-        ...Platform.environment,
-        'STNORESTART': '1',
-        'STNODEFAULTFOLDER': '1',
-      },
+      mode: ProcessStartMode.detachedWithStdio,
+      environment: Platform.environment,
     ).timeout(_processStartTimeout);
+    unawaited(process.stdout.drain<void>());
+    unawaited(process.stderr.drain<void>());
+    return process;
   }
-
   Future<bool> _ping(String apiKey) async {
     final port = await _ensureApiPort();
     return _pingAt(apiKey, port);
@@ -902,12 +973,93 @@ class WindowsSyncthingTransport {
         .toList(growable: false);
     final tail = lines.isEmpty ? '' : lines.last.trim();
     return tail.isEmpty
-        ? '设备同步在等待时间内没有启动完成。'
-            '请重试；若仍失败，可复制同步诊断继续排查。'
+        ? '设备同步进程已退出，但没有给出明确原因。'
         : '设备同步启动失败：$tail';
   }
 
-  Future<void> _terminateStaleBundledProcesses() async {
+  Future<void> _applyIntegrationPolicy(String apiKey) async {
+    if (_runtimePolicyApplied) return;
+    await _request(
+      'PATCH',
+      '/rest/config/options',
+      apiKey: apiKey,
+      body: jsonEncode(<String, dynamic>{
+        'urAccepted': -1,
+        'crashReportingEnabled': false,
+        'autoUpgradeIntervalH': 0,
+      }),
+    );
+    _runtimePolicyApplied = true;
+  }
+
+  Future<void> _recoverStaleBundledProcesses(
+    File binary,
+    String apiKey,
+    int port,
+  ) async {
+    if (!await _profileProcessesRunning()) return;
+
+    final support = await getApplicationSupportDirectory();
+    final configDir = Directory(
+      '${support.path}${Platform.pathSeparator}syncthing-config',
+    );
+    final deadline = DateTime.now().add(_gracefulShutdownTimeout);
+    try {
+      await Process.run(
+        binary.path,
+        <String>[
+          '--home=${configDir.path}',
+          'cli',
+          '--gui-address=http://127.0.0.1:$port',
+          '--gui-apikey=$apiKey',
+          'operations',
+          'shutdown',
+        ],
+      ).timeout(const Duration(seconds: 3));
+    } catch (_) {}
+
+    while (DateTime.now().isBefore(deadline)) {
+      if (!await _profileProcessesRunning()) return;
+      await Future<void>.delayed(_shutdownPollInterval);
+    }
+    await _forceTerminateStaleBundledProcesses();
+  }
+
+  Future<bool> _profileProcessesRunning() async {
+    if (!Platform.isWindows) return false;
+    final support = await getApplicationSupportDirectory();
+    final configDir = Directory(
+      '${support.path}${Platform.pathSeparator}syncthing-config',
+    );
+    String quote(String value) => value.replaceAll("'", "''");
+    final home = quote(configDir.absolute.path);
+    final script =
+        "\$ErrorActionPreference='SilentlyContinue';"
+        "Get-CimInstance Win32_Process -Filter \"Name='syncthing.exe'\" | "
+        "Where-Object { "
+        "\$_.CommandLine -and "
+        "\$_.CommandLine.IndexOf('$home', "
+        "[StringComparison]::OrdinalIgnoreCase) -ge 0"
+        " } | Select-Object -ExpandProperty ProcessId";
+    try {
+      final result = await Process.run(
+        'powershell.exe',
+        <String>[
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          script,
+        ],
+      ).timeout(const Duration(seconds: 5));
+      return result.stdout.toString().trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _forceTerminateStaleBundledProcesses() async {
     if (!Platform.isWindows) return;
     final support = await getApplicationSupportDirectory();
     final configDir = Directory(
