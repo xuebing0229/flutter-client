@@ -577,9 +577,9 @@ class _ReceiveAccountTransferPageState
                       const SizedBox(height: 10),
                       Text(
                         folderReady
-                            ? '账号传输通道已对接'
+                            ? '账号连接已就绪'
                             : sourceConnected
-                                ? '已连接原设备，正在确认临时账号目录'
+                                ? '已连接原设备，正在确认账号信息'
                                 : '原设备已确认，正在建立同步连接',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                         textAlign: TextAlign.center,
@@ -592,19 +592,19 @@ class _ReceiveAccountTransferPageState
                     const SizedBox(height: 8),
                     Text(
                       folderReady && hasMeasuredProgress
-                          ? '账号传输通道已对接 · 正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
+                          ? '账号连接已就绪 · 正在接收账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
                           : folderReady
-                              ? '临时账号目录已经双方确认，正在等待账号数据到达……'
+                              ? '连接已经确认，正在等待账号数据到达……'
                               : sourceConnected
                                   ? remoteFolderState == 'notSharing'
-                                      ? '设备已经连接，但临时账号目录尚未被原设备共享，正在自动修复……'
+                                      ? '设备已经连接，但账号数据还没开始传输，正在自动恢复……'
                                       : remoteFolderState == 'paused'
-                                          ? '设备已经连接，但临时账号目录处于暂停状态……'
+                                          ? '设备连接暂时停住，正在等待恢复……'
                                           : '设备已经连接，正在完成账号连接……'
                                   : peerConfirmed
-                                      ? '临时账号目录已确认，正在恢复同步连接……'
+                                      ? '账号连接已确认，正在恢复数据同步……'
                                       : folderState == 'scanning'
-                                          ? '同步通道已准备，正在连接原设备……'
+                                          ? '正在连接原设备……'
                                           : '等待原设备确认并建立连接……',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: colors.onSurfaceVariant),
