@@ -313,7 +313,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   Future<void> _copyPairingCode(SyncthingAccountTransferServer server) async {
     final pairing = widget.syncCoordinator.pairingPayload;
     if (pairing == null || pairing.isEmpty) {
-      _message('同步核心还在准备，请稍后再试');
+      _message('设备连接还在准备，请稍后再试');
       return;
     }
     await Clipboard.setData(ClipboardData(text: _qrData(server)));
@@ -330,12 +330,12 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   Future<void> _copyDiagnostics() async {
     final server = _server;
     if (server == null) {
-      _message('诊断日志还没准备好');
+      _message('同步诊断还没准备好');
       return;
     }
     final report = await server.captureDiagnosticReport();
     await Clipboard.setData(ClipboardData(text: report));
-    if (mounted) _message('原设备诊断日志已复制');
+    if (mounted) _message('原设备同步诊断已复制');
   }
 
   void _message(String message) {
@@ -602,7 +602,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
               OutlinedButton.icon(
                 onPressed: server == null ? null : _copyDiagnostics,
                 icon: const Icon(Icons.bug_report_outlined),
-                label: const Text('复制本次加入诊断日志'),
+                label: const Text('复制本次加入同步诊断'),
               ),
               const SizedBox(height: 12),
               _AddDeviceCard(
