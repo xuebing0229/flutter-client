@@ -33,17 +33,17 @@ class ScreenshotOcrService {
     final source = (await _recognizeScreenshot(encoded.toJS).toDart).toDart;
     final value = jsonDecode(source);
     if (value is! Map) {
-      throw const FormatException('浏览器 OCR 返回格式无效');
+      throw const FormatException('截图识别结果格式无效');
     }
 
     double number(Object? raw, String field) {
       if (raw is num) return raw.toDouble();
-      throw FormatException('浏览器 OCR 缺少 $field');
+      throw FormatException('截图识别结果不完整');
     }
 
     final rawLines = value['lines'];
     if (rawLines is! List) {
-      throw const FormatException('浏览器 OCR 文字行格式无效');
+      throw const FormatException('截图识别结果格式无效');
     }
     final lines = <ScreenshotTextLine>[];
     for (final item in rawLines) {
@@ -65,7 +65,7 @@ class ScreenshotOcrService {
     final width = number(value['imageWidth'], 'imageWidth');
     final height = number(value['imageHeight'], 'imageHeight');
     if (width <= 0 || height <= 0) {
-      throw const FormatException('浏览器 OCR 图片尺寸无效');
+      throw const FormatException('截图尺寸无效');
     }
     return ScreenshotOcrResult(
       width: width,
