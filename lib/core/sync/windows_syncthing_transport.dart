@@ -64,7 +64,7 @@ class WindowsSyncthingTransport {
       return <Object?, Object?>{
         'available': false,
         'running': false,
-        'error': '当前平台暂未接入 Windows 同步核心',
+        'error': '当前平台暂不支持设备同步',
       };
     }
 
@@ -73,7 +73,7 @@ class WindowsSyncthingTransport {
       return <Object?, Object?>{
         'available': false,
         'running': false,
-        'error': '安装包中缺少 Windows 同步核心',
+        'error': '安装包中缺少设备同步组件',
       };
     }
 
@@ -881,19 +881,19 @@ class WindowsSyncthingTransport {
     final lower = log.toLowerCase();
     if (lower.contains('address already in use') ||
         lower.contains('bind:') && lower.contains('in use')) {
-      return 'Windows 同步核心启动失败：本机端口 $port 被其他程序占用。'
-          '请重试，应用会重新选择专用端口。';
+      return '设备同步启动失败：本机资源被其他程序占用。'
+          '请重试，应用会自动重新尝试。';
     }
     if (lower.contains('already running') ||
         lower.contains('database is locked') ||
         lower.contains('lock') && lower.contains('syncthing')) {
-      return 'Windows 同步核心启动失败：检测到旧的同步核心仍占用本机数据目录。'
+      return '设备同步启动失败：检测到旧版同步任务仍在运行。'
           '请关闭旧版冒险者公会后重试。';
     }
     if (lower.contains('access is denied') ||
         lower.contains('permission denied')) {
-      return 'Windows 同步核心启动失败：系统拒绝了同步核心访问。'
-          '请检查安全软件是否拦截了冒险者公会内置的 syncthing.exe。';
+      return '设备同步启动失败：系统拒绝访问。'
+          '请检查安全软件是否拦截了冒险者公会的设备同步组件。';
     }
 
     final lines = log
@@ -902,9 +902,9 @@ class WindowsSyncthingTransport {
         .toList(growable: false);
     final tail = lines.isEmpty ? '' : lines.last.trim();
     return tail.isEmpty
-        ? 'Windows 同步核心在 60 秒内没有启动完成。'
-            '这次没有检测到端口冲突；请重试，若仍失败可根据同步核心日志继续定位。'
-        : 'Windows 同步核心启动失败：$tail';
+        ? '设备同步在等待时间内没有启动完成。'
+            '请重试；若仍失败，可复制同步诊断继续排查。'
+        : '设备同步启动失败：$tail';
   }
 
   Future<void> _terminateStaleBundledProcesses() async {
