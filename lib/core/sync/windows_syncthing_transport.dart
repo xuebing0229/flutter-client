@@ -791,7 +791,10 @@ class WindowsSyncthingTransport {
     );
 
     while (true) {
-      if (await _pingAt(apiKey, port)) return;
+      if (await _pingAt(apiKey, port)) {
+        await _applyIntegrationPolicy(apiKey);
+        return;
+      }
       if (exitError != null) {
         throw StateError('Windows 同步核心进程状态读取失败：$exitError');
       }
