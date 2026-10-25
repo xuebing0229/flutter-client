@@ -740,6 +740,9 @@ class _DeadlineStatusBadgeState extends State<_DeadlineStatusBadge> {
     if (widget.order.isCompleted) {
       background = colors.primaryContainer;
       foreground = colors.onPrimaryContainer;
+    } else if (hasUrgentOrderTag(widget.order.tags)) {
+      background = colors.error;
+      foreground = colors.onError;
     } else if (status.overdue) {
       background = colors.errorContainer;
       foreground = colors.onErrorContainer;
