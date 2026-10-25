@@ -1223,6 +1223,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_ready && _localDataHealthy) {
       await _flushSyncThenPersist();
     }
+    await _syncCoordinator.deactivateTransportForAccountExit();
   }
 
   @override
