@@ -24,9 +24,9 @@ class WindowsSyncthingTransport {
   static const Duration _processStartTimeout = Duration(seconds: 10);
   static const Duration _gracefulShutdownTimeout = Duration(seconds: 10);
   static const Duration _shutdownPollInterval = Duration(milliseconds: 100);
-  static const Duration _startupNoticeTimeout = Duration(seconds: 60);
 
   Future<void>? _starting;
+  Object? _startupFailure;
   Future<int>? _resolvingPort;
   int? _resolvedApiPort;
   bool _runtimePolicyApplied = false;
@@ -48,7 +48,8 @@ class WindowsSyncthingTransport {
     if (!Platform.isWindows) return false;
     if (!force && !await isAutoStartEnabled(folderId)) return false;
 
-    await _ensureReady();
+    final ready = await _ensureStarted();
+    if (!ready) return false;
     await _configureFolder(
       folderId: folderId,
       label: label,
@@ -558,6 +559,7 @@ class WindowsSyncthingTransport {
       );
 
       _starting = null;
+      _startupFailure = null;
       await _ensureReady();
 
       final afterApiKey = await _ensureApiKey();
@@ -586,6 +588,7 @@ class WindowsSyncthingTransport {
         try {
           await backupDir.rename(configDir.path);
           _starting = null;
+          _startupFailure = null;
           await _ensureReady();
         } catch (_) {}
       }
@@ -698,7 +701,7 @@ class WindowsSyncthingTransport {
     );
   }
 
-  Future<void> _ensureReady() async {
+  Future<bool> _ensureStarted() async {
     final binary = _binaryFile();
     if (!await binary.exists()) {
       throw StateError('安装包中缺少 Windows 同步核心');
@@ -706,15 +709,19 @@ class WindowsSyncthingTransport {
 
     final apiKey = await _ensureApiKey();
     if (await _ping(apiKey)) {
+      _startupFailure = null;
       await _applyIntegrationPolicy(apiKey);
-      return;
+      return true;
     }
 
-    final existingStart = _starting;
-    if (existingStart != null) {
-      await _waitForStartup(existingStart);
-      await _applyIntegrationPolicy(apiKey);
-      return;
+    final previousFailure = _startupFailure;
+    if (previousFailure != null) {
+      _startupFailure = null;
+      throw StateError('Windows 同步核心启动失败：$previousFailure');
+    }
+
+    if (_starting != null) {
+      return false;
     }
 
     final start = _startAndWaitUntilReady(binary, apiKey);
@@ -724,26 +731,30 @@ class WindowsSyncthingTransport {
         (_) {
           if (identical(_starting, start)) _starting = null;
         },
-        onError: (Object _, StackTrace __) {
+        onError: (Object error, StackTrace _) {
+          _startupFailure = error;
           if (identical(_starting, start)) _starting = null;
         },
       ),
     );
+    return false;
+  }
 
-    await _waitForStartup(start);
+  Future<void> _ensureReady() async {
+    if (await _ensureStarted()) return;
+    final start = _starting;
+    if (start != null) {
+      await start;
+    }
+    final apiKey = await _ensureApiKey();
+    if (!await _ping(apiKey)) {
+      final failure = _startupFailure;
+      _startupFailure = null;
+      throw StateError(failure ?? 'Windows 同步核心进程已经结束。');
+    }
+    _startupFailure = null;
     await _applyIntegrationPolicy(apiKey);
   }
-
-  Future<void> _waitForStartup(Future<void> startup) async {
-    try {
-      await startup.timeout(_startupNoticeTimeout);
-    } on TimeoutException {
-      throw TimeoutException(
-        'Windows 同步核心启动时间较长，进程仍在继续启动；应用会自动继续等待。',
-      );
-    }
-  }
-
   Future<void> _startAndWaitUntilReady(File binary, String apiKey) async {
     if (await _ping(apiKey)) return;
 
