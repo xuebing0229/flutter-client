@@ -208,6 +208,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ? ScreenshotImportContentKind.products
               : ScreenshotImportContentKind.orders;
           if (detectedKind != null && detectedKind != currentContentKind) {
+            if (!mounted) return;
             final target = await offerScreenshotImportKindSwitch(
               context: context,
               currentKind: _kind,
