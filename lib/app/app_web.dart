@@ -1334,36 +1334,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   Future<void> _chooseAddMethod({required bool products}) async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (dialogContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.edit_note_rounded),
-                title: const Text('手动导入'),
-                subtitle: const Text('逐项填写订单信息'),
-                onTap: () => Navigator.pop(dialogContext, 'manual'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.document_scanner_outlined),
-                title: const Text('截图导入'),
-                subtitle: const Text('从平台截图识别多条，检查后批量添加'),
-                onTap: () => Navigator.pop(dialogContext, 'screenshot'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    final picked = await showGuildAddMethodPicker(context);
     if (!mounted || picked == null) return;
 
-    if (picked == 'screenshot') {
+    if (picked == GuildAddMethod.screenshot) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => ScreenshotImportPage(
