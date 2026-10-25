@@ -1801,7 +1801,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       showPetFocusEntry: showDesktopPet || showFocus,
       showDesktopPet: showDesktopPet,
       accountSubtitle: widget.accountStore.accountName ?? '本地账号',
-      onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
     );
 
     final desktopMenu = AppToolMenu(
