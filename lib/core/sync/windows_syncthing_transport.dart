@@ -750,11 +750,13 @@ class WindowsSyncthingTransport {
     if (!await _ping(apiKey)) {
       final failure = _startupFailure;
       _startupFailure = null;
-      throw StateError(failure ?? 'Windows 同步核心进程已经结束。');
+      if (failure != null) throw failure;
+      throw StateError('Windows 同步核心进程已经结束。');
     }
     _startupFailure = null;
     await _applyIntegrationPolicy(apiKey);
   }
+
   Future<void> _startAndWaitUntilReady(File binary, String apiKey) async {
     if (await _ping(apiKey)) return;
 
