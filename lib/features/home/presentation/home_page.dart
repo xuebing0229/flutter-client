@@ -1192,6 +1192,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           value: leftAt,
         ),
       );
+
+      if (Platform.isWindows) {
+        // On Windows, closing the window hides it to the tray specifically so
+        // sync can continue. Persist local state without tearing down the
+        // transport and manufacturing a stop/start race on every hide/show.
+        _saveDebounce?.cancel();
+        unawaited(_flushSyncThenPersist());
+        return;
+      }
+
       unawaited(_leaveForegroundSync(++_syncLifecycleGeneration));
     }
   }
