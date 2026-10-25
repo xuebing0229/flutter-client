@@ -88,11 +88,9 @@ class SyncthingService : Service() {
                     apiKey,
                     "--no-browser",
                     "--no-restart",
-                    "--log-max-old-files=0",
+                    "--no-upgrade",
                 ).apply {
                     redirectErrorStream(true)
-                    environment()["STNORESTART"] = "1"
-                    environment()["STNODEFAULTFOLDER"] = "1"
                 }.start()
 
                 process = started
@@ -119,6 +117,9 @@ class SyncthingService : Service() {
     }
 
     private fun stopSyncthing() {
+        // Normal app-driven shutdown goes through /rest/system/shutdown in
+        // SyncthingBridge. If Android destroys this Service unexpectedly,
+        // Process.destroy() remains only as the final containment fallback.
         runCatching { process?.destroy() }
         process = null
         isRunning = false
