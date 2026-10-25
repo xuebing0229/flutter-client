@@ -73,8 +73,8 @@ class PublicPeerSyncService extends ChangeNotifier {
       <String, _IncomingTransfer>{};
   final Map<String, String> _lastIncomingFingerprintByPeer =
       <String, String>{};
-  final Map<String, String> _pendingSnapshotByTarget =
-      <String, String>{};
+  final Map<String, _PendingSnapshot> _pendingSnapshotByTarget =
+      <String, _PendingSnapshot>{};
 
   PublicRelayClient? _relay;
   StreamSubscription<PublicRelayMessage>? _relaySubscription;
@@ -192,7 +192,12 @@ class PublicPeerSyncService extends ChangeNotifier {
       final targets = _pendingSnapshotByTarget.keys.toList(growable: false);
       for (final target in targets) {
         if (_disposed || _relay?.connected != true) return;
-        await _publishSnapshot(onlyTarget: target);
+        final pending = _pendingSnapshotByTarget[target];
+        if (pending == null) continue;
+        await _publishSnapshot(
+          onlyTarget: target,
+          requestReply: pending.requestReply,
+        );
       }
     }
   }
@@ -210,7 +215,10 @@ class PublicPeerSyncService extends ChangeNotifier {
     );
   }
 
-  Future<void> _publishSnapshot({String? onlyTarget}) async {
+  Future<void> _publishSnapshot({
+    String? onlyTarget,
+    bool requestReply = true,
+  }) async {
     if (_disposed || _syncing) return;
     if (_relay?.connected != true) {
       await _connectRelay();
@@ -249,6 +257,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       final payload = <String, dynamic>{
         'type': 'snapshot',
         'snapshotId': snapshotId,
+        'requestReply': requestReply,
         'accountId': accountId,
         'sender': deviceId,
         'account': state.toJson(),
@@ -256,7 +265,10 @@ class PublicPeerSyncService extends ChangeNotifier {
         'assets': assets,
       };
       for (final target in targets) {
-        _pendingSnapshotByTarget[target] = snapshotId;
+        _pendingSnapshotByTarget[target] = _PendingSnapshot(
+          snapshotId: snapshotId,
+          requestReply: requestReply,
+        );
         await _sendEncrypted(target, payload);
       }
       _lastError = null;
@@ -385,7 +397,6 @@ class PublicPeerSyncService extends ChangeNotifier {
       );
       final clear = await _cipher.decrypt(box, secretKey: secretKey);
       final clearText = utf8.decode(clear);
-      final fingerprint = _hex((await Sha256().hash(clear)).bytes);
       final decoded = jsonDecode(clearText);
       if (decoded is! Map) return;
       final payload =
@@ -400,18 +411,41 @@ class PublicPeerSyncService extends ChangeNotifier {
         case 'snapshot':
           final snapshotId = payload['snapshotId'];
           if (snapshotId is! String || snapshotId.isEmpty) return;
+          final contentPayload = Map<String, dynamic>.from(payload)
+            ..remove('snapshotId');
+          final contentBytes = utf8.encode(jsonEncode(contentPayload));
+          final fingerprint =
+              _hex((await Sha256().hash(contentBytes)).bytes);
+          final requestReply = payload['requestReply'] != false;
           if (_lastIncomingFingerprintByPeer[sender] == fingerprint) {
             await _ackSnapshot(sender, snapshotId);
+            if (requestReply) {
+              unawaited(
+                _publishSnapshot(
+                  onlyTarget: sender,
+                  requestReply: false,
+                ),
+              );
+            }
             return;
           }
           _lastIncomingFingerprintByPeer[sender] = fingerprint;
           await _receiveSnapshot(sender, payload);
           await _ackSnapshot(sender, snapshotId);
+          if (requestReply) {
+            unawaited(
+              _publishSnapshot(
+                onlyTarget: sender,
+                requestReply: false,
+              ),
+            );
+          }
           break;
         case 'snapshot-ack':
           final snapshotId = payload['snapshotId'];
           if (snapshotId is! String || snapshotId.isEmpty) return;
-          if (_pendingSnapshotByTarget[sender] == snapshotId) {
+          final pending = _pendingSnapshotByTarget[sender];
+          if (pending?.snapshotId == snapshotId) {
             _pendingSnapshotByTarget.remove(sender);
             _lastSuccessfulSyncAt = DateTime.now();
             _lastError = null;
@@ -492,7 +526,6 @@ class PublicPeerSyncService extends ChangeNotifier {
     _lastSuccessfulSyncAt = DateTime.now();
     _lastError = null;
     if (!_disposed) notifyListeners();
-    requestSync(immediate: true);
   }
 
   Future<void> _receiveAssetRequest(
@@ -567,9 +600,17 @@ class PublicPeerSyncService extends ChangeNotifier {
   }
 }
 
-class _IncomingTransfer {
-  _IncomingTransfer({required this.sender, required this.total})
-      : lastUpdatedAt = DateTime.now();
+class _PendingSnapshot {
+  const _PendingSnapshot({
+    required this.snapshotId,
+    required this.requestReply,
+  });
+
+  final String snapshotId;
+  final bool requestReply;
+}
+
+$incomingClass
 
   final String sender;
   final int total;
