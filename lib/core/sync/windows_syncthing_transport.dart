@@ -541,7 +541,6 @@ class WindowsSyncthingTransport {
     );
 
     await shutdown();
-    await _forceTerminateStaleBundledProcesses();
     var movedOriginal = false;
     try {
       await configDir.rename(backupDir.path);
@@ -578,7 +577,6 @@ class WindowsSyncthingTransport {
       try {
         await shutdown();
       } catch (_) {}
-      await _forceTerminateStaleBundledProcesses();
       if (movedOriginal && await backupDir.exists()) {
         try {
           if (await configDir.exists()) {
@@ -717,7 +715,7 @@ class WindowsSyncthingTransport {
     final previousFailure = _startupFailure;
     if (previousFailure != null) {
       _startupFailure = null;
-      throw StateError('Windows 同步核心启动失败：$previousFailure');
+      throw previousFailure;
     }
 
     if (_starting != null) {
