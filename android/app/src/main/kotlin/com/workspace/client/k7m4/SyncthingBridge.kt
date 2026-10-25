@@ -11,6 +11,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.net.URI
 import java.net.URLEncoder
 import java.net.URL
@@ -25,6 +27,7 @@ class SyncthingBridge(
     }
 
     private val executor = Executors.newSingleThreadExecutor()
+    private var integrationPolicyApplied = false
 
     fun configure(messenger: BinaryMessenger) {
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
@@ -160,16 +163,20 @@ class SyncthingBridge(
         }
 
         ensureApiKey()
+        ensureApiPort()
         val startRequested = startService()
 
-        val ready = waitForReady(maxAttempts = if (startRequested) 32 else 2)
+        val ready = pingReady()
+        if (ready) {
+            applyIntegrationPolicy()
+        }
         return linkedMapOf(
             "available" to true,
             "running" to ready,
-            "error" to if (!ready && !startRequested) {
-                "APP_BACKGROUND_START_DEFERRED"
-            } else {
-                null
+            "error" to when {
+                ready -> null
+                !startRequested -> "APP_BACKGROUND_START_DEFERRED"
+                else -> "SYNCTHING_STARTING"
             },
         )
     }
@@ -180,8 +187,13 @@ class SyncthingBridge(
             throw IllegalStateException(state["error"]?.toString() ?: "同步核心不可用")
         }
         if (state["running"] != true) {
+            val reason = state["error"]?.toString()
             throw IllegalStateException(
-                state["error"]?.toString() ?: "同步核心启动超时",
+                if (reason == "SYNCTHING_STARTING") {
+                    "同步核心正在启动，请稍后重试"
+                } else {
+                    reason ?: "同步核心正在启动，请稍后重试"
+                },
             )
         }
     }
@@ -203,12 +215,13 @@ class SyncthingBridge(
             )
         }
 
-        if (!waitForReady(maxAttempts = 2)) {
+        if (!pingReady()) {
             return linkedMapOf(
                 "available" to true,
                 "running" to false,
             )
         }
+        applyIntegrationPolicy()
 
         val system = JSONObject(request("GET", "/rest/system/status"))
         val version = JSONObject(request("GET", "/rest/system/version"))
@@ -419,7 +432,7 @@ class SyncthingBridge(
         }
 
         if (existing == null) {
-            val payload = JSONObject()
+            val payload = JSONObject(request("GET", "/rest/config/defaults/folder"))
                 .put("id", folderId)
                 .put("label", label)
                 .put("path", path)
@@ -435,14 +448,14 @@ class SyncthingBridge(
                 existing.optString("type") == "sendreceive"
         if (unchanged) return
 
-        existing
+        val patch = JSONObject()
             .put("label", label)
             .put("path", path)
             .put("type", "sendreceive")
         request(
-            "PUT",
+            "PATCH",
             "/rest/config/folders/" + encodePathSegment(folderId),
-            existing.toString(),
+            patch.toString(),
         )
     }
 
@@ -467,7 +480,7 @@ class SyncthingBridge(
         }
 
         if (existingDevice == null) {
-            val payload = JSONObject()
+            val payload = JSONObject(request("GET", "/rest/config/defaults/device"))
                 .put("deviceID", normalizedId)
                 .put("name", name.ifBlank { normalizedId.take(7) })
                 .put("addresses", JSONArray().put("dynamic"))
@@ -476,15 +489,10 @@ class SyncthingBridge(
             name.isNotBlank() &&
             existingDevice.optString("name").trim() != name.trim()
         ) {
-            // The bootstrap receiver retries pairDevice while the folder
-            // handshake settles. Rewriting an unchanged device config on every
-            // retry can churn the Syncthing connection and keep remoteState
-            // from ever reaching "valid".
-            existingDevice.put("name", name.trim())
             request(
-                "PUT",
+                "PATCH",
                 "/rest/config/devices/" + encodePathSegment(normalizedId),
-                existingDevice.toString(),
+                JSONObject().put("name", name.trim()).toString(),
             )
         }
 
@@ -512,11 +520,10 @@ class SyncthingBridge(
         }
         if (!present) {
             sharedDevices.put(JSONObject().put("deviceID", normalizedId))
-            folder.put("devices", sharedDevices)
             request(
-                "PUT",
+                "PATCH",
                 "/rest/config/folders/" + encodePathSegment(folderId),
-                folder.toString(),
+                JSONObject().put("devices", sharedDevices).toString(),
             )
         }
     }
@@ -552,11 +559,10 @@ class SyncthingBridge(
         }
         if (!changed) return
 
-        folder.put("devices", filtered)
         request(
-            "PUT",
+            "PATCH",
             "/rest/config/folders/" + encodePathSegment(folderId),
-            folder.toString(),
+            JSONObject().put("devices", filtered).toString(),
         )
     }
 
@@ -590,11 +596,10 @@ class SyncthingBridge(
         }
         if (folder == null) return
         if (folder.optBoolean("paused", false) != paused) {
-            folder.put("paused", paused)
             request(
-                "PUT",
+                "PATCH",
                 "/rest/config/folders/" + encodePathSegment(folderId),
-                folder.toString(),
+                JSONObject().put("paused", paused).toString(),
             )
         }
         activity.getSharedPreferences(
@@ -620,7 +625,7 @@ class SyncthingBridge(
             val folderId = key.removePrefix("auto_start_")
             !preferences.getBoolean("folder_paused_$folderId", false)
         }
-        if (!hasActiveFolder) stopService()
+        if (!hasActiveFolder) shutdownCoreThenStopService()
     }
 
     private fun startService(): Boolean {
@@ -666,39 +671,48 @@ class SyncthingBridge(
 
     private fun shutdownCoreThenStopService() {
         if (SyncthingService.isRunning) {
-            // Flutter can leave and re-enter the foreground quickly. If the
-            // service is destroyed before Syncthing releases its localhost
-            // port/config lock, the next start can briefly attach to the old
-            // process and then lose sync when that process finally exits.
-            // Ask the core to shut down first and wait for the API to disappear.
+            // Syncthing's Windows service guidance uses a ten-second graceful
+            // shutdown window. Use the same conservative lifecycle boundary on
+            // Android before tearing down the wrapper service.
+            val deadlineNanos = System.nanoTime() + 10_000_000_000L
             runCatching {
                 request("POST", "/rest/system/shutdown")
             }
-            repeat(20) {
+            while (System.nanoTime() < deadlineNanos) {
                 val stillReady = runCatching {
                     request("GET", "/rest/system/ping")
                     true
                 }.getOrDefault(false)
                 if (!stillReady) {
+                    integrationPolicyApplied = false
                     stopService()
                     return
                 }
-                Thread.sleep(100)
+                val remainingMillis =
+                    ((deadlineNanos - System.nanoTime()) / 1_000_000L)
+                        .coerceAtLeast(1L)
+                Thread.sleep(minOf(100L, remainingMillis))
             }
         }
+        integrationPolicyApplied = false
         stopService()
     }
 
-    private fun waitForReady(maxAttempts: Int = 32): Boolean {
-        repeat(maxAttempts) {
-            try {
-                request("GET", "/rest/system/ping")
-                return true
-            } catch (_: Exception) {
-                Thread.sleep(250)
-            }
-        }
-        return false
+    private fun applyIntegrationPolicy() {
+        if (integrationPolicyApplied) return
+        val payload = JSONObject()
+            .put("urAccepted", -1)
+            .put("crashReportingEnabled", false)
+            .put("autoUpgradeIntervalH", 0)
+        request("PATCH", "/rest/config/options", payload.toString())
+        integrationPolicyApplied = true
+    }
+
+    private fun pingReady(): Boolean {
+        return runCatching {
+            request("GET", "/rest/system/ping")
+            true
+        }.getOrDefault(false)
     }
 
     private fun request(
@@ -706,7 +720,8 @@ class SyncthingBridge(
         path: String,
         body: String? = null,
     ): String {
-        val connection = URL("http://127.0.0.1:${SyncthingService.API_PORT}$path")
+        val apiPort = ensureApiPort()
+        val connection = URL("http://127.0.0.1:$apiPort$path")
             .openConnection() as HttpURLConnection
         connection.requestMethod = method
         connection.connectTimeout = 2500
@@ -742,6 +757,26 @@ class SyncthingBridge(
         }
     }
 
+    private fun ensureApiPort(): Int {
+        val preferences = activity.getSharedPreferences(
+            SyncthingService.PREF_FILE,
+            Context.MODE_PRIVATE,
+        )
+        val existing = preferences.getInt(SyncthingService.PREF_API_PORT, 0)
+        if (existing in 1024..65535) return existing
+
+        val loopback = InetAddress.getByName("127.0.0.1")
+        val port = ServerSocket(0, 1, loopback).use { socket ->
+            socket.localPort
+        }
+        check(port in 1024..65535) { "无法分配本机同步端口" }
+
+        val saved = preferences.edit()
+            .putInt(SyncthingService.PREF_API_PORT, port)
+            .commit()
+        check(saved) { "无法保存本机同步端口" }
+        return port
+    }
     private fun ensureApiKey(): String {
         val preferences = activity.getSharedPreferences(
             SyncthingService.PREF_FILE,
