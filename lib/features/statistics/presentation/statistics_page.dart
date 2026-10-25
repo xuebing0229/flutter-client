@@ -461,6 +461,7 @@ class _PlatformCategoryCard extends StatelessWidget {
                     amount: entry.value,
                     total: total,
                     color: _platformColor(
+                      context,
                       CommissionPlatform.values.indexOf(entry.key),
                     ),
                   );
@@ -560,6 +561,7 @@ class _DistributionCard extends StatelessWidget {
             platform: entry.key,
             amount: entry.value,
             color: _platformColor(
+              context,
               CommissionPlatform.values.indexOf(entry.key),
             ),
           ),
@@ -861,14 +863,15 @@ class _DonutPainter extends CustomPainter {
   }
 }
 
-Color _platformColor(int index) {
-  const colors = [
-    Color(0xFF2F6BFF),
-    Color(0xFF1FA9E5),
-    Color(0xFF57B77C),
-    Color(0xFFF0A24B),
-    Color(0xFF8B6FD9),
-    Color(0xFFD96F9A),
+Color _platformColor(BuildContext context, int index) {
+  final scheme = Theme.of(context).colorScheme;
+  final colors = <Color>[
+    scheme.primary,
+    scheme.secondary,
+    scheme.tertiary,
+    Color.lerp(scheme.primary, scheme.secondary, 0.5)!,
+    Color.lerp(scheme.secondary, scheme.tertiary, 0.5)!,
+    Color.lerp(scheme.tertiary, scheme.primary, 0.5)!,
   ];
   return colors[index % colors.length];
 }
