@@ -77,6 +77,12 @@ jobs:
       - name: Test Windows updater and installer process shutdown
         shell: powershell
         run: ./tool/test_windows_updater.ps1
+      - name: Verify pinned Windows Syncthing release
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'syncthing-validation'
+          ./tool/fetch_syncthing_windows.ps1 -Version v2.1.7 -Destination $destination
+          & (Join-Path $destination 'syncthing.exe') --version
       - name: Compile Windows debug
         shell: pwsh
         run: flutter build windows --debug
