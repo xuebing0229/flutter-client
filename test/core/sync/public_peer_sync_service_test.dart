@@ -99,6 +99,13 @@ void main() {
       }
       expect(web.lastSuccessfulSyncAt, isNotNull);
 
+      final nativeDeadline = DateTime.now().add(const Duration(seconds: 1));
+      while (native.lastSuccessfulSyncAt == null &&
+          DateTime.now().isBefore(nativeDeadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(native.lastSuccessfulSyncAt, isNotNull);
+
       // Once both directions are acknowledged, the protocol must become idle
       // instead of bouncing snapshots forever.
       await Future<void>.delayed(const Duration(milliseconds: 80));
