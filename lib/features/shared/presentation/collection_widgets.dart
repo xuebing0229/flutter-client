@@ -56,201 +56,178 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
   final FocusNode _focusNode = FocusNode();
 
   @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_handleFocusChanged);
-  }
-
-  @override
   void dispose() {
-    _focusNode.removeListener(_handleFocusChanged);
     _focusNode.dispose();
     super.dispose();
   }
 
-  void _handleFocusChanged() {
-    if (mounted) setState(() {});
-  }
+  Widget? _buildSuffix() {
+    final hasClear = widget.query.isNotEmpty;
+    final hasFilters = widget.filters.isNotEmpty;
+    if (!hasClear && !hasFilters) return null;
 
-  void _exitSearch() {
-    widget.onClear();
-    _focusNode.unfocus();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasClear)
+          IconButton(
+            tooltip: '清空',
+            onPressed: widget.onClear,
+            icon: const Icon(Icons.close_rounded),
+          ),
+        if (hasFilters)
+          PopupMenuButton<String>(
+            tooltip: '选择搜索范围',
+            initialValue: widget.selectedFilter,
+            onSelected: (value) => widget.onFilterChanged?.call(value),
+            itemBuilder: (context) => [
+              for (final option in widget.filters)
+                PopupMenuItem<String>(
+                  value: option.id,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        child: widget.selectedFilter == option.id
+                            ? const Icon(Icons.check_rounded, size: 19)
+                            : null,
+                      ),
+                      Text(option.label),
+                    ],
+                  ),
+                ),
+            ],
+            icon: const Icon(Icons.expand_more_rounded),
+          ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final searching = _focusNode.hasFocus || widget.query.isNotEmpty;
-    final showFilters = searching && widget.filters.isNotEmpty;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Builder(
-            builder: (context) {
-              final style = GuildStyleTheme.of(context);
-              final colors = Theme.of(context).colorScheme;
+      child: Builder(
+        builder: (context) {
+          final style = GuildStyleTheme.of(context);
+          final colors = Theme.of(context).colorScheme;
+          final suffix = _buildSuffix();
 
-              InputDecoration decoration({
-                required BorderRadius radius,
-                required bool minimal,
-              }) {
-                if (minimal) {
-                  return InputDecoration(
-                    hintText: widget.hintText,
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: searching
-                        ? IconButton(
-                            tooltip: '退出搜索',
-                            onPressed: _exitSearch,
-                            icon: const Icon(Icons.close_rounded),
-                          )
-                        : null,
-                    filled: false,
-                    border: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: style.borderColor,
-                        width: 1,
-                      ),
-                    ),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: style.borderColor,
-                        width: 1,
-                      ),
-                    ),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: colors.primary,
-                        width: 1.4,
-                      ),
-                    ),
-                  );
-                }
-
-                if (!style.isClassic) {
-                  // Non-classic search fields are a single styled surface.
-                  // Do not paint a second TextField box inside the outer shell:
-                  // rounded shell + inner rectangle is exactly the mismatch we
-                  // want to avoid.
-                  return InputDecoration(
-                    hintText: widget.hintText,
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: searching
-                        ? IconButton(
-                            tooltip: '退出搜索',
-                            onPressed: _exitSearch,
-                            icon: const Icon(Icons.close_rounded),
-                          )
-                        : null,
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                  );
-                }
-
-                return InputDecoration(
-                  hintText: widget.hintText,
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: searching
-                      ? IconButton(
-                          tooltip: '退出搜索',
-                          onPressed: _exitSearch,
-                          icon: const Icon(Icons.close_rounded),
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: colors.surfaceContainerLow,
-                  border: OutlineInputBorder(
-                    borderRadius: radius,
-                    borderSide: BorderSide.none,
+          InputDecoration decoration({
+            required BorderRadius radius,
+            required bool minimal,
+          }) {
+            if (minimal) {
+              return InputDecoration(
+                hintText: widget.hintText,
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: suffix,
+                filled: false,
+                border: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: style.borderColor,
+                    width: 1,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: radius,
-                    borderSide: BorderSide(
-                      color: colors.outlineVariant.withValues(alpha: 0.48),
-                      width: 0.7,
-                    ),
+                ),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: style.borderColor,
+                    width: 1,
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: radius,
-                    borderSide: BorderSide(
-                      color: colors.primary,
-                      width: 1.2,
-                    ),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: colors.primary,
+                    width: 1.4,
                   ),
-                );
-              }
-
-              final minimal = style.style == AppUiStyle.minimal;
-              final radius = style.isClassic
-                  ? BorderRadius.circular(18)
-                  : style.inputBorderRadius;
-              final inputSurface = switch (style.style) {
-                AppUiStyle.classic => colors.surfaceContainerLow,
-                AppUiStyle.relief => style.background,
-                AppUiStyle.minimal => style.background,
-                AppUiStyle.bold => style.surface,
-                AppUiStyle.geometric => style.surface,
-                AppUiStyle.retroLight => Colors.white,
-                AppUiStyle.retroDark =>
-                  Colors.black.withValues(alpha: 0.40),
-                AppUiStyle.fluorescent =>
-                  Theme.of(context).brightness == Brightness.dark
-                      ? Color.alphaBlend(
-                          colors.primary.withValues(alpha: 0.03),
-                          style.surface,
-                        )
-                      : style.surface,
-                AppUiStyle.collage => style.surface,
-                AppUiStyle.monochrome => style.surfaceAlt,
-                AppUiStyle.clay => style.background,
-                AppUiStyle.glass => style.surface,
-              };
-              final field = TextField(
-                controller: widget.controller,
-                focusNode: _focusNode,
-                onChanged: widget.onChanged,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _focusNode.unfocus(),
-                decoration: decoration(radius: radius, minimal: minimal),
+                ),
               );
+            }
 
-              if (minimal) return field;
+            if (!style.isClassic) {
+              // Non-classic search fields are a single styled surface.
+              // Do not paint a second TextField box inside the outer shell.
+              return InputDecoration(
+                hintText: widget.hintText,
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: suffix,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+              );
+            }
 
-              return GuildStyledSurface(
-                role: GuildSurfaceRole.inset,
+            return InputDecoration(
+              hintText: widget.hintText,
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: suffix,
+              filled: true,
+              fillColor: colors.surfaceContainerLow,
+              border: OutlineInputBorder(
                 borderRadius: radius,
-                backdropAvailable: style.isGlass,
-                backgroundColor: inputSurface,
-                child: field,
-              );
-            },
-          ),
-          if (showFilters) ...[
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final option in widget.filters) ...[
-                    ChoiceChip(
-                      label: Text(option.label),
-                      selected: widget.selectedFilter == option.id,
-                      onSelected: (_) {
-                        widget.onFilterChanged?.call(option.id);
-                      },
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                ],
+                borderSide: BorderSide.none,
               ),
-            ),
-          ],
-        ],
+              enabledBorder: OutlineInputBorder(
+                borderRadius: radius,
+                borderSide: BorderSide(
+                  color: colors.outlineVariant.withValues(alpha: 0.48),
+                  width: 0.7,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: radius,
+                borderSide: BorderSide(
+                  color: colors.primary,
+                  width: 1.2,
+                ),
+              ),
+            );
+          }
+
+          final minimal = style.style == AppUiStyle.minimal;
+          final radius = style.isClassic
+              ? BorderRadius.circular(18)
+              : style.inputBorderRadius;
+          final inputSurface = switch (style.style) {
+            AppUiStyle.classic => colors.surfaceContainerLow,
+            AppUiStyle.relief => style.background,
+            AppUiStyle.minimal => style.background,
+            AppUiStyle.bold => style.surface,
+            AppUiStyle.geometric => style.surface,
+            AppUiStyle.retroLight => Colors.white,
+            AppUiStyle.retroDark => Colors.black.withValues(alpha: 0.40),
+            AppUiStyle.fluorescent =>
+              Theme.of(context).brightness == Brightness.dark
+                  ? Color.alphaBlend(
+                      colors.primary.withValues(alpha: 0.03),
+                      style.surface,
+                    )
+                  : style.surface,
+            AppUiStyle.collage => style.surface,
+            AppUiStyle.monochrome => style.surfaceAlt,
+            AppUiStyle.clay => style.background,
+            AppUiStyle.glass => style.surface,
+          };
+          final field = TextField(
+            controller: widget.controller,
+            focusNode: _focusNode,
+            onChanged: widget.onChanged,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _focusNode.unfocus(),
+            decoration: decoration(radius: radius, minimal: minimal),
+          );
+
+          if (minimal) return field;
+
+          return GuildStyledSurface(
+            role: GuildSurfaceRole.inset,
+            borderRadius: radius,
+            backdropAvailable: style.isGlass,
+            backgroundColor: inputSurface,
+            child: field,
+          );
+        },
       ),
     );
   }
