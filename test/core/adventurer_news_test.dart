@@ -144,9 +144,9 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['电池优化设置修复']);
   });
 
-  test('183 包含 PWA 点对点同步支持见闻', () {
+  test('183 包含网页版设备同步支持见闻', () {
     final picked = newsBetweenBuilds(182, 183);
-    expect(picked.map((e) => e.title).toList(), ['PWA 点对点同步支持']);
+    expect(picked.map((e) => e.title).toList(), ['网页版设备同步支持']);
   });
 
   test('191 包含重装后重新加入设备修复见闻', () {
@@ -174,9 +174,9 @@ void main() {
     expect(picked.map((e) => e.title).toList(), ['临时账号目录卡死修复']);
   });
 
-  test('197 包含 Windows 同步核心状态自愈见闻', () {
+  test('197 包含 Windows 设备同步自愈见闻', () {
     final picked = newsBetweenBuilds(196, 197);
-    expect(picked.map((e) => e.title).toList(), ['Windows 同步核心状态自愈']);
+    expect(picked.map((e) => e.title).toList(), ['Windows 设备同步自愈']);
   });
 
   test('198 包含回应码确认前状态修复见闻', () {
