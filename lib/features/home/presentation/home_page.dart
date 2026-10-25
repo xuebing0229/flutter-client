@@ -1579,6 +1579,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         orderStore: _orderStore,
         productStore: _productStore,
         receiptStyleStore: _receiptStyleStore,
+        accountName: widget.accountStore.accountName ?? '',
       ),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
         store: widget.featureStore,
