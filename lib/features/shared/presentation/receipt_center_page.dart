@@ -396,21 +396,24 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.date_range_outlined, size: 18),
-                    label: Text(
-                      _singleDateRange == null
-                          ? '筛选时间'
-                          : '${_date(_singleDateRange!.start)} ～ '
-                              '${_date(_singleDateRange!.end)}',
-                    ),
-                    onPressed: _pickSingleRange,
-                  ),
-                  if (_singleDateRange != null)
+                  if (_singleDateRange == null)
                     ActionChip(
-                      label: const Text('清除时间'),
-                      onPressed: () =>
+                      avatar: const Icon(Icons.date_range_outlined, size: 18),
+                      label: const Text('筛选时间'),
+                      onPressed: _pickSingleRange,
+                    )
+                  else
+                    InputChip(
+                      avatar: const Icon(Icons.date_range_outlined, size: 18),
+                      label: Text(
+                        '${_date(_singleDateRange!.start)} ～ '
+                        '${_date(_singleDateRange!.end)}',
+                      ),
+                      deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                      deleteButtonTooltipMessage: '清除时间',
+                      onDeleted: () =>
                           setState(() => _singleDateRange = null),
+                      onSelected: (_) => _pickSingleRange(),
                     ),
                 ],
               ),
