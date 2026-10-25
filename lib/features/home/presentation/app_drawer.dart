@@ -11,7 +11,6 @@ class AppDrawer extends StatelessWidget {
     required this.showDesktopPet,
     this.showFeedback = true,
     this.accountSubtitle,
-    this.onHideFeatureToggle,
     super.key,
   });
 
@@ -22,7 +21,6 @@ class AppDrawer extends StatelessWidget {
   final bool showDesktopPet;
   final bool showFeedback;
   final String? accountSubtitle;
-  final VoidCallback? onHideFeatureToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +48,6 @@ class AppDrawer extends StatelessWidget {
             showDesktopPet: showDesktopPet,
             showFeedback: showFeedback,
             accountSubtitle: accountSubtitle,
-            onHideFeatureToggle: onHideFeatureToggle,
             closeBeforeTutorial: true,
             padding: const EdgeInsets.fromLTRB(12, 24, 12, 20),
           ),
@@ -82,7 +79,6 @@ class AppToolMenu extends StatelessWidget {
     required this.showDesktopPet,
     this.showFeedback = true,
     this.accountSubtitle,
-    this.onHideFeatureToggle,
     this.selectedTool,
     this.closeBeforeTutorial = false,
     this.showTrailing = true,
@@ -97,7 +93,6 @@ class AppToolMenu extends StatelessWidget {
   final bool showDesktopPet;
   final bool showFeedback;
   final String? accountSubtitle;
-  final VoidCallback? onHideFeatureToggle;
   final String? selectedTool;
   final bool closeBeforeTutorial;
   final bool showTrailing;
