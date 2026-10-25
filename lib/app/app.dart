@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/account/account_store.dart';
@@ -13,6 +15,7 @@ import '../core/storage/app_data_persistence.dart';
 import '../core/sync/account_sync_record_store.dart';
 import '../core/sync/embedded_syncthing_bridge.dart';
 import '../core/sync/portable_sync_workspace_validator.dart';
+import '../core/sync/windows_syncthing_transport.dart';
 import '../core/sync/pending_device_revocation_service.dart';
 import '../core/theme/app_theme_store.dart';
 import '../features/account/presentation/account_gate.dart';
@@ -42,6 +45,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       GlobalKey<NavigatorState>();
 
   late final PendingDeviceRevocationService _pendingDeviceRevocations;
+  static const MethodChannel _windowsLifecycleChannel =
+      MethodChannel('app.windows_lifecycle');
+
   Timer? _pendingDeviceRevocationTimer;
   String? _sessionAccountId;
   bool _sessionInitialized = false;
@@ -50,12 +56,23 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (Platform.isWindows) {
+      _windowsLifecycleChannel.setMethodCallHandler(
+        _handleWindowsLifecycleCall,
+      );
+    }
     _pendingDeviceRevocations = PendingDeviceRevocationService(
       accountSyncStore: _accountSyncRecordStore,
       persistence: _persistence,
     );
     _accountStore.addListener(_onAccountSessionChanged);
     unawaited(_initialize());
+  }
+
+  Future<Object?> _handleWindowsLifecycleCall(MethodCall call) async {
+    if (call.method != 'prepareForExit') return null;
+    await WindowsSyncthingTransport.instance.shutdown();
+    return true;
   }
 
   Future<void> _initialize() async {
@@ -280,6 +297,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    if (Platform.isWindows) {
+      _windowsLifecycleChannel.setMethodCallHandler(null);
+    }
     WidgetsBinding.instance.removeObserver(this);
     _pendingDeviceRevocationTimer?.cancel();
     _accountStore.removeListener(_onAccountSessionChanged);
