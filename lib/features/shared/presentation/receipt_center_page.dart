@@ -5,6 +5,7 @@ import '../../orders/state/order_store.dart';
 import '../../products/domain/finished_product.dart';
 import '../../products/state/product_store.dart';
 import '../domain/receipt_style_store.dart';
+import 'collection_widgets.dart';
 import 'receipt_page.dart';
 
 enum _ArchiveFilter {
@@ -39,6 +40,7 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
   _ArchiveFilter _archiveFilter = _ArchiveFilter.all;
   DateTimeRange? _singleDateRange;
   String _singleQuery = '';
+  String _singleSearchField = 'all';
   String _clientQuery = '';
   int? _selectedYear;
 
@@ -87,21 +89,45 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
     };
   }
 
-  List<_SingleReceiptItem> _singleItems() {
+  bool _matchesSingleQuery({
+    required String title,
+    required Iterable<String> clients,
+    required String platform,
+    Iterable<String> extra = const <String>[],
+  }) {
     final query = _singleQuery.trim().toLowerCase();
+    if (query.isEmpty) return true;
+
+    final titleMatches = title.toLowerCase().contains(query);
+    final clientMatches = clients.any(
+      (client) => client.toLowerCase().contains(query),
+    );
+    final platformMatches = platform.toLowerCase().contains(query);
+    final extraMatches = extra.any(
+      (value) => value.toLowerCase().contains(query),
+    );
+
+    return switch (_singleSearchField) {
+      'title' => titleMatches,
+      'client' => clientMatches,
+      'platform' => platformMatches,
+      _ => titleMatches || clientMatches || platformMatches || extraMatches,
+    };
+  }
+
+  List<_SingleReceiptItem> _singleItems() {
     final items = <_SingleReceiptItem>[];
 
     for (final order in widget.orderStore.orders) {
       final date = _orderDate(order);
-      final haystack = [
-        order.title,
-        order.clientName,
-        order.platform.label,
-        '排单',
-      ].join(' ').toLowerCase();
       if (!_matchesArchive(order.isArchived) ||
           !_matchesRange(date) ||
-          (query.isNotEmpty && !haystack.contains(query))) {
+          !_matchesSingleQuery(
+            title: order.title,
+            clients: [order.clientName],
+            platform: order.platform.label,
+            extra: const ['排单'],
+          )) {
         continue;
       }
       items.add(
@@ -119,16 +145,14 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
         final name = product.clientNameForSale(soldAt);
         if (name != null) saleClients.add(name);
       }
-      final haystack = [
-        product.title,
-        product.platform.label,
-        product.saleType.label,
-        ...saleClients,
-        '成品',
-      ].join(' ').toLowerCase();
       if (!_matchesArchive(product.isArchived) ||
           !_matchesRange(date) ||
-          (query.isNotEmpty && !haystack.contains(query))) {
+          !_matchesSingleQuery(
+            title: product.title,
+            clients: saleClients,
+            platform: product.platform.label,
+            extra: [product.saleType.label, '成品'],
+          )) {
         continue;
       }
       items.add(
@@ -281,26 +305,25 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
     final items = _singleItems();
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-          child: TextField(
-            controller: _singleSearchController,
-            decoration: InputDecoration(
-              hintText: '搜索图名、单主、平台',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _singleQuery.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: '清空',
-                      onPressed: () {
-                        _singleSearchController.clear();
-                        setState(() => _singleQuery = '');
-                      },
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-            ),
-            onChanged: (value) => setState(() => _singleQuery = value),
-          ),
+        CollectionSearchField(
+          controller: _singleSearchController,
+          query: _singleQuery,
+          hintText: '搜索图名、单主、平台',
+          filters: const [
+            SearchFilterOption(id: 'all', label: '全部'),
+            SearchFilterOption(id: 'title', label: '图名'),
+            SearchFilterOption(id: 'client', label: '单主'),
+            SearchFilterOption(id: 'platform', label: '平台'),
+          ],
+          selectedFilter: _singleSearchField,
+          onFilterChanged: (value) {
+            setState(() => _singleSearchField = value);
+          },
+          onChanged: (value) => setState(() => _singleQuery = value),
+          onClear: () {
+            _singleSearchController.clear();
+            setState(() => _singleQuery = '');
+          },
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
