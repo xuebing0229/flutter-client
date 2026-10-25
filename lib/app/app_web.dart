@@ -1183,17 +1183,39 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     }
   }
 
-  List<_WebTab> _tabs() {
-    return <_WebTab>[
-      const _WebTab('orders', '排单', Icons.assignment_outlined),
+  List<GuildWorkspaceTab> _tabs() {
+    return <GuildWorkspaceTab>[
+      GuildWorkspaceTab(
+        id: 'orders',
+        label: '排单',
+        icon: Icons.format_list_bulleted_rounded,
+        selectedIcon: Icons.view_list_rounded,
+        page: _tabBody('orders'),
+      ),
       if (widget.featureStore.products)
-        const _WebTab('products', '成品', Icons.image_outlined),
+        GuildWorkspaceTab(
+          id: 'products',
+          label: '成品',
+          icon: Icons.image_outlined,
+          selectedIcon: Icons.image_rounded,
+          page: _tabBody('products'),
+        ),
       if (widget.featureStore.schedule)
-        const _WebTab('schedule', '日程', Icons.calendar_month_outlined),
+        GuildWorkspaceTab(
+          id: 'schedule',
+          label: '日程',
+          icon: Icons.calendar_month_outlined,
+          selectedIcon: Icons.calendar_month_rounded,
+          page: _tabBody('schedule'),
+        ),
       if (widget.featureStore.statistics)
-        const _WebTab('statistics', '统计', Icons.bar_chart_rounded),
-      if (widget.featureStore.focus)
-        const _WebTab('focus', '专注', Icons.timer_outlined),
+        GuildWorkspaceTab(
+          id: 'statistics',
+          label: '统计',
+          icon: Icons.bar_chart_outlined,
+          selectedIcon: Icons.bar_chart_rounded,
+          page: _tabBody('statistics'),
+        ),
     ];
   }
 
@@ -1249,11 +1271,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       'statistics' => StatisticsPage(
           store: _orderStore,
           productStore: _productStore,
-        ),
-      'focus' => FocusPanel(
-          orderStore: _orderStore,
-          focusStore: _focusStore,
-          onOpenOrder: _openFocusOrder,
         ),
       _ => OrderQueuePage(
           accountId: _accountId,
@@ -1316,90 +1333,160 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     );
   }
 
-  void _openAdd() {
-    if (_selectedTab == 'products') {
-      Navigator.of(context).push(
+  Future<void> _chooseAddMethod({required bool products}) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (dialogContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_note_rounded),
+                title: const Text('手动导入'),
+                subtitle: const Text('逐项填写订单信息'),
+                onTap: () => Navigator.pop(dialogContext, 'manual'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.document_scanner_outlined),
+                title: const Text('截图导入'),
+                subtitle: const Text('从平台截图识别多条，检查后批量添加'),
+                onTap: () => Navigator.pop(dialogContext, 'screenshot'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+
+    if (picked == 'screenshot') {
+      await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => AddProductPage(
+          builder: (_) => ScreenshotImportPage(
+            kind: products
+                ? ScreenshotImportKind.products
+                : ScreenshotImportKind.orders,
             accountId: _accountId,
-            store: _productStore,
-            pricingPresetStore: _pricingPresetStore,
-            featureStore: widget.featureStore,
+            orderStore: _orderStore,
+            productStore: _productStore,
+            presetStore: _nodePresetStore,
           ),
         ),
       );
       return;
     }
-    if (_selectedTab == 'orders') {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => AddOrderPage(
-            accountId: _accountId,
-            store: _orderStore,
-            nodePresetStore: _nodePresetStore,
-            pricingPresetStore: _pricingPresetStore,
-            featureStore: widget.featureStore,
-          ),
-        ),
-      );
-    }
-  }
 
-  Future<void> _openScreenshotImport(BuildContext drawerContext) async {
-    final navigator = Navigator.of(drawerContext);
-    navigator.pop();
-
-    var kind = _selectedTab == 'products'
-        ? ScreenshotImportKind.products
-        : ScreenshotImportKind.orders;
-    if (widget.featureStore.products) {
-      final picked = await showDialog<ScreenshotImportKind>(
-        context: context,
-        builder: (dialogContext) => SimpleDialog(
-          title: const Text('截图识别导入到哪里？'),
-          children: [
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(dialogContext).pop(
-                ScreenshotImportKind.orders,
-              ),
-              child: const ListTile(
-                leading: Icon(Icons.assignment_outlined),
-                title: Text('导入排单'),
-              ),
-            ),
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(dialogContext).pop(
-                ScreenshotImportKind.products,
-              ),
-              child: const ListTile(
-                leading: Icon(Icons.image_outlined),
-                title: Text('导入成品'),
-              ),
-            ),
-          ],
-        ),
-      );
-      if (picked == null || !mounted) return;
-      kind = picked;
-    }
-
-    await navigator.push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ScreenshotImportPage(
-          kind: kind,
-          accountId: _accountId,
-          orderStore: _orderStore,
-          productStore: _productStore,
-          presetStore: _nodePresetStore,
-        ),
+        builder: (_) => products
+            ? AddProductPage(
+                accountId: _accountId,
+                store: _productStore,
+                pricingPresetStore: _pricingPresetStore,
+                featureStore: widget.featureStore,
+              )
+            : AddOrderPage(
+                accountId: _accountId,
+                store: _orderStore,
+                nodePresetStore: _nodePresetStore,
+                pricingPresetStore: _pricingPresetStore,
+                featureStore: widget.featureStore,
+              ),
       ),
     );
   }
 
-  void _openTool(BuildContext drawerContext, Widget page) {
-    final navigator = Navigator.of(drawerContext);
-    navigator.pop();
-    navigator.push(MaterialPageRoute<void>(builder: (_) => page));
+  void _selectTab(int index) {
+    final tabs = _tabs();
+    if (index < 0 || index >= tabs.length) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _selectedTab = tabs[index].id;
+      _desktopToolSelection = null;
+    });
+  }
+
+  void _selectDesktopTool(String tool) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _desktopToolSelection = tool);
+  }
+
+  void _openMobileTool(String tool) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _buildWebToolPage(tool),
+      ),
+    );
+  }
+
+  void _showTutorial() {
+    unawaited(showFirstRunGuide(context, detailed: true));
+  }
+
+  Widget _buildWebToolPage(String tool) {
+    return switch (tool) {
+      AppToolMenu.presetTool => PresetCenterPage(
+          nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+        ),
+      AppToolMenu.receiptTool => ReceiptCenterPage(
+          orderStore: _orderStore,
+          productStore: _productStore,
+          receiptStyleStore: _receiptStyleStore,
+        ),
+      AppToolMenu.featureToggleTool => FeatureTogglePage(
+          store: widget.featureStore,
+        ),
+      AppToolMenu.desktopPetTool => Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              '专注',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          body: FocusPanel(
+            orderStore: _orderStore,
+            focusStore: _focusStore,
+            onOpenOrder: _openFocusOrder,
+          ),
+        ),
+      AppToolMenu.archiveTool => ArchivePage(
+          accountId: _accountId,
+          orderStore: _orderStore,
+          productStore: _productStore,
+          nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
+          featureStore: widget.featureStore,
+          syncCoordinator: _syncUi,
+        ),
+      AppToolMenu.syncTool => _WebDataPage(
+          linkedAccountName: _accountState.accountName,
+          busy: () => _busy,
+          onExport: _exportBackup,
+          onImport: _importBackup,
+          peerSync: _peerSync,
+        ),
+      AppToolMenu.accountTool => _WebAccountPage(
+          store: widget.accountStore,
+          peerSync: _peerSync,
+        ),
+      AppToolMenu.settingsTool => _WebSettingsPage(
+          themeStore: widget.themeStore,
+          dataPage: _WebDataPage(
+            linkedAccountName: _accountState.accountName,
+            busy: () => _busy,
+            onExport: _exportBackup,
+            onImport: _importBackup,
+            peerSync: _peerSync,
+          ),
+        ),
+      _ => const SizedBox.shrink(),
+    };
   }
 
   Future<void> _exportBackup(BuildContext context) async {
