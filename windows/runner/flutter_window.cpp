@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <flutter/method_result_functions.h>
+
 #include <shellapi.h>
 #include <shobjidl.h>
 
@@ -24,6 +26,7 @@ bool FlutterWindow::OnCreate() {
   // That path reaches OnDestroy() on an already-constructed FlutterWindow, so
   // always begin a real window lifetime in the non-exiting state.
   exiting_ = false;
+  exit_preparing_ = false;
 
   RECT frame = GetClientArea();
 
@@ -129,6 +132,12 @@ bool FlutterWindow::OnCreate() {
         result->Success(flutter::EncodableValue(path));
       });
 
+  windows_lifecycle_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "app.windows_lifecycle",
+          &flutter::StandardMethodCodec::GetInstance());
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   taskbar_created_message_ = ::RegisterWindowMessageW(L"TaskbarCreated");
@@ -149,6 +158,7 @@ bool FlutterWindow::OnCreate() {
 void FlutterWindow::OnDestroy() {
   RemoveTrayIcon();
 
+  windows_lifecycle_channel_.reset();
   windows_file_picker_channel_.reset();
 
   if (flutter_controller_) {
@@ -238,10 +248,52 @@ void FlutterWindow::ShowTrayMenu() {
   if (command == kTrayOpenCommand) {
     RestoreFromTray();
   } else if (command == kTrayExitCommand) {
-    exiting_ = true;
-    RemoveTrayIcon();
-    Destroy();
+    RequestExit();
   }
+}
+
+void FlutterWindow::RequestExit() {
+  HWND window = GetHandle();
+  if (window == nullptr || exit_preparing_) {
+    return;
+  }
+
+  exiting_ = true;
+  exit_preparing_ = true;
+  ::SetTimer(window, kExitPreparationTimerId, kExitPreparationWatchdogMs,
+             nullptr);
+
+  if (!windows_lifecycle_channel_) {
+    FinishExit();
+    return;
+  }
+
+  auto finish = [this]() {
+    HWND current = GetHandle();
+    if (current != nullptr) {
+      ::PostMessageW(current, kExitPreparedMessage, 0, 0);
+    }
+  };
+  auto result =
+      std::make_unique<flutter::MethodResultFunctions<flutter::EncodableValue>>(
+          [finish](const flutter::EncodableValue*) { finish(); },
+          [finish](const std::string&, const std::string&,
+                   const flutter::EncodableValue*) { finish(); },
+          [finish]() { finish(); });
+  windows_lifecycle_channel_->InvokeMethod(
+      "prepareForExit", std::make_unique<flutter::EncodableValue>(),
+      std::move(result));
+}
+
+void FlutterWindow::FinishExit() {
+  HWND window = GetHandle();
+  if (window == nullptr) {
+    return;
+  }
+  ::KillTimer(window, kExitPreparationTimerId);
+  exit_preparing_ = false;
+  RemoveTrayIcon();
+  Destroy();
 }
 
 LRESULT
@@ -257,9 +309,26 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case kExitPreparedMessage:
+      FinishExit();
+      return 0;
+
+    case WM_TIMER:
+      if (wparam == kExitPreparationTimerId && exit_preparing_) {
+        // Dart normally returns after Syncthing's ten-second graceful-shutdown
+        // window. This watchdog prevents an unrelated channel failure from
+        // making the explicit Exit action hang forever.
+        FinishExit();
+        return 0;
+      }
+      break;
+
     case WM_CLOSE:
       // The title-bar close button and Alt+F4 keep the app alive for sync and
       // local reminders. "Exit" in the tray menu is the explicit quit path.
+      if (exit_preparing_) {
+        return 0;
+      }
       if (!exiting_) {
         // Re-add the icon if Explorer restarted or the first registration was
         // delayed. Only fall back to a real close when Windows still refuses
