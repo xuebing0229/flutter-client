@@ -45,6 +45,18 @@ Future<void> runWorkspaceRestoreTransaction({
   }
 }
 
+@visibleForTesting
+bool shouldRetainRevokedTransportShare({
+  required String transportId,
+  required Set<String> activeTransportIds,
+  required Set<String> reauthorizedTransportIds,
+}) {
+  final id = transportId.trim();
+  return id.isNotEmpty &&
+      (activeTransportIds.contains(id) ||
+          reauthorizedTransportIds.contains(id));
+}
+
 class PortableWorkspaceSnapshot {
   const PortableWorkspaceSnapshot({
     required this.exportedAt,
@@ -121,9 +133,11 @@ String syncFieldLabel(String field) {
     'saleType' => '售卖方式',
     'soldCount' => '售出数量基准',
     'saleRecords' => '售出记录',
+    'saleClientNames' => '售出单主',
     'archivedAt' => '归档时间',
     'themeMode' => '主题模式',
     'themePaletteId' => '主题色',
+    'customThemePalettes' => '自定义主题色方案',
     'uiStyle' => 'UI风格',
     'uiTexture' => 'UI风格',
     'features' => '功能开关',
@@ -158,6 +172,7 @@ String syncFieldLabel(String field) {
 
 class SyncCoordinator extends ChangeNotifier {
   static const settingsRecordId = 'app';
+  static const _transportReauthorizationLifetime = Duration(minutes: 30);
 
   SyncCoordinator({
     required this.accountId,
@@ -186,7 +201,7 @@ class SyncCoordinator extends ChangeNotifier {
        _bridge = bridge;
 
   final String accountId;
-  final String deviceId;
+  String deviceId;
   final String deviceName;
   final AccountStore accountStore;
   final OrderStore orderStore;
@@ -256,6 +271,18 @@ class SyncCoordinator extends ChangeNotifier {
             _lastFlushedRecords[kind]![id]!.toJson(),
         ],
     };
+  }
+
+  List<Map<String, dynamic>> _portableRecordsFromCurrentBaseline() {
+    final result = <Map<String, dynamic>>[];
+    for (final kind in SyncEntityKind.values) {
+      final records = _lastFlushedRecords[kind]!;
+      final ids = records.keys.toList()..sort();
+      for (final id in ids) {
+        result.add(Map<String, dynamic>.from(records[id]!.toJson()));
+      }
+    }
+    return result;
   }
 
   void restoreSyncBaseline(Object? raw) {
@@ -351,9 +378,13 @@ class SyncCoordinator extends ChangeNotifier {
           await Future<void>.delayed(const Duration(milliseconds: 120));
         }
 
+        var lastInstability = '同步历史与当前工作区不一致';
         for (var attempt = 0; attempt < 5; attempt++) {
           await _flushLocalChanges();
-          await _reconcileFromSyncDirectory(seedMissing: false);
+
+          // Export is also a safe repair point for older workspaces whose
+          // portable history predates newer entity/settings fields.
+          await _reconcileFromSyncDirectory(seedMissing: true);
 
           final state = accountStore.syncSnapshot;
           if (state == null ||
@@ -374,9 +405,10 @@ class SyncCoordinator extends ChangeNotifier {
           ];
           final focusSessions = <FocusSession>[...focusStore.sessions];
 
-          final records = await _recordStore.exportPortableRecords(
-            accountId: accountId,
-          );
+          // Reconcile already produced a single merged/canonical record set.
+          // Re-reading the directory here creates a second snapshot boundary
+          // and can disagree with the workspace we just applied.
+          final records = _portableRecordsFromCurrentBaseline();
 
           final storesUnchanged =
               syncJsonEquals(orderFields, _captureOrders()) &&
@@ -384,7 +416,11 @@ class SyncCoordinator extends ChangeNotifier {
               syncJsonEquals(presetFields, _capturePresets()) &&
               syncJsonEquals(focusFields, _captureFocusSessions()) &&
               syncJsonEquals(settings, captureSettings());
-          if (!storesUnchanged) continue;
+          if (!storesUnchanged) {
+            lastInstability = '本地工作数据在导出期间持续变化';
+            await Future<void>.delayed(const Duration(milliseconds: 40));
+            continue;
+          }
 
           if (!PortableSyncWorkspaceValidator.recordsMatchWorkspace(
             accountId: accountId,
@@ -396,9 +432,8 @@ class SyncCoordinator extends ChangeNotifier {
             settings: settings,
             mergeEngine: _mergeEngine,
           )) {
-            // A local canonicalization can still finish between two reads.
-            // Reconcile that result and retry without treating harmless account
-            // activity timestamps as workspace mutations.
+            lastInstability = '同步历史与当前工作区仍不一致';
+            await Future<void>.delayed(const Duration(milliseconds: 40));
             continue;
           }
 
@@ -421,7 +456,7 @@ class SyncCoordinator extends ChangeNotifier {
           );
         }
 
-        throw StateError('导出快照暂时无法稳定，请稍后再试。');
+        throw StateError('$lastInstability，已停止导出以避免生成不完整备份。');
       } finally {
         if (pausedTransportForExport) {
           try {
@@ -711,6 +746,25 @@ class SyncCoordinator extends ChangeNotifier {
     }, showBusy: false);
   }
 
+  Future<void> deactivateTransportForAccountExit() {
+    _foregroundTransportEnabled = false;
+    return _enqueue(() async {
+      try {
+        // Signing out is a local session boundary, not a device revocation.
+        // Stop the local core even when this account's folder was paused, but
+        // leave the paired account/device records untouched.
+        await _bridge.stop(accountId: accountId);
+      } finally {
+        _transportPrepared = false;
+        _transportStatus = const EmbeddedSyncthingStatus(
+          available: true,
+          running: false,
+        );
+        if (!_disposed) notifyListeners();
+      }
+    }, showBusy: false);
+  }
+
   Future<void> pauseTransport() {
     return _pauseLock.synchronized(() async {
       return _enqueue(() async {
@@ -779,9 +833,92 @@ class SyncCoordinator extends ChangeNotifier {
     });
   }
 
+  Future<List<AccountDevice>> unacknowledgedRevokedDevices() async {
+    final state = accountStore.syncSnapshot;
+    if (state == null || state.accountId != accountId) {
+      return const <AccountDevice>[];
+    }
+
+    final result = <AccountDevice>[];
+    for (final entry in state.revocations.entries) {
+      if (entry.key == deviceId) continue;
+      final device = state.devices[entry.key];
+      if (device == null) continue;
+      final acknowledged = await _accountSyncStore.hasRevocationAck(
+        accountId: accountId,
+        deviceId: entry.key,
+        revokedAt: entry.value.revokedAt,
+      );
+      if (!acknowledged) result.add(device);
+    }
+    result.sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    return result;
+  }
+
+  Future<void> forceFinalizeRevokedDevice(String appDeviceId) {
+    return _enqueue(() async {
+      final state = accountStore.syncSnapshot;
+      if (state == null || state.accountId != accountId) {
+        throw StateError('当前账号状态不可用。');
+      }
+      if (appDeviceId == deviceId) {
+        throw const FormatException('不能强制清理当前设备。');
+      }
+
+      final revocation = state.revocations[appDeviceId];
+      final device = state.devices[appDeviceId];
+      if (revocation == null || device == null) {
+        throw const FormatException('这台设备没有待完成的解绑记录。');
+      }
+
+      final alreadyAcknowledged = await _accountSyncStore.hasRevocationAck(
+        accountId: accountId,
+        deviceId: appDeviceId,
+        revokedAt: revocation.revokedAt,
+      );
+      if (!alreadyAcknowledged) {
+        // The user explicitly confirmed that this installation has already
+        // been uninstalled/lost and can never come back to acknowledge its
+        // tombstone. Finalize that exact revocation on its behalf so every
+        // surviving peer can stop sharing to the dead transport.
+        await _accountSyncStore.writeRevocationAck(
+          accountId: accountId,
+          deviceId: appDeviceId,
+          revokedAt: revocation.revokedAt,
+        );
+      }
+
+      if (!_transportPrepared) {
+        await _prepareTransport(force: true);
+      }
+
+      final transportId = device.syncTransportId?.trim();
+      if (_transportPrepared) {
+        if (transportId != null && transportId.isNotEmpty) {
+          await _clearTransportReauthorization(transportId);
+          try {
+            await _bridge.unshareDevice(
+              accountId: accountId,
+              deviceId: transportId,
+            );
+          } catch (_) {
+            // The ACK is durable in the shared account state; normal
+            // revocation enforcement will retry the transport cleanup.
+          }
+        }
+        try {
+          await _bridge.requestScan(accountId: accountId);
+        } catch (_) {}
+        await _refreshTransportStatus();
+      }
+    });
+  }
+
   Future<void> bootstrapPeerTransport({
     required String deviceId,
     required String name,
+    String? appDeviceId,
+    String? platform,
   }) {
     return _enqueue(() async {
       if (_syncPaused) {
@@ -807,12 +944,55 @@ class SyncCoordinator extends ChangeNotifier {
       if (remoteName.isEmpty) {
         throw const FormatException('新设备名称无效。');
       }
-      await _bridge.pairDevice(
-        accountId: accountId,
-        deviceId: remoteId,
-        name: remoteName,
-      );
-      await _refreshTransportStatus();
+      // A previously unbound installation can legitimately rejoin with the
+      // same Syncthing identity but a new app-device ID. Keep this explicit
+      // user-approved transport share alive long enough for the new device to
+      // publish that app-device record; otherwise an older acknowledged
+      // tombstone can immediately unshare it again and create an endless
+      // "repairing sync channel" loop.
+      await _authorizeTransportRejoin(remoteId);
+      var transportShared = false;
+      try {
+        await _bridge.pairDevice(
+          accountId: accountId,
+          deviceId: remoteId,
+          name: remoteName,
+        );
+        transportShared = true;
+
+        final provisionalAppDeviceId = appDeviceId?.trim();
+        final provisionalPlatform = platform?.trim();
+        if (provisionalAppDeviceId != null &&
+            provisionalAppDeviceId.length >= 16 &&
+            provisionalPlatform != null &&
+            provisionalPlatform.isNotEmpty) {
+          await accountStore.bindSyncTransportId(
+            appDeviceId: provisionalAppDeviceId,
+            syncTransportId: remoteId,
+            name: remoteName,
+            platform: provisionalPlatform,
+          );
+          // Commit the new app-device record before the receiver tears down the
+          // bootstrap folder. This removes the old race where a historical
+          // tombstone could unshare the transport before the new device became
+          // visible to the source account.
+          await _syncAccountState();
+          await _bridge.requestScan(accountId: accountId);
+        }
+
+        await _refreshTransportStatus();
+      } catch (_) {
+        if (transportShared) {
+          try {
+            await _bridge.unshareDevice(
+              accountId: accountId,
+              deviceId: remoteId,
+            );
+          } catch (_) {}
+        }
+        await _clearTransportReauthorization(remoteId);
+        rethrow;
+      }
     });
   }
 
@@ -897,7 +1077,12 @@ class SyncCoordinator extends ChangeNotifier {
 
   Future<void> revokeDevice(String appDeviceId) {
     return _enqueue(() async {
+      final transportId =
+          accountStore.syncSnapshot?.devices[appDeviceId]?.syncTransportId;
       await accountStore.revokeDevice(appDeviceId);
+      if (transportId?.trim().isNotEmpty == true) {
+        await _clearTransportReauthorization(transportId!);
+      }
       await _syncAccountState();
 
       if (_transportPrepared) {
@@ -983,6 +1168,7 @@ class SyncCoordinator extends ChangeNotifier {
       _transportPrepared = prepared;
       await _refreshTransportStatus();
       if (prepared) {
+        _lastError = null;
         final current = accountStore.syncSnapshot;
         if (current != null &&
             current.accountId == accountId &&
@@ -994,9 +1180,84 @@ class SyncCoordinator extends ChangeNotifier {
       }
     } catch (error) {
       if (_disposed) return;
-      _lastError = '同步核心启动失败：$error';
+      final message = error.toString();
+      if (message.contains('仍在继续启动') ||
+          message.contains('正在启动，请稍后重试')) {
+        _lastError = '同步核心启动时间较长，仍在继续尝试。';
+      } else {
+        _lastError = '同步核心启动失败：$error';
+      }
     }
     if (!_disposed) notifyListeners();
+  }
+
+  Future<File> _transportReauthorizationFile() async {
+    final directory = await getApplicationSupportDirectory();
+    return File(
+      '${directory.path}${Platform.pathSeparator}accounts'
+      '${Platform.pathSeparator}$accountId'
+      '${Platform.pathSeparator}transport-reauthorizations-v1.json',
+    );
+  }
+
+  Future<Map<String, DateTime>> _loadTransportReauthorizations() async {
+    final file = await _transportReauthorizationFile();
+    if (!await file.exists()) return <String, DateTime>{};
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return <String, DateTime>{};
+      final now = DateTime.now().toUtc();
+      final result = <String, DateTime>{};
+      for (final entry in decoded.entries) {
+        final id = entry.key.toString().trim();
+        final value = entry.value;
+        if (id.isEmpty || value is! String) continue;
+        final expiresAt = DateTime.tryParse(value)?.toUtc();
+        if (expiresAt == null || !expiresAt.isAfter(now)) continue;
+        result[id] = expiresAt;
+      }
+      return result;
+    } catch (_) {
+      return <String, DateTime>{};
+    }
+  }
+
+  Future<void> _saveTransportReauthorizations(
+    Map<String, DateTime> values,
+  ) async {
+    final file = await _transportReauthorizationFile();
+    if (values.isEmpty) {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+      return;
+    }
+    await file.parent.create(recursive: true);
+    await file.writeAsString(
+      jsonEncode(<String, String>{
+        for (final entry in values.entries)
+          entry.key: entry.value.toUtc().toIso8601String(),
+      }),
+      flush: true,
+    );
+  }
+
+  Future<void> _authorizeTransportRejoin(String transportId) async {
+    final id = transportId.trim();
+    if (id.isEmpty) return;
+    final values = await _loadTransportReauthorizations();
+    values[id] = DateTime.now().toUtc().add(
+      _transportReauthorizationLifetime,
+    );
+    await _saveTransportReauthorizations(values);
+  }
+
+  Future<void> _clearTransportReauthorization(String transportId) async {
+    final id = transportId.trim();
+    if (id.isEmpty) return;
+    final values = await _loadTransportReauthorizations();
+    if (values.remove(id) == null) return;
+    await _saveTransportReauthorizations(values);
   }
 
   Future<File> _syncPauseFile() async {
@@ -1071,11 +1332,10 @@ class SyncCoordinator extends ChangeNotifier {
       }
       expectedRemoteIds.add(remoteTransportId);
     }
-    if (expectedRemoteIds.isEmpty) return;
+    if (expectedRemoteIds.isEmpty) {
+      return;
+    }
 
-    // If the core died, or this paired account never restored its permanent
-    // folder on this launch, bring it back without requiring a tap on this
-    // device's sync page.
     if (!_transportPrepared ||
         !_transportStatus.running ||
         _transportStatus.folderState == null) {
@@ -1088,14 +1348,35 @@ class SyncCoordinator extends ChangeNotifier {
         .whereType<String>()
         .where((id) => id.isNotEmpty)
         .toSet();
-    if (expectedRemoteIds.every(configuredRemoteIds.contains)) return;
+    final connectedExpectedIds = expectedRemoteIds.intersection(
+      _transportStatus.connectedDeviceIds.toSet(),
+    );
 
-    // Syncthing can still be running while the account folder has lost one of
-    // its peer shares (for example after an interrupted migration). Repair the
-    // folder config from the account's signed device state.
-    await _pairKnownTransportPeers(state);
-    await _bridge.requestScan(accountId: accountId);
-    await _refreshTransportStatus();
+    // Device connectivity alone is not a completed sync handshake. Syncthing
+    // reports "valid" only when the peer shares this exact account folder back.
+    // The previous repair path returned as soon as the peer existed in config,
+    // which could leave a connected notSharing/paused peer stuck at 0% forever.
+    final brokenFolderHandshake = connectedExpectedIds.where((id) {
+      final remoteState = _transportStatus.remoteFolderStates[id]?.trim();
+      return remoteState == 'notSharing' || remoteState == 'paused';
+    }).toSet();
+
+    final missingConfiguredPeer =
+        !expectedRemoteIds.every(configuredRemoteIds.contains);
+    if (missingConfiguredPeer) {
+      // Repair only configuration that is actually missing on this device.
+      // Remote "notSharing" / "paused" states belong to the peer and cannot be
+      // fixed by repeatedly rewriting our local Syncthing configuration.
+      await _pairKnownTransportPeers(state);
+      await _refreshTransportStatus();
+      return;
+    }
+
+    if (brokenFolderHandshake.isNotEmpty) {
+      _lastError =
+          '设备已经连接，但另一台设备的同步目录尚未共享或已暂停。'
+          '请让另一台设备保持打开并恢复同步。';
+    }
   }
 
   Future<void> _refreshTransportStatus() async {
@@ -1103,10 +1384,20 @@ class SyncCoordinator extends ChangeNotifier {
       _transportStatus = await _bridge.status(accountId: accountId);
       if (_transportStatus.error != null) {
         _lastError = _transportStatus.error;
+      } else if (_transportStatus.folderErrors.isNotEmpty) {
+        _lastError = '同步目录错误：${_transportStatus.folderErrors.first}';
       }
 
       final ownTransportId = _transportStatus.deviceId?.trim();
       if (ownTransportId != null && ownTransportId.isNotEmpty) {
+        final canonicalDeviceId =
+            await accountStore.reconcileCurrentDeviceTransportIdentity(
+          syncTransportId: ownTransportId,
+        );
+        if (canonicalDeviceId != null && canonicalDeviceId != deviceId) {
+          deviceId = canonicalDeviceId;
+        }
+
         final currentDevice = accountStore.syncSnapshot?.devices[deviceId];
         if (currentDevice == null) {
           throw StateError('当前设备记录不存在。');
@@ -1310,6 +1601,9 @@ class SyncCoordinator extends ChangeNotifier {
           records: recordsByKind[kind]!,
         );
       }
+      await _removeSupersededLegacySettings(
+        recordsByKind[SyncEntityKind.settings]!,
+      );
     }
 
     _applyingRemote = true;
@@ -1579,6 +1873,15 @@ class SyncCoordinator extends ChangeNotifier {
         if (device.syncTransportId?.trim().isNotEmpty == true)
           device.syncTransportId!.trim(),
     };
+    final reauthorizedTransportIds =
+        (await _loadTransportReauthorizations()).keys.toSet();
+
+    // Once the rejoined app-device record has propagated, the normal active
+    // device binding is enough; remove the temporary local authorization.
+    for (final transportId
+        in activeTransportIds.intersection(reauthorizedTransportIds)) {
+      await _clearTransportReauthorization(transportId);
+    }
 
     for (final entry in state.revocations.entries) {
       final revokedId = entry.key;
@@ -1599,7 +1902,13 @@ class SyncCoordinator extends ChangeNotifier {
 
       // The same physical Syncthing identity may be explicitly re-authorized
       // after a revoked device rejoins and receives a new app-device ID.
-      if (activeTransportIds.contains(transportId)) {
+      // During the short bootstrap window the new app-device record may not
+      // have arrived yet, so also honor the persisted explicit rejoin marker.
+      if (shouldRetainRevokedTransportShare(
+        transportId: transportId,
+        activeTransportIds: activeTransportIds,
+        reauthorizedTransportIds: reauthorizedTransportIds,
+      )) {
         continue;
       }
 
@@ -1666,13 +1975,17 @@ class SyncCoordinator extends ChangeNotifier {
   Map<String, dynamic> _normalizeMaterializedSettings(
     Map<String, dynamic> settings,
   ) {
-    final hasFieldLevelFeatures = settings.keys.any(
+    final normalized = <String, dynamic>{...settings};
+    final hasFieldLevelFeatures = normalized.keys.any(
       (key) => key.startsWith('feature.'),
     );
-    if (!hasFieldLevelFeatures || !settings.containsKey('features')) {
-      return settings;
+    if (hasFieldLevelFeatures) {
+      normalized.remove('features');
     }
-    return <String, dynamic>{...settings}..remove('features');
+    if (normalized.containsKey('uiStyle')) {
+      normalized.remove('uiTexture');
+    }
+    return normalized;
   }
 
   Future<void> _backfillMissingRecordFields({
@@ -1709,6 +2022,32 @@ class SyncCoordinator extends ChangeNotifier {
       await _recordStore.write(accountId: accountId, record: migrated);
       records[entry.key] = migrated;
     }
+  }
+
+  Future<void> _removeSupersededLegacySettings(
+    Map<String, SyncRecord> records,
+  ) async {
+    final record = records[settingsRecordId];
+    if (record == null || !record.fields.containsKey('uiStyle')) return;
+    if (!record.fields.containsKey('uiTexture') &&
+        !record.conflicts.containsKey('uiTexture')) {
+      return;
+    }
+
+    final fields = <String, SyncFieldValue>{...record.fields}
+      ..remove('uiTexture');
+    final conflicts = <String, SyncConflict>{...record.conflicts}
+      ..remove('uiTexture');
+    final migrated = SyncRecord(
+      accountId: record.accountId,
+      kind: record.kind,
+      id: record.id,
+      fields: Map<String, SyncFieldValue>.unmodifiable(fields),
+      operations: record.operations,
+      conflicts: Map<String, SyncConflict>.unmodifiable(conflicts),
+    );
+    await _recordStore.write(accountId: accountId, record: migrated);
+    records[settingsRecordId] = migrated;
   }
 
   Future<void> _migrateLegacyFeatureSettings(

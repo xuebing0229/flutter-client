@@ -1,0 +1,2292 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'app_theme.dart';
+import 'package:archive/archive.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
+import '../core/account/account_models.dart';
+import '../core/account/web_account_store.dart';
+import '../core/features/app_feature_store.dart';
+import '../core/finance/pricing_preset_store.dart';
+import '../core/portability/app_backup_data.dart';
+import '../core/portability/web_backup_reader.dart';
+import '../core/sync/public_peer_sync_service.dart';
+import '../core/sync/sync_coordinator_web.dart';
+import '../core/theme/app_theme_store.dart';
+import '../core/theme/app_ui_style.dart';
+import '../core/web/web_platform_bridge.dart';
+import '../features/home/presentation/about_page.dart';
+import '../features/home/presentation/app_drawer.dart';
+import '../features/home/presentation/archive_page.dart';
+import '../features/home/presentation/feature_toggle_page.dart';
+import '../features/home/presentation/first_run_guide.dart';
+import '../features/home/presentation/theme_color_page.dart';
+import '../features/home/presentation/workspace_shell.dart';
+import '../features/imports/presentation/screenshot_import_page.dart';
+import '../features/focus/state/focus_store.dart';
+import '../features/focus/presentation/focus_panel.dart';
+import '../features/orders/data/node_presets.dart';
+import '../features/orders/data/order_reference_image_store_web.dart';
+import '../features/orders/domain/queue_order.dart';
+import '../features/orders/presentation/add_order_page.dart';
+import '../features/orders/presentation/order_detail_page.dart';
+import '../features/orders/presentation/order_queue_page.dart';
+import '../features/orders/state/order_store.dart';
+import '../features/products/presentation/add_product_page.dart';
+import '../features/products/presentation/product_page.dart';
+import '../features/products/state/product_store.dart';
+import '../features/schedule/presentation/schedule_page.dart';
+import '../features/statistics/presentation/statistics_page.dart';
+import '../features/shared/domain/collection_view_preferences.dart';
+import '../features/shared/domain/receipt_style_store.dart';
+import '../features/shared/presentation/preset_center_page.dart';
+import '../features/shared/presentation/receipt_center_page.dart';
+
+Set<String> _desktopPetAssetPaths(Object? rawManifest) {
+  if (rawManifest == null) return const <String>{};
+  if (rawManifest is! Map || rawManifest['schema'] != 1) {
+    return const <String>{};
+  }
+  final presets = rawManifest['presets'];
+  if (presets is! List) return const <String>{};
+
+  final result = <String>{};
+  for (final preset in presets) {
+    if (preset is! Map) continue;
+    for (final key in const <String>['imageA', 'imageB', 'bubbleImage']) {
+      final value = preset[key];
+      if (value is! String) continue;
+      final segments = value.split('/');
+      final valid = segments.length == 4 &&
+          segments[0] == 'desktop-pet' &&
+          segments[1] == 'presets' &&
+          segments.skip(2).every(
+                (segment) =>
+                    segment.isNotEmpty &&
+                    segment != '.' &&
+                    segment != '..' &&
+                    RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
+              );
+      if (valid) result.add(value);
+    }
+  }
+  return result;
+}
+
+class App extends StatefulWidget {
+  const App({super.key});
+
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  final AppThemeStore _themeStore = AppThemeStore();
+  final AppFeatureStore _featureStore = AppFeatureStore();
+  final WebAccountStore _accountStore = WebAccountStore();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_initialize());
+  }
+
+  Future<void> _initialize() async {
+    await Future.wait<void>([
+      _themeStore.load(),
+      _featureStore.load(),
+      _accountStore.load(),
+    ]);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _themeStore.dispose();
+    _featureStore.dispose();
+    _accountStore.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge(<Listenable>[
+        _themeStore,
+        _accountStore,
+      ]),
+      builder: (context, _) {
+        return MaterialApp(
+          title: '冒险者公会',
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: const [Locale('zh', 'CN')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          themeMode: _themeStore.mode,
+          theme: GuildAppTheme.light(_themeStore),
+          darkTheme: GuildAppTheme.dark(_themeStore),
+          home: _WebAccountGate(
+            accountStore: _accountStore,
+            themeStore: _themeStore,
+            featureStore: _featureStore,
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+class _WebAccountGate extends StatefulWidget {
+  const _WebAccountGate({
+    required this.accountStore,
+    required this.themeStore,
+    required this.featureStore,
+  });
+
+  final WebAccountStore accountStore;
+  final AppThemeStore themeStore;
+  final AppFeatureStore featureStore;
+
+  @override
+  State<_WebAccountGate> createState() => _WebAccountGateState();
+}
+
+class _WebAccountGateState extends State<_WebAccountGate> {
+  final WebBackupReader _backupReader = const WebBackupReader();
+  final OrderReferenceImageStore _referenceImageStore =
+      OrderReferenceImageStore();
+  bool _importing = false;
+
+  Future<void> _importAccountBackup() async {
+    if (_importing) return;
+    setState(() => _importing = true);
+    try {
+      final imported = await _backupReader.pickAndRead();
+      if (imported == null) return;
+      final state = imported.backup.accountSyncState;
+      if (state == null || !state.hasCredentials) {
+        throw const FormatException(
+          '这份备份没有完整账号凭据，不能用来在新浏览器登录。',
+        );
+      }
+
+      final accountId = state.accountId;
+      final workspaceKey = 'adventurers-guild.web.workspace.v2.$accountId';
+
+      if (imported.includesAssets) {
+        AppBackupData? previousBackup;
+        final previousSource = webStorageGet(workspaceKey);
+        if (previousSource != null && previousSource.trim().isNotEmpty) {
+          try {
+            previousBackup = AppBackupData.decode(previousSource);
+          } catch (_) {
+            // A damaged old workspace must not block a valid replacement.
+          }
+        }
+
+        final importedPaths = <String>{};
+        final importedImages = <OrderReferenceImage>[
+          for (final order in imported.backup.orders) ...order.referenceImages,
+          for (final product in imported.backup.products)
+            ...product.referenceImages,
+        ];
+        for (final image in importedImages) {
+          final bytes = imported.assets[image.relativePath];
+          if (bytes == null) {
+            throw FormatException('完整备份缺少参考图：${image.fileName}');
+          }
+          await _referenceImageStore.writeAssetBytes(
+            accountId: accountId,
+            relativePath: image.relativePath,
+            bytes: bytes,
+          );
+          importedPaths.add(image.relativePath);
+        }
+
+        final importedDesktopPaths = _desktopPetAssetPaths(
+          imported.backup.settings['desktopPetBackup'],
+        );
+        for (final path in importedDesktopPaths) {
+          final bytes = imported.assets[path];
+          if (bytes == null) {
+            throw FormatException('桌宠备份缺少素材：$path');
+          }
+          await _referenceImageStore.writeAssetBytes(
+            accountId: accountId,
+            relativePath: path,
+            bytes: bytes,
+          );
+        }
+
+        if (previousBackup != null) {
+          await _referenceImageStore.deleteImages(
+            accountId: accountId,
+            images: [
+              for (final order in previousBackup.orders)
+                for (final image in order.referenceImages)
+                  if (!importedPaths.contains(image.relativePath)) image,
+              for (final product in previousBackup.products)
+                for (final image in product.referenceImages)
+                  if (!importedPaths.contains(image.relativePath)) image,
+            ],
+          );
+          final previousDesktopPaths = _desktopPetAssetPaths(
+            previousBackup.settings['desktopPetBackup'],
+          );
+          await _referenceImageStore.deleteAssetPaths(
+            accountId: accountId,
+            relativePaths: previousDesktopPaths.difference(
+              importedDesktopPaths,
+            ),
+          );
+        }
+      } else if (_desktopPetAssetPaths(
+        imported.backup.settings['desktopPetBackup'],
+      ).isNotEmpty) {
+        throw const FormatException('这份备份包含桌宠素材记录，但没有随包素材文件。');
+      }
+
+      webStorageSet(
+        workspaceKey,
+        imported.backup.encode(pretty: false),
+      );
+
+      await widget.accountStore.importAccountState(
+        state,
+        select: true,
+        stayLoggedIn: false,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('账号和本地数据已导入，请输入账号密码登录。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('导入失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (widget.accountStore.status) {
+      WebAccountStatus.loading => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      WebAccountStatus.unlocked => _WebWorkspace(
+          accountStore: widget.accountStore,
+          themeStore: widget.themeStore,
+          featureStore: widget.featureStore,
+        ),
+      WebAccountStatus.locked => _WebLoginPage(store: widget.accountStore),
+      WebAccountStatus.revoked => _WebRevokedPage(store: widget.accountStore),
+      WebAccountStatus.unactivated => _WebAccountEntryPage(
+          store: widget.accountStore,
+          importing: _importing,
+          onImportBackup: _importAccountBackup,
+        ),
+    };
+  }
+}
+
+class _WebAccountEntryPage extends StatelessWidget {
+  const _WebAccountEntryPage({
+    required this.store,
+    required this.importing,
+    required this.onImportBackup,
+  });
+
+  final WebAccountStore store;
+  final bool importing;
+  final Future<void> Function() onImportBackup;
+
+  @override
+  Widget build(BuildContext context) {
+    final accounts = store.localAccounts;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '冒险者公会',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
+            children: [
+              Text(
+                accounts.isEmpty ? '开始使用网页版' : '选择本机账号',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '网页账号只保存在当前浏览器。可以使用激活码创建新账号，也可以登录当前浏览器已保存的账号，或从 Android / Windows 完整备份加入已有账号。',
+                style: TextStyle(
+                  height: 1.5,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (accounts.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      for (var index = 0; index < accounts.length; index++) ...[
+                        ListTile(
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.person_outline_rounded),
+                          ),
+                          title: Text(
+                            accounts[index].accountName,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: const Text('当前浏览器已保存'),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () =>
+                              store.selectLocalAccount(accounts[index].accountId),
+                        ),
+                        if (index != accounts.length - 1)
+                          const Divider(height: 1, indent: 72),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => _WebActivationPage(store: store),
+                  ),
+                ),
+                icon: const Icon(Icons.add_card_rounded),
+                label: const Text('首次使用 / 注册激活'),
+              ),
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                onPressed: importing ? null : onImportBackup,
+                icon: importing
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.devices_other_rounded),
+                label: Text(importing ? '正在导入…' : '已有账号 / 导入完整备份'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebActivationPage extends StatefulWidget {
+  const _WebActivationPage({required this.store});
+
+  final WebAccountStore store;
+
+  @override
+  State<_WebActivationPage> createState() => _WebActivationPageState();
+}
+
+class _WebActivationPageState extends State<_WebActivationPage> {
+  final TextEditingController _activation = TextEditingController();
+  final TextEditingController _name = TextEditingController();
+  final TextEditingController _password = TextEditingController();
+  bool _showPassword = false;
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.store.activate(
+        activationCode: _activation.text,
+        accountName: _name.text,
+        password: _password.text,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _activation.dispose();
+    _name.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('激活新账号')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              TextField(
+                controller: _activation,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: '激活码',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: '账号名',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _password,
+                obscureText: !_showPassword,
+                decoration: InputDecoration(
+                  labelText: '密码',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => _showPassword = !_showPassword),
+                    icon: Icon(
+                      _showPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: _busy ? null : _submit,
+                child: _busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('激活并登录'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebLoginPage extends StatefulWidget {
+  const _WebLoginPage({required this.store});
+
+  final WebAccountStore store;
+
+  @override
+  State<_WebLoginPage> createState() => _WebLoginPageState();
+}
+
+class _WebLoginPageState extends State<_WebLoginPage> {
+  late final TextEditingController _name;
+  final TextEditingController _password = TextEditingController();
+  bool _showPassword = false;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.store.accountName ?? '');
+  }
+
+  Future<void> _login() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final ok = await widget.store.unlock(
+        accountName: _name.text,
+        password: _password.text,
+      );
+      if (!ok && mounted) {
+        setState(() => _error = '账号名或密码不正确。');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('从这个浏览器移除账号？'),
+        content: const Text('会移除当前浏览器里这个账号的登录与工作区记录，不会影响安卓、Windows 或其他设备。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await widget.store.removeSelectedLocalAccount();
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '登录',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: '账号名',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _password,
+                obscureText: !_showPassword,
+                onSubmitted: (_) => _login(),
+                decoration: InputDecoration(
+                  labelText: '密码',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => _showPassword = !_showPassword),
+                    icon: Icon(
+                      _showPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: _busy ? null : _login,
+                child: _busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('登录'),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _busy ? null : widget.store.returnToAccountChooser,
+                icon: const Icon(Icons.swap_horiz_rounded),
+                label: const Text('使用其他账号'),
+              ),
+              TextButton.icon(
+                onPressed: _busy ? null : _remove,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('从这个浏览器移除账号'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebRevokedPage extends StatelessWidget {
+  const _WebRevokedPage({required this.store});
+
+  final WebAccountStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.phonelink_erase_rounded, size: 52),
+                const SizedBox(height: 16),
+                Text(
+                  '这个网页设备已被解绑',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  '当前浏览器里的这个账号不能继续作为已授权设备使用。你可以移除本地记录，再从新的完整备份重新加入。',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                FilledButton(
+                  onPressed: store.removeSelectedLocalAccount,
+                  child: const Text('移除本地账号'),
+                ),
+                TextButton(
+                  onPressed: store.returnToAccountChooser,
+                  child: const Text('返回账号列表'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebWorkspace extends StatefulWidget {
+  const _WebWorkspace({
+    required this.accountStore,
+    required this.themeStore,
+    required this.featureStore,
+  });
+
+  final WebAccountStore accountStore;
+  final AppThemeStore themeStore;
+  final AppFeatureStore featureStore;
+
+  @override
+  State<_WebWorkspace> createState() => _WebWorkspaceState();
+}
+
+class _WebWorkspaceState extends State<_WebWorkspace> {
+  static const String _legacyWorkspaceKey =
+      'adventurers-guild.web.workspace.v1';
+  static const String _manifestName = 'backup.json';
+
+  final OrderStore _orderStore = OrderStore();
+  final ProductStore _productStore = ProductStore();
+  final NodePresetStore _nodePresetStore = NodePresetStore();
+  final PricingPresetStore _pricingPresetStore = PricingPresetStore();
+  final ReceiptStyleStore _receiptStyleStore = ReceiptStyleStore();
+  final FocusStore _focusStore = FocusStore();
+  late final SyncCoordinator _syncUi;
+  PublicPeerSyncService? _peerSync;
+  final OrderReferenceImageStore _referenceImageStore =
+      OrderReferenceImageStore();
+  final WebBackupReader _backupReader = const WebBackupReader();
+
+  Timer? _saveDebounce;
+
+  String get _accountId => widget.accountStore.accountId!;
+  AccountSyncState get _accountState => widget.accountStore.syncSnapshot!;
+  String get _webDeviceId => widget.accountStore.currentDeviceId!;
+  String get _workspaceKey =>
+      'adventurers-guild.web.workspace.v2.$_accountId';
+
+  bool _ready = false;
+  bool _busy = false;
+  String _selectedTab = 'orders';
+  String? _desktopToolSelection;
+  CollectionViewPreferences _collectionViews =
+      const CollectionViewPreferences();
+
+  bool get _orderCardView => _collectionViews.orderCardView;
+  bool get _orderOverviewView => _collectionViews.orderOverviewView;
+  int get _orderOverviewColumns => _collectionViews.orderOverviewColumns;
+  bool get _productCardView => _collectionViews.productCardView;
+  bool get _productOverviewView => _collectionViews.productOverviewView;
+  int get _productOverviewColumns => _collectionViews.productOverviewColumns;
+
+  String get _orderSortMode => _collectionViews.orderSortMode;
+  String get _productSortMode => _collectionViews.productSortMode;
+  bool _desktopNavigationOpen = true;
+  bool _nativeDeadlineReminderPreference = false;
+  Map<String, dynamic> _retainedSettings = <String, dynamic>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _syncUi = SyncCoordinator.web(
+      accountId: _accountId,
+      deviceId: _webDeviceId,
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      focusStore: _focusStore,
+      captureSettings: _captureSettings,
+      applySettings: _applySettings,
+    );
+    _syncUi.addListener(_onSyncUiChanged);
+    _orderStore.addListener(_scheduleSave);
+    _productStore.addListener(_scheduleSave);
+    _nodePresetStore.addListener(_scheduleSave);
+    _pricingPresetStore.addListener(_scheduleSave);
+    _receiptStyleStore.addListener(_scheduleSave);
+    _focusStore.addListener(_scheduleSave);
+    widget.featureStore.addListener(_onFeatureStoreChanged);
+    widget.themeStore.addListener(_scheduleSave);
+    unawaited(_restoreWorkspace());
+  }
+
+  void _onSyncUiChanged() {
+    if (!_ready) return;
+    _scheduleSave();
+    _peerSync?.requestSync();
+    if (mounted) setState(() {});
+  }
+
+  void _onPeerSyncChanged() {
+    if (mounted && _ready) setState(() {});
+  }
+
+  void _startPublicPeerSync() {
+    if (_peerSync != null) return;
+    final service = PublicPeerSyncService(
+      accountId: _accountId,
+      deviceId: _webDeviceId,
+      captureAccountState: () => _accountState,
+      mergeAccountState: widget.accountStore.mergeCurrentAccountState,
+      exportRecords: _syncUi.exportPeerRecords,
+      mergeRecords: _syncUi.mergePeerRecords,
+      captureAssetPaths: () => <String>{
+        for (final order in _orderStore.orders)
+          for (final image in order.referenceImages) image.relativePath,
+        for (final product in _productStore.products)
+          for (final image in product.referenceImages) image.relativePath,
+      },
+      assetExists: (path) async =>
+          (await _referenceImageStore.readAssetBytes(
+            accountId: _accountId,
+            relativePath: path,
+          )) !=
+          null,
+      readAsset: (path) => _referenceImageStore.readAssetBytes(
+        accountId: _accountId,
+        relativePath: path,
+      ),
+      writeAsset: (path, bytes) => _referenceImageStore.writeAssetBytes(
+        accountId: _accountId,
+        relativePath: path,
+        bytes: bytes,
+      ),
+    );
+    _peerSync = service;
+    service.addListener(_onPeerSyncChanged);
+    unawaited(service.start());
+  }
+
+  void _onFeatureStoreChanged() {
+    if (mounted) {
+      final allowed = _tabs().map((item) => item.id).toSet();
+      if (!allowed.contains(_selectedTab)) _selectedTab = 'orders';
+      setState(() {});
+    }
+    _scheduleSave();
+  }
+
+  Future<void> _restoreWorkspace() async {
+    var foundWorkspace = false;
+    try {
+      var source = webStorageGet(_workspaceKey);
+      var migratedLegacy = false;
+      if (source == null || source.trim().isEmpty) {
+        final legacy = webStorageGet(_legacyWorkspaceKey);
+        if (legacy != null && legacy.trim().isNotEmpty) {
+          final legacyBackup = AppBackupData.decode(legacy);
+          final legacyAccountId = legacyBackup.accountSyncState?.accountId;
+          if (legacyAccountId == null || legacyAccountId == _accountId) {
+            source = legacy;
+            migratedLegacy = true;
+          }
+        }
+      }
+
+      if (source != null && source.trim().isNotEmpty) {
+        foundWorkspace = true;
+        final backup = AppBackupData.decode(source);
+        final backupAccount = backup.accountSyncState;
+        if (backupAccount != null && backupAccount.accountId != _accountId) {
+          throw const FormatException('当前本机数据属于另一个账号。');
+        }
+        if (backupAccount != null) {
+          await widget.accountStore.mergeCurrentAccountState(backupAccount);
+        }
+        _retainedSettings = Map<String, dynamic>.from(backup.settings);
+        backup.restoreInto(
+          orderStore: _orderStore,
+          productStore: _productStore,
+          nodePresetStore: _nodePresetStore,
+          focusStore: _focusStore,
+        );
+        await _applySettings(backup.settings);
+        if (backup.syncRecords != null) {
+          _syncUi.restorePortableRecords(backup.syncRecords!);
+        }
+        if (migratedLegacy) {
+          await _persistWorkspace();
+          webStorageRemove(_legacyWorkspaceKey);
+        }
+      } else {
+        _retainedSettings = <String, dynamic>{};
+        await widget.themeStore.resetToDefaults();
+        await widget.featureStore.resetToDefaults();
+      }
+      await _syncUi.initialize();
+      _startPublicPeerSync();
+    } catch (error) {
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('本机数据读取失败：$error'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() => _ready = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(
+          foundWorkspace
+              ? _showDailyBackupReminder()
+              : _showMissingWorkspaceRecoveryPrompt(),
+        );
+      });
+    }
+  }
+
+  Future<void> _showMissingWorkspaceRecoveryPrompt() async {
+    if (!mounted) return;
+    final restore = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('没有找到旧版数据'),
+        content: const Text(
+          '新版没有找到这个账号的旧数据。'
+          '如果之前导出过完整备份，可以直接导入继续使用。\n\n'
+          '建议定期导出完整备份，'
+          '这样在更换浏览器、清理数据或迁移设备时，'
+          '都可以用备份恢复。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('先空白使用'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.file_upload_outlined),
+            label: const Text('导入完整备份'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (restore == true) {
+      await _importBackup(context);
+      return;
+    }
+    await _showDailyBackupReminder();
+  }
+
+  Future<void> _showDailyBackupReminder() async {
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    final today = '${now.year}-${two(now.month)}-${two(now.day)}';
+    final reminderKey =
+        'adventurers-guild.web.backup-reminder.v1.$_accountId';
+
+    try {
+      if (webStorageGet(reminderKey) == today) return;
+      // Record the reminder as soon as it is shown so dismissing it still
+      // keeps the promise of at most one reminder per local calendar day.
+      webStorageSet(reminderKey, today);
+    } catch (_) {
+      // If browser storage is unavailable, showing the reminder is safer than
+      // silently skipping backup guidance.
+    }
+
+    if (!mounted) return;
+    final backupNow = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('今天备份了吗？'),
+        content: const Text(
+          '网页版数据保存在当前设备。建议定期导出完整备份，'
+          '这样更换浏览器、清理数据或迁移设备时也能恢复排单、成品、节点和参考图。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('今天不再提醒'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.file_download_outlined),
+            label: const Text('立即备份'),
+          ),
+        ],
+      ),
+    );
+
+    if (backupNow == true && mounted) {
+      await _exportBackup(context);
+    }
+  }
+
+  Map<String, dynamic> _captureSettings() {
+    final features = widget.featureStore.toJson();
+    return <String, dynamic>{
+      ..._retainedSettings,
+      'id': 'app',
+      'themeMode': widget.themeStore.mode.name,
+      'themePaletteId': widget.themeStore.paletteId,
+      'customThemePalettes': widget.themeStore.exportCustomPalettes(),
+      'uiStyle': widget.themeStore.style.id,
+      'pricingAdjustmentPresets': _pricingPresetStore.toJson(),
+      'receiptStyle': _receiptStyleStore.toJson(),
+      for (final entry in features.entries)
+        'feature.${entry.key}': entry.key == AppFeature.deadlineReminders.name
+            ? _nativeDeadlineReminderPreference
+            : entry.value,
+      ..._collectionViews.toSettings(),
+      'desktopNavigationOpen': _desktopNavigationOpen,
+    };
+  }
+
+  Future<void> _applySettings(Map<String, dynamic> settings) async {
+    final modeName = settings['themeMode'];
+    if (modeName is String) {
+      await widget.themeStore.setMode(
+        switch (modeName) {
+          'light' => ThemeMode.light,
+          'dark' => ThemeMode.dark,
+          _ => ThemeMode.system,
+        },
+      );
+    }
+
+    final customPalettes = settings['customThemePalettes'];
+    if (customPalettes is List) {
+      await widget.themeStore.replaceCustomPalettesFromJson(customPalettes);
+    }
+
+    final paletteId = settings['themePaletteId'];
+    if (paletteId is String && widget.themeStore.containsPaletteId(paletteId)) {
+      await widget.themeStore.setPaletteId(paletteId);
+    }
+
+    final styleId = settings['uiStyle'] ?? settings['uiTexture'];
+    if (styleId is String) {
+      await widget.themeStore.setStyle(AppUiStyle.byId(styleId));
+    }
+
+    if (settings.containsKey('pricingAdjustmentPresets')) {
+      _pricingPresetStore.applyJson(settings['pricingAdjustmentPresets']);
+    }
+    if (settings.containsKey('receiptStyle')) {
+      _receiptStyleStore.applyJson(settings['receiptStyle']);
+    }
+
+    final legacyFeatures = settings['features'];
+    final nextFeatures = widget.featureStore.toJson();
+    if (legacyFeatures is Map) {
+      for (final entry in legacyFeatures.entries) {
+        if (entry.key is String && entry.value is bool) {
+          nextFeatures[entry.key as String] = entry.value as bool;
+        }
+      }
+    }
+    for (final feature in AppFeature.values) {
+      final value = settings['feature.${feature.name}'];
+      if (value is bool) {
+        if (feature == AppFeature.deadlineReminders) {
+          _nativeDeadlineReminderPreference = value;
+        } else {
+          nextFeatures[feature.name] = value;
+        }
+      }
+    }
+    nextFeatures[AppFeature.deadlineReminders.name] = false;
+    await widget.featureStore.applyJson(nextFeatures);
+
+    _collectionViews = _collectionViews.applySettings(settings);
+    final desktopOpen = settings['desktopNavigationOpen'];
+    if (desktopOpen is bool) _desktopNavigationOpen = desktopOpen;
+  }
+
+  AppBackupData _captureLocalBackup({bool portable = false}) {
+    final settings = _captureSettings();
+    return AppBackupData.capture(
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      focusStore: _focusStore,
+      accountSyncState: _accountState,
+      syncRecords: _syncUi.portableRecordsSnapshot,
+      settings: settings,
+    );
+  }
+
+  void _scheduleSave() {
+    if (!_ready) return;
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 300), _persistWorkspace);
+    _peerSync?.requestSync();
+  }
+
+  Future<void> _persistWorkspace() async {
+    try {
+      webStorageSet(
+        _workspaceKey,
+        _captureLocalBackup().encode(pretty: false),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('本机数据保存失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  List<GuildWorkspaceTab> _tabs() {
+    return <GuildWorkspaceTab>[
+      GuildWorkspaceTab(
+        id: 'orders',
+        label: '排单',
+        icon: Icons.format_list_bulleted_rounded,
+        selectedIcon: Icons.view_list_rounded,
+        page: _tabBody('orders'),
+      ),
+      if (widget.featureStore.products)
+        GuildWorkspaceTab(
+          id: 'products',
+          label: '成品',
+          icon: Icons.image_outlined,
+          selectedIcon: Icons.image_rounded,
+          page: _tabBody('products'),
+        ),
+      if (widget.featureStore.schedule)
+        GuildWorkspaceTab(
+          id: 'schedule',
+          label: '日程',
+          icon: Icons.calendar_month_outlined,
+          selectedIcon: Icons.calendar_month_rounded,
+          page: _tabBody('schedule'),
+        ),
+      if (widget.featureStore.statistics)
+        GuildWorkspaceTab(
+          id: 'statistics',
+          label: '统计',
+          icon: Icons.bar_chart_outlined,
+          selectedIcon: Icons.bar_chart_rounded,
+          page: _tabBody('statistics'),
+        ),
+    ];
+  }
+
+  Widget _tabBody(String id) {
+    return switch (id) {
+      'products' => ProductPage(
+          accountId: _accountId,
+          store: _productStore,
+          featureStore: widget.featureStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
+          syncCoordinator: _syncUi,
+          cardView: _productCardView,
+          onCardViewChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productCardView: value);
+            });
+            _scheduleSave();
+          },
+          overviewView: _productOverviewView,
+          onOverviewViewChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productOverviewView: value);
+            });
+            _scheduleSave();
+          },
+          overviewColumns: _productOverviewColumns,
+          onOverviewColumnsChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productOverviewColumns: value);
+            });
+            _scheduleSave();
+          },
+          sortModeName: _productSortMode,
+          onSortModeChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(productSortMode: value);
+            });
+            _scheduleSave();
+          },
+        ),
+      'schedule' => SchedulePage(
+          accountId: _accountId,
+          store: _orderStore,
+          productStore: _productStore,
+          nodePresetStore: _nodePresetStore,
+          featureStore: widget.featureStore,
+        ),
+      'statistics' => StatisticsPage(
+          store: _orderStore,
+          productStore: _productStore,
+        ),
+      _ => OrderQueuePage(
+          accountId: _accountId,
+          store: _orderStore,
+          nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
+          featureStore: widget.featureStore,
+          syncCoordinator: _syncUi,
+          cardView: _orderCardView,
+          onCardViewChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderCardView: value);
+            });
+            _scheduleSave();
+          },
+          overviewView: _orderOverviewView,
+          onOverviewViewChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderOverviewView: value);
+            });
+            _scheduleSave();
+          },
+          overviewColumns: _orderOverviewColumns,
+          onOverviewColumnsChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderOverviewColumns: value);
+            });
+            _scheduleSave();
+          },
+          sortModeName: _orderSortMode,
+          onSortModeChanged: (value) {
+            setState(() {
+              _collectionViews =
+                  _collectionViews.copyWith(orderSortMode: value);
+            });
+            _scheduleSave();
+          },
+        ),
+    };
+  }
+
+  Future<void> _openFocusOrder(String orderId) async {
+    if (!_orderStore.contains(orderId)) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OrderDetailPage(
+          accountId: _accountId,
+          store: _orderStore,
+          orderId: orderId,
+          nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
+          featureStore: widget.featureStore,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _chooseAddMethod({required bool products}) async {
+    final picked = await showGuildAddMethodPicker(context);
+    if (!mounted || picked == null) return;
+
+    if (picked == GuildAddMethod.screenshot) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ScreenshotImportPage(
+            kind: products
+                ? ScreenshotImportKind.products
+                : ScreenshotImportKind.orders,
+            accountId: _accountId,
+            orderStore: _orderStore,
+            productStore: _productStore,
+            presetStore: _nodePresetStore,
+          ),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => products
+            ? AddProductPage(
+                accountId: _accountId,
+                store: _productStore,
+                pricingPresetStore: _pricingPresetStore,
+                featureStore: widget.featureStore,
+              )
+            : AddOrderPage(
+                accountId: _accountId,
+                store: _orderStore,
+                nodePresetStore: _nodePresetStore,
+                pricingPresetStore: _pricingPresetStore,
+                featureStore: widget.featureStore,
+              ),
+      ),
+    );
+  }
+
+  void _selectTab(int index) {
+    final tabs = _tabs();
+    if (index < 0 || index >= tabs.length) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _selectedTab = tabs[index].id;
+      _desktopToolSelection = null;
+    });
+  }
+
+  void _selectDesktopTool(String tool) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _desktopToolSelection = tool);
+  }
+
+  void _openMobileTool(String tool) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _buildWebToolPage(tool),
+      ),
+    );
+  }
+
+  void _showTutorial() {
+    unawaited(showFirstRunGuide(context, detailed: true));
+  }
+
+  Widget _buildWebToolPage(String tool) {
+    return switch (tool) {
+      AppToolMenu.presetTool => PresetCenterPage(
+          nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+        ),
+      AppToolMenu.receiptTool => ReceiptCenterPage(
+          orderStore: _orderStore,
+          productStore: _productStore,
+          receiptStyleStore: _receiptStyleStore,
+          accountName: widget.accountStore.accountName ?? '',
+        ),
+      AppToolMenu.featureToggleTool => FeatureTogglePage(
+          store: widget.featureStore,
+        ),
+      AppToolMenu.desktopPetTool => Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              '专注',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          body: FocusPanel(
+            orderStore: _orderStore,
+            focusStore: _focusStore,
+            onOpenOrder: _openFocusOrder,
+          ),
+        ),
+      AppToolMenu.archiveTool => ArchivePage(
+          accountId: _accountId,
+          orderStore: _orderStore,
+          productStore: _productStore,
+          nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
+          featureStore: widget.featureStore,
+          syncCoordinator: _syncUi,
+        ),
+      AppToolMenu.syncTool => _WebDataPage(
+          linkedAccountName: _accountState.accountName,
+          busy: () => _busy,
+          onExport: _exportBackup,
+          onImport: _importBackup,
+          peerSync: _peerSync,
+        ),
+      AppToolMenu.accountTool => _WebAccountPage(
+          store: widget.accountStore,
+          peerSync: _peerSync,
+        ),
+      AppToolMenu.settingsTool => _WebSettingsPage(
+          themeStore: widget.themeStore,
+          dataPage: _WebDataPage(
+            linkedAccountName: _accountState.accountName,
+            busy: () => _busy,
+            onExport: _exportBackup,
+            onImport: _importBackup,
+            peerSync: _peerSync,
+          ),
+        ),
+      _ => const SizedBox.shrink(),
+    };
+  }
+
+  Future<void> _exportBackup(BuildContext context) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final backup = _captureLocalBackup(portable: true);
+      final archive = Archive();
+      final manifest = utf8.encode(backup.encode());
+      archive.addFile(
+        ArchiveFile(_manifestName, manifest.length, manifest),
+      );
+
+      final referenceImages = <OrderReferenceImage>[
+        for (final order in backup.orders) ...order.referenceImages,
+        for (final product in backup.products) ...product.referenceImages,
+      ];
+      for (final image in referenceImages) {
+        final bytes = await _referenceImageStore.readAssetBytes(
+          accountId: _accountId,
+          relativePath: image.relativePath,
+        );
+        if (bytes == null) {
+          throw StateError('参考图“${image.fileName}”原文件缺失，无法生成完整备份。');
+        }
+        if (bytes.length != image.sizeBytes) {
+          throw StateError('参考图“${image.fileName}”文件大小与记录不一致。');
+        }
+        archive.addFile(
+          ArchiveFile(image.relativePath, bytes.length, bytes),
+        );
+      }
+
+      for (final path
+          in _desktopPetAssetPaths(backup.settings['desktopPetBackup'])) {
+        final bytes = await _referenceImageStore.readAssetBytes(
+          accountId: _accountId,
+          relativePath: path,
+        );
+        if (bytes == null) {
+          throw StateError('桌宠素材“$path”原文件缺失，无法生成完整备份。');
+        }
+        archive.addFile(ArchiveFile(path, bytes.length, bytes));
+      }
+
+      final encoded = ZipEncoder().encode(archive);
+      final bytes = Uint8List.fromList(encoded);
+      _downloadBytes(
+        fileName: _backupFileName(DateTime.now()),
+        bytes: bytes,
+        mimeType: 'application/zip',
+      );
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '完整备份已导出，可在安卓或电脑端“设置 → 导入完整备份”中手动同步。',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('导出失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _importBackup(BuildContext context) async {
+    if (_busy) return;
+
+    final imported = await _backupReader.pickAndRead();
+    if (imported == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final backup = imported.backup;
+      final backupAccount = backup.accountSyncState;
+      if (backupAccount != null && backupAccount.accountId != _accountId) {
+        throw FormatException(
+          '这份备份属于账号“${backupAccount.accountName}”，'
+          '不能覆盖当前账号“${widget.accountStore.accountName}”。',
+        );
+      }
+      final accountName =
+          backupAccount?.accountName ?? widget.accountStore.accountName;
+
+      if (!context.mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('导入并替换当前数据？'),
+          content: Text(
+            '排单 ${backup.orders.length} 条 · 成品 ${backup.products.length} 条 · '
+            '节点预设 ${backup.nodePresets.length} 个\n'
+            '账号：${accountName ?? '当前账号'}\n'
+            '备份时间：${_formatDateTime(backup.exportedAt.toLocal())}\n\n'
+            '导入后会用这份备份替换当前账号的数据。'
+            '${imported.includesAssets ? '' : '\n这份文件不含参考图原文件，已有参考图可能显示为缺失。'}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('导入'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+
+      final previousDesktopPaths = _desktopPetAssetPaths(
+        _retainedSettings['desktopPetBackup'],
+      );
+      if (imported.includesAssets) {
+        final importedPaths = <String>{};
+        final importedImages = <OrderReferenceImage>[
+          for (final order in backup.orders) ...order.referenceImages,
+          for (final product in backup.products) ...product.referenceImages,
+        ];
+        for (final image in importedImages) {
+          final bytes = imported.assets[image.relativePath];
+          if (bytes == null) {
+            throw FormatException('完整备份缺少参考图：${image.fileName}');
+          }
+          await _referenceImageStore.writeAssetBytes(
+            accountId: _accountId,
+            relativePath: image.relativePath,
+            bytes: bytes,
+          );
+          importedPaths.add(image.relativePath);
+        }
+        await _referenceImageStore.deleteImages(
+          accountId: _accountId,
+          images: [
+            for (final order in _orderStore.orders)
+              for (final image in order.referenceImages)
+                if (!importedPaths.contains(image.relativePath)) image,
+            for (final product in _productStore.products)
+              for (final image in product.referenceImages)
+                if (!importedPaths.contains(image.relativePath)) image,
+          ],
+        );
+
+        final importedDesktopPaths =
+            _desktopPetAssetPaths(backup.settings['desktopPetBackup']);
+        for (final path in importedDesktopPaths) {
+          final bytes = imported.assets[path];
+          if (bytes == null) {
+            throw FormatException('桌宠备份缺少素材：$path');
+          }
+          await _referenceImageStore.writeAssetBytes(
+            accountId: _accountId,
+            relativePath: path,
+            bytes: bytes,
+          );
+        }
+        await _referenceImageStore.deleteAssetPaths(
+          accountId: _accountId,
+          relativePaths:
+              previousDesktopPaths.difference(importedDesktopPaths),
+        );
+      } else if (_desktopPetAssetPaths(
+        backup.settings['desktopPetBackup'],
+      ).isNotEmpty) {
+        throw const FormatException('这份备份包含桌宠素材记录，但没有随包素材文件。');
+      }
+
+      if (backupAccount != null) {
+        await widget.accountStore.mergeCurrentAccountState(backupAccount);
+      }
+      _retainedSettings = Map<String, dynamic>.from(backup.settings);
+      backup.restoreInto(
+        orderStore: _orderStore,
+        productStore: _productStore,
+        nodePresetStore: _nodePresetStore,
+        focusStore: _focusStore,
+      );
+      await _applySettings(backup.settings);
+      await _syncUi.replacePortableRecordsForCurrentWorkspace(
+        backup.syncRecords,
+      );
+      _peerSync?.requestSync(immediate: true);
+      await _persistWorkspace();
+
+      if (!context.mounted) return;
+      setState(() => _selectedTab = 'orders');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('导入完成，当前账号的数据已经替换。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('导入失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _downloadBytes({
+    required String fileName,
+    required Uint8List bytes,
+    required String mimeType,
+  }) {
+    webDownloadBytes(
+      fileName: fileName,
+      bytes: bytes,
+      mimeType: mimeType,
+    );
+  }
+
+  String _backupFileName(DateTime now) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '冒险者公会-${now.year}${two(now.month)}${two(now.day)}-'
+        '${two(now.hour)}${two(now.minute)}.zip';
+  }
+
+  String _formatDateTime(DateTime value) {
+    String two(int part) => part.toString().padLeft(2, '0');
+    return '${value.year}-${two(value.month)}-${two(value.day)} '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
+
+  @override
+  void dispose() {
+    _saveDebounce?.cancel();
+    _orderStore.removeListener(_scheduleSave);
+    _productStore.removeListener(_scheduleSave);
+    _nodePresetStore.removeListener(_scheduleSave);
+    _pricingPresetStore.removeListener(_scheduleSave);
+    _receiptStyleStore.removeListener(_scheduleSave);
+    _pricingPresetStore.dispose();
+    _receiptStyleStore.dispose();
+    _focusStore.removeListener(_scheduleSave);
+    _focusStore.dispose();
+    widget.featureStore.removeListener(_onFeatureStoreChanged);
+    widget.themeStore.removeListener(_scheduleSave);
+    _syncUi.removeListener(_onSyncUiChanged);
+    _peerSync?.removeListener(_onPeerSyncChanged);
+    _peerSync?.dispose();
+    _peerSync = null;
+    _syncUi.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = _tabs();
+    if (tabs.isEmpty) {
+      return const Scaffold(body: SizedBox.shrink());
+    }
+    if (!tabs.any((tab) => tab.id == _selectedTab)) {
+      _selectedTab = tabs.first.id;
+    }
+    final selectedIndex = tabs.indexWhere((tab) => tab.id == _selectedTab);
+    final current = tabs[selectedIndex];
+    final showFocus = widget.featureStore.enabled(AppFeature.focus);
+
+    final title = switch (_desktopToolSelection) {
+      AppToolMenu.presetTool => '节点＆加价预设',
+      AppToolMenu.receiptTool => '生成小票',
+      AppToolMenu.featureToggleTool => '附加功能开关',
+      AppToolMenu.desktopPetTool => '专注',
+      AppToolMenu.archiveTool => '归档',
+      AppToolMenu.syncTool => '设备同步',
+      AppToolMenu.accountTool => '账号与设备',
+      AppToolMenu.settingsTool => '设置',
+      _ => current.label,
+    };
+
+    final tabBody = IndexedStack(
+      index: selectedIndex,
+      children: [
+        for (final tab in tabs)
+          KeyedSubtree(key: ValueKey(tab.id), child: tab.page),
+      ],
+    );
+
+    final desktopBody = _desktopToolSelection == null
+        ? tabBody
+        : KeyedSubtree(
+            key: ValueKey('desktop-tool-$_desktopToolSelection'),
+            child: _buildWebToolPage(_desktopToolSelection!),
+          );
+
+    final drawer = AppDrawer(
+      onSelectTool: _openMobileTool,
+      onShowTutorial: _showTutorial,
+      showFeatureToggle: true,
+      showPetFocusEntry: showFocus,
+      showDesktopPet: false,
+      showFeedback: false,
+      accountSubtitle: widget.accountStore.accountName ?? '当前账号',
+    );
+
+    final desktopMenu = AppToolMenu(
+      onSelectTool: _selectDesktopTool,
+      onShowTutorial: _showTutorial,
+      showFeatureToggle: true,
+      showPetFocusEntry: showFocus,
+      showDesktopPet: false,
+      showFeedback: false,
+      accountSubtitle: widget.accountStore.accountName ?? '当前账号',
+      selectedTool: _desktopToolSelection,
+      showTrailing: false,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+    );
+
+    final floatingAction = _busy || _desktopToolSelection != null
+        ? null
+        : switch (current.id) {
+            'orders' => FloatingActionButton.extended(
+                onPressed: () => unawaited(
+                  _chooseAddMethod(products: false),
+                ),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('新增排单'),
+              ),
+            'products' => FloatingActionButton.extended(
+                onPressed: () => unawaited(
+                  _chooseAddMethod(products: true),
+                ),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('新增成品'),
+              ),
+            _ => null,
+          };
+
+    final shell = GuildWorkspaceShell(
+      tabs: tabs,
+      selectedIndex: selectedIndex,
+      onTabSelected: _selectTab,
+      title: title,
+      ready: _ready,
+      contentAvailable: true,
+      mobileBody: tabBody,
+      desktopBody: desktopBody,
+      drawer: drawer,
+      desktopToolMenu: desktopMenu,
+      desktopNavigationOpen: _desktopNavigationOpen,
+      onDesktopNavigationChanged: (value) {
+        setState(() => _desktopNavigationOpen = value);
+        _scheduleSave();
+      },
+      toolSelected: _desktopToolSelection != null,
+      floatingActionButton: floatingAction,
+      showAppBar: _desktopToolSelection == null,
+    );
+
+    if (!_busy) return shell;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        shell,
+        ColoredBox(
+          color: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.08),
+          child: const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox.square(
+                      dimension: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                    SizedBox(width: 14),
+                    Text('正在处理备份…'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WebAccountPage extends StatefulWidget {
+  const _WebAccountPage({
+    required this.store,
+    required this.peerSync,
+  });
+
+  final WebAccountStore store;
+  final PublicPeerSyncService? peerSync;
+
+  @override
+  State<_WebAccountPage> createState() => _WebAccountPageState();
+}
+
+class _WebAccountPageState extends State<_WebAccountPage> {
+  Future<void> _renameAccount() async {
+    final controller = TextEditingController(text: widget.store.accountName ?? '');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改账号名'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '新账号名'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.renameAccount(value);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改账号名失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final value = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改密码'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: current,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '当前密码'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: next,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '新密码'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(
+              <String>[current.text, next.text],
+            ),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    current.dispose();
+    next.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.changePassword(
+        currentPassword: value[0],
+        newPassword: value[1],
+      );
+      widget.peerSync?.requestSync(immediate: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('密码已修改')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改密码失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _renameDevice(AccountDevice device) async {
+    final controller = TextEditingController(text: device.name);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改设备名称'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '设备名称'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    try {
+      await widget.store.renameDevice(device.id, value);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('修改设备名称失败：$error')),
+      );
+    }
+  }
+
+  Future<void> _revokeDevice(AccountDevice device) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('解绑设备？'),
+        content: Text('“${device.name}”会从使用中设备移除，并通过设备同步发送解绑状态。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('解绑'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.store.revokeDevice(device.id);
+      widget.peerSync?.requestSync(immediate: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('解绑设备失败：$error')),
+      );
+    }
+  }
+
+  String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, _) {
+        final currentId = widget.store.currentDeviceId;
+        final devices = widget.store.activeDevices;
+        final password = widget.store.accountPassword ?? '';
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              '账号与设备',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+            children: [
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('账号名'),
+                      subtitle: Text(widget.store.accountName ?? ''),
+                      trailing: IconButton(
+                        tooltip: '修改账号名',
+                        onPressed: _renameAccount,
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      title: const Text('密码'),
+                      subtitle: Text(password),
+                      trailing: TextButton(
+                        onPressed: _changePassword,
+                        child: const Text('修改'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '使用中设备 · ${devices.length} 台',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              for (final device in devices)
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      device.id == currentId
+                          ? Icons.devices_rounded
+                          : Icons.devices_other_rounded,
+                    ),
+                    title: Text(device.name),
+                    subtitle: Text(
+                      '${device.platform} · 最后使用 ${_formatTime(device.lastSeenAt)}'
+                      '${device.id == currentId ? ' · 当前设备' : ''}',
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'rename') {
+                          _renameDevice(device);
+                        } else if (value == 'revoke') {
+                          _revokeDevice(device);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'rename',
+                          child: Text('修改设备名称'),
+                        ),
+                        if (device.id != currentId)
+                          const PopupMenuItem(
+                            value: 'revoke',
+                            child: Text('解绑设备'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await widget.store.lock();
+                  if (!context.mounted) return;
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                },
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('退出登录'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WebSettingsPage extends StatelessWidget {
+  const _WebSettingsPage({
+    required this.themeStore,
+    required this.dataPage,
+  });
+
+  final AppThemeStore themeStore;
+  final Widget dataPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '设置',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('UI主题色'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ThemeColorPage(store: themeStore),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sync_alt_rounded),
+            title: const Text('设备同步与完整备份'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => dataPage),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline_rounded),
+            title: const Text('关于冒险者公会'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () async {
+              final navigator = Navigator.of(context);
+              final info = await PackageInfo.fromPlatform();
+              if (!context.mounted) return;
+              await navigator.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => AppAboutPage(
+                    version: info.version,
+                    buildNumber: int.tryParse(info.buildNumber) ?? 0,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebDataPage extends StatelessWidget {
+  const _WebDataPage({
+    required this.linkedAccountName,
+    required this.busy,
+    required this.onExport,
+    required this.onImport,
+    required this.peerSync,
+  });
+
+  final String? linkedAccountName;
+  final bool Function() busy;
+  final Future<void> Function(BuildContext context) onExport;
+  final Future<void> Function(BuildContext context) onImport;
+  final PublicPeerSyncService? peerSync;
+
+  @override
+  Widget build(BuildContext context) {
+    final linked = linkedAccountName != null;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '设备同步 / 备份',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    linked
+                        ? Icons.verified_user_outlined
+                        : Icons.info_outline_rounded,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      linked
+                          ? '当前网页版已关联账号“$linkedAccountName”。完整备份可在其他设备上导入恢复。'
+                          : '当前网页版尚未关联其他设备。若要导入已有数据，可以使用之前导出的完整备份。',
+                      style: const TextStyle(height: 1.45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: Icon(
+                peerSync?.connected == true
+                    ? Icons.sync_rounded
+                    : Icons.sync_problem_rounded,
+              ),
+              title: Text(
+                peerSync?.connected == true
+                    ? '在线设备同步已连接'
+                    : '正在连接在线同步',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                peerSync?.lastError ??
+                    '两端同时打开时会自动同步排单、成品、节点、设置和参考图。',
+              ),
+              trailing: TextButton(
+                onPressed: peerSync == null
+                    ? null
+                    : () => peerSync!.requestSync(immediate: true),
+                child: const Text('立即同步'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.file_download_outlined),
+                  title: const Text(
+                    '导出完整备份',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('排单、成品、节点、设置和参考图会一起保存'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: busy() ? null : () => onExport(context),
+                ),
+                const Divider(height: 1, indent: 56),
+                ListTile(
+                  leading: const Icon(Icons.file_upload_outlined),
+                  title: const Text(
+                    '导入完整备份',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('支持导入完整备份，也兼容旧版备份'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: busy() ? null : () => onImport(context),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            margin: EdgeInsets.zero,
+            child: const ListTile(
+              leading: Icon(Icons.ios_share_rounded),
+              title: Text(
+                'iPhone / iPad 可以添加到主屏幕',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text('用 Safari 打开网页 → 点“分享” → “添加到主屏幕”，之后就能像普通 App 一样从桌面进入。'),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '在线同步只在设备打开时进行。'
+            '若要更换浏览器、清理数据或迁移设备，建议先保留一份完整备份。',
+            style: TextStyle(
+              height: 1.5,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

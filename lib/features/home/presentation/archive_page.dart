@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
-import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/sync/sync_coordinator_view.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/order_detail_page.dart';
@@ -12,6 +12,8 @@ import '../../products/presentation/product_detail_page.dart';
 import '../../products/presentation/product_summary_card.dart';
 import '../../products/state/product_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../../core/finance/pricing_preset_store.dart';
+import '../../shared/domain/receipt_style_store.dart';
 
 class ArchivePage extends StatefulWidget {
   const ArchivePage({
@@ -19,6 +21,8 @@ class ArchivePage extends StatefulWidget {
     required this.orderStore,
     required this.productStore,
     required this.nodePresetStore,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
     required this.featureStore,
     required this.syncCoordinator,
     super.key,
@@ -28,8 +32,10 @@ class ArchivePage extends StatefulWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore nodePresetStore;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
-  final SyncCoordinator syncCoordinator;
+  final SyncCoordinatorView syncCoordinator;
 
   @override
   State<ArchivePage> createState() => _ArchivePageState();
@@ -46,6 +52,8 @@ class _ArchivePageState extends State<ArchivePage> {
           store: widget.orderStore,
           orderId: orderId,
           nodePresetStore: widget.nodePresetStore,
+          pricingPresetStore: widget.pricingPresetStore,
+          receiptStyleStore: widget.receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -59,6 +67,8 @@ class _ArchivePageState extends State<ArchivePage> {
           accountId: widget.accountId,
           store: widget.productStore,
           productId: productId,
+          pricingPresetStore: widget.pricingPresetStore,
+          receiptStyleStore: widget.receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),

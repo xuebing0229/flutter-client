@@ -6,12 +6,16 @@ import 'package:flutter/material.dart';
 import '../../../core/account/account_models.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
+import '../../../core/cloud_sync/native_cloudflare_record_bridge.dart';
+import '../../../core/cloud_sync/native_sync_coordinator_view_adapter.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
+import '../../../core/sync/public_peer_sync_service.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
@@ -21,9 +25,9 @@ import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/data/node_presets.dart';
+import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/add_order_page.dart';
-import '../../orders/presentation/node_preset_page.dart';
 import '../../orders/presentation/order_detail_page.dart';
 import '../../orders/presentation/order_queue_page.dart';
 import '../../orders/state/order_store.dart';
@@ -32,10 +36,15 @@ import '../../products/presentation/product_page.dart';
 import '../../products/state/product_store.dart';
 import '../../schedule/presentation/schedule_page.dart';
 import '../../statistics/presentation/statistics_page.dart';
+import '../../shared/domain/receipt_style_store.dart';
+import '../../shared/domain/collection_view_preferences.dart';
+import '../../shared/presentation/preset_center_page.dart';
+import '../../shared/presentation/receipt_center_page.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
 import 'app_drawer.dart';
+import 'workspace_shell.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
@@ -44,6 +53,26 @@ import 'first_run_guide.dart';
 import 'reminder_background_guide.dart';
 import 'settings_page.dart';
 import 'theme_color_page.dart';
+
+Future<String> _buildAccountTransferPackage(
+  AccountStore accountStore,
+) async {
+  final account = accountStore.syncSnapshot;
+  if (account == null || !account.hasCredentials) {
+    throw StateError('当前账号信息尚未准备好，不能添加设备。');
+  }
+
+  final backup = AppBackupData(
+    exportedAt: DateTime.now(),
+    orders: const [],
+    products: const [],
+    nodePresets: const [],
+    accountSyncState: account,
+    syncRecords: const <Map<String, dynamic>>[],
+    settings: const <String, dynamic>{'bootstrapOnly': true},
+  );
+  return backup.encode(pretty: false);
+}
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -69,27 +98,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderStore _orderStore = OrderStore();
   final ProductStore _productStore = ProductStore();
   final NodePresetStore _nodePresetStore = NodePresetStore();
+  final PricingPresetStore _pricingPresetStore = PricingPresetStore();
+  final ReceiptStyleStore _receiptStyleStore = ReceiptStyleStore();
   final FocusStore _focusStore = FocusStore();
+  final OrderReferenceImageStore _referenceImageStore =
+      OrderReferenceImageStore();
   final AppDataPersistence _persistence = const AppDataPersistence();
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
   final InteractionHintStore _hintStore = const InteractionHintStore();
   final DesktopPetService _desktopPetService = DesktopPetService();
+  late final DesktopPetAccountSync _desktopPetAccountSync;
   late final SyncCoordinator _syncCoordinator;
+  late final NativeCloudflareRecordBridge _cloudflareRecordBridge;
+  late final NativeSyncCoordinatorViewAdapter _syncCoordinatorView;
+  PublicPeerSyncService? _publicPeerSync;
 
-  static const _orderCardViewSettingKey = 'orderCardView';
-  static const _productCardViewSettingKey = 'productCardView';
-  static const _orderSortModeSettingKey = 'orderSortMode';
-  static const _productSortModeSettingKey = 'productSortMode';
+  static const _pricingPresetsSettingKey = 'pricingAdjustmentPresets';
+  static const _receiptStyleSettingKey = 'receiptStyle';
   static const _desktopNavigationOpenSettingKey = 'desktopNavigationOpen';
   static const _featureSettingPrefix = 'feature.';
 
   int _index = 0;
   bool _ready = false;
-  bool _orderCardView = false;
-  bool _productCardView = false;
-  String _orderSortMode = 'defaultOrder';
-  String _productSortMode = 'defaultOrder';
+  CollectionViewPreferences _collectionViews =
+      const CollectionViewPreferences();
+
+  bool get _orderCardView => _collectionViews.orderCardView;
+  bool get _orderOverviewView => _collectionViews.orderOverviewView;
+  int get _orderOverviewColumns => _collectionViews.orderOverviewColumns;
+  bool get _productCardView => _collectionViews.productCardView;
+  bool get _productOverviewView => _collectionViews.productOverviewView;
+  int get _productOverviewColumns => _collectionViews.productOverviewColumns;
+  String get _orderSortMode => _collectionViews.orderSortMode;
+  String get _productSortMode => _collectionViews.productSortMode;
   bool _desktopNavigationOpen = true;
   String? _desktopToolSelection;
   GlobalKey<NavigatorState> _desktopContentNavigatorKey =
@@ -101,6 +143,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? _saveDebounce;
   Timer? _reminderDebounce;
   Timer? _focusPersistenceHeartbeat;
+  Timer? _desktopPetAccountSyncDebounce;
+  Timer? _desktopPetLegacySeedTimer;
   String? _focusRecoverySessionId;
   DateTime? _focusRecoveryCutoff;
   bool _saving = false;
@@ -113,6 +157,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _newsPromptAttempted = false;
   bool _syncConflictPromptVisible = false;
   bool _syncConflictPromptedUntilClear = false;
+  bool _desktopPetAccountSyncReady = false;
+  bool _applyingSyncedDesktopPet = false;
+  bool _leavingAccount = false;
   Map<String, dynamic>? _syncProgressOverlay;
   String? _syncProgressOverlaySignature;
   AccountSyncState? _accountSyncSnapshot;
@@ -135,6 +182,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         break;
       }
     }
+    _desktopPetService.settings.bindAccount(widget.accountId);
+    _desktopPetAccountSync = DesktopPetAccountSync(
+      settings: _desktopPetService.settings,
+    );
     _syncCoordinator = SyncCoordinator(
       accountId: widget.accountId,
       deviceId: currentDeviceId,
@@ -148,10 +199,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       applySettings: _applySyncSettings,
     );
     _syncCoordinator.addListener(_onSyncCoordinatorChanged);
+    _syncCoordinatorView = NativeSyncCoordinatorViewAdapter(_syncCoordinator);
+    _cloudflareRecordBridge = NativeCloudflareRecordBridge(
+      accountId: widget.accountId,
+      flushNativeWorkspace: _syncCoordinator.flushNow,
+    );
 
     widget.themeStore.addListener(_onThemeSettingsChanged);
     widget.featureStore.addListener(_onFeatureSettingsChanged);
     widget.accountStore.addListener(_onAccountStoreChanged);
+    if (Platform.isWindows) {
+      _desktopPetService.settings.addListener(_onDesktopPetSettingsChanged);
+    }
     _restoreLocalData();
   }
 
@@ -161,8 +220,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     var bootstrapOnly = false;
     var hasWorkspaceSettings = false;
     var consumedPortableSyncHistory = false;
+    var hadDesktopPetConfigBeforeSync = false;
 
     try {
+      if (Platform.isWindows) {
+        hadDesktopPetConfigBeforeSync =
+            await _desktopPetService.settings.hasLocalConfigFile();
+        await _desktopPetService.settings.load();
+      }
       final backup = await _persistence.load(accountId: widget.accountId);
       isNewAccount = backup == null;
       bootstrapOnly = backup?.settings['bootstrapOnly'] == true;
@@ -223,6 +288,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.addListener(_onOrderStoreChanged);
     _productStore.addListener(_scheduleSave);
     _nodePresetStore.addListener(_scheduleSave);
+    _pricingPresetStore.addListener(_onSharedWorkspaceSettingChanged);
+    _receiptStyleStore.addListener(_onSharedWorkspaceSettingChanged);
     _focusStore.addListener(_onFocusStoreChanged);
     _refreshFocusPersistenceHeartbeat();
 
@@ -236,6 +303,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         seedLocalSettings:
             !bootstrapOnly && (hasWorkspaceSettings || isNewAccount),
       );
+      _startPublicPeerSync();
+      if (Platform.isWindows) {
+        _applyingSyncedDesktopPet = true;
+        try {
+          // Pull an already-synced desktop-pet workspace first. Never let a
+          // clean/reinstalled PC publish its empty runtime config over the
+          // copy that a phone is relaying.
+          await _desktopPetAccountSync.reconcile(widget.accountId);
+        } catch (_) {
+          // The auxiliary manifest/assets can still be arriving from another
+          // device. Normal sync notifications retry without blocking work data.
+        } finally {
+          _applyingSyncedDesktopPet = false;
+        }
+        _desktopPetAccountSyncReady = true;
+
+        // v171 and earlier kept desktop-pet data only on Windows. Give an
+        // existing remote workspace a short chance to arrive before seeding
+        // this legacy local copy for the first time.
+        if (hadDesktopPetConfigBeforeSync &&
+            _desktopPetService.settings.accountSyncRevision == null) {
+          _desktopPetLegacySeedTimer = Timer(
+            const Duration(seconds: 8),
+            () => unawaited(_reconcileDesktopPetAccountSync(
+              seedLocalIfMissing: true,
+            )),
+          );
+        }
+      }
       if (consumedPortableSyncHistory) {
         // The portable history is a one-time handoff. Persist the materialized
         // workspace again without embedding it, otherwise every launch would
@@ -354,9 +450,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _onAccountStoreChanged() {
     final snapshot = widget.accountStore.syncSnapshot;
-    if (snapshot?.accountId != widget.accountId) return;
+    if (widget.accountStore.status != AccountStatus.unlocked ||
+        snapshot?.accountId != widget.accountId) {
+      if (!_leavingAccount && Platform.isWindows) {
+        _leavingAccount = true;
+        _desktopPetAccountSyncDebounce?.cancel();
+        _desktopPetLegacySeedTimer?.cancel();
+        unawaited(_desktopPetService.stopForAccountExit());
+      }
+      return;
+    }
     _accountSyncSnapshot = snapshot;
     _scheduleSave();
+    _publicPeerSync?.requestSync();
+  }
+
+  void _startPublicPeerSync() {
+    if (_publicPeerSync != null) return;
+    final currentDeviceId = widget.accountStore.currentDeviceId;
+    final state = widget.accountStore.syncSnapshot;
+    if (currentDeviceId == null || state == null) return;
+
+    final service = PublicPeerSyncService(
+      accountId: widget.accountId,
+      deviceId: currentDeviceId,
+      captureAccountState: () =>
+          widget.accountStore.syncSnapshot ?? state,
+      mergeAccountState: widget.accountStore.mergeSyncedState,
+      exportRecords: _cloudflareRecordBridge.exportRecords,
+      mergeRecords: _cloudflareRecordBridge.mergeRecords,
+      shouldTargetDevice: (device) => device.platform == 'web',
+      captureAssetPaths: () => <String>{
+        for (final order in _orderStore.orders)
+          for (final image in order.referenceImages) image.relativePath,
+        for (final product in _productStore.products)
+          for (final image in product.referenceImages) image.relativePath,
+      },
+      assetExists: (path) async =>
+          (await _referenceImageStore.readAssetBytes(
+            accountId: widget.accountId,
+            relativePath: path,
+          )) !=
+          null,
+      readAsset: (path) => _referenceImageStore.readAssetBytes(
+        accountId: widget.accountId,
+        relativePath: path,
+      ),
+      writeAsset: (path, bytes) => _referenceImageStore.writeAssetBytes(
+        accountId: widget.accountId,
+        relativePath: path,
+        bytes: bytes,
+      ),
+    );
+    _publicPeerSync = service;
+    unawaited(service.start());
   }
 
   Map<String, dynamic>? _activeSyncProgress(
@@ -387,6 +534,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       progress['needItems'],
       progress['direction'],
       progress['deviceName'],
+      progress['remoteState'],
     ].join('|');
   }
 
@@ -403,6 +551,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _syncProgressOverlay = nextProgress;
         _syncProgressOverlaySignature = nextSignature;
       });
+    }
+
+    if (Platform.isWindows && _desktopPetAccountSyncReady) {
+      _scheduleDesktopPetAccountReconcile();
     }
 
     final conflicts = _syncCoordinator.conflicts;
@@ -428,6 +580,69 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       unawaited(_showSyncConflictPrompt());
     });
+  }
+
+  void _onDesktopPetSettingsChanged() {
+    if (!Platform.isWindows ||
+        !_ready ||
+        !_desktopPetAccountSyncReady ||
+        _applyingSyncedDesktopPet) {
+      return;
+    }
+    _desktopPetLegacySeedTimer?.cancel();
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetAccountSyncDebounce = Timer(
+      const Duration(milliseconds: 450),
+      () => unawaited(_publishDesktopPetAccountSync()),
+    );
+  }
+
+  void _scheduleDesktopPetAccountReconcile() {
+    if (!Platform.isWindows ||
+        !_ready ||
+        !_desktopPetAccountSyncReady ||
+        _applyingSyncedDesktopPet) {
+      return;
+    }
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetAccountSyncDebounce = Timer(
+      const Duration(milliseconds: 500),
+      () => unawaited(_reconcileDesktopPetAccountSync()),
+    );
+  }
+
+  Future<void> _publishDesktopPetAccountSync() async {
+    if (!Platform.isWindows || !_desktopPetAccountSyncReady) return;
+    try {
+      await _desktopPetAccountSync.publish(widget.accountId);
+    } catch (_) {
+      // Desktop-pet account sync is supplementary; the shared workspace keeps
+      // retrying through normal Syncthing scans and future local changes.
+    }
+  }
+
+  Future<void> _reconcileDesktopPetAccountSync({
+    bool seedLocalIfMissing = false,
+  }) async {
+    if (!Platform.isWindows ||
+        !_desktopPetAccountSyncReady ||
+        _applyingSyncedDesktopPet) {
+      return;
+    }
+    _applyingSyncedDesktopPet = true;
+    try {
+      await _desktopPetAccountSync.reconcile(
+        widget.accountId,
+        seedLocalIfMissing: seedLocalIfMissing,
+      );
+      if (_ready && mounted) {
+        await _syncDesktopPet();
+      }
+    } catch (_) {
+      // A half-arrived auxiliary file must never block the main work data.
+    } finally {
+      _applyingSyncedDesktopPet = false;
+    }
   }
 
   Future<void> _showSyncConflictPrompt() async {
@@ -657,7 +872,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _syncDesktopPet() async {
-    if (!Platform.isWindows) return;
+    if (!Platform.isWindows || _leavingAccount) return;
     try {
       final order = await _currentDesktopPetOrder();
       if (!mounted) return;
@@ -677,8 +892,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             : null,
       );
     } catch (_) {
-      // Desktop pet is optional and local-only. A host/config failure must not
-      // bubble into the main Guild UI zone or interrupt order/focus editing.
+      // Desktop pet is optional. A host/config failure must not bubble into
+      // the main Guild UI zone or interrupt order/focus editing.
     }
   }
 
@@ -688,6 +903,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _syncCoordinator.notifySettingsChanged();
     if (_ready) {
       unawaited(_syncDesktopPet());
+    }
+  }
+
+  void _onSharedWorkspaceSettingChanged() {
+    if (!mounted) return;
+    _scheduleSave();
+    if (_ready) {
+      _syncCoordinator.notifySettingsChanged();
     }
   }
 
@@ -706,13 +929,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'id': SyncCoordinator.settingsRecordId,
       'themeMode': widget.themeStore.mode.name,
       'themePaletteId': widget.themeStore.paletteId,
+      'customThemePalettes': widget.themeStore.exportCustomPalettes(),
       'uiStyle': widget.themeStore.style.id,
       for (final entry in features.entries)
         '$_featureSettingPrefix${entry.key}': entry.value,
-      _orderCardViewSettingKey: _orderCardView,
-      _productCardViewSettingKey: _productCardView,
-      _orderSortModeSettingKey: _orderSortMode,
-      _productSortModeSettingKey: _productSortMode,
+      ..._collectionViews.toSettings(),
+      _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
+      _receiptStyleSettingKey: _receiptStyleStore.toJson(),
       _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
     };
   }
@@ -729,11 +952,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await widget.themeStore.setMode(mode);
     }
 
+    if (settings.containsKey('customThemePalettes')) {
+      await widget.themeStore.replaceCustomPalettesFromJson(
+        settings['customThemePalettes'],
+      );
+    }
+
     final paletteId = settings['themePaletteId'];
-    if (paletteId is String && AppThemePalettes.containsId(paletteId)) {
-      await widget.themeStore.setPaletteId(paletteId);
+    if (paletteId is String) {
+      if (widget.themeStore.containsPaletteId(paletteId)) {
+        await widget.themeStore.setPaletteId(paletteId);
+      } else if (paletteId.startsWith('custom:')) {
+        // A UI preference must never make otherwise valid work data
+        // unreadable. Build 154 could persist a selected custom palette ID
+        // into workspace settings without embedding the custom palette itself.
+        // If that old preset is unavailable, keep/fall back to a valid local
+        // palette and continue restoring orders/products normally.
+        await widget.themeStore.setPaletteId(
+          AppThemePalettes.guildOriginal.id,
+        );
+      } else {
+        await widget.themeStore.setPaletteId(
+          AppThemePalettes.guildOriginal.id,
+        );
+      }
     } else if (paletteId != null) {
-      throw const FormatException('同步主题色无效。');
+      await widget.themeStore.setPaletteId(
+        AppThemePalettes.guildOriginal.id,
+      );
     }
 
     final styleId = settings['uiStyle'];
@@ -780,34 +1026,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await widget.featureStore.applyJson(nextFeatures);
     }
 
+    if (settings.containsKey(_pricingPresetsSettingKey)) {
+      _pricingPresetStore.applyJson(settings[_pricingPresetsSettingKey]);
+    }
+    if (settings.containsKey(_receiptStyleSettingKey)) {
+      _receiptStyleStore.applyJson(settings[_receiptStyleSettingKey]);
+    }
+
     var layoutChanged = false;
-    final nextOrderCardView = settings[_orderCardViewSettingKey];
-    if (nextOrderCardView is bool && nextOrderCardView != _orderCardView) {
-      _orderCardView = nextOrderCardView;
-      layoutChanged = true;
-    }
-    final nextProductCardView = settings[_productCardViewSettingKey];
-    if (nextProductCardView is bool &&
-        nextProductCardView != _productCardView) {
-      _productCardView = nextProductCardView;
-      layoutChanged = true;
-    }
-    final nextOrderSortMode = _normalizeOrderSortMode(
-      settings[_orderSortModeSettingKey],
-    );
-    if (nextOrderSortMode != null && nextOrderSortMode != _orderSortMode) {
-      _orderSortMode = nextOrderSortMode;
-      layoutChanged = true;
-    }
-    final nextProductSortMode = settings[_productSortModeSettingKey];
-    if (nextProductSortMode is String &&
-        const <String>{
-          'defaultOrder',
-          'income',
-          'soldCount',
-        }.contains(nextProductSortMode) &&
-        nextProductSortMode != _productSortMode) {
-      _productSortMode = nextProductSortMode;
+    final nextCollectionViews = _collectionViews.applySettings(settings);
+    if (nextCollectionViews != _collectionViews) {
+      _collectionViews = nextCollectionViews;
       layoutChanged = true;
     }
     final nextNavigationOpen = settings[_desktopNavigationOpenSettingKey];
@@ -825,16 +1054,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  String? _normalizeOrderSortMode(Object? value) {
-    if (value is! String) return null;
-    return switch (value) {
-      'defaultOrder' => 'defaultOrder',
-      'income' => 'income',
-      'deadline' || 'remainingTime' => 'deadline',
-      _ => null,
-    };
-  }
-
   void _scheduleSave() {
     if (!_ready || !_localDataHealthy) return;
 
@@ -843,6 +1062,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       const Duration(milliseconds: 350),
       _persistCurrentData,
     );
+    _publicPeerSync?.requestSync();
   }
 
   void _scheduleReminderSync() {
@@ -993,17 +1213,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           value: leftAt,
         ),
       );
+      if (Platform.isWindows) {
+        // Closing the window hides it to the tray so sync can continue.
+        // Persist local state without tearing down the transport.
+        _saveDebounce?.cancel();
+        unawaited(_flushSyncThenPersist());
+        return;
+      }
+
       unawaited(_leaveForegroundSync(++_syncLifecycleGeneration));
     }
   }
 
   Future<void> _prepareForSignOut() async {
+    _leavingAccount = true;
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
     _focusPersistenceHeartbeat?.cancel();
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetLegacySeedTimer?.cancel();
+
+    if (Platform.isWindows) {
+      // Account chooser/login pages must never retain the previous account's
+      // detached desktop-pet process.
+      await _desktopPetService.stopForAccountExit();
+    }
+
     if (_ready && _localDataHealthy) {
       await _flushSyncThenPersist();
     }
+    await _syncCoordinator.deactivateTransportForAccountExit();
   }
 
   @override
@@ -1012,6 +1251,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _saveDebounce?.cancel();
     _reminderDebounce?.cancel();
     _focusPersistenceHeartbeat?.cancel();
+    _desktopPetAccountSyncDebounce?.cancel();
+    _desktopPetLegacySeedTimer?.cancel();
+    if (Platform.isWindows) {
+      _desktopPetService.settings.removeListener(_onDesktopPetSettingsChanged);
+    }
     widget.themeStore.removeListener(_onThemeSettingsChanged);
     widget.featureStore.removeListener(_onFeatureSettingsChanged);
     widget.accountStore.removeListener(_onAccountStoreChanged);
@@ -1019,6 +1263,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _orderStore.removeListener(_onOrderStoreChanged);
     _productStore.removeListener(_scheduleSave);
     _nodePresetStore.removeListener(_scheduleSave);
+    _pricingPresetStore.removeListener(_onSharedWorkspaceSettingChanged);
+    _receiptStyleStore.removeListener(_onSharedWorkspaceSettingChanged);
     _focusStore.removeListener(_onFocusStoreChanged);
 
     // Remote revocation can dispose this page without going through the
@@ -1040,46 +1286,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
 
+    _publicPeerSync?.dispose();
+    _publicPeerSync = null;
     _desktopContentNavigatorObserver.deactivate();
     _desktopPetService.dispose();
     _syncCoordinator.dispose();
     _orderStore.dispose();
     _productStore.dispose();
     _nodePresetStore.dispose();
+    _pricingPresetStore.dispose();
+    _receiptStyleStore.dispose();
     _focusStore.dispose();
     super.dispose();
   }
 
   Future<void> _chooseAddMethod({required bool products}) async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (dialogContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.edit_note_rounded),
-                title: const Text('手动导入'),
-                subtitle: const Text('逐项填写订单信息'),
-                onTap: () => Navigator.pop(dialogContext, 'manual'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.document_scanner_outlined),
-                title: const Text('截图导入'),
-                subtitle: const Text('从平台截图识别多条，检查后批量添加'),
-                onTap: () => Navigator.pop(dialogContext, 'screenshot'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    final picked = await showGuildAddMethodPicker(context);
     if (!mounted || picked == null) return;
-    if (picked == 'manual') {
+
+    if (picked == GuildAddMethod.manual) {
       if (products) {
         _openAddProduct();
       } else {
@@ -1087,7 +1312,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       return;
     }
-    if (picked == 'screenshot') _openScreenshotImport(products: products);
+    if (picked == GuildAddMethod.screenshot) {
+      _openScreenshotImport(products: products);
+    }
   }
 
   void _openScreenshotImport({required bool products}) {
@@ -1127,6 +1354,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         accountId: widget.accountId,
         store: _orderStore,
         nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
       ),
     );
@@ -1153,6 +1381,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       builder: (_) => AddProductPage(
         accountId: widget.accountId,
         store: _productStore,
+        pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
       ),
     );
@@ -1212,7 +1441,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _setOrderCardView(bool value) {
     if (_orderCardView == value) return;
     setState(() {
-      _orderCardView = value;
+      _collectionViews =
+          _collectionViews.copyWith(orderCardView: value);
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _setOrderOverviewView(bool value) {
+    if (_orderOverviewView == value) return;
+    setState(() {
+      _collectionViews =
+          _collectionViews.copyWith(orderOverviewView: value);
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _setOrderOverviewColumns(int value) {
+    final next = _collectionViews.copyWith(orderOverviewColumns: value);
+    if (next == _collectionViews) return;
+    setState(() {
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1222,7 +1474,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _setProductCardView(bool value) {
     if (_productCardView == value) return;
     setState(() {
-      _productCardView = value;
+      _collectionViews =
+          _collectionViews.copyWith(productCardView: value);
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _setProductOverviewView(bool value) {
+    if (_productOverviewView == value) return;
+    setState(() {
+      _collectionViews =
+          _collectionViews.copyWith(productOverviewView: value);
+      _refreshDesktopCollectionRootIfNeeded();
+    });
+    _scheduleSave();
+    _syncCoordinator.notifySettingsChanged();
+  }
+
+  void _setProductOverviewColumns(int value) {
+    final next = _collectionViews.copyWith(productOverviewColumns: value);
+    if (next == _collectionViews) return;
+    setState(() {
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1230,9 +1505,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _setOrderSortMode(String value) {
-    if (_orderSortMode == value) return;
+    final next = _collectionViews.copyWith(orderSortMode: value);
+    if (next == _collectionViews) return;
     setState(() {
-      _orderSortMode = value;
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1240,9 +1516,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _setProductSortMode(String value) {
-    if (_productSortMode == value) return;
+    final next = _collectionViews.copyWith(productSortMode: value);
+    if (next == _collectionViews) return;
     setState(() {
-      _productSortMode = value;
+      _collectionViews = next;
       _refreshDesktopCollectionRootIfNeeded();
     });
     _scheduleSave();
@@ -1275,6 +1552,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           store: _orderStore,
           orderId: orderId,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -1292,7 +1571,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildDesktopToolPage(String tool) {
     return switch (tool) {
-      AppToolMenu.nodePresetTool => NodePresetPage(store: _nodePresetStore),
+      AppToolMenu.presetTool => PresetCenterPage(
+        nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
+      ),
+      AppToolMenu.receiptTool => ReceiptCenterPage(
+        orderStore: _orderStore,
+        productStore: _productStore,
+        receiptStyleStore: _receiptStyleStore,
+        accountName: widget.accountStore.accountName ?? '',
+      ),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
         store: widget.featureStore,
         onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
@@ -1312,15 +1600,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         orderStore: _orderStore,
         productStore: _productStore,
         nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
+        receiptStyleStore: _receiptStyleStore,
         featureStore: widget.featureStore,
-        syncCoordinator: _syncCoordinator,
+        syncCoordinator: _syncCoordinatorView,
       ),
       AppToolMenu.syncTool => DeviceSyncPage(coordinator: _syncCoordinator),
       AppToolMenu.feedbackTool => const FeedbackPage(),
       AppToolMenu.accountTool => AccountPage(
         store: widget.accountStore,
         buildTransferPackage: () =>
-            buildAccountTransferPackage(widget.accountStore),
+            _buildAccountTransferPackage(widget.accountStore),
         syncCoordinator: _syncCoordinator,
         onBeforeSignOut: _prepareForSignOut,
         onRevokeDevice: _syncCoordinator.revokeDevice,
@@ -1332,6 +1622,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         focusStore: _focusStore,
         themeStore: widget.themeStore,
         featureStore: widget.featureStore,
+        desktopPetSettings: _desktopPetService.settings,
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
         onApplyWorkspaceSettings: _applySyncSettings,
@@ -1385,10 +1676,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  void _openMobileTool(String tool) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _buildDesktopToolPage(tool),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tabs = <_HomeTab>[
-      _HomeTab(
+    final tabs = <GuildWorkspaceTab>[
+      GuildWorkspaceTab(
+        id: 'orders',
         label: '排单',
         icon: Icons.format_list_bulleted_rounded,
         selectedIcon: Icons.view_list_rounded,
@@ -1396,32 +1696,46 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           accountId: widget.accountId,
           store: _orderStore,
           nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
-          syncCoordinator: _syncCoordinator,
+          syncCoordinator: _syncCoordinatorView,
           cardView: _orderCardView,
           onCardViewChanged: _setOrderCardView,
+          overviewView: _orderOverviewView,
+          onOverviewViewChanged: _setOrderOverviewView,
+          overviewColumns: _orderOverviewColumns,
+          onOverviewColumnsChanged: _setOrderOverviewColumns,
           sortModeName: _orderSortMode,
           onSortModeChanged: _setOrderSortMode,
         ),
       ),
       if (widget.featureStore.products)
-        _HomeTab(
+        GuildWorkspaceTab(
+          id: 'products',
           label: '成品',
           icon: Icons.image_outlined,
           selectedIcon: Icons.image_rounded,
           page: ProductPage(
             accountId: widget.accountId,
             store: _productStore,
+            pricingPresetStore: _pricingPresetStore,
+            receiptStyleStore: _receiptStyleStore,
             featureStore: widget.featureStore,
-            syncCoordinator: _syncCoordinator,
+            syncCoordinator: _syncCoordinatorView,
             cardView: _productCardView,
             onCardViewChanged: _setProductCardView,
+            overviewView: _productOverviewView,
+            onOverviewViewChanged: _setProductOverviewView,
+            overviewColumns: _productOverviewColumns,
+            onOverviewColumnsChanged: _setProductOverviewColumns,
             sortModeName: _productSortMode,
             onSortModeChanged: _setProductSortMode,
           ),
         ),
       if (widget.featureStore.schedule)
-        _HomeTab(
+        GuildWorkspaceTab(
+          id: 'schedule',
           label: '日程',
           icon: Icons.calendar_month_outlined,
           selectedIcon: Icons.calendar_month_rounded,
@@ -1434,7 +1748,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
       if (widget.featureStore.statistics)
-        _HomeTab(
+        GuildWorkspaceTab(
+          id: 'statistics',
           label: '统计',
           icon: Icons.bar_chart_outlined,
           selectedIcon: Icons.bar_chart_rounded,
@@ -1442,19 +1757,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
     ];
 
-    if (_index >= tabs.length) {
-      _index = 0;
-    }
+    if (_index >= tabs.length) _index = 0;
 
     final current = tabs[_index];
-    final title = switch (_desktopToolSelection) {
-      AppToolMenu.nodePresetTool => '节点预设',
-      AppToolMenu.featureToggleTool => '附加功能开关',
-      AppToolMenu.desktopPetTool =>
+    final showDesktopPet =
         Platform.isWindows &&
-                widget.featureStore.enabled(AppFeature.desktopPet)
-            ? '桌宠'
-            : '专注',
+        widget.featureStore.enabled(AppFeature.desktopPet);
+    final showFocus = widget.featureStore.enabled(AppFeature.focus);
+    final showFeatureToggle =
+        !widget.featureStore.abstractMode ||
+        !widget.featureStore.abstractEffects ||
+        !_abstractFeatureToggleHidden;
+    final title = switch (_desktopToolSelection) {
+      AppToolMenu.presetTool => '节点＆加价预设',
+      AppToolMenu.receiptTool => '生成小票',
+      AppToolMenu.featureToggleTool => '附加功能开关',
+      AppToolMenu.desktopPetTool => showDesktopPet ? '桌宠' : '专注',
       AppToolMenu.archiveTool => '归档',
       AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
@@ -1463,15 +1781,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.themeColorTool => 'UI主题色',
       _ => current.label,
     };
-    final width = MediaQuery.sizeOf(context).width;
-    final useDesktopLayout = width >= 900;
-    final uiStyle = GuildStyleTheme.of(context);
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
 
     final tabBody = IndexedStack(
       index: _index,
       children: [
         for (final tab in tabs)
-          KeyedSubtree(key: ValueKey(tab.label), child: tab.page),
+          KeyedSubtree(key: ValueKey(tab.id), child: tab.page),
       ],
     );
 
@@ -1488,226 +1804,83 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
 
-    final scaffold = Scaffold(
-      // The tab pages already reserve bottom-nav clearance. Glass keeps real
-      // content behind the bottom chrome so the document-style blur can show.
-      extendBody: uiStyle.isGlass && !useDesktopLayout,
-      drawer: _ready && _localDataHealthy
-          ? AppDrawer(
-              orderStore: _orderStore,
-              productStore: _productStore,
-              nodePresetStore: _nodePresetStore,
-              focusStore: _focusStore,
-              desktopPetSettings: _desktopPetService.settings,
-              onOpenOrder: _openOrderFromFocus,
-              themeStore: widget.themeStore,
-              featureStore: widget.featureStore,
-              accountStore: widget.accountStore,
-              syncCoordinator: _syncCoordinator,
-              onApplyWorkspaceSettings: _applySyncSettings,
-              onBeforeSignOut: _prepareForSignOut,
-              onShowTutorial: () => unawaited(_showTutorial()),
-              showFeatureToggle:
-                  !widget.featureStore.abstractMode ||
-                  !widget.featureStore.abstractEffects ||
-                  !_abstractFeatureToggleHidden,
-              onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
-            )
-          : null,
-      appBar: _desktopToolSelection == null
-          ? AppBar(
-              leading: useDesktopLayout
-                  ? IconButton(
-                      tooltip: _desktopNavigationOpen ? '收起主导航' : '展开主导航',
-                      icon: Icon(
-                        _desktopNavigationOpen
-                            ? Icons.menu_open_rounded
-                            : Icons.menu_rounded,
-                      ),
-                      onPressed: () =>
-                          _setDesktopNavigationOpen(!_desktopNavigationOpen),
-                    )
-                  : null,
-              title: Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            )
-          : null,
-      body: GuildStyleBackdrop(
-        child: !_ready
-          ? const Center(child: CircularProgressIndicator())
-          : !_localDataHealthy
-          ? _buildLocalDataFailure(context)
-          : useDesktopLayout
-          ? Row(
-              children: [
-                ClipRect(
-                  child: AnimatedSize(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeInOut,
-                    alignment: Alignment.centerLeft,
-                    child: _desktopNavigationOpen
-                        ? GuildStyledSurface(
-                            role: GuildSurfaceRole.chrome,
-                            backdropAvailable: false,
-                            backgroundColor: Theme.of(context).colorScheme.surface,
-                            child: SizedBox(
-                            width: 320,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                ListView(
-                                  shrinkWrap: true,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    12,
-                                    12,
-                                    12,
-                                    8,
-                                  ),
-                                  children: [
-                                    for (
-                                      var index = 0;
-                                      index < tabs.length;
-                                      index++
-                                    )
-                                      AppMenuTile(
-                                        icon: tabs[index].icon,
-                                        selectedIcon: tabs[index].selectedIcon,
-                                        title: tabs[index].label,
-                                        selected:
-                                            _desktopToolSelection == null &&
-                                            _index == index,
-                                        onTap: () => _selectDesktopTab(index),
-                                      ),
-                                  ],
-                                ),
-                                const Divider(height: 1),
-                                Expanded(
-                                  child: AppToolMenu(
-                                    orderStore: _orderStore,
-                                    productStore: _productStore,
-                                    nodePresetStore: _nodePresetStore,
-                                    focusStore: _focusStore,
-                                    desktopPetSettings:
-                                        _desktopPetService.settings,
-                                    onOpenOrder: _openOrderFromFocus,
-                                    themeStore: widget.themeStore,
-                                    featureStore: widget.featureStore,
-                                    accountStore: widget.accountStore,
-                                    syncCoordinator: _syncCoordinator,
-                                    onApplyWorkspaceSettings:
-                                        _applySyncSettings,
-                                    onBeforeSignOut: _prepareForSignOut,
-                                    onShowTutorial: () =>
-                                        unawaited(_showTutorial()),
-                                    showFeatureToggle:
-                                        !widget.featureStore.abstractMode ||
-                                        !widget.featureStore.abstractEffects ||
-                                        !_abstractFeatureToggleHidden,
-                                    onHideFeatureToggle:
-                                        _hideFeatureToggleForAbstractSession,
-                                    onSelectTool: _selectDesktopTool,
-                                    selectedTool:
-                                        _desktopToolSelection ==
-                                            AppToolMenu.themeColorTool
-                                        ? AppToolMenu.settingsTool
-                                        : _desktopToolSelection,
-                                    showTrailing: false,
-                                    padding: const EdgeInsets.fromLTRB(
-                                      12,
-                                      8,
-                                      12,
-                                      20,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeInOut,
-                  width: _desktopNavigationOpen ? 1 : 0,
-                  child: const VerticalDivider(width: 1),
-                ),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    child: desktopContent,
-                  ),
-                ),
-              ],
-            )
-          : tabBody,
-      ),
-      floatingActionButton:
-          !_ready ||
-              !_localDataHealthy ||
-              _desktopToolSelection != null ||
-              (useDesktopLayout &&
-                  (_desktopAddEditorOpen ||
-                      _desktopContentHasNestedRoute ||
-                      _desktopRootRefreshPending))
-          ? null
-          : switch (current.label) {
-              '排单' => FloatingActionButton.extended(
+    final drawer = AppDrawer(
+      onSelectTool: _openMobileTool,
+      onShowTutorial: () => unawaited(_showTutorial()),
+      showFeatureToggle: showFeatureToggle,
+      showPetFocusEntry: showDesktopPet || showFocus,
+      showDesktopPet: showDesktopPet,
+      accountSubtitle: widget.accountStore.accountName ?? '本地账号',
+    );
+
+    final desktopMenu = AppToolMenu(
+      onSelectTool: _selectDesktopTool,
+      onShowTutorial: () => unawaited(_showTutorial()),
+      showFeatureToggle: showFeatureToggle,
+      showPetFocusEntry: showDesktopPet || showFocus,
+      showDesktopPet: showDesktopPet,
+      accountSubtitle: widget.accountStore.accountName ?? '本地账号',
+      selectedTool: _desktopToolSelection == AppToolMenu.themeColorTool
+          ? AppToolMenu.settingsTool
+          : _desktopToolSelection,
+      showTrailing: false,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+    );
+
+    final floatingAction = !_ready ||
+            !_localDataHealthy ||
+            _desktopToolSelection != null ||
+            (useDesktopLayout &&
+                (_desktopAddEditorOpen ||
+                    _desktopContentHasNestedRoute ||
+                    _desktopRootRefreshPending))
+        ? null
+        : switch (current.id) {
+            'orders' => FloatingActionButton.extended(
                 onPressed: () => unawaited(_chooseAddMethod(products: false)),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('新增排单'),
               ),
-              '成品' => FloatingActionButton.extended(
+            'products' => FloatingActionButton.extended(
                 onPressed: () => unawaited(_chooseAddMethod(products: true)),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('新增成品'),
               ),
-              _ => null,
-            },
-      bottomNavigationBar: !_ready || tabs.length <= 1 || useDesktopLayout
-          ? null
-          : GuildStyledSurface(
-              role: GuildSurfaceRole.chrome,
-              backdropAvailable: uiStyle.isGlass,
-              backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-              child: NavigationBar(
-                backgroundColor:
-                    uiStyle.isClassic ? null : Colors.transparent,
-                selectedIndex: _index,
-                onDestinationSelected: (value) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  setState(() => _index = value);
-                },
-                destinations: [
-                  for (final tab in tabs)
-                    NavigationDestination(
-                      icon: Icon(tab.icon),
-                      selectedIcon: Icon(tab.selectedIcon),
-                      label: tab.label,
-                    ),
-                ],
-              ),
-            ),
+            _ => null,
+          };
+
+    final shell = GuildWorkspaceShell(
+      tabs: tabs,
+      selectedIndex: _index,
+      onTabSelected: _selectDesktopTab,
+      title: title,
+      ready: _ready,
+      contentAvailable: _localDataHealthy,
+      unavailableBody: _buildLocalDataFailure(context),
+      mobileBody: tabBody,
+      desktopBody: desktopContent,
+      drawer: drawer,
+      desktopToolMenu: desktopMenu,
+      desktopNavigationOpen: _desktopNavigationOpen,
+      onDesktopNavigationChanged: _setDesktopNavigationOpen,
+      toolSelected: _desktopToolSelection != null,
+      floatingActionButton: floatingAction,
+      showAppBar: _desktopToolSelection == null,
     );
 
     final progress = _syncProgressOverlay;
     final showProgress =
         progress != null &&
         !(useDesktopLayout && _desktopToolSelection == AppToolMenu.syncTool);
-    if (!showProgress) return scaffold;
+    if (!showProgress) return shell;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        scaffold,
+        shell,
         Positioned(
           top: useDesktopLayout ? 8 : null,
-          bottom: useDesktopLayout
-              ? null
-              : (tabs.length > 1 ? 88 : 12),
+          bottom: useDesktopLayout ? null : (tabs.length > 1 ? 88 : 12),
           left: 16,
           right: 16,
           child: SafeArea(
@@ -1744,8 +1917,17 @@ class _ForegroundSyncProgressPopup extends StatelessWidget {
         : '${completion.toStringAsFixed(1)}%';
     final direction = progress['direction']?.toString();
     final deviceName = progress['deviceName']?.toString().trim() ?? '';
-    final subtitle = direction == 'sending'
-        ? '正在同步到${deviceName.isEmpty ? '另一台设备' : '「$deviceName」'}'
+    final remoteState = progress['remoteState']?.toString().trim();
+    final repairingHandshake =
+        remoteState == 'notSharing' || remoteState == 'paused';
+    final peerLabel = deviceName.isEmpty ? '另一台设备' : '「$deviceName」';
+    final title = repairingHandshake ? '正在修复同步通道' : '正在同步 $percent';
+    final subtitle = remoteState == 'paused'
+        ? '$peerLabel 已连接，但同步目录处于暂停状态，正在恢复'
+        : remoteState == 'notSharing'
+        ? '$peerLabel 已连接，正在重新确认双向共享目录'
+        : direction == 'sending'
+        ? '正在同步到$peerLabel'
         : '正在接收另一台设备的数据';
 
     return GuildContentPanel(
@@ -1763,11 +1945,13 @@ class _ForegroundSyncProgressPopup extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '正在同步 $percent',
+                    title,
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 4),
-                  LinearProgressIndicator(value: completion / 100),
+                  LinearProgressIndicator(
+                    value: repairingHandshake ? null : completion / 100,
+                  ),
                   const SizedBox(height: 5),
                   Text(
                     subtitle,
@@ -1825,18 +2009,4 @@ class _DesktopContentNavigatorObserver extends NavigatorObserver {
   }) {
     _notify();
   }
-}
-
-class _HomeTab {
-  const _HomeTab({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-    required this.page,
-  });
-
-  final String label;
-  final IconData icon;
-  final IconData selectedIcon;
-  final Widget page;
 }

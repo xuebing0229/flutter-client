@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SYNCTHING_VERSION="${SYNCTHING_VERSION:-v2.1.5}"
+SYNCTHING_VERSION="${SYNCTHING_VERSION:-v2.1.7}"
 SYNCTHING_COMMIT="${SYNCTHING_COMMIT:-}"
-if [[ -z "$SYNCTHING_COMMIT" && "$SYNCTHING_VERSION" == "v2.1.5" ]]; then
-  SYNCTHING_COMMIT="2ca95cf1498104113fdfde46df4107f2450a0f71"
+if [[ -z "$SYNCTHING_COMMIT" && "$SYNCTHING_VERSION" == "v2.1.7" ]]; then
+  SYNCTHING_COMMIT="d6d0181f7d466381c4b39ec8fd944c364f939b32"
 fi
 if [[ -z "$SYNCTHING_COMMIT" ]]; then
   echo "SYNCTHING_COMMIT must pin the source commit for $SYNCTHING_VERSION." >&2
@@ -18,6 +18,8 @@ EXPECTED=(
   "$OUT_DIR/armeabi-v7a/libsyncthing.so"
   "$OUT_DIR/x86_64/libsyncthing.so"
 )
+BUILD_STAMP="$OUT_DIR/.syncthing-build-id"
+EXPECTED_BUILD_ID="$SYNCTHING_VERSION@$SYNCTHING_COMMIT"
 
 all_present=true
 for file in "${EXPECTED[@]}"; do
@@ -26,10 +28,16 @@ for file in "${EXPECTED[@]}"; do
     break
   fi
 done
-if [[ "$all_present" == true ]]; then
-  echo "Embedded Syncthing binaries already present."
+if [[ "$all_present" == true &&
+      -f "$BUILD_STAMP" &&
+      "$(cat "$BUILD_STAMP")" == "$EXPECTED_BUILD_ID" ]]; then
+  echo "Embedded Syncthing $EXPECTED_BUILD_ID already present."
   exit 0
 fi
+
+# Never let stale binaries from another pinned Syncthing version survive a
+# local build or restored CI cache.
+rm -f "${EXPECTED[@]}" "$BUILD_STAMP"
 
 SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
 if [[ -z "$SDK_ROOT" ]]; then
@@ -92,5 +100,6 @@ build_one "x86_64" "amd64" "x86_64-linux-android28-clang"
 for file in "${EXPECTED[@]}"; do
   test -s "$file"
 done
+printf '%s' "$EXPECTED_BUILD_ID" > "$BUILD_STAMP"
 
-echo "Embedded Syncthing binaries are ready."
+echo "Embedded Syncthing $EXPECTED_BUILD_ID is ready."

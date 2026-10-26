@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/detail_form_widgets.dart';
+import '../../../core/finance/pricing_adjustments.dart';
+import '../../../core/finance/pricing_preset_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/pricing_preset_selector.dart';
 import '../data/node_presets.dart';
 import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
@@ -18,12 +21,14 @@ class AddOrderPage extends StatefulWidget {
     required this.store,
     required this.nodePresetStore,
     required this.featureStore,
+    this.pricingPresetStore,
     super.key,
   });
 
   final String accountId;
   final OrderStore store;
   final NodePresetStore nodePresetStore;
+  final PricingPresetStore? pricingPresetStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -34,6 +39,8 @@ class _AddOrderPageState extends State<AddOrderPage> {
   final _referenceImageStore = OrderReferenceImageStore();
   final _referenceImages = <OrderReferenceImage>[];
   final _tags = <String>[];
+  final _pricingAdjustments = <PricingAdjustment>[];
+  late final PricingPresetStore _effectivePricingPresetStore;
 
   final _titleController = TextEditingController();
   final _clientController = TextEditingController();
@@ -56,6 +63,8 @@ class _AddOrderPageState extends State<AddOrderPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePricingPresetStore =
+        widget.pricingPresetStore ?? PricingPresetStore();
     _draftOrderId = 'order-${DateTime.now().microsecondsSinceEpoch}';
     final preset = widget.nodePresetStore.byId(_presetId);
     _currentNodeId = preset.nodes.first.id;
@@ -77,6 +86,9 @@ class _AddOrderPageState extends State<AddOrderPage> {
     _descriptionController.dispose();
     _onlineController.dispose();
     _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
     super.dispose();
   }
 
@@ -186,6 +198,9 @@ class _AddOrderPageState extends State<AddOrderPage> {
       huajiaLoveLevel: _huajiaLoveLevel,
       onlinePercent: _onlinePercent,
       supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
+      pricingAdjustments: List<PricingAdjustment>.unmodifiable(
+        _pricingAdjustments.map((item) => item.snapshot()),
+      ),
       deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
       description: _descriptionController.text.trim(),
       tags: normalizeOrderTags(_tags),
@@ -278,6 +293,16 @@ class _AddOrderPageState extends State<AddOrderPage> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 14),
+          PricingPresetSelector(
+            store: _effectivePricingPresetStore,
+            selected: _pricingAdjustments,
+            onChanged: (value) => setState(() {
+              _pricingAdjustments
+                ..clear()
+                ..addAll(value);
+            }),
           ),
           const SizedBox(height: 14),
           const FormFieldLabel('截稿时间'),

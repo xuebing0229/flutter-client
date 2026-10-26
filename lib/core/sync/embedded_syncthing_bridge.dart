@@ -14,7 +14,11 @@ class EmbeddedSyncthingStatus {
     this.version,
     this.connectedDeviceIds = const <String>[],
     this.configuredDevices = const <Map<String, dynamic>>[],
+    this.allConnectedDeviceIds = const <String>[],
+    this.allConfiguredDevices = const <Map<String, dynamic>>[],
     this.folderState,
+    this.remoteFolderStates = const <String, String>{},
+    this.folderErrors = const <String>[],
     this.syncProgress,
     this.error,
   });
@@ -25,7 +29,24 @@ class EmbeddedSyncthingStatus {
   final String? version;
   final List<String> connectedDeviceIds;
   final List<Map<String, dynamic>> configuredDevices;
+
+  /// Diagnostic-only global Syncthing device state. These lists are not used
+  /// by pairing/sync decisions; they let a diagnostic build distinguish
+  /// historical device relationships from this exact folder membership.
+  final List<String> allConnectedDeviceIds;
+  final List<Map<String, dynamic>> allConfiguredDevices;
+
   final String? folderState;
+
+  /// Folder-level handshake state reported by each connected peer.
+  ///
+  /// Syncthing reports "valid" only after the remote device has accepted and
+  /// shares this exact folder back. Device connectivity alone is not enough.
+  final Map<String, String> remoteFolderStates;
+
+  /// Runtime scan/pull errors for this exact folder.
+  final List<String> folderErrors;
+
   final Map<String, dynamic>? syncProgress;
   final String? error;
 
@@ -50,7 +71,25 @@ class EmbeddedSyncthingStatus {
             if (item is String) item,
       ],
       configuredDevices: mapList(map['configuredDevices']),
+      allConnectedDeviceIds: [
+        if (map['allConnectedDeviceIds'] is List)
+          for (final item in map['allConnectedDeviceIds'] as List)
+            if (item is String) item,
+      ],
+      allConfiguredDevices: mapList(map['allConfiguredDevices']),
       folderState: map['folderState'] as String?,
+      remoteFolderStates: map['remoteFolderStates'] is Map
+          ? <String, String>{
+              for (final entry in (map['remoteFolderStates'] as Map).entries)
+                if (entry.key is String && entry.value is String)
+                  entry.key as String: entry.value as String,
+            }
+          : const <String, String>{},
+      folderErrors: [
+        if (map['folderErrors'] is List)
+          for (final item in map['folderErrors'] as List)
+            if (item is String && item.trim().isNotEmpty) item.trim(),
+      ],
       syncProgress: map['syncProgress'] is Map
           ? (map['syncProgress'] as Map).map(
               (key, value) => MapEntry(key.toString(), value),
@@ -189,6 +228,12 @@ class EmbeddedSyncthingBridge {
       'folderId': folderId,
       'paused': paused,
     });
+  }
+
+  Future<bool> rebuildWindowsProfilePreservingIdentity() async {
+    if (!Platform.isWindows) return false;
+    await WindowsSyncthingTransport.instance.rebuildProfilePreservingIdentity();
+    return true;
   }
 
   Future<void> removeFolderById(String folderId) async {

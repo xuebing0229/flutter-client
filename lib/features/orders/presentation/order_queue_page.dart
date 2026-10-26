@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
-import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/finance/pricing_preset_store.dart';
+import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
 import '../../shared/presentation/collection_widgets.dart';
@@ -36,6 +38,12 @@ class OrderQueuePage extends StatefulWidget {
     required this.cardView,
     required this.onCardViewChanged,
     required this.sortModeName,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
+    this.overviewView = false,
+    this.onOverviewViewChanged,
+    this.overviewColumns = 3,
+    this.onOverviewColumnsChanged,
     required this.onSortModeChanged,
     super.key,
   });
@@ -43,10 +51,16 @@ class OrderQueuePage extends StatefulWidget {
   final String accountId;
   final OrderStore store;
   final NodePresetStore nodePresetStore;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
-  final SyncCoordinator syncCoordinator;
+  final SyncCoordinatorView syncCoordinator;
   final bool cardView;
   final ValueChanged<bool> onCardViewChanged;
+  final bool overviewView;
+  final ValueChanged<bool>? onOverviewViewChanged;
+  final int overviewColumns;
+  final ValueChanged<int>? onOverviewColumnsChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
 
@@ -56,6 +70,8 @@ class OrderQueuePage extends StatefulWidget {
 
 class _OrderQueuePageState extends State<OrderQueuePage> {
   final TextEditingController _searchController = TextEditingController();
+  late final TextEditingController _overviewColumnsController;
+  late final FocusNode _overviewColumnsFocusNode;
   String _query = '';
   String _searchField = 'all';
   final Set<String> _selectedTags = <String>{};
@@ -68,8 +84,34 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    _overviewColumnsController = TextEditingController(
+      text: widget.overviewColumns.toString(),
+    );
+    _overviewColumnsFocusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant OrderQueuePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.overviewColumns == widget.overviewColumns) return;
+
+    final current = int.tryParse(_overviewColumnsController.text.trim());
+    if (current == widget.overviewColumns) return;
+
+    final text = widget.overviewColumns.toString();
+    _overviewColumnsController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _overviewColumnsController.dispose();
+    _overviewColumnsFocusNode.dispose();
     super.dispose();
   }
 
@@ -195,6 +237,77 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
     }
   }
 
+  OrderSummaryCardCompactLayout _compactRowLayout({
+    required BuildContext context,
+    required List<QueueOrder> orders,
+    required List<int> rowIndices,
+    required double cardWidth,
+  }) {
+    final theme = Theme.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+    );
+    final clientStyle = theme.textTheme.bodySmall;
+    final innerWidth = (cardWidth - 24).clamp(1.0, double.infinity);
+    final clientWidth = (innerWidth - 23).clamp(1.0, double.infinity);
+
+    double measure(String text, TextStyle? style, double width) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: direction,
+        textScaler: scaler,
+      )..layout(maxWidth: width);
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final rowOrders = <QueueOrder>[
+      for (final index in rowIndices) orders[index],
+    ];
+    final titleHeight = rowOrders
+        .map((order) => measure(order.title, titleStyle, innerWidth))
+        .fold<double>(0, (maxHeight, height) =>
+            height > maxHeight ? height : maxHeight);
+    final clientHeight = widget.featureStore.clientInfo
+        ? rowOrders
+              .map(
+                (order) => measure(
+                  order.clientName.isEmpty ? '未填写' : order.clientName,
+                  clientStyle,
+                  clientWidth,
+                ),
+              )
+              .fold<double>(0, (maxHeight, height) =>
+                  height > maxHeight ? height : maxHeight)
+        : 0.0;
+    final reserveTagLine =
+        widget.featureStore.customTags &&
+        rowOrders.any((order) => order.tags.isNotEmpty);
+    final hasEditableProgress =
+        widget.featureStore.nodeProgress &&
+        rowOrders.any(
+          (order) =>
+              !order.isCompleted &&
+              order.currentNodeId != notStartedNodeId,
+        );
+    final reserveAction = rowOrders.any(
+      (order) =>
+          !order.isCompleted &&
+          order.nodePresetSnapshot.nodes.isNotEmpty,
+    );
+
+    return OrderSummaryCardCompactLayout(
+      titleHeight: titleHeight,
+      clientHeight: clientHeight,
+      reserveTagLine: reserveTagLine,
+      reserveEditableProgress: hasEditableProgress,
+      reserveAction: reserveAction,
+    );
+  }
+
   void _openOrder(QueueOrder order) {
     FocusManager.instance.primaryFocus?.unfocus();
     Navigator.of(context).push(
@@ -204,6 +317,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           store: widget.store,
           orderId: order.id,
           nodePresetStore: widget.nodePresetStore,
+          pricingPresetStore: widget.pricingPresetStore,
+          receiptStyleStore: widget.receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -922,13 +1037,19 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       ]),
       builder: (context, _) {
         final orders = _visibleOrders();
-        final availableTags = widget.store.orders
-            .where((order) => !order.isArchived)
-            .expand((order) => order.tags)
-            .toSet()
-            .toList()
+        final availableTags = normalizeOrderTags(
+          <String>[
+            ...builtInOrderTags,
+            ...widget.store.orders
+                .where((order) => !order.isArchived)
+                .expand((order) => order.tags),
+          ],
+        ).toList()
           ..sort();
-        final useCardView = widget.featureStore.viewSwitch && widget.cardView;
+        final useOverviewView =
+            widget.featureStore.viewSwitch && widget.overviewView;
+        final useCardView =
+            widget.featureStore.viewSwitch && widget.cardView && !useOverviewView;
 
         return Column(
           children: [
@@ -952,10 +1073,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 onChanged: (value) => setState(() => _query = value),
                 onClear: () {
                   _searchController.clear();
-                  setState(() {
-                    _query = '';
-                    _searchField = 'all';
-                  });
+                  setState(() => _query = '');
                 },
               ),
             if (widget.featureStore.customTags && availableTags.isNotEmpty)
@@ -1036,11 +1154,109 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       )
                     : null,
                 cardView: widget.cardView,
-                onToggleView: widget.featureStore.viewSwitch
-                    ? () {
-                        widget.onCardViewChanged(!widget.cardView);
-                      }
+                viewControl: widget.featureStore.viewSwitch
+                    ? PopupMenuButton<String>(
+                        tooltip: '切换视图',
+                        initialValue: useOverviewView
+                            ? 'overview'
+                            : useCardView
+                                ? 'card'
+                                : 'list',
+                        onSelected: (value) {
+                          if (value == 'overview') {
+                            widget.onCardViewChanged(false);
+                            widget.onOverviewViewChanged?.call(true);
+                          } else if (value == 'card') {
+                            widget.onOverviewViewChanged?.call(false);
+                            widget.onCardViewChanged(true);
+                          } else {
+                            widget.onOverviewViewChanged?.call(false);
+                            widget.onCardViewChanged(false);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'list',
+                            child: Text('列表视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'card',
+                            child: Text('卡片视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'overview',
+                            child: Text('总概览视图'),
+                          ),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                useOverviewView
+                                    ? Icons.view_compact_alt_rounded
+                                    : useCardView
+                                        ? Icons.grid_view_rounded
+                                        : Icons.view_agenda_outlined,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                useOverviewView
+                                    ? '总概览'
+                                    : useCardView
+                                        ? '卡片视图'
+                                        : '列表视图',
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.arrow_drop_down_rounded,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
                     : null,
+              ),
+            if (useOverviewView)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    const Text('每行'),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          child: TextFormField(
+                            controller: _overviewColumnsController,
+                            focusNode: _overviewColumnsFocusNode,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                            ),
+                            onChanged: (raw) {
+                              final parsed = int.tryParse(raw.trim());
+                              if (parsed == null) return;
+                              widget.onOverviewColumnsChanged
+                                  ?.call(parsed < 1 ? 1 : parsed);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const Text('列'),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             Expanded(
               child: orders.isEmpty
@@ -1051,6 +1267,25 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                             ? '没有找到匹配的排单'
                             : '还没有排单，点右下角「新增排单」开始记录',
                       ),
+                    )
+                  : useOverviewView
+                  ? CollectionOverviewGrid(
+                      itemCount: orders.length,
+                      columns: widget.overviewColumns,
+                      childAspectRatio: OrderOverviewSummaryCard.aspectRatio,
+                      itemBuilder: (context, index) {
+                        final order = orders[index];
+                        return OrderOverviewSummaryCard(
+                          order: order,
+                          hasSyncConflict: widget
+                              .syncCoordinator
+                              .conflictedOrderIds
+                              .contains(order.id),
+                          showClient: widget.featureStore.clientInfo,
+                          onTap: () => _openOrder(order),
+                          onLongPress: () => _showQuickActions(order),
+                        );
+                      },
                     )
                   : useCardView
                   ? CollectionCardGrid(
@@ -1067,10 +1302,19 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           ? 320
                           : 260,
                       desktopAspectRatio: 1.05,
-                      itemBuilder: (context, index) {
+                      equalizeRowHeights: true,
+                      rowItemBuilder:
+                          (context, index, rowIndices, cardWidth) {
                         final order = orders[index];
+                        final compactLayout = _compactRowLayout(
+                          context: context,
+                          orders: orders,
+                          rowIndices: rowIndices,
+                          cardWidth: cardWidth,
+                        );
                         return OrderSummaryCard(
                           order: order,
+                          compactLayout: compactLayout,
                           hasSyncConflict: widget
                               .syncCoordinator
                               .conflictedOrderIds

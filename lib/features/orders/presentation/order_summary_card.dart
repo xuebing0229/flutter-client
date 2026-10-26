@@ -5,6 +5,129 @@ import 'package:flutter/material.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
 import '../domain/queue_order.dart';
 
+class OrderSummaryCardCompactLayout {
+  const OrderSummaryCardCompactLayout({
+    required this.titleHeight,
+    required this.clientHeight,
+    required this.reserveTagLine,
+    required this.reserveEditableProgress,
+    required this.reserveAction,
+  });
+
+  final double titleHeight;
+  final double clientHeight;
+  final bool reserveTagLine;
+  final bool reserveEditableProgress;
+  final bool reserveAction;
+}
+
+class OrderOverviewSummaryCard extends StatelessWidget {
+  const OrderOverviewSummaryCard({
+    required this.order,
+    required this.onTap,
+    this.onLongPress,
+    this.showClient = true,
+    this.hasSyncConflict = false,
+    super.key,
+  });
+
+  static const double designWidth = 132;
+  static const double designHeight = 126;
+  static const double aspectRatio = designWidth / designHeight;
+
+  final QueueOrder order;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool showClient;
+  final bool hasSyncConflict;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+    );
+
+    return FittedBox(
+      fit: BoxFit.fill,
+      child: SizedBox(
+        width: designWidth,
+        height: designHeight,
+        child: SummaryCardSurface(
+          compact: true,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SummaryTag(
+                    text: order.platform.label,
+                    compact: true,
+                  ),
+                  const Spacer(),
+                  if (hasSyncConflict) ...[
+                    const Tooltip(
+                      message: '有同步冲突待确认',
+                      child: _SyncConflictDot(),
+                    ),
+                    const SizedBox(width: 7),
+                  ],
+                  if (order.isPinned)
+                    Icon(
+                      Icons.push_pin_rounded,
+                      size: 16,
+                      color: colors.primary,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _DeadlineStatusBadge(
+                  order: order,
+                  compact: true,
+                  neverEllipsize: true,
+                ),
+              ),
+              const SizedBox(height: 9),
+              Text(
+                order.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              ),
+              if (showClient) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person_outline_rounded,
+                      size: 16,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        order.clientName.isEmpty ? '未填写' : order.clientName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class OrderSummaryCard extends StatelessWidget {
   const OrderSummaryCard({
     required this.order,
@@ -19,6 +142,7 @@ class OrderSummaryCard extends StatelessWidget {
     this.showNodeProgress = true,
     this.compact = false,
     this.hasSyncConflict = false,
+    this.compactLayout,
     super.key,
   });
 
@@ -34,12 +158,16 @@ class OrderSummaryCard extends StatelessWidget {
   final bool showNodeProgress;
   final bool compact;
   final bool hasSyncConflict;
+  final OrderSummaryCardCompactLayout? compactLayout;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final currentNode = order.currentNode;
+    final compactTitleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+    );
 
     return SummaryCardSurface(
       compact: compact,
@@ -56,15 +184,6 @@ class OrderSummaryCard extends StatelessWidget {
                         text: order.platform.label,
                         compact: true,
                       ),
-                    if (showTags && order.tags.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: SummaryTag(
-                          text: '#${order.tags.first}',
-                          compact: true,
-                        ),
-                      ),
-                    ],
                     const Spacer(),
                     if (hasSyncConflict) ...[
                       const Tooltip(
@@ -95,32 +214,29 @@ class OrderSummaryCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  order.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
+                SizedBox(
+                  height: compactLayout?.titleHeight,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: Text(
+                      order.title,
+                      softWrap: true,
+                      style: compactTitleStyle,
+                    ),
                   ),
                 ),
-              ] else
+                if (showTags &&
+                    (order.tags.isNotEmpty ||
+                        compactLayout?.reserveTagLine == true)) ...[
+                  const SizedBox(height: 8),
+                  _CompactTagLine(tags: order.tags),
+                ],
+              ] else ...[
                 Row(
                   children: [
-                    if (showPlatform) ...[
+                    if (showPlatform)
                       SummaryTag(text: order.platform.label),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      child: Text(
-                        order.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
+                    const Spacer(),
                     if (hasSyncConflict) ...[
                       const Tooltip(
                         message: '有同步冲突待确认',
@@ -139,6 +255,15 @@ class OrderSummaryCard extends StatelessWidget {
                     _DeadlineStatusBadge(order: order),
                   ],
                 ),
+                const SizedBox(height: 9),
+                Text(
+                  order.title,
+                  softWrap: true,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
               if (!compact && showTags && order.tags.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Wrap(
@@ -152,23 +277,31 @@ class OrderSummaryCard extends StatelessWidget {
               ],
               if (showClient) ...[
                 SizedBox(height: compact ? 10 : 13),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.person_outline_rounded,
-                      size: compact ? 16 : 18,
-                      color: colors.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        order.clientName.isEmpty ? '未填写' : order.clientName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: compact ? theme.textTheme.bodySmall : null,
+                SizedBox(
+                  height: compact ? compactLayout?.clientHeight : null,
+                  child: Row(
+                    crossAxisAlignment: compact
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.only(top: compact ? 1 : 0),
+                        child: Icon(
+                          Icons.person_outline_rounded,
+                          size: compact ? 16 : 18,
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          order.clientName.isEmpty ? '未填写' : order.clientName,
+                          softWrap: true,
+                          style: compact ? theme.textTheme.bodySmall : null,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               SizedBox(height: compact ? 10 : 13),
@@ -209,29 +342,173 @@ class OrderSummaryCard extends StatelessWidget {
                         ? null
                         : onIncreaseNodeProgress,
                   )
+                else if (compact &&
+                    compactLayout?.reserveEditableProgress == true)
+                  Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      IgnorePointer(
+                        child: Opacity(
+                          opacity: 0,
+                          child: _NodeWorkProgress(
+                            progress: 0,
+                            compact: true,
+                            onDecrease: null,
+                            onIncrease: null,
+                          ),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(
+                            value: currentNode.progressPercent / 100,
+                            minHeight: 5,
+                            backgroundColor:
+                                colors.surfaceContainerHighest,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
                 else
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(99),
-                    child: LinearProgressIndicator(
-                      value: currentNode.progressPercent / 100,
-                      minHeight: compact ? 5 : 6,
-                      backgroundColor: colors.surfaceContainerHighest,
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(99),
+                      child: LinearProgressIndicator(
+                        value: currentNode.progressPercent / 100,
+                        minHeight: compact ? 5 : 6,
+                        backgroundColor: colors.surfaceContainerHighest,
+                      ),
                     ),
                   ),
               ],
-              if (onConfirmNode != null) ...[
+              if (onConfirmNode != null ||
+                  (compact && compactLayout?.reserveAction == true)) ...[
                 SizedBox(height: compact ? 10 : 12),
                 SizedBox(
                   width: double.infinity,
-                  child: ResponsiveCardActionButton(
-                    onPressed: onConfirmNode,
-                    icon: Icons.check_circle_outline_rounded,
-                    label: '确认节点',
-                    compact: compact,
-                  ),
+                  child: onConfirmNode != null
+                      ? ResponsiveCardActionButton(
+                          onPressed: onConfirmNode,
+                          icon: Icons.check_circle_outline_rounded,
+                          label: '确认节点',
+                          compact: compact,
+                        )
+                      : IgnorePointer(
+                          child: Opacity(
+                            opacity: 0,
+                            child: ResponsiveCardActionButton(
+                              onPressed: () {},
+                              icon: Icons.check_circle_outline_rounded,
+                              label: '确认节点',
+                              compact: true,
+                            ),
+                          ),
+                        ),
                 ),
               ],
         ],
+      ),
+    );
+  }
+}
+
+class _CompactTagLine extends StatelessWidget {
+  const _CompactTagLine({required this.tags});
+
+  final List<String> tags;
+
+  @override
+  Widget build(BuildContext context) {
+    const slotHeight = 25.0;
+    if (tags.isEmpty) {
+      return const SizedBox(
+        height: slotHeight,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Opacity(
+            opacity: 0,
+            child: SummaryTag(text: '#', compact: true),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: slotHeight,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const gap = 6.0;
+          const chipHorizontalPadding = 14.0;
+          const overflowWidth = 18.0;
+          final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              );
+          final scaler = MediaQuery.textScalerOf(context);
+          final direction = Directionality.of(context);
+
+          double labelWidth(String label) {
+            final painter = TextPainter(
+              text: TextSpan(text: label, style: style),
+              textDirection: direction,
+              textScaler: scaler,
+              maxLines: 1,
+            )..layout();
+            final width = painter.width;
+            painter.dispose();
+            return width + chipHorizontalPadding;
+          }
+
+          final visible = <String>[];
+          var used = 0.0;
+          for (var index = 0; index < tags.length; index++) {
+            final label = '#${tags[index]}';
+            final width = labelWidth(label);
+            final hasMore = index < tags.length - 1;
+            final reserve = hasMore ? gap + overflowWidth : 0.0;
+            final next = used + (visible.isEmpty ? 0 : gap) + width + reserve;
+            if (next <= constraints.maxWidth || visible.isEmpty) {
+              visible.add(label);
+              used += (visible.length == 1 ? 0 : gap) + width;
+            } else {
+              break;
+            }
+          }
+
+          final hidden = visible.length < tags.length;
+          return Row(
+            children: [
+              for (var index = 0; index < visible.length; index++) ...[
+                if (index != 0) const SizedBox(width: gap),
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth -
+                          (hidden ? overflowWidth + gap : 0),
+                    ),
+                    child: SummaryTag(
+                      text: visible[index],
+                      compact: true,
+                    ),
+                  ),
+                ),
+              ],
+              if (hidden) ...[
+                const SizedBox(width: gap),
+                Text(
+                  '…',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -460,10 +737,14 @@ class _DeadlineStatusBadgeState extends State<_DeadlineStatusBadge> {
     final Color background;
     final Color foreground;
 
+    final urgent =
+        !widget.order.isCompleted && hasUrgentOrderTag(widget.order.tags);
+
     if (widget.order.isCompleted) {
       background = colors.primaryContainer;
       foreground = colors.onPrimaryContainer;
-    } else if (status.overdue) {
+    } else if (urgent || status.overdue) {
+      // Urgent deliberately reuses the same warning palette as overdue.
       background = colors.errorContainer;
       foreground = colors.onErrorContainer;
     } else if (status.within24Hours) {
@@ -485,7 +766,7 @@ class _DeadlineStatusBadgeState extends State<_DeadlineStatusBadge> {
           vertical: widget.compact ? 4 : 5,
         ),
         child: Text(
-          status.label,
+          urgent ? '$urgentOrderTag ${status.label}' : status.label,
           maxLines: 1,
           overflow: widget.neverEllipsize
               ? TextOverflow.visible

@@ -132,6 +132,173 @@ void main() {
     expect(rows.single.detectedDate, DateTime(2026, 7, 13, 21, 5));
   });
 
+  test('newer MiHuashi workbench detail parses title buyer total and progress', () {
+    final lines = [
+      box('工作板', 92, x: 302),
+      box('一则生贺～', 207, x: 28),
+      box('距截稿日 2026-11-15 还有 25 天', 274, x: 28),
+      box('一个弹珠', 349, x: 111),
+      box('验收节点', 470, x: 28),
+      box('草稿 20%', 514, x: 28),
+      box('已付 ￥148', 478, x: 438),
+      box('总额 ￥740', 522, x: 437),
+      box('稿件夹', 626, x: 28),
+      box('进程动态', 626, x: 165),
+      box('参考信息', 626, x: 326),
+      box('0 B/5.0 GB', 716, x: 28),
+      box('共 0 个文件', 716, x: 548),
+      box('联系企划方', 1430, x: 280),
+      box('上传稿件', 1430, x: 505),
+    ];
+
+    expect(isMiHuashiOrderDetailScreenshot(
+      lines: lines,
+      imageWidth: 690,
+      imageHeight: 1536,
+    ), isTrue);
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 690,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.title, '一则生贺～');
+    expect(found.single.clientName, '一个弹珠');
+    expect(found.single.price, 740);
+    expect(found.single.progressPercent, 20);
+    expect(found.single.detectedDate, DateTime(2026, 11, 15));
+    expect(found.single.deadlineHasTime, isFalse);
+  });
+
+  test('workbench still prefers lower total when faint 总额 label is lost', () {
+    final lines = [
+      box('工作板', 92, x: 302),
+      box('一则生贺～', 207, x: 28),
+      box('距截稿日 2026-11-15 还有 25 天', 274, x: 28),
+      box('一个弹珠', 349, x: 111),
+      box('验收节点', 470, x: 28),
+      box('草稿 20%', 514, x: 28),
+      box('已付 ￥148', 478, x: 438),
+      box('￥740', 522, x: 487),
+      box('稿件夹', 626, x: 28),
+      box('进程动态', 626, x: 165),
+      box('参考信息', 626, x: 326),
+    ];
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 690,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.price, 740);
+  });
+
+  test('actual order-style MiHuashi detail parses full payment accurately', () {
+    final lines = [
+      box('订单', 111, x: 304),
+      box('【常驻】黑白摸鱼头3.0', 219, x: 208),
+      box('距截稿时间 2026-11-30 23:59 还有 40 天', 312, x: 191),
+      box('y照', 425, x: 116),
+      box('创作节点', 552, x: 32),
+      box('60%', 603, x: 83),
+      box('已全额支付', 557, x: 437),
+      box('￥94', 604, x: 437),
+      box('稿件夹', 730, x: 33),
+      box('进程动态', 730, x: 188),
+      box('参考信息', 730, x: 370),
+      box('0 B/5.0 GB', 820, x: 34),
+      box('共 0 个文件', 820, x: 555),
+    ];
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.title, '【常驻】黑白摸鱼头3.0');
+    expect(found.single.clientName, 'y照');
+    expect(found.single.price, 94);
+    expect(found.single.progressPercent, 60);
+    expect(
+      found.single.importReadyDeadline,
+      DateTime(2026, 11, 30, 23, 59),
+    );
+  });
+
+  test('actual workbench-style MiHuashi detail parses full payment accurately', () {
+    final lines = [
+      box('工作板', 111, x: 304),
+      box('邀请您价目表中的人head气球', 231, x: 32),
+      box('距截稿日 2026-12-31 还有 71 天', 307, x: 32),
+      box('W落秋', 391, x: 116),
+      box('验收节点', 505, x: 32),
+      box('80%', 561, x: 81),
+      box('已全额支付', 512, x: 437),
+      box('￥105', 561, x: 437),
+      box('稿件夹', 690, x: 32),
+      box('进程动态', 690, x: 188),
+      box('参考信息', 690, x: 370),
+      box('0 B/5.0 GB', 789, x: 32),
+      box('共 0 个文件', 789, x: 555),
+    ];
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.title, '邀请您价目表中的人head气球');
+    expect(found.single.clientName, 'W落秋');
+    expect(found.single.price, 105);
+    expect(found.single.progressPercent, 80);
+    expect(found.single.detectedDate, DateTime(2026, 12, 31));
+    expect(found.single.deadlineHasTime, isFalse);
+  });
+
+  test('detail page without header or deadline never turns UI labels into orders', () {
+    final lines = [
+      box('【常驻】黑白摸鱼头3.0', 190, x: 205),
+      box('y照', 340, x: 116),
+      box('验收节点', 490, x: 32),
+      box('已全额支付', 500, x: 437),
+      box('60%', 545, x: 83),
+      box('￥94', 548, x: 437),
+      // Current screenshots can lose the small centered header, deadline and
+      // middle tab labels while keeping the bottom action.
+      box('上传稿件', 1430, x: 505),
+    ];
+
+    expect(isMiHuashiOrderDetailScreenshot(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    ), isTrue);
+
+    final found = const ScreenshotLayoutParser().parse(
+      lines: lines,
+      imageWidth: 698,
+      imageHeight: 1536,
+    );
+
+    expect(found, hasLength(1));
+    expect(found.single.title, '【常驻】黑白摸鱼头3.0');
+    expect(found.single.clientName, 'y照');
+    expect(found.single.price, 94);
+    expect(found.single.progressPercent, 60);
+    expect(
+      found.map((row) => row.title),
+      isNot(contains(anyOf('已全额支付', '上传稿件', '验收节点'))),
+    );
+  });
+
   test('normal vertically stacked commission list is not a detail page', () {
     final lines = [
       box('进行中', 115, x: 167),

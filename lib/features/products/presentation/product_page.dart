@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../../core/features/app_feature_store.dart';
-import '../../../core/sync/sync_coordinator.dart';
+import '../../../core/finance/pricing_preset_store.dart';
+import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../domain/finished_product.dart';
@@ -25,9 +27,15 @@ class ProductPage extends StatefulWidget {
     required this.accountId,
     required this.store,
     required this.featureStore,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
     required this.syncCoordinator,
     required this.cardView,
     required this.onCardViewChanged,
+    this.overviewView = false,
+    this.onOverviewViewChanged,
+    this.overviewColumns = 3,
+    this.onOverviewColumnsChanged,
     required this.sortModeName,
     required this.onSortModeChanged,
     super.key,
@@ -35,10 +43,16 @@ class ProductPage extends StatefulWidget {
 
   final String accountId;
   final ProductStore store;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
-  final SyncCoordinator syncCoordinator;
+  final SyncCoordinatorView syncCoordinator;
   final bool cardView;
   final ValueChanged<bool> onCardViewChanged;
+  final bool overviewView;
+  final ValueChanged<bool>? onOverviewViewChanged;
+  final int overviewColumns;
+  final ValueChanged<int>? onOverviewColumnsChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
 
@@ -48,6 +62,8 @@ class ProductPage extends StatefulWidget {
 
 class _ProductPageState extends State<ProductPage> {
   final TextEditingController _searchController = TextEditingController();
+  late final TextEditingController _overviewColumnsController;
+  late final FocusNode _overviewColumnsFocusNode;
   String _query = '';
   String _searchField = 'all';
 
@@ -57,8 +73,34 @@ class _ProductPageState extends State<ProductPage> {
       );
 
   @override
+  void initState() {
+    super.initState();
+    _overviewColumnsController = TextEditingController(
+      text: widget.overviewColumns.toString(),
+    );
+    _overviewColumnsFocusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.overviewColumns == widget.overviewColumns) return;
+
+    final current = int.tryParse(_overviewColumnsController.text.trim());
+    if (current == widget.overviewColumns) return;
+
+    final text = widget.overviewColumns.toString();
+    _overviewColumnsController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _overviewColumnsController.dispose();
+    _overviewColumnsFocusNode.dispose();
     super.dispose();
   }
 
@@ -125,6 +167,8 @@ class _ProductPageState extends State<ProductPage> {
           accountId: widget.accountId,
           store: widget.store,
           productId: product.id,
+          pricingPresetStore: widget.pricingPresetStore,
+          receiptStyleStore: widget.receiptStyleStore,
           featureStore: widget.featureStore,
         ),
       ),
@@ -255,34 +299,51 @@ class _ProductPageState extends State<ProductPage> {
   Future<void> _confirmSale(FinishedProduct product) async {
     FocusManager.instance.primaryFocus?.unfocus();
     final isMultiple = product.saleType == ProductSaleType.multiple;
-    final confirmed = await showDialog<bool>(
+    final clientController = TextEditingController();
+    final clientName = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('确认售出'),
-          content: Text(
-            isMultiple
-                ? '确认“${product.title}”新增 1 次售出？\n\n'
-                    '售出数量将从 ${product.soldCount} 次变为 ${product.soldCount + 1} 次，'
-                    '并记录到本次售出时间对应的日程。'
-                : '确认将“${product.title}”标记为已售出？\n\n'
-                    '确认后会记录本次售出时间，并显示在日程中。',
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isMultiple
+                    ? '确认“${product.title}”新增 1 次售出？\n'
+                        '售出数量将从 ${product.soldCount} 次变为 ${product.soldCount + 1} 次，'
+                        '并记录到本次售出时间对应的日程。'
+                    : '确认将“${product.title}”标记为已售出？\n'
+                        '确认后会记录本次售出时间，并显示在日程中。',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: clientController,
+                decoration: const InputDecoration(
+                  labelText: '单主（可选）',
+                  hintText: '填写后可计入该单主的年度小票',
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () => Navigator.of(dialogContext).pop(
+                clientController.text.trim(),
+              ),
               child: const Text('确认售出'),
             ),
           ],
         );
       },
     );
+    clientController.dispose();
 
-    if (confirmed != true || !mounted) return;
+    if (clientName == null || !mounted) return;
 
     if (!widget.store.contains(product.id)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -304,7 +365,10 @@ class _ProductPageState extends State<ProductPage> {
       return;
     }
 
-    widget.store.markSold(product.id);
+    widget.store.markSold(
+      product.id,
+      clientName: clientName,
+    );
 
     if (!mounted || !widget.store.contains(product.id)) return;
     final updated = widget.store.byId(product.id);
@@ -340,8 +404,10 @@ class _ProductPageState extends State<ProductPage> {
       ]),
       builder: (context, _) {
         final products = _visibleProducts();
+        final useOverviewView =
+            widget.featureStore.viewSwitch && widget.overviewView;
         final useCardView =
-            widget.featureStore.viewSwitch && widget.cardView;
+            widget.featureStore.viewSwitch && widget.cardView && !useOverviewView;
 
         return Column(
           children: [
@@ -373,48 +439,141 @@ class _ProductPageState extends State<ProductPage> {
             if (widget.featureStore.sorting ||
                 widget.featureStore.viewSwitch)
               CollectionToolbar(
-              title: '成品',
-              count: products.length,
-              helpMessage: '长按卡片，可快速进行置顶、归档、删除操作',
-              sortControl: widget.featureStore.sorting
-                  ? PopupMenuButton<_ProductSortMode>(
-                tooltip: '选择排序方式',
-                initialValue: _sortMode,
-                onSelected: (value) {
-                  widget.onSortModeChanged(value.name);
-                },
-                itemBuilder: (context) {
-                  return [
-                    for (final mode in _ProductSortMode.values)
-                      PopupMenuItem<_ProductSortMode>(
-                        value: mode,
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 28,
-                              child: _sortMode == mode
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      size: 19,
-                                    )
-                                  : null,
-                            ),
-                            Expanded(child: Text(mode.label)),
-                          ],
+                title: '成品',
+                count: products.length,
+                helpMessage: '长按卡片，可快速进行置顶、归档、删除操作',
+                sortControl: widget.featureStore.sorting
+                    ? PopupMenuButton<_ProductSortMode>(
+                        tooltip: '选择排序方式',
+                        initialValue: _sortMode,
+                        onSelected: (value) {
+                          widget.onSortModeChanged(value.name);
+                        },
+                        itemBuilder: (context) {
+                          return [
+                            for (final mode in _ProductSortMode.values)
+                              PopupMenuItem<_ProductSortMode>(
+                                value: mode,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 28,
+                                      child: _sortMode == mode
+                                          ? const Icon(
+                                              Icons.check_rounded,
+                                              size: 19,
+                                            )
+                                          : null,
+                                    ),
+                                    Expanded(child: Text(mode.label)),
+                                  ],
+                                ),
+                              ),
+                          ];
+                        },
+                        icon: const Icon(Icons.sort_rounded),
+                      )
+                    : null,
+                cardView: widget.cardView,
+                viewControl: widget.featureStore.viewSwitch
+                    ? PopupMenuButton<String>(
+                        tooltip: '切换视图',
+                        initialValue: useOverviewView
+                            ? 'overview'
+                            : useCardView
+                                ? 'card'
+                                : 'list',
+                        onSelected: (value) {
+                          if (value == 'overview') {
+                            widget.onCardViewChanged(false);
+                            widget.onOverviewViewChanged?.call(true);
+                          } else if (value == 'card') {
+                            widget.onOverviewViewChanged?.call(false);
+                            widget.onCardViewChanged(true);
+                          } else {
+                            widget.onOverviewViewChanged?.call(false);
+                            widget.onCardViewChanged(false);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'list',
+                            child: Text('列表视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'card',
+                            child: Text('卡片视图'),
+                          ),
+                          PopupMenuItem(
+                            value: 'overview',
+                            child: Text('总概览视图'),
+                          ),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                useOverviewView
+                                    ? Icons.view_compact_alt_rounded
+                                    : useCardView
+                                        ? Icons.grid_view_rounded
+                                        : Icons.view_agenda_outlined,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                useOverviewView
+                                    ? '总概览'
+                                    : useCardView
+                                        ? '卡片视图'
+                                        : '列表视图',
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.arrow_drop_down_rounded,
+                                size: 20,
+                              ),
+                            ],
+                          ),
                         ),
+                      )
+                    : null,
+              ),
+            if (useOverviewView)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    const Text('每行'),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 44,
+                      child: TextFormField(
+                        controller: _overviewColumnsController,
+                        focusNode: _overviewColumnsFocusNode,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                        ),
+                        onChanged: (raw) {
+                          final parsed = int.tryParse(raw.trim());
+                          if (parsed == null) return;
+                          widget.onOverviewColumnsChanged
+                              ?.call(parsed < 1 ? 1 : parsed);
+                        },
                       ),
-                  ];
-                },
-                icon: const Icon(Icons.sort_rounded),
-              )
-                  : null,
-              cardView: widget.cardView,
-              onToggleView: widget.featureStore.viewSwitch
-                  ? () {
-                      widget.onCardViewChanged(!widget.cardView);
-                    }
-                  : null,
-            ),
+                    ),
+                    const SizedBox(width: 5),
+                    const Text('列'),
+                  ],
+                ),
+              ),
             Expanded(
               child: products.isEmpty
                   ? Center(
@@ -424,7 +583,23 @@ class _ProductPageState extends State<ProductPage> {
                             : '还没有成品，点右下角「新增成品」开始记录',
                       ),
                     )
-                  : useCardView
+                  : useOverviewView
+                      ? CollectionOverviewGrid(
+                          itemCount: products.length,
+                          columns: widget.overviewColumns,
+                          childAspectRatio:
+                              ProductOverviewSummaryCard.aspectRatio,
+                          itemBuilder: (context, index) {
+                            final product = products[index];
+                            return ProductOverviewSummaryCard(
+                              product: product,
+                              onTap: () => _openProduct(product),
+                              onLongPress: () =>
+                                  _showQuickActions(product),
+                            );
+                          },
+                        )
+                      : useCardView
                       ? CollectionCardGrid(
                           itemCount: products.length,
                           mobileAspectRatio: 0.70,
@@ -463,10 +638,9 @@ class _ProductPageState extends State<ProductPage> {
                             final product = products[index];
                             return ProductSummaryCard(
                               product: product,
-                              hasSyncConflict: widget.syncCoordinator.conflicts
-                                  .any((item) =>
-                                      item.kind.name == 'product' &&
-                                      item.recordId == product.id),
+                              hasSyncConflict: widget.syncCoordinator
+                                  .conflictedProductIds
+                                  .contains(product.id),
                               onTap: () => _openProduct(product),
                               onLongPress: () =>
                                   _showQuickActions(product),

@@ -159,7 +159,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _StatusRow(
-                      label: '内置同步核心',
+                      label: '同步服务',
                       value: coordinator.syncPaused
                           ? '已暂停'
                           : status.available
@@ -176,18 +176,21 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                       label: '传输状态',
                       value: coordinator.syncPaused
                           ? '已暂停'
-                          : status.connectedDeviceIds.isNotEmpty
-                              ? '已连接 ${status.connectedDeviceIds.length} 台设备'
-                              : status.available
-                                  ? '等待其他设备'
-                                  : '尚未建立',
+                          : !status.available
+                              ? '尚未建立'
+                              : !status.running
+                                  ? '等待同步服务启动'
+                                  : status.connectedDeviceIds.isNotEmpty
+                                      ? '已连接 ${status.connectedDeviceIds.length} 台设备'
+                                      : '等待其他设备',
                       good: !coordinator.syncPaused &&
+                          status.running &&
                           status.connectedDeviceIds.isNotEmpty,
                     ),
                     if (status.folderState != null) ...[
                       const SizedBox(height: 8),
                       _StatusRow(
-                        label: '数据目录',
+                        label: '数据状态',
                         value: _folderStateLabel(status.folderState!),
                         good: status.folderState == 'idle',
                       ),
@@ -320,11 +323,19 @@ class _SyncTransferProgress extends StatelessWidget {
         : 0;
     final deviceName = progress['deviceName']?.toString().trim() ?? '';
     final direction = progress['direction']?.toString();
+    final remoteState = progress['remoteState']?.toString().trim();
+    final repairingHandshake =
+        remoteState == 'notSharing' || remoteState == 'paused';
+    final peerLabel = deviceName.isEmpty ? '另一台设备' : '「$deviceName」';
     final completed = completion >= 99.95 && needBytes <= 0;
-    final title = completed
+    final title = repairingHandshake
+        ? remoteState == 'paused'
+            ? '$peerLabel 同步目录已暂停，正在恢复'
+            : '$peerLabel 已连接，正在确认双向共享目录'
+        : completed
         ? '数据已同步'
         : direction == 'sending'
-        ? '正在同步到${deviceName.isEmpty ? '另一台设备' : '「$deviceName」'}'
+        ? '正在同步到$peerLabel'
         : '本机正在接收数据';
     final percentText = completion >= 99.95
         ? '100%'
@@ -355,7 +366,9 @@ class _SyncTransferProgress extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          LinearProgressIndicator(value: completion / 100),
+          LinearProgressIndicator(
+            value: repairingHandshake ? null : completion / 100,
+          ),
           if (globalBytes > 0) ...[
             const SizedBox(height: 8),
             Text(

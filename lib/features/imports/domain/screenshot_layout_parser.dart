@@ -37,6 +37,7 @@ class ScreenshotOrderCandidate {
     required this.relativeDeadlineText,
     required this.price,
     required this.progressPercent,
+    this.recognizedNodeLabel,
     required this.sourceLines,
     required this.sourceStartY,
     required this.sourceEndY,
@@ -57,6 +58,10 @@ class ScreenshotOrderCandidate {
   /// A raw, visible relative deadline (e.g. 接单后3天). Never transform it
   /// into a concrete timestamp without the actual acceptance time.
   final String? relativeDeadlineText;
+
+  /// Visible workflow/node label from a detail screenshot. It can exist even
+  /// when the user's selected local node preset does not contain that node.
+  final String? recognizedNodeLabel;
 
   bool get hasRelativeDeadline => relativeDeadlineText != null;
   bool get needsDeadlineDateConfirmation => detectedDate == null;
@@ -147,7 +152,7 @@ class ScreenshotLayoutParser {
   static final RegExp _detailTab = RegExp(
       r'稿件夹|进程动态|参考信息|联系企划方|上传稿件|共\s*\d+\s*个文件');
   static final RegExp _detailPayment = RegExp(
-      r'稿酬|全额支付|约稿完成|已支付|已结算');
+      r'稿酬|全额支付|约稿完成|已支付|已付|已结算|总额');
 
 
   // Identifies ONLY an acceptance-relative quick deadline, not labels like
@@ -437,12 +442,18 @@ class ScreenshotLayoutParser {
     final deadlineLine = deadline?.$1;
     final deadlineY = deadlineLine?.centerY ?? imageHeight * 0.19;
 
-    // The actual work title is to the RIGHT of the artwork thumbnail, above
-    // its deadline. The page navigation "订单" must never be a buyer/title.
+    // Older detail pages put the title to the right of a thumbnail. Newer
+    // MiHuashi "工作板" pages put it near the left edge instead.
+    final workbenchLayout = prepared.any((line) =>
+        line.centerY < imageHeight * 0.14 &&
+        line.centerY > imageHeight * 0.025 &&
+        line.text.trim() == '工作板');
+    final detailTitleMinLeft =
+        imageWidth * (workbenchLayout ? 0.035 : 0.22);
     final titles = prepared.where((line) =>
         line.centerY > imageHeight * 0.08 &&
         line.centerY < math.min(deadlineY - 8, imageHeight * 0.32) &&
-        line.left >= imageWidth * 0.22 &&
+        line.left >= detailTitleMinLeft &&
         _plausibleDetailTitle(line.text)).toList()
       ..sort((a, b) => b.centerY.compareTo(a.centerY));
     final titleLine = titles.isEmpty ? null : titles.first;
@@ -476,6 +487,38 @@ class ScreenshotLayoutParser {
         .whereType<int>()
         .where((value) => value <= 100)
         .firstOrNull;
+
+    final nodeHeaders = cardLines.where((line) {
+      final text = line.text.trim();
+      return text.contains('创作节点') || text.contains('验收节点');
+    }).toList()
+      ..sort((a, b) => a.centerY.compareTo(b.centerY));
+    String? recognizedNodeLabel;
+    if (nodeHeaders.isNotEmpty) {
+      final header = nodeHeaders.first;
+      final nodeCandidates = cardLines.where((line) {
+        final text = line.text.trim();
+        if (line.centerY <= header.centerY + 8 ||
+            line.centerY > header.centerY + 105 ||
+            line.left > imageWidth * 0.58 ||
+            text.isEmpty ||
+            text.contains('创作节点') ||
+            text.contains('验收节点') ||
+            _detailPayment.hasMatch(text) ||
+            _date.hasMatch(text) ||
+            _money.hasMatch(text)) {
+          return false;
+        }
+        final withoutProgress = text.replaceAll(_percent, '').trim();
+        return withoutProgress.isNotEmpty;
+      }).toList()
+        ..sort((a, b) => a.centerY.compareTo(b.centerY));
+      if (nodeCandidates.isNotEmpty) {
+        recognizedNodeLabel =
+            nodeCandidates.first.text.replaceAll(_percent, '').trim();
+        if (recognizedNodeLabel.isEmpty) recognizedNodeLabel = null;
+      }
+    }
     // A completed commission page may not show a separate progress widget;
     // the status "约稿完成" itself explicitly means the final 100% node.
     final isFinished = payment.any((line) =>
@@ -488,6 +531,7 @@ class ScreenshotLayoutParser {
       relativeDeadlineText: null,
       price: amount?.$1,
       progressPercent: progress ?? (isFinished ? 100 : null),
+      recognizedNodeLabel: recognizedNodeLabel,
       // Preserve the full screenshot for preview inspection, but never turn
       // upload metadata below the tabs into a second commission.
       sourceLines: List.unmodifiable(prepared),
@@ -502,41 +546,82 @@ class ScreenshotLayoutParser {
 
   static (double, ScreenshotTextLine)? _findDetailPrice(
     List<ScreenshotTextLine> lines, {required double paymentY}) {
-    // Prefer a currency token in the payment/status row, not a number from
-    // the thumbnail or file-size line. Some OCR runs separate ¥ and 88.
-    // In the actual MiHuashi detail layout the status "已全额支付" and
-    // the fee itself are two *vertically stacked* rows. ML Kit measures
-    // their centers about 50px apart on a 1920px screenshot. Restrict to
-    // the same payment block, but don't require a same-line token.
+    // The workbench layout can show both "已付" and "总额". The commission
+    // price is always the total, never the amount already paid.
     final nearby = lines.where((line) =>
         line.centerY >= paymentY - 30 &&
         line.centerY <= paymentY + 105).toList();
-    for (final line in nearby) {
-      final matched = _money.firstMatch(line.text.trim().replaceFirst(
-        RegExp(r'^[yY](?=\s*\d)'), '¥',
-      ));
-      if (matched != null) {
-        final value = double.tryParse(matched.group(1)!);
-        if (value != null) return (value, line);
+
+    final totalLabels =
+        nearby.where((line) => line.text.contains('总额')).toList();
+    for (final label in totalLabels) {
+      final direct = _money.firstMatch(label.text.trim());
+      if (direct != null) {
+        final value = double.tryParse(direct.group(1)!);
+        if (value != null) return (value, label);
+      }
+      final sameRow = nearby.where((line) =>
+          !identical(line, label) &&
+          (line.centerY - label.centerY).abs() < 30 &&
+          line.left >= label.left).toList()
+        ..sort((a, b) => a.left.compareTo(b.left));
+      for (final line in sameRow) {
+        final normalized = line.text.trim().replaceFirst(
+          RegExp(r'^[yY](?=\s*\d)'), '¥',
+        );
+        final matched = _money.firstMatch(normalized);
+        if (matched != null) {
+          final value = double.tryParse(matched.group(1)!);
+          if (value != null) return (value, line);
+        }
+        final bare = double.tryParse(line.text.trim());
+        if (bare != null && bare >= 0 && bare <= 10000000) {
+          return (bare, line);
+        }
       }
     }
-    final currencyMarks = nearby.where(
-      (line) => RegExp(r'^[¥￥]$').hasMatch(line.text.trim()),
-    ).toList();
+
+    final explicitAmounts = <(double, ScreenshotTextLine)>[];
+    for (final line in nearby) {
+      final normalized = line.text.trim().replaceFirst(
+        RegExp(r'^[yY](?=\s*\d)'), '¥',
+      );
+      final matched = _money.firstMatch(normalized);
+      if (matched != null) {
+        final value = double.tryParse(matched.group(1)!);
+        if (value != null) explicitAmounts.add((value, line));
+      }
+    }
+    if (nearby.any((line) => line.text.contains('已付')) &&
+        explicitAmounts.length >= 2) {
+      explicitAmounts.sort((a, b) => b.$2.centerY.compareTo(a.$2.centerY));
+      return explicitAmounts.first;
+    }
+    if (explicitAmounts.isNotEmpty) return explicitAmounts.first;
+
+    final currencyMarks = nearby.where((line) {
+      final text = line.text.trim();
+      return text == '¥' || text == '￥';
+    }).toList();
+    final splitAmounts = <(double, ScreenshotTextLine)>[];
     for (final line in nearby) {
       final value = double.tryParse(line.text.trim());
       if (value == null || value < 0 || value > 10000000) continue;
       final paired = currencyMarks.any((symbol) =>
           (symbol.centerY - line.centerY).abs() < 27 &&
           (line.left - symbol.right).abs() < 90);
-      // OCR can drop the currency glyph but preserve the fee number.
       final feeLabel = nearby.any((label) =>
           _detailPayment.hasMatch(label.text) &&
           (label.centerY - line.centerY).abs() < 25 &&
           label.left <= line.left);
-      if (paired || feeLabel) return (value, line);
+      if (paired || feeLabel) splitAmounts.add((value, line));
     }
-    return null;
+    if (nearby.any((line) => line.text.contains('已付')) &&
+        splitAmounts.length >= 2) {
+      splitAmounts.sort((a, b) => b.$2.centerY.compareTo(a.$2.centerY));
+      return splitAmounts.first;
+    }
+    return splitAmounts.isEmpty ? null : splitAmounts.first;
   }
 
   static bool _plausibleDetailTitle(String text) {
@@ -544,7 +629,7 @@ class ScreenshotLayoutParser {
     final name = text.trim();
     if (_detailTab.hasMatch(name) || _detailPayment.hasMatch(name) ||
         name.contains('截稿') || name.contains('上传') ||
-        name == '订单' || name.contains('文件')) {
+        name == '订单' || name == '工作板' || name.contains('文件')) {
       return false;
     }
     return true;
@@ -554,7 +639,8 @@ class ScreenshotLayoutParser {
     final name = text.trim();
     if (!_plausibleBuyer(name) || _detailTab.hasMatch(name) ||
         _detailPayment.hasMatch(name) || name.contains('截稿') ||
-        name == '订单' || name.contains('文件') ||
+        name == '订单' || name == '工作板' || name == '验收节点' ||
+        name.contains('文件') ||
         name.contains('.png') || name.contains('.jpg') ||
         name.contains('KB') || name.contains('GB')) {
       return false;
@@ -643,8 +729,11 @@ class ScreenshotLayoutParser {
     }
     const ignore = [
       '当前交付节点', '截稿时间', '购买时间', '添加备注',
-      '全额支付', '定向企划', '待支付', '我卖出的', '已完成',
+      '全额支付', '已全额支付', '定向企划', '待支付', '我卖出的', '已完成',
       '进行中', '待交稿', '等待对方收稿', '企划方名称',
+      '上传稿件', '联系企划方', '验收节点', '创作节点',
+      '稿件夹', '进程动态', '参考信息', '订单', '工作板',
+      '约稿完成', '已支付', '已付', '已结算', '总额',
     ];
     if (ignore.any((item) => text == item || text.startsWith('$item：'))) {
       return false;
@@ -727,7 +816,7 @@ bool isMiHuashiOrderDetailScreenshot({
   }
   final miSpecific = <String>[
     '稿件夹', '进程动态', '联系企划方', '上传稿件', '约稿完成',
-    '创作节点',
+    '创作节点', '验收节点',
   ].any(combined.contains);
   if (!miSpecific) return false;
   final centeredHeader = prepared.any((line) =>
@@ -735,7 +824,7 @@ bool isMiHuashiOrderDetailScreenshot({
       line.centerY > imageHeight * 0.025 &&
       line.left >= imageWidth * 0.3 &&
       line.right <= imageWidth * 0.78 &&
-      line.text.trim() == '订单');
+      (line.text.trim() == '订单' || line.text.trim() == '工作板'));
   final deadlineTop = prepared.any((line) =>
       line.centerY > imageHeight * 0.115 &&
       line.centerY < imageHeight * 0.42 &&
@@ -753,6 +842,22 @@ bool isMiHuashiOrderDetailScreenshot({
       (RegExp(r'\.(png|jpe?g|webp)\b', caseSensitive: false)
           .hasMatch(line.text) ||
        line.text.contains('企划方已下载')));
+  final nodeSection = prepared.any((line) {
+    final text = line.text.trim();
+    return text.contains('创作节点') || text.contains('验收节点');
+  });
+  final bottomAction = prepared.any((line) {
+    final text = line.text.trim();
+    return text == '上传稿件' || text == '联系企划方';
+  });
+  // The current MiHuashi detail/workbench layout can lose the small centered
+  // header and even the deadline in OCR, while still clearly exposing the
+  // node section, payment block and bottom actions. Treat that combination as
+  // one detail page before generic card splitting gets a chance to manufacture
+  // fake orders from labels such as "已全额支付 / 上传稿件 / 验收节点".
+  if (paymentRow && nodeSection && (strongTab || bottomAction || attachment)) {
+    return true;
+  }
   // Header + order date + one independent confirmation suffices. If the
   // "订单" glyph is lost, require BOTH the payment line and attachment/tab.
   if (centeredHeader && deadlineTop &&

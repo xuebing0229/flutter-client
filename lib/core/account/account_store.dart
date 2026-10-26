@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'account_models.dart';
+import 'account_state_mutations.dart';
 import 'activation_api.dart';
 import 'device_descriptor.dart';
 import 'offline_license.dart';
@@ -21,6 +22,16 @@ class LocalAccountSummary {
 
   final String accountId;
   final String accountName;
+}
+
+class LocalDeviceRemovalSnapshot {
+  const LocalDeviceRemovalSnapshot({
+    required this.state,
+    required this.deviceId,
+  });
+
+  final AccountSyncState state;
+  final String deviceId;
 }
 
 class _LocalAccountRecord {
@@ -104,6 +115,7 @@ class AccountStore extends ChangeNotifier {
   static const String _fileName = 'account-state-v1.json';
   static const String _accountsDirName = 'accounts';
   static const String _deviceIdentityFileName = 'local-device-id.txt';
+  static const String _installationIdentityFileName = 'installation-id-v1.txt';
   static const String _pendingActivationDirName = 'pending-activations';
 
   final OfflineLicenseVerifier _verifier;
@@ -161,6 +173,18 @@ class AccountStore extends ChangeNotifier {
         !record.syncState.isRevoked(record.currentDeviceId);
   }
 
+  LocalDeviceRemovalSnapshot? localDeviceRemovalSnapshot(
+    String accountId,
+  ) {
+    final id = requireValidAccountId(accountId);
+    final record = _accounts[id];
+    if (record == null) return null;
+    return LocalDeviceRemovalSnapshot(
+      state: record.syncState,
+      deviceId: record.currentDeviceId,
+    );
+  }
+
   List<String> get revokedLocalAccountIds => <String>[
     for (final entry in _accounts.entries)
       if (entry.value.syncState.isRevoked(entry.value.currentDeviceId))
@@ -180,6 +204,28 @@ class AccountStore extends ChangeNotifier {
   Future<File> _file() async {
     final directory = await getApplicationSupportDirectory();
     return File('${directory.path}/$_fileName');
+  }
+
+  Future<File> _installationIdentityFile() async {
+    final directory = await getApplicationSupportDirectory();
+    return File('${directory.path}/$_installationIdentityFileName');
+  }
+
+  Future<String> _installationIdentity() async {
+    final file = await _installationIdentityFile();
+    try {
+      if (await file.exists()) {
+        final value = (await file.readAsString()).trim();
+        if (value.length >= 16) return value;
+      }
+    } catch (_) {
+      // Replace a damaged marker below.
+    }
+
+    final value = _randomId();
+    await file.parent.create(recursive: true);
+    await atomicWriteString(file, value);
+    return value;
   }
 
   Future<File> _deviceIdentityFile(String accountId) async {
@@ -498,6 +544,7 @@ class AccountStore extends ChangeNotifier {
 
     final now = DateTime.now().toUtc();
     final descriptor = await DeviceDescriptor.current();
+    final installationId = await _installationIdentity();
     final newDeviceId = _randomId();
 
     var state = AccountSyncState(
@@ -517,6 +564,7 @@ class AccountStore extends ChangeNotifier {
       platform: descriptor.platform,
       firstSeenAt: now,
       lastSeenAt: now,
+      installationId: installationId,
     );
     state = state.copyWith(devices: devices);
 
@@ -637,9 +685,11 @@ class AccountStore extends ChangeNotifier {
     final current = record.syncState.devices[record.currentDeviceId];
     if (current == null) return;
 
+    final installationId = await _installationIdentity();
     final devices = <String, AccountDevice>{...record.syncState.devices};
     devices[record.currentDeviceId] = current.copyWith(
       lastSeenAt: DateTime.now().toUtc(),
+      installationId: installationId,
     );
 
     _accounts[record.syncState.accountId] = record.copyWith(
@@ -685,6 +735,97 @@ class AccountStore extends ChangeNotifier {
     }
   }
 
+  Future<String?> reconcileCurrentDeviceTransportIdentity({
+    required String syncTransportId,
+  }) async {
+    final normalizedTransportId = syncTransportId.trim();
+    if (normalizedTransportId.length < 20) {
+      throw const FormatException('同步设备 ID 格式无效。');
+    }
+
+    final record = _selectedRecord;
+    if (record == null) return null;
+    final currentId = record.currentDeviceId;
+    if (record.syncState.isRevoked(currentId)) return currentId;
+
+    final current = record.syncState.devices[currentId];
+    if (current == null) return currentId;
+
+    final installationId = await _installationIdentity();
+    final aliases = <AccountDevice>[current];
+
+    for (final device in record.syncState.activeDevices) {
+      if (device.id == currentId) continue;
+
+      // Never infer physical identity from display name/platform. Two genuine
+      // devices can have the same Windows/Android name, and treating that as a
+      // duplicate revokes a freshly joined device before its account state can
+      // reach the existing peers. Exact stable-installation or transport
+      // identity is required for automatic collapse.
+      if (isSameDeviceIdentityForAutomaticDedupe(
+        installationId: installationId,
+        syncTransportId: normalizedTransportId,
+        candidate: device,
+      )) {
+        aliases.add(device);
+      }
+    }
+
+    if (aliases.length == 1) {
+      final devices = <String, AccountDevice>{...record.syncState.devices};
+      devices[currentId] = current.copyWith(
+        installationId: installationId,
+        syncTransportId: normalizedTransportId,
+        lastSeenAt: DateTime.now().toUtc(),
+      );
+      _accounts[record.syncState.accountId] = record.copyWith(
+        syncState: record.syncState.copyWith(devices: devices),
+      );
+      await _save();
+      return currentId;
+    }
+
+    aliases.sort((left, right) {
+      final byFirstSeen = left.firstSeenAt.compareTo(right.firstSeenAt);
+      if (byFirstSeen != 0) return byFirstSeen;
+      return left.id.compareTo(right.id);
+    });
+    final canonical = aliases.first;
+    final now = DateTime.now().toUtc();
+
+    final devices = <String, AccountDevice>{...record.syncState.devices};
+    devices[canonical.id] = canonical.copyWith(
+      name: current.name,
+      platform: current.platform,
+      lastSeenAt: now,
+      syncTransportId: normalizedTransportId,
+      installationId: installationId,
+    );
+
+    final revocations = <String, DeviceRevocation>{
+      ...record.syncState.revocations,
+    };
+    for (final duplicate in aliases) {
+      if (duplicate.id == canonical.id) continue;
+      revocations.putIfAbsent(
+        duplicate.id,
+        () => DeviceRevocation(deviceId: duplicate.id, revokedAt: now),
+      );
+    }
+
+    _accounts[record.syncState.accountId] = record.copyWith(
+      currentDeviceId: canonical.id,
+      syncState: record.syncState.copyWith(
+        devices: devices,
+        revocations: revocations,
+      ),
+    );
+
+    await _save();
+    notifyListeners();
+    return canonical.id;
+  }
+
   Future<void> bindSyncTransportId({
     required String appDeviceId,
     required String syncTransportId,
@@ -707,6 +848,9 @@ class AccountStore extends ChangeNotifier {
     if (record == null) return;
 
     final now = DateTime.now().toUtc();
+    final installationId = normalizedAppDeviceId == record.currentDeviceId
+        ? await _installationIdentity()
+        : null;
     final devices = <String, AccountDevice>{...record.syncState.devices};
     final current = devices[normalizedAppDeviceId];
 
@@ -722,9 +866,11 @@ class AccountStore extends ChangeNotifier {
             firstSeenAt: now,
             lastSeenAt: now,
             syncTransportId: normalizedTransportId,
+            installationId: installationId,
           )
         : current.copyWith(
             syncTransportId: normalizedTransportId,
+            installationId: installationId,
             lastSeenAt: now,
           );
 
@@ -737,32 +883,15 @@ class AccountStore extends ChangeNotifier {
   }
 
   Future<void> renameDevice(String deviceId, String name) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed.length > 40) {
-      throw const FormatException('设备名称需要在 1–40 个字符之间。');
-    }
-
     final record = _selectedRecord;
     if (record == null) return;
-    if (record.syncState.isRevoked(deviceId)) {
-      throw const FormatException('已解绑设备不能修改名称。');
-    }
-
-    final current = record.syncState.devices[deviceId];
-    if (current == null) {
-      throw const FormatException('这台设备已经不存在。');
-    }
-
-    final devices = <String, AccountDevice>{...record.syncState.devices};
-    devices[deviceId] = current.copyWith(
-      name: trimmed,
-      nameUpdatedAt: DateTime.now().toUtc(),
-    );
-
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(devices: devices),
+      syncState: renameAccountDeviceState(
+        record.syncState,
+        deviceId: deviceId,
+        name: name,
+      ),
     );
-
     await _save();
     notifyListeners();
   }
@@ -774,22 +903,11 @@ class AccountStore extends ChangeNotifier {
   }
 
   Future<void> renameAccount(String name) async {
-    final trimmed = name.trim();
-    if (trimmed.length < 2 || trimmed.length > 32) {
-      throw const FormatException('账号名长度需要在 2–32 个字符之间。');
-    }
-
     final record = _selectedRecord;
     if (record == null) return;
-
-    final now = DateTime.now().toUtc();
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(
-        accountName: trimmed,
-        accountNameUpdatedAt: now,
-      ),
+      syncState: renameAccountState(record.syncState, name),
     );
-
     await _save();
     notifyListeners();
   }
@@ -827,21 +945,13 @@ class AccountStore extends ChangeNotifier {
     if (record == null || !isUnlocked) {
       throw const FormatException('当前账号未登录，不能修改密码。');
     }
-    if (currentPassword != record.syncState.password) {
-      throw const FormatException('当前密码不正确。');
-    }
-    if (newPassword.length < 6) {
-      throw const FormatException('新密码至少需要 6 个字符。');
-    }
-
-    final now = DateTime.now().toUtc();
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(
-        password: newPassword,
-        passwordUpdatedAt: now,
+      syncState: changeAccountPasswordState(
+        record.syncState,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
       ),
     );
-
     await _save();
     notifyListeners();
   }
@@ -851,27 +961,21 @@ class AccountStore extends ChangeNotifier {
     if (record == null || !record.syncState.devices.containsKey(deviceId)) {
       return;
     }
-    if (deviceId == record.currentDeviceId) {
-      throw const FormatException('当前设备不能在这里解绑。');
-    }
-
-    final revocations = <String, DeviceRevocation>{
-      ...record.syncState.revocations,
-    };
-    revocations[deviceId] = DeviceRevocation(
-      deviceId: deviceId,
-      revokedAt: DateTime.now().toUtc(),
-    );
-
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(revocations: revocations),
+      syncState: revokeAccountDeviceState(
+        record.syncState,
+        currentDeviceId: record.currentDeviceId,
+        deviceId: deviceId,
+      ),
     );
-
     await _save();
     notifyListeners();
   }
 
-  Future<void> adoptSyncedAccount(AccountSyncState incoming) async {
+  Future<void> adoptSyncedAccount(
+    AccountSyncState incoming, {
+    String? preferredDeviceId,
+  }) async {
     if (!incoming.hasCredentials) {
       throw const FormatException('同步账号缺少登录信息，不能加入。');
     }
@@ -892,12 +996,32 @@ class AccountStore extends ChangeNotifier {
 
     final now = DateTime.now().toUtc();
     final descriptor = await DeviceDescriptor.current();
+    final installationId = await _installationIdentity();
     final rememberedDeviceId =
         existing == null ? await _readDeviceIdentity(incoming) : null;
+    String? installationDeviceId;
+    for (final device in incoming.activeDevices) {
+      if (device.installationId?.trim() == installationId) {
+        installationDeviceId = device.id;
+        break;
+      }
+    }
+    final preferredId = preferredDeviceId?.trim();
+    final safePreferredId =
+        preferredId != null &&
+            preferredId.length >= 16 &&
+            !incoming.isRevoked(preferredId)
+        ? preferredId
+        : null;
     final newDeviceId =
-        rememberedDeviceId != null && !incoming.isRevoked(rememberedDeviceId)
-        ? rememberedDeviceId
-        : _randomId();
+        safePreferredId ??
+        (installationDeviceId != null &&
+                !incoming.isRevoked(installationDeviceId)
+            ? installationDeviceId
+            : rememberedDeviceId != null &&
+                  !incoming.isRevoked(rememberedDeviceId)
+            ? rememberedDeviceId
+            : _randomId());
 
     // A locally removed account keeps only its device marker so rejoining the
     // same account can reuse the existing app-device identity. A revoked
@@ -914,8 +1038,10 @@ class AccountStore extends ChangeNotifier {
       id: newDeviceId,
       name: descriptor.name,
       platform: descriptor.platform,
-      firstSeenAt: now,
+      firstSeenAt: devices[newDeviceId]?.firstSeenAt ?? now,
       lastSeenAt: now,
+      syncTransportId: devices[newDeviceId]?.syncTransportId,
+      installationId: installationId,
     );
 
     final state = baseState.copyWith(devices: devices);
@@ -964,6 +1090,7 @@ class AccountStore extends ChangeNotifier {
   Future<void> removeLocalAccountById({
     required String accountId,
     required Future<void> Function(String accountId) deleteAccountData,
+    bool retainDeviceIdentity = true,
   }) async {
     final id = requireValidAccountId(accountId);
     final record = _accounts[id];
@@ -972,12 +1099,18 @@ class AccountStore extends ChangeNotifier {
     final retainedDeviceId = record.currentDeviceId;
     await deleteAccountData(id);
 
-    // Keep only the tiny local device marker. If this account is joined again
-    // on the same installation, the existing device identity can be reused
-    // instead of leaving a duplicate active device on the other peers.
     final marker = await _deviceIdentityFile(id);
-    await marker.parent.create(recursive: true);
-    await atomicWriteString(marker, retainedDeviceId);
+    if (retainDeviceIdentity) {
+      // Plain local removal can reuse the same identity. A true device unbind
+      // must pass retainDeviceIdentity=false so a later rejoin cannot reuse an
+      // app-device ID that is permanently covered by a revocation tombstone.
+      await marker.parent.create(recursive: true);
+      await atomicWriteString(marker, retainedDeviceId);
+    } else {
+      try {
+        if (await marker.exists()) await marker.delete();
+      } catch (_) {}
+    }
 
     _accounts.remove(id);
     if (_selectedAccountId == id) {
@@ -1016,6 +1149,27 @@ class AccountStore extends ChangeNotifier {
     }
   }
 }
+
+
+@visibleForTesting
+bool isSameDeviceIdentityForAutomaticDedupe({
+  required String installationId,
+  required String syncTransportId,
+  required AccountDevice candidate,
+}) {
+  final candidateInstallationId = candidate.installationId?.trim();
+  if (candidateInstallationId != null &&
+      candidateInstallationId.isNotEmpty &&
+      candidateInstallationId == installationId.trim()) {
+    return true;
+  }
+
+  final candidateTransportId = candidate.syncTransportId?.trim();
+  return candidateTransportId != null &&
+      candidateTransportId.isNotEmpty &&
+      candidateTransportId == syncTransportId.trim();
+}
+
 
 String _randomId() => base64UrlEncode(_randomBytes(12)).replaceAll('=', '');
 

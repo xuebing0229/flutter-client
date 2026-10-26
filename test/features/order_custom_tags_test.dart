@@ -29,6 +29,23 @@ void main() {
     expect(SyncEntityCodec.orderFromFields(fields).tags, ['加急', '商稿']);
   });
 
+
+  test('urgent tag is exposed as a built-in custom tag', () {
+    expect(builtInOrderTags, contains(urgentOrderTag));
+  });
+
+  test('urgent tag toggles through the ordinary tag list', () {
+    final source = <String>['定向企划', '商稿'];
+
+    final urgent = setUrgentOrderTag(source, enabled: true);
+    expect(urgent, ['定向企划', '商稿', urgentOrderTag]);
+    expect(hasUrgentOrderTag(urgent), isTrue);
+
+    final cleared = setUrgentOrderTag(urgent, enabled: false);
+    expect(cleared, source);
+    expect(hasUrgentOrderTag(cleared), isFalse);
+  });
+
   test('complete backup round-trip preserves labels', () {
     final source = AppBackupData(
       exportedAt: DateTime.utc(2026, 10, 8),

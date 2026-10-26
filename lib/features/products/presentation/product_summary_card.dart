@@ -3,6 +3,85 @@ import 'package:flutter/material.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
 import '../domain/finished_product.dart';
 
+class ProductOverviewSummaryCard extends StatelessWidget {
+  const ProductOverviewSummaryCard({
+    required this.product,
+    required this.onTap,
+    this.onLongPress,
+    super.key,
+  });
+
+  static const double designWidth = 132;
+  static const double designHeight = 116;
+  static const double aspectRatio = designWidth / designHeight;
+
+  final FinishedProduct product;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return FittedBox(
+      fit: BoxFit.fill,
+      child: SizedBox(
+        width: designWidth,
+        height: designHeight,
+        child: SummaryCardSurface(
+          compact: true,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  SummaryTag(
+                    text: product.platform.label,
+                    compact: true,
+                  ),
+                  const Spacer(),
+                  SummaryTag(
+                    text: product.saleType.label,
+                    compact: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 11),
+              Text(
+                product.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Icon(
+                    Icons.sell_outlined,
+                    size: 16,
+                    color: colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '售出 ${product.soldCount}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 class ProductSummaryCard extends StatelessWidget {
   const ProductSummaryCard({
     required this.product,

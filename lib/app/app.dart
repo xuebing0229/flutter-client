@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/account/account_store.dart';
@@ -12,8 +15,9 @@ import '../core/storage/app_data_persistence.dart';
 import '../core/sync/account_sync_record_store.dart';
 import '../core/sync/embedded_syncthing_bridge.dart';
 import '../core/sync/portable_sync_workspace_validator.dart';
+import '../core/sync/windows_syncthing_transport.dart';
+import '../core/sync/pending_device_revocation_service.dart';
 import '../core/theme/app_theme_store.dart';
-import '../core/theme/guild_visual_theme.dart';
 import '../features/account/presentation/account_gate.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/orders/data/node_presets.dart';
@@ -27,7 +31,7 @@ class App extends StatefulWidget {
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> {
+class _AppState extends State<App> with WidgetsBindingObserver {
   final AppThemeStore _themeStore = AppThemeStore();
   final AppFeatureStore _featureStore = AppFeatureStore();
   final AccountStore _accountStore = AccountStore();
@@ -40,14 +44,35 @@ class _AppState extends State<App> {
   final GlobalKey<NavigatorState> _navigatorKey =
       GlobalKey<NavigatorState>();
 
+  late final PendingDeviceRevocationService _pendingDeviceRevocations;
+  static const MethodChannel _windowsLifecycleChannel =
+      MethodChannel('app.windows_lifecycle');
+
+  Timer? _pendingDeviceRevocationTimer;
   String? _sessionAccountId;
   bool _sessionInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (Platform.isWindows) {
+      _windowsLifecycleChannel.setMethodCallHandler(
+        _handleWindowsLifecycleCall,
+      );
+    }
+    _pendingDeviceRevocations = PendingDeviceRevocationService(
+      accountSyncStore: _accountSyncRecordStore,
+      persistence: _persistence,
+    );
     _accountStore.addListener(_onAccountSessionChanged);
     unawaited(_initialize());
+  }
+
+  Future<Object?> _handleWindowsLifecycleCall(MethodCall call) async {
+    if (call.method != 'prepareForExit') return null;
+    await WindowsSyncthingTransport.instance.shutdown();
+    return true;
   }
 
   Future<void> _initialize() async {
@@ -73,6 +98,29 @@ class _AppState extends State<App> {
     // Revoked accounts intentionally keep their transport folder until the
     // remote revocation acknowledgement has had a chance to sync. The user can
     // still remove the local account explicitly from the pre-login UI.
+
+    _startPendingDeviceRevocationDelivery();
+  }
+
+  void _startPendingDeviceRevocationDelivery() {
+    unawaited(_flushPendingDeviceRevocations());
+    _pendingDeviceRevocationTimer ??= Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => unawaited(_flushPendingDeviceRevocations()),
+    );
+  }
+
+  Future<void> _flushPendingDeviceRevocations() {
+    return _pendingDeviceRevocations.flushPending(
+      hasLocalAccount: _accountStore.hasActiveLocalAccount,
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_flushPendingDeviceRevocations());
+    }
   }
 
   void _onAccountSessionChanged() {
@@ -127,21 +175,41 @@ class _AppState extends State<App> {
 
   Future<void> _removeLocalAccount(String accountId) async {
     const syncBridge = EmbeddedSyncthingBridge();
+    final snapshot = _accountStore.localDeviceRemovalSnapshot(accountId);
 
-    // Transport cleanup is best effort. A broken/unavailable sync core must
-    // never trap the user in a saved account they cannot log into.
-    try {
-      await syncBridge.removeAccountFolder(accountId: accountId);
-    } catch (_) {}
+    var pendingDelivery = false;
+    if (snapshot != null) {
+      pendingDelivery =
+          await _pendingDeviceRevocations.stageLocalRemoval(snapshot);
+    }
+
+    // When another device still needs the tombstone, remove the visible local
+    // account immediately but retain its hidden sync workspace as an outbox.
+    // Otherwise the transport folder can be discarded right away.
+    if (!pendingDelivery) {
+      try {
+        await syncBridge.removeAccountFolder(accountId: accountId);
+      } catch (_) {}
+    }
 
     await _accountStore.removeLocalAccountById(
       accountId: accountId,
-      deleteAccountData: _persistence.deleteAccountData,
+      deleteAccountData: pendingDelivery
+          ? _persistence.deleteAccountDataPreservingSyncWorkspace
+          : _persistence.deleteAccountData,
+      retainDeviceIdentity: false,
     );
 
     try {
       await _reminderService.clearAll(accountId: accountId);
     } catch (_) {}
+
+    if (pendingDelivery) {
+      // Never block or notify the user about delivery. The app-level outbox
+      // keeps retrying on the login page, inside another account, and on every
+      // later foreground session until every known peer has received it.
+      unawaited(_flushPendingDeviceRevocations());
+    }
   }
 
   Future<void> _acknowledgeCurrentRevocation() async {
@@ -189,7 +257,11 @@ class _AppState extends State<App> {
     if (bootstrapOnly) {
       // First-device handoff intentionally carries only account identity.
       // Write placeholder data so user knows data is being synced in background.
-      await _accountStore.adoptSyncedAccount(account);
+      final joinDeviceId = backup.settings['joinDeviceId'];
+      await _accountStore.adoptSyncedAccount(
+        account,
+        preferredDeviceId: joinDeviceId is String ? joinDeviceId : null,
+      );
       await _persistence.save(
         AppBackupData.capture(
           orderStore: OrderStore(),
@@ -225,70 +297,17 @@ class _AppState extends State<App> {
 
   @override
   void dispose() {
+    if (Platform.isWindows) {
+      _windowsLifecycleChannel.setMethodCallHandler(null);
+    }
+    WidgetsBinding.instance.removeObserver(this);
+    _pendingDeviceRevocationTimer?.cancel();
     _accountStore.removeListener(_onAccountSessionChanged);
     _accountStore.dispose();
     _themeStore.dispose();
     _featureStore.dispose();
     super.dispose();
   }
-
-  Color _onColor(Color color) {
-    return color.computeLuminance() > 0.48 ? Colors.black : Colors.white;
-  }
-
-  ColorScheme _paletteScheme(Brightness brightness) {
-    final palette = _themeStore.palette;
-    final colors = palette.previewColors;
-    final primary = colors.first;
-    final secondary = colors.length > 1 ? colors[1] : primary;
-    final tertiary = colors.length > 2 ? colors[2] : secondary;
-    final primaryContainer =
-        colors.length > 3 ? colors[3] : primary;
-    final secondaryContainer =
-        colors.length > 4 ? colors[4] : secondary;
-    final tertiaryContainer =
-        colors.length > 2 ? colors.last : primary;
-
-    final dark = brightness == Brightness.dark;
-
-    final base = ColorScheme.fromSeed(
-      seedColor: dark ? palette.effectiveDarkSeed : palette.lightSeed,
-      brightness: brightness,
-    );
-
-    return base.copyWith(
-      primary: primary,
-      onPrimary: _onColor(primary),
-      primaryContainer: primaryContainer,
-      onPrimaryContainer: _onColor(primaryContainer),
-      secondary: secondary,
-      onSecondary: _onColor(secondary),
-      secondaryContainer: secondaryContainer,
-      onSecondaryContainer: _onColor(secondaryContainer),
-      tertiary: tertiary,
-      onTertiary: _onColor(tertiary),
-      tertiaryContainer: tertiaryContainer,
-      onTertiaryContainer: _onColor(tertiaryContainer),
-      surface: base.surface,
-      onSurface: base.onSurface,
-      surfaceContainerHighest: base.surfaceContainerHighest,
-      onSurfaceVariant: base.onSurfaceVariant,
-      outline: base.outline,
-      outlineVariant: base.outlineVariant,
-      inversePrimary: primary,
-      surfaceTint: Colors.transparent,
-    );
-  }
-
-  ThemeData _lightTheme() => GuildVisualTheme.build(
-        _paletteScheme(Brightness.light),
-        style: _themeStore.style,
-      );
-
-  ThemeData _darkTheme() => GuildVisualTheme.build(
-        _paletteScheme(Brightness.dark),
-        style: _themeStore.style,
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -309,8 +328,8 @@ class _AppState extends State<App> {
             GlobalCupertinoLocalizations.delegate,
           ],
           themeMode: _themeStore.mode,
-          theme: _lightTheme(),
-          darkTheme: _darkTheme(),
+          theme: GuildAppTheme.light(_themeStore),
+          darkTheme: GuildAppTheme.dark(_themeStore),
           home: AccountGate(
             store: _accountStore,
             onAdoptBackup: _adoptBackup,

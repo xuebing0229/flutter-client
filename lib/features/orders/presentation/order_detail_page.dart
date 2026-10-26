@@ -3,7 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/finance/pricing_adjustments.dart';
+import '../../../core/finance/pricing_preset_store.dart';
+import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/pricing_preset_selector.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/adjustment_widgets.dart';
@@ -23,6 +27,8 @@ class OrderDetailPage extends StatefulWidget {
     required this.orderId,
     required this.nodePresetStore,
     required this.featureStore,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
     super.key,
   });
 
@@ -30,6 +36,8 @@ class OrderDetailPage extends StatefulWidget {
   final OrderStore store;
   final String orderId;
   final NodePresetStore nodePresetStore;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -40,7 +48,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   final _referenceImageStore = OrderReferenceImageStore();
   final _referenceImages = <OrderReferenceImage>[];
   final _tags = <String>[];
+  final _pricingAdjustments = <PricingAdjustment>[];
   final _sessionAddedReferenceImages = <OrderReferenceImage>[];
+  late final PricingPresetStore _effectivePricingPresetStore;
 
   bool _editing = false;
   bool _pickingReferenceImages = false;
@@ -68,6 +78,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePricingPresetStore =
+        widget.pricingPresetStore ?? PricingPresetStore();
     final order = _order;
     _titleController = TextEditingController();
     _clientController = TextEditingController();
@@ -96,6 +108,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _descriptionController.dispose();
     _onlineController.dispose();
     _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
     super.dispose();
   }
 
@@ -109,6 +124,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _referenceImages
       ..clear()
       ..addAll(order.referenceImages);
+    _pricingAdjustments
+      ..clear()
+      ..addAll(order.pricingAdjustments.map((item) => item.snapshot()));
     _platform = order.platform;
     _presetId = order.nodePresetId;
     _presetSnapshot = order.nodePresetSnapshot.snapshot();
@@ -119,6 +137,25 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _onlinePercent = order.normalizedOnlinePercent;
     _onlineController.text = formatPercentValue(_onlinePercent);
     _offlineController.text = formatPercentValue(100 - _onlinePercent);
+  }
+
+  bool _samePricingAdjustments(
+    List<PricingAdjustment> left,
+    List<PricingAdjustment> right,
+  ) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      final a = left[index];
+      final b = right[index];
+      if (a.id != b.id ||
+          a.name != b.name ||
+          a.multiplier != b.multiplier ||
+          a.percent != b.percent ||
+          a.fixedAmount != b.fixedAmount) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _setOnlinePercent(double value) {
@@ -300,6 +337,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       _referenceImages,
       _draftBaseline.referenceImages,
     );
+    final pricingChanged = !_samePricingAdjustments(
+      _pricingAdjustments,
+      _draftBaseline.pricingAdjustments,
+    );
 
     List<String> concurrentFields(QueueOrder latest) {
       final fields = <String>[];
@@ -322,6 +363,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           latest.price != _draftBaseline.price &&
           price != latest.price) {
         fields.add('稿费');
+      }
+      if (pricingChanged &&
+          !_samePricingAdjustments(
+            latest.pricingAdjustments,
+            _draftBaseline.pricingAdjustments,
+          ) &&
+          !_samePricingAdjustments(_pricingAdjustments, latest.pricingAdjustments)) {
+        fields.add('加价预设');
       }
       if (descriptionChanged &&
           latest.description != _draftBaseline.description &&
@@ -393,6 +442,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           feeChanged ||
           loveLevelChanged ||
           onlinePercentChanged ||
+          pricingChanged ||
           referenceImagesChanged;
       if (anyLocalChanged &&
           latest.isArchived != _draftBaseline.isArchived) {
@@ -445,6 +495,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         tagsChanged && !useSyncedConflictFields.contains('自定义标签');
     final applyCommission =
         !useSyncedConflictFields.contains('平台与手续费设置');
+    final applyPricing =
+        pricingChanged && !useSyncedConflictFields.contains('加价预设');
     final applyNode =
         nodeChanged && !useSyncedConflictFields.contains('节点或交稿状态');
 
@@ -481,6 +533,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       onlinePercent: onlinePercentChanged && applyCommission
           ? _onlinePercent
           : currentForSave.onlinePercent,
+      pricingAdjustments: applyPricing
+          ? <PricingAdjustment>[
+              for (final item in _pricingAdjustments) item.snapshot(),
+            ]
+          : currentForSave.pricingAdjustments,
       description: applyDescription
           ? _descriptionController.text.trim()
           : currentForSave.description,
@@ -508,6 +565,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       label: '补款',
       amount: order.supplementAmount,
       feeEnabled: order.supplementFeeEnabled,
+      pricingEnabled: order.supplementPricingEnabled,
+      allowPricingParticipation: true,
     );
     if (!mounted || result == null) return;
 
@@ -518,11 +577,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       draft: result,
       currentAmount: current.supplementAmount,
       currentFeeEnabled: current.supplementFeeEnabled,
+      baselinePricingEnabled: order.supplementPricingEnabled,
+      currentPricingEnabled: current.supplementPricingEnabled,
     );
     widget.store.updateOrder(
       current.copyWith(
         supplementAmount: merged.amount,
         supplementFeeEnabled: merged.feeEnabled,
+        supplementPricingEnabled: merged.pricingEnabled,
       ),
     );
   }
@@ -635,6 +697,18 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       ? '未填写'
                       : '¥ ${_formatPrice(order.price)}',
                 ),
+                if (order.pricingAdjustments.isNotEmpty)
+                  ReadOnlyDetailRow(
+                    label: '加价预设',
+                    value: order.pricingAdjustments
+                        .map((item) => '${item.name} ${item.formulaLabel}')
+                        .join('、'),
+                    multiline: true,
+                  ),
+                ReadOnlyDetailRow(
+                  label: '计价合计',
+                  value: '¥ ${_formatPrice(order.originalTotal)}',
+                ),
                 ReadOnlyDetailRow(
                   label: '手续费',
                   value: order.feeEnabled
@@ -661,6 +735,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   label: '补款',
                   amount: order.supplementAmount,
                   feeEnabled: order.supplementFeeEnabled,
+                  pricingEnabled: order.supplementPricingEnabled,
                   sign: '+',
                   onTap: () => _editSupplement(order),
                 ),
@@ -728,6 +803,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   multiline: true,
                 ),
                 const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -783,6 +859,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 14),
+                PricingPresetSelector(
+                  store: _effectivePricingPresetStore,
+                  selected: _pricingAdjustments,
+                  onChanged: (value) => setState(() {
+                    _pricingAdjustments
+                      ..clear()
+                      ..addAll(value);
+                  }),
                 ),
                 const SizedBox(height: 14),
                 const FormFieldLabel('截稿时间'),

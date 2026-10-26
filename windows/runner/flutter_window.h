@@ -3,6 +3,8 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
 
 #include <memory>
 
@@ -26,6 +28,9 @@ class FlutterWindow : public Win32Window {
 
  private:
   static constexpr UINT kTrayCallbackMessage = WM_APP + 1;
+  static constexpr UINT kExitPreparedMessage = WM_APP + 2;
+  static constexpr UINT_PTR kExitPreparationTimerId = 2;
+  static constexpr UINT kExitPreparationWatchdogMs = 25000;
   static constexpr UINT kTrayIconId = 1;
   static constexpr UINT kTrayOpenCommand = 1001;
   static constexpr UINT kTrayExitCommand = 1002;
@@ -34,16 +39,23 @@ class FlutterWindow : public Win32Window {
   void RemoveTrayIcon();
   void RestoreFromTray();
   void ShowTrayMenu();
+  void RequestExit();
+  void FinishExit();
 
   // The project to run.
   flutter::DartProject project_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      windows_file_picker_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      windows_lifecycle_channel_;
 
   UINT taskbar_created_message_ = 0;
   bool tray_icon_added_ = false;
   bool exiting_ = false;
+  bool exit_preparing_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

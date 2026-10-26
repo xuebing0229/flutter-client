@@ -358,7 +358,7 @@ class _ReceiveAccountTransferPageState
   AccountTransferStatus? _transferStatus;
   String? _error;
   bool _finished = false;
-  bool _peerConnectedOnce = false;
+  bool _folderReadyOnce = false;
 
   @override
   void initState() {
@@ -381,18 +381,40 @@ class _ReceiveAccountTransferPageState
           if (!mounted || !identical(_session, session)) return;
           setState(() {
             _transferStatus = status;
-            if (status.sourceConnected) {
-              _peerConnectedOnce = true;
+            if (status.folderReady) {
+              _folderReadyOnce = true;
             }
           });
         },
       );
+      var adoptedSource = source;
+      final provisionalAppDeviceId =
+          session.response.receiverAppDeviceId?.trim();
+      if (provisionalAppDeviceId != null &&
+          provisionalAppDeviceId.length >= 16) {
+        final backup = AppBackupData.decode(source);
+        adoptedSource = AppBackupData(
+          exportedAt: backup.exportedAt,
+          orders: backup.orders,
+          products: backup.products,
+          nodePresets: backup.nodePresets,
+          focusSessions: backup.focusSessions,
+          accountSyncState: backup.accountSyncState,
+          syncRecords: backup.syncRecords,
+          settings: <String, dynamic>{
+            ...backup.settings,
+            'joinDeviceId': provisionalAppDeviceId,
+            'joinTransportId': session.response.receiverDeviceId,
+          },
+        ).encode(pretty: false);
+      }
+
       _finished = true;
       await Future<void>.delayed(const Duration(milliseconds: 700));
       await session.close();
 
       if (!mounted) return;
-      Navigator.of(context).pop(source);
+      Navigator.of(context).pop(adoptedSource);
     } on FormatException catch (error) {
       await session?.close();
       if (mounted) setState(() => _error = error.message);
@@ -415,6 +437,29 @@ class _ReceiveAccountTransferPageState
     );
   }
 
+  Future<void> _copyDiagnostics() async {
+    final session = _session;
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('同步诊断还没准备好'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final report = await session.captureDiagnosticReport();
+    await Clipboard.setData(ClipboardData(text: report));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('新设备同步诊断已复制'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     if (!_finished) {
@@ -430,7 +475,9 @@ class _ReceiveAccountTransferPageState
     final transferStatus = _transferStatus;
     final progress = transferStatus?.progress;
     final sourceConnected = transferStatus?.sourceConnected == true;
-    final peerConfirmed = _peerConnectedOnce || sourceConnected;
+    final folderReady = transferStatus?.folderReady == true;
+    final peerConfirmed = _folderReadyOnce || folderReady;
+    final remoteFolderState = transferStatus?.remoteFolderState;
     final folderState = transferStatus?.folderState;
     final completion = ((progress?['completion'] as num?)?.toDouble() ?? 0)
         .clamp(0, 100)
@@ -479,7 +526,7 @@ class _ReceiveAccountTransferPageState
                     const SizedBox(height: 12),
                     Text(
                       Platform.isWindows
-                          ? '正在初始化 Windows 同步核心并准备本机回应码……首次使用可能需要 10–30 秒。'
+                          ? '正在准备设备连接并生成回应码……首次使用可能需要一点时间。'
                           : '正在准备本机回应码……',
                       textAlign: TextAlign.center,
                     ),
@@ -519,19 +566,21 @@ class _ReceiveAccountTransferPageState
                       ),
                     ] else ...[
                       Icon(
-                        sourceConnected
+                        folderReady
                             ? Icons.check_circle_rounded
                             : Icons.sync_rounded,
                         size: 46,
-                        color: sourceConnected
+                        color: folderReady
                             ? colors.primary
                             : colors.onSurfaceVariant,
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        sourceConnected
-                            ? '已连接原设备'
-                            : '原设备已确认，正在重新连接同步通道',
+                        folderReady
+                            ? '账号连接已就绪'
+                            : sourceConnected
+                                ? '已连接原设备，正在确认账号信息'
+                                : '原设备已确认，正在建立同步连接',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                         textAlign: TextAlign.center,
                       ),
@@ -542,15 +591,21 @@ class _ReceiveAccountTransferPageState
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      sourceConnected && hasMeasuredProgress
-                          ? '已连接原设备 · 正在传输账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
-                          : sourceConnected
-                              ? '已连接原设备，正在等待账号数据到达……'
-                              : peerConfirmed
-                                  ? '原设备已经确认成功，正在恢复同步连接……'
-                                  : folderState == 'scanning'
-                                      ? '同步通道已准备，正在连接原设备……'
-                                      : '等待原设备确认并建立连接……',
+                      folderReady && hasMeasuredProgress
+                          ? '账号连接已就绪 · 正在接收账号信息 ${completion >= 99.95 ? '100' : completion.toStringAsFixed(1)}%'
+                          : folderReady
+                              ? '连接已经确认，正在等待账号数据到达……'
+                              : sourceConnected
+                                  ? remoteFolderState == 'notSharing'
+                                      ? '设备已经连接，但账号数据还没开始传输，正在自动恢复……'
+                                      : remoteFolderState == 'paused'
+                                          ? '设备连接暂时停住，正在等待恢复……'
+                                          : '设备已经连接，正在完成账号连接……'
+                                  : peerConfirmed
+                                      ? '账号连接已确认，正在恢复数据同步……'
+                                      : folderState == 'scanning'
+                                          ? '正在连接原设备……'
+                                          : '等待原设备确认并建立连接……',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
@@ -558,6 +613,12 @@ class _ReceiveAccountTransferPageState
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _session == null ? null : _copyDiagnostics,
+            icon: const Icon(Icons.bug_report_outlined),
+            label: const Text('复制本次加入同步诊断'),
           ),
         ],
       ),

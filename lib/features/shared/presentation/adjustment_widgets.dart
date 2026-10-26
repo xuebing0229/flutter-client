@@ -4,10 +4,12 @@ class AdjustmentDialogResult {
   const AdjustmentDialogResult({
     required this.amount,
     required this.feeEnabled,
+    this.pricingEnabled = false,
   });
 
   final double amount;
   final bool feeEnabled;
+  final bool pricingEnabled;
 }
 
 AdjustmentDialogResult mergeAdjustmentEdit({
@@ -16,9 +18,12 @@ AdjustmentDialogResult mergeAdjustmentEdit({
   required AdjustmentDialogResult draft,
   required double currentAmount,
   required bool currentFeeEnabled,
+  bool baselinePricingEnabled = false,
+  bool currentPricingEnabled = false,
 }) {
   final amountChanged = draft.amount != baselineAmount;
   final feeChanged = draft.feeEnabled != baselineFeeEnabled;
+  final pricingChanged = draft.pricingEnabled != baselinePricingEnabled;
 
   final mergedAmount = amountChanged
       ? (currentAmount + (draft.amount - baselineAmount))
@@ -29,6 +34,8 @@ AdjustmentDialogResult mergeAdjustmentEdit({
   return AdjustmentDialogResult(
     amount: mergedAmount,
     feeEnabled: feeChanged ? draft.feeEnabled : currentFeeEnabled,
+    pricingEnabled:
+        pricingChanged ? draft.pricingEnabled : currentPricingEnabled,
   );
 }
 
@@ -39,12 +46,14 @@ class AdjustmentDetailRow extends StatelessWidget {
     required this.feeEnabled,
     required this.sign,
     required this.onTap,
+    this.pricingEnabled = false,
     super.key,
   });
 
   final String label;
   final double amount;
   final bool feeEnabled;
+  final bool pricingEnabled;
   final String sign;
   final VoidCallback onTap;
 
@@ -53,8 +62,13 @@ class AdjustmentDetailRow extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final value = amount == 0
         ? '未设置'
-        : [sign, '¥', formatAdjustmentMoney(amount), if (feeEnabled) '· 计手续费']
-            .join(' ');
+        : [
+            sign,
+            '¥',
+            formatAdjustmentMoney(amount),
+            if (feeEnabled) '· 计手续费',
+            if (pricingEnabled) '· 参与加价',
+          ].join(' ');
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -93,11 +107,14 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
   required String label,
   required double amount,
   required bool feeEnabled,
+  bool pricingEnabled = false,
+  bool allowPricingParticipation = false,
 }) {
   final controller = TextEditingController(
     text: amount == 0 ? '' : formatAdjustmentMoney(amount),
   );
   var nextFeeEnabled = feeEnabled;
+  var nextPricingEnabled = pricingEnabled;
   String? errorText;
 
   return showDialog<AdjustmentDialogResult>(
@@ -137,6 +154,18 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
                       });
                     },
                   ),
+                  if (allowPricingParticipation)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('参与加价计算'),
+                      subtitle: const Text('×N 和 ±N% 会作用于这笔补款；固定金额加价不重复计算'),
+                      value: nextPricingEnabled,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          nextPricingEnabled = value ?? false;
+                        });
+                      },
+                    ),
                 ],
               ),
             ),
@@ -159,6 +188,7 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
                     AdjustmentDialogResult(
                       amount: parsed,
                       feeEnabled: nextFeeEnabled,
+                      pricingEnabled: nextPricingEnabled,
                     ),
                   );
                 },

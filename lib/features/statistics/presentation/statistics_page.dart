@@ -53,6 +53,31 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return sales;
   }
 
+  List<QueueOrder> _pendingOrdersFor(DateTime month) {
+    return widget.store.orders.where((order) {
+      final deadline = order.deadline;
+      return !order.isArchived &&
+          !order.isCompleted &&
+          deadline != null &&
+          deadline.year == month.year &&
+          deadline.month == month.month;
+    }).toList();
+  }
+
+  double _yearTotal(int year) {
+    var total = widget.store.orders.where((order) {
+      final incomeAt = _incomeDate(order);
+      return order.isArchived && incomeAt != null && incomeAt.year == year;
+    }).fold<double>(0, (sum, order) => sum + order.settlementIncome);
+
+    for (final product in widget.productStore.products) {
+      final count =
+          product.saleRecords.where((soldAt) => soldAt.year == year).length;
+      total += product.realIncome * count;
+    }
+    return total;
+  }
+
   double _totalFor(DateTime month) {
     final orderIncome = _incomeOrdersFor(month).fold<double>(
       0,
@@ -183,6 +208,12 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final monthSales = _productSalesFor(_selectedMonth);
         final total = _totalFor(_selectedMonth);
         final platformTotals = _platformTotals(_selectedMonth);
+        final pendingOrders = _pendingOrdersFor(_selectedMonth);
+        final pendingThisMonth = pendingOrders.fold<double>(
+          0,
+          (sum, order) => sum + order.realIncome,
+        );
+        final yearTotal = _yearTotal(_selectedMonth.year);
 
         return ListView(
           padding: AppLayoutSpacing.tabScrollPadding(
@@ -202,9 +233,17 @@ class _StatisticsPageState extends State<StatisticsPage> {
               ),
             ),
             const SizedBox(height: 10),
+            _PeriodOverviewCard(
+              yearIncome: yearTotal,
+              year: _selectedMonth.year,
+            ),
+            const SizedBox(height: 12),
             _SummaryCard(
-              count: monthOrders.length + monthSales.length,
-              total: total,
+              month: _selectedMonth,
+              incomeCount: monthOrders.length + monthSales.length,
+              incomeTotal: total,
+              pendingCount: pendingOrders.length,
+              pendingTotal: pendingThisMonth,
             ),
             const SizedBox(height: 12),
             _PlatformCategoryCard(
@@ -229,40 +268,153 @@ class _StatisticsPageState extends State<StatisticsPage> {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.count,
-    required this.total,
+class _PeriodOverviewCard extends StatelessWidget {
+  const _PeriodOverviewCard({
+    required this.yearIncome,
+    required this.year,
   });
 
-  final int count;
-  final double total;
+  final double yearIncome;
+  final int year;
 
   @override
   Widget build(BuildContext context) {
+    return _StatsCard(
+      child: _PeriodMetric(
+        label: '$year 年度收入',
+        value: yearIncome,
+        helpText: '已结算排单 + 成品售出',
+      ),
+    );
+  }
+}
+
+class _PeriodMetric extends StatelessWidget {
+  const _PeriodMetric({
+    required this.label,
+    required this.value,
+    required this.helpText,
+  });
+
+  final String label;
+  final double value;
+  final String helpText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Tooltip(
+              message: helpText,
+              triggerMode: TooltipTriggerMode.tap,
+              child: Icon(
+                Icons.help_outline_rounded,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '¥ ${_money(value)}',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
+    required this.month,
+    required this.incomeCount,
+    required this.incomeTotal,
+    required this.pendingCount,
+    required this.pendingTotal,
+  });
+
+  final DateTime month;
+  final int incomeCount;
+  final double incomeTotal;
+  final int pendingCount;
+  final double pendingTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+
+    Widget metricRow({
+      required String label,
+      required int count,
+      required double amount,
+    }) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$label $count 笔',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            '¥ ${_money(amount)}',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      );
+    }
+
     return _StatsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '收入总计',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '收入 $count 笔，共计金额',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            '${month.year}年${month.month}月月度收入',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            '¥ ${_money(total)}',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+          const SizedBox(height: 14),
+          metricRow(
+            label: '已收入',
+            count: incomeCount,
+            amount: incomeTotal,
+          ),
+          const SizedBox(height: 12),
+          Divider(
+            height: 1,
+            color: theme.colorScheme.outlineVariant,
+          ),
+          const SizedBox(height: 12),
+          metricRow(
+            label: '待收入',
+            count: pendingCount,
+            amount: pendingTotal,
           ),
         ],
       ),
@@ -309,6 +461,7 @@ class _PlatformCategoryCard extends StatelessWidget {
                     amount: entry.value,
                     total: total,
                     color: _platformColor(
+                      context,
                       CommissionPlatform.values.indexOf(entry.key),
                     ),
                   );
@@ -408,6 +561,7 @@ class _DistributionCard extends StatelessWidget {
             platform: entry.key,
             amount: entry.value,
             color: _platformColor(
+              context,
               CommissionPlatform.values.indexOf(entry.key),
             ),
           ),
@@ -709,14 +863,15 @@ class _DonutPainter extends CustomPainter {
   }
 }
 
-Color _platformColor(int index) {
-  const colors = [
-    Color(0xFF2F6BFF),
-    Color(0xFF1FA9E5),
-    Color(0xFF57B77C),
-    Color(0xFFF0A24B),
-    Color(0xFF8B6FD9),
-    Color(0xFFD96F9A),
+Color _platformColor(BuildContext context, int index) {
+  final scheme = Theme.of(context).colorScheme;
+  final colors = <Color>[
+    scheme.primary,
+    scheme.secondary,
+    scheme.tertiary,
+    Color.lerp(scheme.primary, scheme.secondary, 0.5)!,
+    Color.lerp(scheme.secondary, scheme.tertiary, 0.5)!,
+    Color.lerp(scheme.tertiary, scheme.primary, 0.5)!,
   ];
   return colors[index % colors.length];
 }

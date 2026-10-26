@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/account/account_models.dart';
 import '../../../core/account/account_transfer_service.dart';
 import '../../../core/account/qr_image_decoder.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
@@ -39,11 +40,69 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   bool _receiverConfirmed = false;
   bool _responseBusy = false;
   bool _pairingBusy = false;
+  bool _pollBusy = false;
+  bool _finalizingPermanentPeer = false;
+  bool _loadingRevokedResidue = true;
+  bool _cleaningRevokedResidue = false;
+  List<AccountDevice> _unacknowledgedRevokedDevices = const <AccountDevice>[];
 
   @override
   void initState() {
     super.initState();
+    unawaited(_loadRevokedResidue());
     unawaited(_start());
+  }
+
+  Future<void> _loadRevokedResidue() async {
+    try {
+      final devices =
+          await widget.syncCoordinator.unacknowledgedRevokedDevices();
+      if (!mounted) return;
+      setState(() {
+        _unacknowledgedRevokedDevices = devices;
+        _loadingRevokedResidue = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingRevokedResidue = false);
+    }
+  }
+
+  Future<void> _forceCleanRevokedResidue(AccountDevice device) async {
+    if (_cleaningRevokedResidue) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认清理旧设备残留？'),
+        content: Text(
+          '仅当“${device.name}”上的冒险者公会已经被卸载、设备丢失，'
+          '或确定永远不会再打开旧安装时使用。\n\n'
+          '清理后会立即停止向旧安装共享同步目录；如果它只是暂时离线，'
+          '请取消并让它以后正常上线接收解绑记录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认清理'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cleaningRevokedResidue = true);
+    try {
+      await widget.syncCoordinator.forceFinalizeRevokedDevice(device.id);
+      await _loadRevokedResidue();
+      if (mounted) _message('旧设备残留已清理，可以继续添加新设备。');
+    } catch (error) {
+      if (mounted) _message('清理旧设备残留失败：$error');
+    } finally {
+      if (mounted) setState(() => _cleaningRevokedResidue = false);
+    }
   }
 
   Future<void> _start() async {
@@ -61,10 +120,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       final payload = await widget.buildTransferPackage();
       final server = await SyncthingAccountTransferServer.start(
         payload: payload,
-        onTransferred: () {
-          if (!mounted) return;
-          setState(() => _transferred = true);
-        },
       );
       if (!mounted) {
         await server.close();
@@ -72,12 +127,8 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       }
       setState(() => _server = server);
       _pollTimer?.cancel();
-      _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-        if (!mounted) return;
-        await server.poll();
-        if (mounted && server.transferred != _transferred) {
-          setState(() => _transferred = server.transferred);
-        }
+      _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        unawaited(_pollServer(server));
       });
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -93,6 +144,8 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       _error = null;
       _transferred = false;
       _receiverConfirmed = false;
+      _pollBusy = false;
+      _finalizingPermanentPeer = false;
       _responseCodeController.clear();
     });
     await _start();
@@ -153,15 +206,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       final response = AccountTransferResponseCode.decode(source);
       await server.acceptResponse(response);
 
-      // The response is authenticated by the one-time bootstrap key, so the
-      // permanent account folder can be shared with the same transport now.
-      // After the new device logs in its app-device identity will arrive
-      // through the normal account-state sync.
-      await widget.syncCoordinator.bootstrapPeerTransport(
-        deviceId: response.receiverDeviceId,
-        name: response.receiverName,
-      );
-
       if (!mounted) return;
       setState(() {
         _receiverConfirmed = true;
@@ -174,6 +218,64 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       if (mounted) _message('确认新设备失败：$error');
     } finally {
       if (mounted) setState(() => _responseBusy = false);
+    }
+  }
+
+  Future<void> _pollServer(SyncthingAccountTransferServer server) async {
+    if (_pollBusy || !mounted || !identical(_server, server)) return;
+    _pollBusy = true;
+    try {
+      await server.poll();
+      if (server.receiverFinished &&
+          !server.transferred &&
+          !_finalizingPermanentPeer) {
+        await _finalizePermanentPeer(server);
+      }
+      if (mounted &&
+          identical(_server, server) &&
+          server.transferred != _transferred) {
+        setState(() => _transferred = server.transferred);
+      }
+    } catch (error) {
+      if (mounted && identical(_server, server)) {
+        setState(() => _error = '完成设备加入失败：$error');
+      }
+    } finally {
+      _pollBusy = false;
+    }
+  }
+
+  Future<void> _finalizePermanentPeer(
+    SyncthingAccountTransferServer server,
+  ) async {
+    final deviceId = server.acceptedReceiverDeviceId;
+    final deviceName = server.acceptedReceiverName;
+    if (deviceId == null || deviceName == null) {
+      throw StateError('新设备身份尚未确认。');
+    }
+
+    _finalizingPermanentPeer = true;
+    try {
+      // Only after the receiver proves it actually received transfer.json do
+      // we share the permanent account folder. Then return transfer.ack so the
+      // new device knows both bootstrap transfer and permanent pairing are
+      // safely committed before it tears down the temporary folder.
+      await widget.syncCoordinator.bootstrapPeerTransport(
+        deviceId: deviceId,
+        name: deviceName,
+        appDeviceId: server.acceptedReceiverAppDeviceId,
+        platform: server.acceptedReceiverPlatform,
+      );
+      await server.completeTransfer();
+      if (mounted && identical(_server, server)) {
+        setState(() {
+          _error = null;
+          _transferred = true;
+        });
+        _message('账号信息与正式同步通道都已确认，新设备可以继续登录。');
+      }
+    } finally {
+      _finalizingPermanentPeer = false;
     }
   }
 
@@ -211,11 +313,11 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   Future<void> _copyPairingCode(SyncthingAccountTransferServer server) async {
     final pairing = widget.syncCoordinator.pairingPayload;
     if (pairing == null || pairing.isEmpty) {
-      _message('同步核心还在准备，请稍后再试');
+      _message('设备连接还在准备，请稍后再试');
       return;
     }
     await Clipboard.setData(ClipboardData(text: _qrData(server)));
-    if (mounted) _message('配对码已复制');
+    if (mounted) _message('设备码已复制');
   }
 
   String _qrData(SyncthingAccountTransferServer server) {
@@ -223,6 +325,17 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       accountTransferPayload: server.descriptor.encode(),
       syncPairingPayload: widget.syncCoordinator.pairingPayload,
     ).encode();
+  }
+
+  Future<void> _copyDiagnostics() async {
+    final server = _server;
+    if (server == null) {
+      _message('同步诊断还没准备好');
+      return;
+    }
+    final report = await server.captureDiagnosticReport();
+    await Clipboard.setData(ClipboardData(text: report));
+    if (mounted) _message('原设备同步诊断已复制');
   }
 
   void _message(String message) {
@@ -252,6 +365,23 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
         builder: (context, _) {
           final pairingReady =
               widget.syncCoordinator.pairingPayload?.isNotEmpty == true;
+          final currentDevice = widget.syncCoordinator.accountStore
+              .syncSnapshot?.devices[widget.syncCoordinator.deviceId];
+
+          bool isCurrentInstallationResidue(AccountDevice device) {
+            final currentInstallationId = currentDevice?.installationId?.trim();
+            final candidateInstallationId = device.installationId?.trim();
+            if (currentInstallationId != null &&
+                currentInstallationId.isNotEmpty &&
+                candidateInstallationId == currentInstallationId) {
+              return true;
+            }
+            final currentTransportId = currentDevice?.syncTransportId?.trim();
+            final candidateTransportId = device.syncTransportId?.trim();
+            return currentTransportId != null &&
+                currentTransportId.isNotEmpty &&
+                candidateTransportId == currentTransportId;
+          }
 
           return ListView(
             padding: AppLayoutSpacing.pageScrollPadding(
@@ -261,6 +391,58 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
               right: 18,
             ),
             children: [
+              if (_loadingRevokedResidue ||
+                  _unacknowledgedRevokedDevices.isNotEmpty) ...[
+                _AddDeviceCard(
+                  icon: Icons.phonelink_erase_rounded,
+                  title: '已解绑设备残留',
+                  child: _loadingRevokedResidue
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '检测到下面这些设备已经解绑，但还没有回传解绑确认。'
+                              '如果旧 App 已经被卸载/设备已丢失，它将永远无法确认，'
+                              '可以在这里明确清理；只是暂时离线则不要清理。',
+                              style: TextStyle(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            for (final device
+                                in _unacknowledgedRevokedDevices) ...[
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(
+                                  Icons.devices_other_rounded,
+                                ),
+                                title: Text(
+                                  isCurrentInstallationResidue(device)
+                                      ? '${device.name}（本机旧安装）'
+                                      : device.name,
+                                ),
+                                subtitle: Text(
+                                  isCurrentInstallationResidue(device)
+                                      ? '${device.platform} · 当前这台设备的历史残留'
+                                      : device.platform,
+                                ),
+                                trailing: OutlinedButton(
+                                  onPressed: _cleaningRevokedResidue
+                                      ? null
+                                      : () => _forceCleanRevokedResidue(device),
+                                  child: const Text('清理旧残留'),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 12),
+              ],
               _AddDeviceCard(
                 icon: Icons.qr_code_2_rounded,
                 title: '第一步：让新设备扫描',
@@ -295,6 +477,17 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                           data: _qrData(server),
                           size: 250,
                           backgroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: pairingReady
+                              ? () => _copyPairingCode(server)
+                              : null,
+                          icon: const Icon(Icons.copy_rounded),
+                          label: const Text('复制设备码'),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -406,6 +599,12 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                 ),
               ),
               const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: server == null ? null : _copyDiagnostics,
+                icon: const Icon(Icons.bug_report_outlined),
+                label: const Text('复制本次加入同步诊断'),
+              ),
+              const SizedBox(height: 12),
               _AddDeviceCard(
                 icon: Icons.sync_alt_rounded,
                 title: '已登录设备互相配对',
@@ -434,28 +633,6 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                       label: Text(
                         Platform.isWindows ? '选择另一台设备二维码图片' : '扫描另一台已登录设备',
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              _AddDeviceCard(
-                icon: Icons.link_rounded,
-                title: '无法扫码时',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      '上方添加设备二维码也可以复制成文字。把它粘贴到新设备「加入已有账号 → 配对码加入」即可；之后仍会生成回应码，需要填回本页确认。',
-                      style: TextStyle(color: colors.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: pairingReady && server != null
-                          ? () => _copyPairingCode(server)
-                          : null,
-                      icon: const Icon(Icons.copy_rounded),
-                      label: const Text('复制本机配对码'),
                     ),
                   ],
                 ),

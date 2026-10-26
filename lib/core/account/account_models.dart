@@ -16,6 +16,7 @@ class AccountDevice {
     required this.lastSeenAt,
     this.nameUpdatedAt,
     this.syncTransportId,
+    this.installationId,
   });
 
   final String id;
@@ -25,6 +26,7 @@ class AccountDevice {
   final DateTime lastSeenAt;
   final DateTime? nameUpdatedAt;
   final String? syncTransportId;
+  final String? installationId;
 
   AccountDevice copyWith({
     String? name,
@@ -33,6 +35,7 @@ class AccountDevice {
     DateTime? lastSeenAt,
     DateTime? nameUpdatedAt,
     String? syncTransportId,
+    String? installationId,
   }) {
     return AccountDevice(
       id: id,
@@ -42,6 +45,7 @@ class AccountDevice {
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       nameUpdatedAt: nameUpdatedAt ?? this.nameUpdatedAt,
       syncTransportId: syncTransportId ?? this.syncTransportId,
+      installationId: installationId ?? this.installationId,
     );
   }
 
@@ -54,6 +58,7 @@ class AccountDevice {
     if (nameUpdatedAt != null)
       'nameUpdatedAt': nameUpdatedAt!.toUtc().toIso8601String(),
     if (syncTransportId != null) 'syncTransportId': syncTransportId,
+    if (installationId != null) 'installationId': installationId,
   };
 
   factory AccountDevice.fromJson(Map<String, dynamic> json) {
@@ -62,6 +67,7 @@ class AccountDevice {
     final platform = json['platform'];
     final nameUpdatedAt = json['nameUpdatedAt'];
     final syncTransportId = json['syncTransportId'];
+    final installationId = json['installationId'];
     if (id is! String || id.isEmpty) {
       throw const FormatException('设备记录缺少设备 ID。');
     }
@@ -75,6 +81,10 @@ class AccountDevice {
         (syncTransportId is! String || syncTransportId.trim().length < 20)) {
       throw const FormatException('设备同步身份格式无效。');
     }
+    if (installationId != null &&
+        (installationId is! String || installationId.trim().length < 16)) {
+      throw const FormatException('设备安装身份格式无效。');
+    }
     return AccountDevice(
       id: id,
       name: name,
@@ -83,6 +93,7 @@ class AccountDevice {
       lastSeenAt: _date(json['lastSeenAt']),
       nameUpdatedAt: nameUpdatedAt == null ? null : _date(nameUpdatedAt),
       syncTransportId: syncTransportId?.trim(),
+      installationId: installationId?.trim(),
     );
   }
 }
@@ -177,6 +188,14 @@ class AccountSyncState {
           ? incoming.lastSeenAt
           : local.lastSeenAt;
 
+      final sameInstallation =
+          local.installationId != null &&
+          incoming.installationId == local.installationId;
+      final acceptIncomingBinding =
+          incoming.installationId != null &&
+          (local.installationId == null || sameInstallation) &&
+          takeIncomingActivity;
+
       mergedDevices[entry.key] = AccountDevice(
         id: local.id,
         name: nameSource.name,
@@ -184,9 +203,14 @@ class AccountSyncState {
         firstSeenAt: firstSeenAt,
         lastSeenAt: lastSeenAt,
         nameUpdatedAt: nameSource.nameUpdatedAt,
-        // Syncthing identity is a device binding, not mutable profile data.
-        // Once known, a newer activity snapshot must not silently remap it.
-        syncTransportId: local.syncTransportId ?? incoming.syncTransportId,
+        // The stable installation identity is the durable physical-install
+        // binding. Syncthing transport identity may legitimately change after
+        // core/config migration, so accept a newer binding only when it comes
+        // from the same installation (or upgrades a legacy record without one).
+        syncTransportId: acceptIncomingBinding
+            ? incoming.syncTransportId ?? local.syncTransportId
+            : local.syncTransportId ?? incoming.syncTransportId,
+        installationId: local.installationId ?? incoming.installationId,
       );
     }
 

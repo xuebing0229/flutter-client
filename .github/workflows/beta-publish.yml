@@ -13,18 +13,30 @@ permissions:
 
 concurrency:
   group: beta-publish
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
   BETA_SIGNING_BUNDLE_BASE64: ${{ secrets.BETA_SIGNING_BUNDLE_BASE64 }}
   ACTIVATION_API_BASE_URL: https://license.apixb.top
+  PUBLIC_SYNC_RELAY_URL: https://beta.guild.apixb.top/sync
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify Beta source lineage
+        shell: bash
+        run: |
+          REQUIRED_BASE="9e8ed11502825e1cc9d4d157f6d477ccbb68f6b0"
+          if ! git merge-base --is-ancestor "$REQUIRED_BASE" HEAD; then
+            echo "::error::This Beta branch does not descend from the verified Beta 166 lineage. Refusing to publish a regression build."
+            exit 1
+          fi
 
       - uses: subosito/flutter-action@v2
         with:
@@ -70,11 +82,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: android/app/src/sync/jniLibs
-          key: embedded-syncthing-v2.1.5-2ca95cf149810411-${{ runner.os }}-android
+          key: embedded-syncthing-v2.1.7-d6d0181f7d466381-${{ runner.os }}-android
 
       - name: Build embedded Syncthing core
         env:
-          SYNCTHING_VERSION: v2.1.5
+          SYNCTHING_VERSION: v2.1.7
         run: bash tool/build_syncthing_android.sh
 
       - name: Restore fixed Beta signing bundle
@@ -96,8 +108,12 @@ jobs:
             --release \
             --flavor beta \
             --dart-define=APP_CHANNEL=beta \
+            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-beta-release.apk app-beta.apk
+
+      - name: Verify Android runtime payload
+        run: python3 tool/verify_android_apk_payload.py app-beta.apk
 
       - name: Verify Beta APK signature
         run: |
@@ -142,7 +158,7 @@ jobs:
 
       - name: Build Windows Beta
         shell: pwsh
-        run: flutter build windows --release --dart-define=APP_CHANNEL=beta --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
+        run: flutter build windows --release --dart-define=APP_CHANNEL=beta --dart-define="PUBLIC_SYNC_RELAY_URL=$env:PUBLIC_SYNC_RELAY_URL" --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
 
       - name: Build VPet desktop companion
         shell: pwsh
@@ -162,13 +178,13 @@ jobs:
 
       - name: Bundle embedded Syncthing core
         shell: pwsh
-        run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.5
+        run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.7
 
       - name: Cache official PaddleOCR Windows runtime
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/ag-official-paddleocr
-          key: official-paddleocr-windows-dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf-paddle3.2.1-opencv4.12.0-v1
+          key: official-paddleocr-windows-dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf-paddle3.2.1-opencv4.12.0-v2
 
       - name: Bundle official PaddleOCR C++ screenshot recognition
         shell: pwsh
@@ -189,6 +205,10 @@ jobs:
           Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon.ico") -Force
           Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon_$version.ico") -Force
           Copy-Item -LiteralPath "windows/installer/refresh_app_shortcuts.ps1" -Destination $releaseDir -Force
+
+      - name: Verify Windows runtime payload
+        shell: pwsh
+        run: ./tool/verify_windows_release_bundle.ps1
 
       - name: Package Windows Beta
         shell: pwsh
@@ -237,10 +257,69 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  web:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build PWA Beta
+        run: |
+          flutter build web \
+            --release \
+            --no-web-resources-cdn \
+            --dart-define=APP_CHANNEL=beta \
+            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
+
+      - name: Finalize offline PWA cache
+        run: python3 tool/finalize_pwa.py build/web
+
+      - name: Validate installable PWA shell
+        shell: bash
+        run: |
+          test -s build/web/index.html
+          test -s build/web/manifest.json
+          test -s build/web/pwa_service_worker.js
+          test -s build/web/main.dart.js
+          test -s build/web/canvaskit/canvaskit.js
+          test -s build/web/canvaskit/canvaskit.wasm
+          grep -q '"display": "standalone"' build/web/manifest.json
+          grep -q "serviceWorker.register" build/web/index.html
+          grep -q './main.dart.js' build/web/pwa_service_worker.js
+          grep -q './canvaskit/canvaskit.wasm' build/web/pwa_service_worker.js
+          if grep -q '__PWA_PRECACHE_FILES__' build/web/pwa_service_worker.js; then
+            echo "PWA precache manifest was not finalized." >&2
+            exit 1
+          fi
+
+      - name: Package PWA Beta
+        run: |
+          cd build/web
+          zip -qr ../../app-pwa-beta.zip .
+
+      - name: Upload PWA Beta package
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-pwa-package
+          path: app-pwa-beta.zip
+          retention-days: 1
+          if-no-files-found: error
+
   publish:
     needs:
       - android
       - windows
+      - web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -255,6 +334,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: beta-windows-package
+          path: dist
+
+      - name: Download PWA Beta package
+        uses: actions/download-artifact@v4
+        with:
+          name: beta-pwa-package
           path: dist
 
       - name: Read build metadata
@@ -316,6 +401,7 @@ jobs:
           )
           android_path = Path("dist/app-beta.apk")
           windows_path = Path("dist/app-windows-beta.zip")
+          pwa_path = Path("dist/app-pwa-beta.zip")
 
           def sha256(path):
               digest = hashlib.sha256()
@@ -337,6 +423,9 @@ jobs:
               "windows_size_bytes": windows_path.stat().st_size,
               "windows_sha256": sha256(windows_path),
               "windows_installer_url": release_base + "/app-windows-beta-setup.exe",
+              "pwa_download_url": release_base + "/app-pwa-beta.zip",
+              "pwa_size_bytes": pwa_path.stat().st_size,
+              "pwa_sha256": sha256(pwa_path),
               "notes": "Beta ${VERSION} (${BUILD})",
           }
           Path("app-beta-latest.json").write_text(
@@ -354,6 +443,7 @@ jobs:
             "dist/app-beta.apk#app-beta.apk" \
             "dist/app-windows-beta.zip#app-windows-beta.zip" \
             "dist/app-windows-beta-setup.exe#app-windows-beta-setup.exe" \
+            "dist/app-pwa-beta.zip#app-pwa-beta.zip" \
             "app-beta-latest.json#app-beta-latest.json" \
             --repo xuebing0229/release-files \
             --title "Beta ${VERSION} (${BUILD})" \
@@ -382,6 +472,7 @@ jobs:
           )
           android_path = Path("${GITHUB_WORKSPACE}/dist/app-beta.apk")
           windows_path = Path("${GITHUB_WORKSPACE}/dist/app-windows-beta.zip")
+          pwa_path = Path("${GITHUB_WORKSPACE}/dist/app-pwa-beta.zip")
 
           def sha256(path):
               digest = hashlib.sha256()
@@ -405,6 +496,10 @@ jobs:
               "windows_size_bytes": windows_path.stat().st_size,
               "windows_sha256": sha256(windows_path),
               "windows_installer_url": release_base + "/app-windows-beta-setup.exe",
+              "pwa_download_url": release_base + "/app-pwa-beta.zip",
+              "pwa_size_bytes": pwa_path.stat().st_size,
+              "pwa_sha256": sha256(pwa_path),
+              "notes": "Beta ${VERSION} (${BUILD})",
           })
           path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
           PY
@@ -414,4 +509,14 @@ jobs:
           git add version.json
           git commit -m "beta: publish ${VERSION} (${BUILD})"
           git push
+
+          cp version.json "$RUNNER_TEMP/beta-pwa-version.json"
+          git fetch origin deploy/beta-pwa
+          git checkout deploy/beta-pwa
+          cp "$RUNNER_TEMP/beta-pwa-version.json" version.json
+          git add version.json
+          if ! git diff --cached --quiet; then
+            git commit -m "beta-pwa: publish ${VERSION} (${BUILD})"
+            git push origin deploy/beta-pwa
+          fi
 

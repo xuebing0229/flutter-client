@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../sync/windows_syncthing_transport.dart';
 
 class WindowsSelfUpdateLauncher {
   const WindowsSelfUpdateLauncher();
@@ -17,9 +18,9 @@ class WindowsSelfUpdateLauncher {
 
     await _ensureInstallDirectoryWritable(installDirectory);
 
-    // Do not stop Syncthing before the updater process is known to exist.
-    // The PowerShell updater stops the exact embedded process after this app
-    // exits and immediately before replacing installation files.
+    // Start the updater first so a spawn failure cannot take sync down. Once
+    // it exists, stop Syncthing through its own API before this app exits.
+    // The PowerShell path-specific forced stop remains a last-resort fallback.
     final script = File(
       '${workDirectory.path}${Platform.pathSeparator}apply-windows-update.ps1',
     );
@@ -60,6 +61,12 @@ class WindowsSelfUpdateLauncher {
         'syncthing${Platform.pathSeparator}syncthing.exe',
       ).path,
     ], mode: ProcessStartMode.normal);
+
+    try {
+      await WindowsSyncthingTransport.instance.shutdown();
+    } catch (_) {
+      // The updater still has its exact-path forced-stop fallback.
+    }
 
     await Future<void>.delayed(const Duration(milliseconds: 350));
     exit(0);

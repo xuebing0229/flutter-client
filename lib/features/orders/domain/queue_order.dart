@@ -1,4 +1,5 @@
 import '../../../core/finance/income_calculator.dart';
+import '../../../core/finance/pricing_adjustments.dart';
 
 int defaultOrderFromId(String id) {
   final match = RegExp(r'(\d+)$').firstMatch(id);
@@ -159,6 +160,8 @@ class QueueOrder {
     this.onlinePercent = 100,
     this.supplementAmount = 0,
     this.supplementFeeEnabled = false,
+    this.supplementPricingEnabled = false,
+    this.pricingAdjustments = const <PricingAdjustment>[],
     this.deductionAmount = 0,
     this.deductionFeeEnabled = false,
     this.description = '',
@@ -201,6 +204,15 @@ class QueueOrder {
 
   final double supplementAmount;
   final bool supplementFeeEnabled;
+
+  /// Whether proportional pricing presets (×N / ±N%) also apply to the supplement.
+  /// Fixed ¥ adjustments never apply to supplements through this switch.
+  final bool supplementPricingEnabled;
+
+  /// Snapshot of the pricing presets applied to this order. Editing the global
+  /// preset library later must not silently change an existing order.
+  final List<PricingAdjustment> pricingAdjustments;
+
   final double deductionAmount;
   final bool deductionFeeEnabled;
 
@@ -250,8 +262,20 @@ class QueueOrder {
 
   double get offlinePercent => 100 - normalizedOnlinePercent;
 
+  double get pricedBaseAmount =>
+      applyPricingAdjustments(price, pricingAdjustments);
+
+  double get pricedSupplementAmountValue => pricedSupplementAmount(
+        basePrice: price,
+        supplementAmount: supplementAmount,
+        adjustments: pricingAdjustments,
+        participates: supplementPricingEnabled,
+      );
+
+  /// Customer-facing amount before platform fees. Pricing presets are part of
+  /// the quoted price, while deductions remain a final fixed subtraction.
   double get originalTotal =>
-      price + supplementAmount - deductionAmount;
+      pricedBaseAmount + pricedSupplementAmountValue - deductionAmount;
 
   double _feeFor(double amount, bool enabled) {
     return calculatePlatformServiceFee(
@@ -265,18 +289,18 @@ class QueueOrder {
     );
   }
 
-  double get serviceFeeAmount => _feeFor(price, feeEnabled);
+  double get serviceFeeAmount => _feeFor(pricedBaseAmount, feeEnabled);
 
   double get supplementFeeAmount =>
-      _feeFor(supplementAmount, supplementFeeEnabled);
+      _feeFor(pricedSupplementAmountValue, supplementFeeEnabled);
 
   double get deductionFeeAmount =>
       _feeFor(deductionAmount, deductionFeeEnabled);
 
   double get realIncome => calculateAdjustedIncome(
-        basePrice: price,
+        basePrice: pricedBaseAmount,
         baseFee: serviceFeeAmount,
-        supplementAmount: supplementAmount,
+        supplementAmount: pricedSupplementAmountValue,
         supplementFee: supplementFeeAmount,
         deductionAmount: deductionAmount,
         deductionFee: deductionFeeAmount,
@@ -312,6 +336,8 @@ class QueueOrder {
     double? onlinePercent,
     double? supplementAmount,
     bool? supplementFeeEnabled,
+    bool? supplementPricingEnabled,
+    List<PricingAdjustment>? pricingAdjustments,
     double? deductionAmount,
     bool? deductionFeeEnabled,
     String? description,
@@ -351,6 +377,9 @@ class QueueOrder {
       supplementAmount: supplementAmount ?? this.supplementAmount,
       supplementFeeEnabled:
           supplementFeeEnabled ?? this.supplementFeeEnabled,
+      supplementPricingEnabled:
+          supplementPricingEnabled ?? this.supplementPricingEnabled,
+      pricingAdjustments: pricingAdjustments ?? this.pricingAdjustments,
       deductionAmount: deductionAmount ?? this.deductionAmount,
       deductionFeeEnabled:
           deductionFeeEnabled ?? this.deductionFeeEnabled,
@@ -376,6 +405,31 @@ class QueueOrder {
   }
 }
 
+
+const String urgentOrderTag = '加急';
+const List<String> builtInOrderTags = <String>[urgentOrderTag];
+
+bool hasUrgentOrderTag(Iterable<String> values) {
+  final target = urgentOrderTag.toLowerCase();
+  return values.any((value) => value.trim().toLowerCase() == target);
+}
+
+List<String> setUrgentOrderTag(
+  Iterable<String> values, {
+  required bool enabled,
+}) {
+  final normalized = normalizeOrderTags(values);
+  if (enabled) {
+    return hasUrgentOrderTag(normalized)
+        ? normalized
+        : normalizeOrderTags(<String>[...normalized, urgentOrderTag]);
+  }
+  return normalizeOrderTags(
+    normalized.where(
+      (value) => value.trim().toLowerCase() != urgentOrderTag.toLowerCase(),
+    ),
+  );
+}
 
 /// Canonicalize labels while keeping the original display spelling/order.
 List<String> normalizeOrderTags(Iterable<String> values) {

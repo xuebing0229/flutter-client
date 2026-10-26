@@ -235,7 +235,27 @@ class OrderReminderBridge(
     }
 
     private fun openBatteryOptimizationSettings(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            result.success(null)
+            return
+        }
+
+        val powerManager =
+            activity.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        if (powerManager.isIgnoringBatteryOptimizations(activity.packageName)) {
+            result.success(null)
+            return
+        }
+
+        val packageUri = Uri.parse("package:${activity.packageName}")
         runCatching {
+            activity.startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    packageUri,
+                ),
+            )
+        }.recoverCatching {
             activity.startActivity(
                 Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
             )

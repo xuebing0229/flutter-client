@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
@@ -136,7 +135,7 @@ class FeatureTogglePage extends StatelessWidget {
                     title: '视图切换',
                     subtitle: '控制列表视图与卡片视图之间的切换入口。',
                   ),
-                  if (!Platform.isWindows)
+                  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
                     _FeatureSwitch(
                       store: store,
                       feature: AppFeature.deadlineReminders,
@@ -184,7 +183,7 @@ class FeatureTogglePage extends StatelessWidget {
                     feature: AppFeature.desktopPet,
                     icon: Icons.pets_outlined,
                     title: '桌宠（电脑端）',
-                    subtitle: Platform.isWindows
+                    subtitle: !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
                         ? '控制 A/B 桌宠和文字泡。开启专注时两者共用同一个左侧板块；单独关闭桌宠不会影响专注。'
                         : '桌宠形象仅在电脑端显示；这个开关会随账号同步到电脑。',
                   ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../account/account_models.dart';
+import '../finance/pricing_adjustments.dart';
 import '../../features/orders/data/node_presets.dart';
 import '../../features/orders/domain/queue_order.dart';
 import '../../features/focus/domain/focus_session.dart';
@@ -267,6 +268,8 @@ Map<String, dynamic> _normalizeLegacyOrder(Map<String, dynamic> source) {
   json['onlinePercent'] ??= 100;
   json['supplementAmount'] ??= 0;
   json['supplementFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
+  json['supplementPricingEnabled'] ??= false;
+  json['pricingAdjustments'] ??= <dynamic>[];
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
@@ -294,6 +297,8 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['onlinePercent'] ??= 100;
   json['supplementAmount'] ??= 0;
   json['supplementFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
+  json['supplementPricingEnabled'] ??= false;
+  json['pricingAdjustments'] ??= <dynamic>[];
   json['deductionAmount'] ??= 0;
   json['deductionFeeEnabled'] ??= platform.defaultAdjustmentFeeEnabled;
   json['description'] ??= '';
@@ -301,6 +306,7 @@ Map<String, dynamic> _normalizeLegacyProduct(Map<String, dynamic> source) {
   json['defaultOrder'] ??= 0;
   json['soldCount'] ??= 0;
   json['saleRecords'] ??= <dynamic>[];
+  json['saleClientNames'] ??= <String, dynamic>{};
   json['isArchived'] ??= false;
   json['isPinned'] ??= false;
   return json;
@@ -342,6 +348,10 @@ Map<String, dynamic> _orderToJson(QueueOrder order) {
     'onlinePercent': order.onlinePercent,
     'supplementAmount': order.supplementAmount,
     'supplementFeeEnabled': order.supplementFeeEnabled,
+    'supplementPricingEnabled': order.supplementPricingEnabled,
+    'pricingAdjustments': [
+      for (final adjustment in order.pricingAdjustments) adjustment.toJson(),
+    ],
     'deductionAmount': order.deductionAmount,
     'deductionFeeEnabled': order.deductionFeeEnabled,
     'description': order.description,
@@ -414,6 +424,19 @@ QueueOrder _orderFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'order.supplementFeeEnabled',
     ),
+    supplementPricingEnabled: json['supplementPricingEnabled'] == null
+        ? false
+        : _asBool(
+            json['supplementPricingEnabled'],
+            'order.supplementPricingEnabled',
+          ),
+    pricingAdjustments: <PricingAdjustment>[
+      for (final item in _asList(
+        json['pricingAdjustments'] ?? <dynamic>[],
+        'order.pricingAdjustments',
+      ))
+        PricingAdjustment.fromJson(_asMap(item, 'order.pricingAdjustment')),
+    ],
     deductionAmount: _asDouble(
       json['deductionAmount'],
       'order.deductionAmount',
@@ -493,6 +516,10 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
     'onlinePercent': product.onlinePercent,
     'supplementAmount': product.supplementAmount,
     'supplementFeeEnabled': product.supplementFeeEnabled,
+    'supplementPricingEnabled': product.supplementPricingEnabled,
+    'pricingAdjustments': [
+      for (final adjustment in product.pricingAdjustments) adjustment.toJson(),
+    ],
     'deductionAmount': product.deductionAmount,
     'deductionFeeEnabled': product.deductionFeeEnabled,
     'description': product.description,
@@ -512,6 +539,7 @@ Map<String, dynamic> _productToJson(FinishedProduct product) {
       for (final soldAt in product.saleRecords)
         soldAt.toUtc().toIso8601String(),
     ],
+    'saleClientNames': product.saleClientNames,
     'archivedAt': product.archivedAt?.toUtc().toIso8601String(),
     'isArchived': product.isArchived,
     'isPinned': product.isPinned,
@@ -551,6 +579,19 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       json['supplementFeeEnabled'],
       'product.supplementFeeEnabled',
     ),
+    supplementPricingEnabled: json['supplementPricingEnabled'] == null
+        ? false
+        : _asBool(
+            json['supplementPricingEnabled'],
+            'product.supplementPricingEnabled',
+          ),
+    pricingAdjustments: <PricingAdjustment>[
+      for (final item in _asList(
+        json['pricingAdjustments'] ?? <dynamic>[],
+        'product.pricingAdjustments',
+      ))
+        PricingAdjustment.fromJson(_asMap(item, 'product.pricingAdjustment')),
+    ],
     deductionAmount: _asDouble(
       json['deductionAmount'],
       'product.deductionAmount',
@@ -575,6 +616,10 @@ FinishedProduct _productFromJson(Map<String, dynamic> json) {
       for (final item in _asList(json['saleRecords'], 'product.saleRecords'))
         _asDateTime(item, 'product.saleRecords'),
     ],
+    saleClientNames: _asStringMap(
+      json['saleClientNames'] ?? const <String, dynamic>{},
+      'product.saleClientNames',
+    ),
     archivedAt: _asNullableDateTime(json['archivedAt'], 'product.archivedAt'),
     isArchived: _asBool(json['isArchived'], 'product.isArchived'),
     isPinned: _asBool(json['isPinned'], 'product.isPinned'),
@@ -655,6 +700,22 @@ String _asString(Object? value, String field) {
 String _asText(Object? value, String field) {
   if (value is String) return value;
   throw FormatException('$field 缺失或格式无效。');
+}
+
+Map<String, String> _asStringMap(Object? value, String field) {
+  if (value is! Map) {
+    throw FormatException('$field 格式无效。');
+  }
+  final result = <String, String>{};
+  for (final entry in value.entries) {
+    final key = entry.key.toString();
+    final item = entry.value;
+    if (item is! String) {
+      throw FormatException('$field 格式无效。');
+    }
+    result[key] = item;
+  }
+  return result;
 }
 
 String? _asNullableString(Object? value, String field) {

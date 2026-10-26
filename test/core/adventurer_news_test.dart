@@ -139,4 +139,85 @@ void main() {
     );
   });
 
+  test('182 包含电池优化设置修复见闻', () {
+    final picked = newsBetweenBuilds(181, 182);
+    expect(picked.map((e) => e.title).toList(), ['电池优化设置修复']);
+  });
+
+  test('183 包含网页版设备同步支持见闻', () {
+    final picked = newsBetweenBuilds(182, 183);
+    expect(picked.map((e) => e.title).toList(), ['网页版设备同步支持']);
+  });
+
+  test('191 包含重装后重新加入设备修复见闻', () {
+    final picked = newsBetweenBuilds(190, 191);
+    expect(picked.map((e) => e.title).toList(), ['重装后重新加入设备修复']);
+  });
+
+  test('192 包含新设备回应码显示修复见闻', () {
+    final picked = newsBetweenBuilds(191, 192);
+    expect(picked.map((e) => e.title).toList(), ['新设备回应码显示修复']);
+  });
+
+  test('193 包含电脑确认回应码卡死修复见闻', () {
+    final picked = newsBetweenBuilds(192, 193);
+    expect(picked.map((e) => e.title).toList(), ['电脑确认回应码卡死修复']);
+  });
+
+  test('195 包含卸载后重新加入设备修复见闻', () {
+    final picked = newsBetweenBuilds(194, 195);
+    expect(picked.map((e) => e.title).toList(), ['卸载后重新加入设备修复']);
+  });
+
+  test('196 包含临时账号目录卡死修复见闻', () {
+    final picked = newsBetweenBuilds(195, 196);
+    expect(picked.map((e) => e.title).toList(), ['临时账号目录卡死修复']);
+  });
+
+  test('197 包含 Windows 设备同步自愈见闻', () {
+    final picked = newsBetweenBuilds(196, 197);
+    expect(picked.map((e) => e.title).toList(), ['Windows 设备同步自愈']);
+  });
+
+  test('198 包含回应码确认前状态修复见闻', () {
+    final picked = newsBetweenBuilds(197, 198);
+    expect(picked.map((e) => e.title).toList(), ['回应码确认前状态修复']);
+  });
+
+  test('200 包含设备加入诊断版见闻', () {
+    final picked = newsBetweenBuilds(199, 200);
+    expect(picked.map((e) => e.title).toList(), ['设备加入诊断版']);
+  });
+
+  test('201 包含 Android 新设备加入后台切换修复见闻', () {
+    final picked = newsBetweenBuilds(200, 201);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['Android 新设备加入后台切换修复'],
+    );
+  });
+
+  test('202 包含截图识别结构化回归修复见闻', () {
+    final picked = newsBetweenBuilds(201, 202);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['截图识别结构化回归修复'],
+    );
+  });
+
+  test('203 包含截图导入类型误选保护见闻', () {
+    final picked = newsBetweenBuilds(202, 203);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['截图导入类型误选保护'],
+    );
+  });
+
+  test('204 包含成品总概览与小票预设分享见闻', () {
+    final picked = newsBetweenBuilds(203, 204);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['成品总概览与小票预设分享'],
+    );
+  });
 }

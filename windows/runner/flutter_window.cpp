@@ -1,12 +1,16 @@
 #include "flutter_window.h"
 
+#include <flutter/method_result_functions.h>
+
 #include <shellapi.h>
+#include <shobjidl.h>
 
 #include <cwchar>
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "utils.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -22,6 +26,7 @@ bool FlutterWindow::OnCreate() {
   // That path reaches OnDestroy() on an already-constructed FlutterWindow, so
   // always begin a real window lifetime in the non-exiting state.
   exiting_ = false;
+  exit_preparing_ = false;
 
   RECT frame = GetClientArea();
 
@@ -34,6 +39,105 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  windows_file_picker_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "app.windows_file_picker",
+          &flutter::StandardMethodCodec::GetInstance());
+  windows_file_picker_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() != "pickBackupFile") {
+          result->NotImplemented();
+          return;
+        }
+
+        IFileOpenDialog* dialog = nullptr;
+        HRESULT hr = ::CoCreateInstance(
+            CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(&dialog));
+        if (FAILED(hr) || dialog == nullptr) {
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Could not create the Windows file picker.");
+          return;
+        }
+
+        FILEOPENDIALOGOPTIONS options = 0;
+        hr = dialog->GetOptions(&options);
+        if (SUCCEEDED(hr)) {
+          hr = dialog->SetOptions(
+              options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST |
+              FOS_PATHMUSTEXIST);
+        }
+
+        const COMDLG_FILTERSPEC filters[] = {
+            {L"Adventure Guild backup", L"*.json;*.zip"}};
+        if (SUCCEEDED(hr)) {
+          hr = dialog->SetFileTypes(1, filters);
+        }
+
+        if (SUCCEEDED(hr)) {
+          hr = dialog->Show(GetHandle());
+        }
+        if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+          dialog->Release();
+          result->Success();
+          return;
+        }
+        if (FAILED(hr)) {
+          dialog->Release();
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Windows could not open the selected backup file.");
+          return;
+        }
+
+        IShellItem* item = nullptr;
+        hr = dialog->GetResult(&item);
+        if (FAILED(hr) || item == nullptr) {
+          dialog->Release();
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Windows did not return the selected backup file.");
+          return;
+        }
+
+        wchar_t* wide_path = nullptr;
+        hr = item->GetDisplayName(SIGDN_FILESYSPATH, &wide_path);
+        item->Release();
+        dialog->Release();
+
+        if (FAILED(hr) || wide_path == nullptr) {
+          if (wide_path != nullptr) {
+            ::CoTaskMemFree(wide_path);
+          }
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "The selected item does not expose a filesystem path.");
+          return;
+        }
+
+        const std::string path = Utf8FromUtf16(wide_path);
+        ::CoTaskMemFree(wide_path);
+        if (path.empty()) {
+          result->Error(
+              "WINDOWS_FILE_PICKER_FAILED",
+              "Windows returned an empty filesystem path.");
+          return;
+        }
+
+        result->Success(flutter::EncodableValue(path));
+      });
+
+  windows_lifecycle_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "app.windows_lifecycle",
+          &flutter::StandardMethodCodec::GetInstance());
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   taskbar_created_message_ = ::RegisterWindowMessageW(L"TaskbarCreated");
@@ -53,6 +157,9 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   RemoveTrayIcon();
+
+  windows_lifecycle_channel_.reset();
+  windows_file_picker_channel_.reset();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -141,10 +248,52 @@ void FlutterWindow::ShowTrayMenu() {
   if (command == kTrayOpenCommand) {
     RestoreFromTray();
   } else if (command == kTrayExitCommand) {
-    exiting_ = true;
-    RemoveTrayIcon();
-    Destroy();
+    RequestExit();
   }
+}
+
+void FlutterWindow::RequestExit() {
+  HWND window = GetHandle();
+  if (window == nullptr || exit_preparing_) {
+    return;
+  }
+
+  exiting_ = true;
+  exit_preparing_ = true;
+  ::SetTimer(window, kExitPreparationTimerId, kExitPreparationWatchdogMs,
+             nullptr);
+
+  if (!windows_lifecycle_channel_) {
+    FinishExit();
+    return;
+  }
+
+  auto finish = [this]() {
+    HWND current = GetHandle();
+    if (current != nullptr) {
+      ::PostMessageW(current, kExitPreparedMessage, 0, 0);
+    }
+  };
+  auto result =
+      std::make_unique<flutter::MethodResultFunctions<flutter::EncodableValue>>(
+          [finish](const flutter::EncodableValue*) { finish(); },
+          [finish](const std::string&, const std::string&,
+                   const flutter::EncodableValue*) { finish(); },
+          [finish]() { finish(); });
+  windows_lifecycle_channel_->InvokeMethod(
+      "prepareForExit", std::make_unique<flutter::EncodableValue>(),
+      std::move(result));
+}
+
+void FlutterWindow::FinishExit() {
+  HWND window = GetHandle();
+  if (window == nullptr) {
+    return;
+  }
+  ::KillTimer(window, kExitPreparationTimerId);
+  exit_preparing_ = false;
+  RemoveTrayIcon();
+  Destroy();
 }
 
 LRESULT
@@ -160,9 +309,26 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case kExitPreparedMessage:
+      FinishExit();
+      return 0;
+
+    case WM_TIMER:
+      if (wparam == kExitPreparationTimerId && exit_preparing_) {
+        // Dart normally returns after Syncthing's ten-second graceful-shutdown
+        // window. This watchdog prevents an unrelated channel failure from
+        // making the explicit Exit action hang forever.
+        FinishExit();
+        return 0;
+      }
+      break;
+
     case WM_CLOSE:
       // The title-bar close button and Alt+F4 keep the app alive for sync and
       // local reminders. "Exit" in the tray menu is the explicit quit path.
+      if (exit_preparing_) {
+        return 0;
+      }
       if (!exiting_) {
         // Re-add the icon if Explorer restarted or the first registration was
         // delayed. Only fall back to a real close when Windows still refuses

@@ -2,7 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/finance/pricing_adjustments.dart';
+import '../../../core/finance/pricing_preset_store.dart';
+import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/pricing_preset_selector.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/adjustment_widgets.dart';
@@ -22,12 +26,16 @@ class ProductDetailPage extends StatefulWidget {
     required this.store,
     required this.productId,
     required this.featureStore,
+    this.pricingPresetStore,
+    this.receiptStyleStore,
     super.key,
   });
 
   final String accountId;
   final ProductStore store;
   final String productId;
+  final PricingPresetStore? pricingPresetStore;
+  final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
 
   @override
@@ -37,7 +45,9 @@ class ProductDetailPage extends StatefulWidget {
 class _ProductDetailPageState extends State<ProductDetailPage> {
   final _referenceImageStore = OrderReferenceImageStore();
   final _referenceImages = <OrderReferenceImage>[];
+  final _pricingAdjustments = <PricingAdjustment>[];
   final _sessionAddedReferenceImages = <OrderReferenceImage>[];
+  late final PricingPresetStore _effectivePricingPresetStore;
   bool _editing = false;
   bool _pickingReferenceImages = false;
 
@@ -61,6 +71,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePricingPresetStore =
+        widget.pricingPresetStore ?? PricingPresetStore();
     final product = _product;
     _titleController = TextEditingController();
     _priceController = TextEditingController();
@@ -87,6 +99,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     _soldCountController.dispose();
     _onlineController.dispose();
     _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
     super.dispose();
   }
 
@@ -100,6 +115,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     _referenceImages
       ..clear()
       ..addAll(product.referenceImages);
+    _pricingAdjustments
+      ..clear()
+      ..addAll(product.pricingAdjustments.map((item) => item.snapshot()));
     _soldCountController.text = product.soldCount.toString();
     _platform = product.platform;
     _saleType = product.saleType;
@@ -109,6 +127,25 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     _onlinePercent = product.normalizedOnlinePercent;
     _onlineController.text = formatPercentValue(_onlinePercent);
     _offlineController.text = formatPercentValue(100 - _onlinePercent);
+  }
+
+  bool _samePricingAdjustments(
+    List<PricingAdjustment> left,
+    List<PricingAdjustment> right,
+  ) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      final a = left[index];
+      final b = right[index];
+      if (a.id != b.id ||
+          a.name != b.name ||
+          a.multiplier != b.multiplier ||
+          a.percent != b.percent ||
+          a.fixedAmount != b.fixedAmount) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _setOnlinePercent(double value) {
@@ -214,6 +251,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       label: '补款',
       amount: product.supplementAmount,
       feeEnabled: product.supplementFeeEnabled,
+      pricingEnabled: product.supplementPricingEnabled,
+      allowPricingParticipation: true,
     );
     if (!mounted || result == null) return;
 
@@ -224,11 +263,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       draft: result,
       currentAmount: current.supplementAmount,
       currentFeeEnabled: current.supplementFeeEnabled,
+      baselinePricingEnabled: product.supplementPricingEnabled,
+      currentPricingEnabled: current.supplementPricingEnabled,
     );
     widget.store.updateProduct(
       current.copyWith(
         supplementAmount: merged.amount,
         supplementFeeEnabled: merged.feeEnabled,
+        supplementPricingEnabled: merged.pricingEnabled,
       ),
     );
   }
@@ -304,6 +346,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final soldCountChanged = soldCount != _draftBaseline.soldCount;
     final referenceImagesChanged = widget.featureStore.referenceImages &&
         !_sameReferenceImages(_referenceImages, _draftBaseline.referenceImages);
+    final pricingChanged = !_samePricingAdjustments(
+      _pricingAdjustments,
+      _draftBaseline.pricingAdjustments,
+    );
 
     bool sameSaleRecords(List<DateTime> left, List<DateTime> right) {
       if (left.length != right.length) return false;
@@ -324,6 +370,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           latest.price != _draftBaseline.price &&
           price != latest.price) {
         fields.add('价格');
+      }
+      if (pricingChanged &&
+          !_samePricingAdjustments(
+            latest.pricingAdjustments,
+            _draftBaseline.pricingAdjustments,
+          ) &&
+          !_samePricingAdjustments(_pricingAdjustments, latest.pricingAdjustments)) {
+        fields.add('加价预设');
       }
       if (descriptionChanged &&
           latest.description != _draftBaseline.description &&
@@ -391,6 +445,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           onlinePercentChanged ||
           descriptionChanged ||
           soldCountChanged ||
+          pricingChanged ||
           referenceImagesChanged;
       if (anyLocalChanged &&
           latest.isArchived != _draftBaseline.isArchived) {
@@ -437,6 +492,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         descriptionChanged && !useSyncedConflictFields.contains('描述');
     final applyCommission =
         !useSyncedConflictFields.contains('平台与手续费设置');
+    final applyPricing =
+        pricingChanged && !useSyncedConflictFields.contains('加价预设');
     final applySaleType =
         saleTypeChanged &&
         !useSyncedConflictFields.contains('售卖方式或售出记录');
@@ -517,6 +574,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         onlinePercent: onlinePercentChanged && applyCommission
             ? _onlinePercent
             : currentForSave.onlinePercent,
+        pricingAdjustments: applyPricing
+            ? <PricingAdjustment>[
+                for (final item in _pricingAdjustments) item.snapshot(),
+              ]
+            : currentForSave.pricingAdjustments,
         description: applyDescription
             ? _descriptionController.text.trim()
             : currentForSave.description,
@@ -602,6 +664,18 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                       ? '未填写'
                       : '¥ ${formatProductPrice(product.price)}',
                 ),
+                if (product.pricingAdjustments.isNotEmpty)
+                  ReadOnlyDetailRow(
+                    label: '加价预设',
+                    value: product.pricingAdjustments
+                        .map((item) => '${item.name} ${item.formulaLabel}')
+                        .join('、'),
+                    multiline: true,
+                  ),
+                ReadOnlyDetailRow(
+                  label: '计价合计',
+                  value: '¥ ${formatProductPrice(product.originalTotal)}',
+                ),
                 ReadOnlyDetailRow(
                   label: '手续费',
                   value: product.feeEnabled
@@ -628,6 +702,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   label: '补款',
                   amount: product.supplementAmount,
                   feeEnabled: product.supplementFeeEnabled,
+                  pricingEnabled: product.supplementPricingEnabled,
                   sign: '+',
                   onTap: () => _editSupplement(product),
                 ),
@@ -646,14 +721,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   label: '售出状态',
                   value: product.saleStatusLabel,
                 ),
-                if (product.saleType == ProductSaleType.multiple)
+                if (product.saleRecords.isNotEmpty)
                   _SaleHistoryDetailRow(
                     count: product.saleRecords.length,
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => ProductSaleHistoryPage(
-                            product: product,
+                            store: widget.store,
+                            productId: product.id,
                           ),
                         ),
                       );
@@ -667,6 +743,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   multiline: true,
                 ),
                 const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -717,6 +794,16 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 14),
+                PricingPresetSelector(
+                  store: _effectivePricingPresetStore,
+                  selected: _pricingAdjustments,
+                  onChanged: (value) => setState(() {
+                    _pricingAdjustments
+                      ..clear()
+                      ..addAll(value);
+                  }),
                 ),
                 const SizedBox(height: 14),
                 const FormFieldLabel('售卖方式'),

@@ -1,81 +1,26 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
-import '../../../core/account/account_store.dart';
-import '../../../core/desktop_pet/desktop_pet_service.dart';
-import '../../../core/features/app_feature_store.dart';
-import '../../../core/portability/app_backup_data.dart';
-import '../../../core/sync/sync_coordinator.dart';
-import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/guild_visual_theme.dart';
-import '../../account/presentation/account_page.dart';
-import '../../orders/data/node_presets.dart';
-import '../../orders/presentation/node_preset_page.dart';
-import '../../focus/state/focus_store.dart';
-import '../../orders/state/order_store.dart';
-import '../../products/state/product_store.dart';
-import '../../sync/presentation/device_sync_page.dart';
-import 'archive_page.dart';
-import 'desktop_pet_page.dart';
-import 'feature_toggle_page.dart';
-import 'feedback_page.dart';
-import 'settings_page.dart';
-
-Future<String> buildAccountTransferPackage(AccountStore accountStore) async {
-  final account = accountStore.syncSnapshot;
-  if (account == null || !account.hasCredentials) {
-    throw StateError('当前账号信息尚未准备好，不能添加设备。');
-  }
-
-  final backup = AppBackupData(
-    exportedAt: DateTime.now(),
-    orders: const [],
-    products: const [],
-    nodePresets: const [],
-    accountSyncState: account,
-    syncRecords: const <Map<String, dynamic>>[],
-    settings: const <String, dynamic>{'bootstrapOnly': true},
-  );
-  return backup.encode(pretty: false);
-}
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
-    required this.orderStore,
-    required this.productStore,
-    required this.nodePresetStore,
-    required this.focusStore,
-    required this.desktopPetSettings,
-    required this.onOpenOrder,
-    required this.themeStore,
-    required this.featureStore,
-    required this.accountStore,
-    required this.syncCoordinator,
-    required this.onApplyWorkspaceSettings,
-    required this.onBeforeSignOut,
+    required this.onSelectTool,
     required this.onShowTutorial,
     required this.showFeatureToggle,
-    required this.onHideFeatureToggle,
+    required this.showPetFocusEntry,
+    required this.showDesktopPet,
+    this.showFeedback = true,
+    this.accountSubtitle,
     super.key,
   });
 
-  final OrderStore orderStore;
-  final ProductStore productStore;
-  final NodePresetStore nodePresetStore;
-  final FocusStore focusStore;
-  final DesktopPetSettings desktopPetSettings;
-  final Future<void> Function(String orderId) onOpenOrder;
-  final AppThemeStore themeStore;
-  final AppFeatureStore featureStore;
-  final AccountStore accountStore;
-  final SyncCoordinator syncCoordinator;
-  final Future<void> Function(Map<String, dynamic> settings)
-  onApplyWorkspaceSettings;
-  final Future<void> Function() onBeforeSignOut;
+  final ValueChanged<String> onSelectTool;
   final VoidCallback onShowTutorial;
   final bool showFeatureToggle;
-  final VoidCallback onHideFeatureToggle;
+  final bool showPetFocusEntry;
+  final bool showDesktopPet;
+  final bool showFeedback;
+  final String? accountSubtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -96,22 +41,13 @@ class AppDrawer extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: radius),
         child: SafeArea(
           child: AppToolMenu(
-            orderStore: orderStore,
-            productStore: productStore,
-            nodePresetStore: nodePresetStore,
-            focusStore: focusStore,
-            desktopPetSettings: desktopPetSettings,
-            onOpenOrder: onOpenOrder,
-            themeStore: themeStore,
-            featureStore: featureStore,
-            accountStore: accountStore,
-            syncCoordinator: syncCoordinator,
-            onApplyWorkspaceSettings: onApplyWorkspaceSettings,
-            onBeforeSignOut: onBeforeSignOut,
-            onBeforeNavigate: () => Navigator.of(context).pop(),
+            onSelectTool: onSelectTool,
             onShowTutorial: onShowTutorial,
             showFeatureToggle: showFeatureToggle,
-            onHideFeatureToggle: onHideFeatureToggle,
+            showPetFocusEntry: showPetFocusEntry,
+            showDesktopPet: showDesktopPet,
+            showFeedback: showFeedback,
+            accountSubtitle: accountSubtitle,
             closeBeforeTutorial: true,
             padding: const EdgeInsets.fromLTRB(12, 24, 12, 20),
           ),
@@ -122,7 +58,10 @@ class AppDrawer extends StatelessWidget {
 }
 
 class AppToolMenu extends StatelessWidget {
+  static const presetTool = 'presetCenter';
+  static const receiptTool = 'receiptCenter';
   static const nodePresetTool = 'nodePreset';
+  static const pricingPresetTool = 'pricingPreset';
   static const featureToggleTool = 'featureToggle';
   static const archiveTool = 'archive';
   static const syncTool = 'sync';
@@ -133,23 +72,13 @@ class AppToolMenu extends StatelessWidget {
   static const desktopPetTool = 'desktopPet';
 
   const AppToolMenu({
-    required this.orderStore,
-    required this.productStore,
-    required this.nodePresetStore,
-    required this.focusStore,
-    required this.desktopPetSettings,
-    required this.onOpenOrder,
-    required this.themeStore,
-    required this.featureStore,
-    required this.accountStore,
-    required this.syncCoordinator,
-    required this.onApplyWorkspaceSettings,
-    required this.onBeforeSignOut,
+    required this.onSelectTool,
     required this.onShowTutorial,
     required this.showFeatureToggle,
-    required this.onHideFeatureToggle,
-    this.onBeforeNavigate,
-    this.onSelectTool,
+    required this.showPetFocusEntry,
+    required this.showDesktopPet,
+    this.showFeedback = true,
+    this.accountSubtitle,
     this.selectedTool,
     this.closeBeforeTutorial = false,
     this.showTrailing = true,
@@ -157,42 +86,17 @@ class AppToolMenu extends StatelessWidget {
     super.key,
   });
 
-  final OrderStore orderStore;
-  final ProductStore productStore;
-  final NodePresetStore nodePresetStore;
-  final FocusStore focusStore;
-  final DesktopPetSettings desktopPetSettings;
-  final Future<void> Function(String orderId) onOpenOrder;
-  final AppThemeStore themeStore;
-  final AppFeatureStore featureStore;
-  final AccountStore accountStore;
-  final SyncCoordinator syncCoordinator;
-  final Future<void> Function(Map<String, dynamic> settings)
-  onApplyWorkspaceSettings;
-  final Future<void> Function() onBeforeSignOut;
+  final ValueChanged<String> onSelectTool;
   final VoidCallback onShowTutorial;
   final bool showFeatureToggle;
-  final VoidCallback onHideFeatureToggle;
-  final VoidCallback? onBeforeNavigate;
-  final ValueChanged<String>? onSelectTool;
+  final bool showPetFocusEntry;
+  final bool showDesktopPet;
+  final bool showFeedback;
+  final String? accountSubtitle;
   final String? selectedTool;
   final bool closeBeforeTutorial;
   final bool showTrailing;
   final EdgeInsets padding;
-
-  Future<String> _buildTransferPackage() async {
-    return buildAccountTransferPackage(accountStore);
-  }
-
-  void _open(BuildContext context, String tool, Widget page) {
-    if (onSelectTool != null) {
-      onSelectTool!(tool);
-      return;
-    }
-
-    onBeforeNavigate?.call();
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
-  }
 
   Widget _item({
     required IconData icon,
@@ -213,78 +117,48 @@ class AppToolMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showDesktopPet =
-        Platform.isWindows && featureStore.enabled(AppFeature.desktopPet);
-    final showFocus = featureStore.enabled(AppFeature.focus);
-    final showPetFocusEntry = showDesktopPet || showFocus;
+    void select(String tool) => onSelectTool(tool);
 
     return ListView(
       padding: padding,
       children: [
         _item(
-          icon: Icons.account_tree_outlined,
-          title: '节点预设',
-          tool: nodePresetTool,
-          onTap: () => _open(
-            context,
-            nodePresetTool,
-            NodePresetPage(store: nodePresetStore),
-          ),
+          icon: Icons.tune_rounded,
+          title: '节点＆加价预设',
+          tool: presetTool,
+          onTap: () => select(presetTool),
+        ),
+        _item(
+          icon: Icons.receipt_long_outlined,
+          title: '生成小票',
+          tool: receiptTool,
+          onTap: () => select(receiptTool),
         ),
         if (showFeatureToggle)
           _item(
             icon: Icons.extension_outlined,
             title: '附加功能开关',
             tool: featureToggleTool,
-            onTap: () => _open(
-              context,
-              featureToggleTool,
-              FeatureTogglePage(
-                store: featureStore,
-                onHideFeatureToggle: onHideFeatureToggle,
-              ),
-            ),
+            onTap: () => select(featureToggleTool),
           ),
         if (showPetFocusEntry)
           _item(
             icon: showDesktopPet ? Icons.pets_outlined : Icons.timer_outlined,
             title: showDesktopPet ? '桌宠' : '专注',
             tool: desktopPetTool,
-            onTap: () => _open(
-              context,
-              desktopPetTool,
-              DesktopPetPage(
-                orderStore: orderStore,
-                focusStore: focusStore,
-                settings: desktopPetSettings,
-                onOpenOrder: onOpenOrder,
-                showDesktopPet: showDesktopPet,
-                showFocus: showFocus,
-              ),
-            ),
+            onTap: () => select(desktopPetTool),
           ),
         _item(
           icon: Icons.archive_outlined,
           title: '归档',
           tool: archiveTool,
-          onTap: () => _open(
-            context,
-            archiveTool,
-            ArchivePage(
-              accountId: syncCoordinator.accountId,
-              orderStore: orderStore,
-              productStore: productStore,
-              nodePresetStore: nodePresetStore,
-              featureStore: featureStore,
-              syncCoordinator: syncCoordinator,
-            ),
-          ),
+          onTap: () => select(archiveTool),
         ),
         _item(
           icon: Icons.school_outlined,
           title: '使用教程',
           onTap: () {
-            onBeforeNavigate?.call();
+            if (closeBeforeTutorial) Navigator.of(context).pop();
             if (closeBeforeTutorial) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 onShowTutorial();
@@ -294,62 +168,31 @@ class AppToolMenu extends StatelessWidget {
             }
           },
         ),
-        _item(
-          icon: Icons.feedback_outlined,
-          title: '问题反馈',
-          tool: feedbackTool,
-          onTap: () => _open(
-            context,
-            feedbackTool,
-            const FeedbackPage(),
+        if (showFeedback)
+          _item(
+            icon: Icons.feedback_outlined,
+            title: '问题反馈',
+            tool: feedbackTool,
+            onTap: () => select(feedbackTool),
           ),
-        ),
         _item(
           icon: Icons.sync_alt_rounded,
           title: '设备同步',
           tool: syncTool,
-          onTap: () => _open(
-            context,
-            syncTool,
-            DeviceSyncPage(coordinator: syncCoordinator),
-          ),
+          onTap: () => select(syncTool),
         ),
         _item(
           icon: Icons.manage_accounts_outlined,
           title: '账号与设备',
-          subtitle: accountStore.accountName ?? '本地账号',
+          subtitle: accountSubtitle,
           tool: accountTool,
-          onTap: () => _open(
-            context,
-            accountTool,
-            AccountPage(
-              store: accountStore,
-              buildTransferPackage: _buildTransferPackage,
-              syncCoordinator: syncCoordinator,
-              onBeforeSignOut: onBeforeSignOut,
-              onRevokeDevice: syncCoordinator.revokeDevice,
-            ),
-          ),
+          onTap: () => select(accountTool),
         ),
         _item(
           icon: Icons.settings_outlined,
           title: '设置',
           tool: settingsTool,
-          onTap: () => _open(
-            context,
-            settingsTool,
-            SettingsPage(
-              orderStore: orderStore,
-              productStore: productStore,
-              nodePresetStore: nodePresetStore,
-              focusStore: focusStore,
-              themeStore: themeStore,
-              featureStore: featureStore,
-              accountStore: accountStore,
-              syncCoordinator: syncCoordinator,
-              onApplyWorkspaceSettings: onApplyWorkspaceSettings,
-            ),
-          ),
+          onTap: () => select(settingsTool),
         ),
       ],
     );
@@ -400,13 +243,13 @@ class AppMenuTile extends StatelessWidget {
                 color: uiStyle.isClassic
                     ? colors.primary.withValues(alpha: 0.38)
                     : uiStyle.borderWidth > 0
-                    ? uiStyle.borderColor
-                    : colors.primary.withValues(alpha: 0.55),
+                        ? uiStyle.borderColor
+                        : colors.primary.withValues(alpha: 0.55),
                 width: uiStyle.isClassic
                     ? 0.8
                     : uiStyle.borderWidth <= 0
-                    ? 1
-                    : uiStyle.borderWidth,
+                        ? 1
+                        : uiStyle.borderWidth,
               )
             : BorderSide.none,
       ),

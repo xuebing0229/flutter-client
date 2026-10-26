@@ -69,6 +69,36 @@ void main() {
     expect(items.last.price, 30);
   });
 
+  test('order-detail UI labels never become product titles', () {
+    final items = const ScreenshotProductLayoutParser().parse(
+      imageHeight: 2800,
+      platform: CommissionPlatform.mihuashi,
+      lines: [
+        line('工作板', 180, x: 530),
+        line('邀请您价目表中的人head气球', 390, x: 50),
+        line('距截稿日 2026-12-31还有 71天', 520, x: 50),
+        line('W落秋', 680, x: 200),
+        line('验收节点', 910, x: 50),
+        line('已全额支付', 920, x: 790),
+        line('¥105', 1000, x: 790),
+        line('稿件夹', 1240, x: 50),
+        line('进程动态', 1240, x: 330),
+        line('参考信息', 1240, x: 660),
+        line('上传稿件', 2450, x: 900),
+      ],
+    );
+
+    expect(
+      items.map((e) => e.title),
+      isNot(contains(anyOf(
+        '已全额支付',
+        '验收节点',
+        '上传稿件',
+        '工作板',
+      ))),
+    );
+  });
+
   test('product OCR does not treat dates or sale status as a title', () {
     final items = const ScreenshotProductLayoutParser().parse(
       imageHeight: 1200,
