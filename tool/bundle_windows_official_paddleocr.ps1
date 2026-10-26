@@ -206,8 +206,7 @@ foreach ($required in $requiredFiles) {
     throw "Official Windows PaddleOCR bundle is incomplete: $required"
   }
 }
-if (-not (Select-String -LiteralPath $config -Pattern '^pipeline_name:\s*OCR\s*
- -Quiet)) {
+if (-not (Select-String -LiteralPath $config -SimpleMatch "pipeline_name: OCR" -Quiet)) {
   throw "Official Windows PaddleOCR OCR.yaml is invalid."
 }
 
