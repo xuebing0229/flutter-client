@@ -996,7 +996,14 @@ class _ReceiptContentEditorPage extends StatefulWidget {
 }
 
 class _ReceiptContentEditorPageState extends State<_ReceiptContentEditorPage> {
-  late _ReceiptContentDraft _draft = widget.initial;
+  late _ReceiptContentDraft _draft;
+  int _resetGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _draft = widget.initial;
+  }
 
   void _changeFontSize(_ReceiptEditableSpec spec, double delta) {
     final current = _draft.fontSize(spec.id, spec.defaultFontSize);
@@ -1018,6 +1025,7 @@ class _ReceiptContentEditorPageState extends State<_ReceiptContentEditorPage> {
             onPressed: () {
               setState(() {
                 _draft = const _ReceiptContentDraft();
+                _resetGeneration += 1;
               });
             },
             child: const Text('恢复本张默认'),
@@ -1049,7 +1057,9 @@ class _ReceiptContentEditorPageState extends State<_ReceiptContentEditorPage> {
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
-                    key: ValueKey('receipt-content-${spec.id}'),
+                    key: ValueKey(
+                      'receipt-content-${spec.id}-$_resetGeneration',
+                    ),
                     initialValue: _draft.text(spec.id, spec.defaultText),
                     minLines: 1,
                     maxLines: 4,
