@@ -901,9 +901,9 @@ class _ReceiptPageState extends State<ReceiptPage> {
                     label: const Text('字体颜色'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: _editHeaderText,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('抬头文字'),
+                    onPressed: _editContent,
+                    icon: const Icon(Icons.edit_note_rounded),
+                    label: const Text('编辑内容'),
                   ),
                   OutlinedButton.icon(
                     onPressed: _showStylePresets,
@@ -944,6 +944,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                           headerText: style.effectiveHeaderText(
                             widget.defaultHeaderText,
                           ),
+                          content: _contentDraft,
                           fontColor: Color(style.fontColorValue),
                           backgroundImage: backgroundImage,
                           transparentBackground: _transparentBackground,
@@ -953,6 +954,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                           headerText: style.effectiveHeaderText(
                             widget.defaultHeaderText,
                           ),
+                          content: _contentDraft,
                           fontColor: Color(style.fontColorValue),
                           backgroundImage: backgroundImage,
                           transparentBackground: _transparentBackground,
@@ -978,16 +980,6 @@ class _ReceiptPageState extends State<ReceiptPage> {
   }
 }
 
-
-class _ReceiptHeaderEditResult {
-  const _ReceiptHeaderEditResult.custom(this.text) : followAccount = false;
-  const _ReceiptHeaderEditResult.followAccount()
-      : followAccount = true,
-        text = '';
-
-  final bool followAccount;
-  final String text;
-}
 
 class _ReceiptPaperFrame extends StatelessWidget {
   const _ReceiptPaperFrame({
