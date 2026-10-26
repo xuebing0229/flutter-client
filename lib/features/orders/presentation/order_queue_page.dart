@@ -1037,12 +1037,14 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       ]),
       builder: (context, _) {
         final orders = _visibleOrders();
-        final availableTags = widget.store.orders
-            .where((order) => !order.isArchived)
-            .expand((order) => order.tags)
-            .toSet()
-            .toList()
-          ..sort();
+        final availableTags = normalizeOrderTags(
+          <String>[
+            ...builtInOrderTags,
+            ...widget.store.orders
+                .where((order) => !order.isArchived)
+                .expand((order) => order.tags),
+          ],
+        )..sort();
         final useOverviewView =
             widget.featureStore.viewSwitch && widget.overviewView;
         final useCardView =
