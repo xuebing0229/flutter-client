@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $PaddleOcrCommit = "dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf"
 $PaddleInferenceVersion = "3.2.1"
 $OpenCvVersion = "4.12.0"
+$BundleRevision = "2"
 $PaddleInferenceUrl = "https://paddle-inference-lib.bj.bcebos.com/3.2.1/cxx_c/Windows/CPU/x86-64_avx-mkl-vs2019/paddle_inference.zip"
 $OpenCvUrl = "https://github.com/opencv/opencv/releases/download/4.12.0/opencv-4.12.0-windows.exe"
 $DetModelUrl = "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_small_det_infer.tar"
@@ -21,7 +22,7 @@ if (-not $CacheDir) {
   }
 }
 
-$runtimeCache = Join-Path $CacheDir "runtime-$PaddleOcrCommit-paddle-$PaddleInferenceVersion-opencv-$OpenCvVersion"
+$runtimeCache = Join-Path $CacheDir "runtime-$PaddleOcrCommit-paddle-$PaddleInferenceVersion-opencv-$OpenCvVersion-bundle-$BundleRevision"
 $target = Join-Path $OutputDir "paddleocr"
 
 function Get-File([string]$Url, [string]$Path) {
@@ -164,6 +165,11 @@ if (-not (Test-Path (Join-Path $runtimeCache "ppocr.exe"))) {
     Copy-Item -LiteralPath $source.FullName -Destination $modelRoot -Recurse -Force
   }
 
+  $pipelineConfig = Join-Path $src "deploy\cpp_infer\src\configs\OCR.yaml"
+  if (-not (Test-Path $pipelineConfig)) {
+    throw "Official PaddleOCR OCR.yaml pipeline config was not found."
+  }
+  Copy-Item -LiteralPath $pipelineConfig -Destination (Join-Path $runtimeCache "OCR.yaml") -Force
   Copy-Item -LiteralPath (Join-Path $src "LICENSE") -Destination (Join-Path $runtimeCache "LICENSE-PaddleOCR.txt") -Force
 
   @{
@@ -173,6 +179,7 @@ if (-not (Test-Path (Join-Path $runtimeCache "ppocr.exe"))) {
     detector = "PP-OCRv6_small_det"
     recognizer = "PP-OCRv6_small_rec"
     networkRequiredAtRuntime = $false
+    pipelineConfig = "OCR.yaml"
   } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtimeCache "runtime.json") -Encoding UTF8
 }
 
@@ -181,10 +188,27 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 Copy-Item -LiteralPath $runtimeCache -Destination $target -Recurse -Force
 
 $engine = Join-Path $target "ppocr.exe"
+$config = Join-Path $target "OCR.yaml"
 $det = Join-Path $target "models\PP-OCRv6_small_det_infer"
 $rec = Join-Path $target "models\PP-OCRv6_small_rec_infer"
-if (-not (Test-Path $engine) -or -not (Test-Path $det) -or -not (Test-Path $rec)) {
-  throw "Official Windows PaddleOCR bundle is incomplete."
+$requiredFiles = @(
+  $engine,
+  $config,
+  (Join-Path $det "inference.json"),
+  (Join-Path $det "inference.pdiparams"),
+  (Join-Path $det "inference.yml"),
+  (Join-Path $rec "inference.json"),
+  (Join-Path $rec "inference.pdiparams"),
+  (Join-Path $rec "inference.yml")
+)
+foreach ($required in $requiredFiles) {
+  if (-not (Test-Path $required) -or (Get-Item -LiteralPath $required).Length -le 0) {
+    throw "Official Windows PaddleOCR bundle is incomplete: $required"
+  }
+}
+if (-not (Select-String -LiteralPath $config -Pattern '^pipeline_name:\s*OCR\s*
+ -Quiet)) {
+  throw "Official Windows PaddleOCR OCR.yaml is invalid."
 }
 
 Write-Host "Bundled official PaddleOCR C++ + Paddle Inference + PP-OCRv6 Small under $target"
