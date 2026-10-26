@@ -177,6 +177,52 @@ class AnnualReceiptData {
       entries.fold<double>(0, (sum, entry) => sum + entry.amount);
 }
 
+class _ReceiptEditableSpec {
+  const _ReceiptEditableSpec({
+    required this.id,
+    required this.name,
+    required this.defaultText,
+    required this.defaultFontSize,
+  });
+
+  final String id;
+  final String name;
+  final String defaultText;
+  final double defaultFontSize;
+}
+
+class _ReceiptContentDraft {
+  const _ReceiptContentDraft({
+    this.textOverrides = const <String, String>{},
+    this.fontSizeOverrides = const <String, double>{},
+  });
+
+  final Map<String, String> textOverrides;
+  final Map<String, double> fontSizeOverrides;
+
+  String text(String id, String fallback) => textOverrides[id] ?? fallback;
+
+  double fontSize(String id, double fallback) =>
+      fontSizeOverrides[id] ?? fallback;
+
+  _ReceiptContentDraft withText(String id, String value) {
+    return _ReceiptContentDraft(
+      textOverrides: <String, String>{...textOverrides, id: value},
+      fontSizeOverrides: fontSizeOverrides,
+    );
+  }
+
+  _ReceiptContentDraft withFontSize(String id, double value) {
+    return _ReceiptContentDraft(
+      textOverrides: textOverrides,
+      fontSizeOverrides: <String, double>{
+        ...fontSizeOverrides,
+        id: value.clamp(8, 42).toDouble(),
+      },
+    );
+  }
+}
+
 double annualReceiptAmountForOrder(QueueOrder order) {
   if (order.archiveOutcome != OrderArchiveOutcome.terminated) {
     return order.originalTotal;
@@ -227,6 +273,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
   static const ReceiptStyleTransfer _styleTransfer = ReceiptStyleTransfer();
   bool _exporting = false;
   bool _transparentBackground = false;
+  _ReceiptContentDraft _contentDraft = const _ReceiptContentDraft();
   String? _cachedBackgroundBase64;
   MemoryImage? _cachedBackgroundImage;
 
