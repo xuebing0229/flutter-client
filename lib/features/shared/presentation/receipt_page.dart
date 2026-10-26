@@ -1036,6 +1036,7 @@ class _AnnualReceiptPaper extends StatelessWidget {
   const _AnnualReceiptPaper({
     required this.data,
     required this.headerText,
+    required this.content,
     required this.fontColor,
     required this.backgroundImage,
     required this.transparentBackground,
@@ -1043,6 +1044,7 @@ class _AnnualReceiptPaper extends StatelessWidget {
 
   final AnnualReceiptData data;
   final String headerText;
+  final _ReceiptContentDraft content;
   final Color fontColor;
   final ImageProvider? backgroundImage;
   final bool transparentBackground;
@@ -1176,6 +1178,7 @@ class _ReceiptPaper extends StatelessWidget {
   const _ReceiptPaper({
     required this.data,
     required this.headerText,
+    required this.content,
     required this.fontColor,
     required this.backgroundImage,
     required this.transparentBackground,
@@ -1183,6 +1186,7 @@ class _ReceiptPaper extends StatelessWidget {
 
   final ReceiptData data;
   final String headerText;
+  final _ReceiptContentDraft content;
   final Color fontColor;
   final ImageProvider? backgroundImage;
   final bool transparentBackground;
