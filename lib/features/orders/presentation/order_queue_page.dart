@@ -1044,7 +1044,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 .where((order) => !order.isArchived)
                 .expand((order) => order.tags),
           ],
-        )..sort();
+        ).toList()
+          ..sort();
         final useOverviewView =
             widget.featureStore.viewSwitch && widget.overviewView;
         final useCardView =
