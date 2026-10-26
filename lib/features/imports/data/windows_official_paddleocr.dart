@@ -24,11 +24,13 @@ class WindowsOfficialPaddleOcr {
     final root = File(Platform.resolvedExecutable).parent.path;
     final runtime = Directory('$root\\paddleocr');
     final engine = File('$root\\paddleocr\\ppocr.exe');
+    final pipelineConfig = File('$root\\paddleocr\\OCR.yaml');
     final detModel =
         Directory('$root\\paddleocr\\models\\PP-OCRv6_small_det_infer');
     final recModel =
         Directory('$root\\paddleocr\\models\\PP-OCRv6_small_rec_infer');
     if (!await engine.exists() ||
+        !await pipelineConfig.exists() ||
         !await detModel.exists() ||
         !await recModel.exists()) {
       throw StateError('截图识别组件缺失，请安装完整 Windows 版本');
@@ -60,6 +62,8 @@ class WindowsOfficialPaddleOcr {
         engine.path,
         [
           'ocr',
+          '--paddlex_config',
+          slash(pipelineConfig.path),
           '--input',
           slash(local.path),
           '--save_path',
