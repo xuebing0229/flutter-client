@@ -1051,6 +1051,7 @@ class _AnnualReceiptPaper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visibleHeader = content.text('header', headerText);
     return _ReceiptPaperFrame(
       fontColor: fontColor,
       backgroundImage: backgroundImage,
@@ -1058,13 +1059,13 @@ class _AnnualReceiptPaper extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (headerText.isNotEmpty) ...[
+          if (visibleHeader.isNotEmpty) ...[
             Text(
-              headerText,
+              visibleHeader,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: fontColor,
-                fontSize: 22,
+                fontSize: content.fontSize('header', 22),
                 fontWeight: FontWeight.w800,
                 letterSpacing: 2,
               ),
@@ -1072,20 +1073,40 @@ class _AnnualReceiptPaper extends StatelessWidget {
             const SizedBox(height: 4),
           ],
           Text(
-            '${data.year} 年度业务小票',
+            content.text(
+              'annual.subtitle',
+              '${data.year} 年度业务小票',
+            ),
             textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: content.fontSize('annual.subtitle', 14),
+            ),
           ),
           const SizedBox(height: 18),
           _DashedDivider(color: fontColor),
           const SizedBox(height: 14),
-          _ReceiptTextRow(label: '单主', value: data.clientName),
-          _ReceiptTextRow(label: '业务数', value: '${data.entries.length} 单'),
+          _ReceiptTextRow(
+            label: content.text('annual.client.label', '单主'),
+            value: content.text('annual.client.value', data.clientName),
+            labelFontSize: content.fontSize('annual.client.label', 14),
+            valueFontSize: content.fontSize('annual.client.value', 14),
+          ),
+          _ReceiptTextRow(
+            label: content.text('annual.count.label', '业务数'),
+            value: content.text(
+              'annual.count.value',
+              '${data.entries.length} 单',
+            ),
+            labelFontSize: content.fontSize('annual.count.label', 14),
+            valueFontSize: content.fontSize('annual.count.value', 14),
+          ),
           const SizedBox(height: 12),
           for (var index = 0; index < data.entries.length; index++) ...[
             if (index > 0) const SizedBox(height: 13),
             _AnnualReceiptEntryRow(
-              index: index + 1,
+              index: index,
               entry: data.entries[index],
+              content: content,
             ),
           ],
           const SizedBox(height: 16),
@@ -1095,19 +1116,22 @@ class _AnnualReceiptPaper extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '全年总额',
+                  content.text('annual.total.label', '全年总额'),
                   style: TextStyle(
                     color: fontColor,
-                    fontSize: 18,
+                    fontSize: content.fontSize('annual.total.label', 18),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
               Text(
-                '¥ ${_money(data.total)}',
+                content.text(
+                  'annual.total.value',
+                  '¥ ${_money(data.total)}',
+                ),
                 style: TextStyle(
                   color: fontColor,
-                  fontSize: 22,
+                  fontSize: content.fontSize('annual.total.value', 22),
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -1115,10 +1139,11 @@ class _AnnualReceiptPaper extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           Text(
-            'THANK YOU',
+            content.text('footer', 'THANK YOU'),
             textAlign: TextAlign.center,
             style: TextStyle(
               color: fontColor,
+              fontSize: content.fontSize('footer', 14),
               fontWeight: FontWeight.w700,
               letterSpacing: 3,
             ),
@@ -1133,13 +1158,16 @@ class _AnnualReceiptEntryRow extends StatelessWidget {
   const _AnnualReceiptEntryRow({
     required this.index,
     required this.entry,
+    required this.content,
   });
 
   final int index;
   final AnnualReceiptEntry entry;
+  final _ReceiptContentDraft content;
 
   @override
   Widget build(BuildContext context) {
+    final prefix = 'annual.entry.$index';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1148,13 +1176,24 @@ class _AnnualReceiptEntryRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 28,
-              child: Text(index.toString().padLeft(2, '0')),
+              child: Text(
+                content.text(
+                  '$prefix.index',
+                  (index + 1).toString().padLeft(2, '0'),
+                ),
+                style: TextStyle(
+                  fontSize: content.fontSize('$prefix.index', 14),
+                ),
+              ),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                entry.title,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                content.text('$prefix.title', entry.title),
+                style: TextStyle(
+                  fontSize: content.fontSize('$prefix.title', 14),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -1164,8 +1203,23 @@ class _AnnualReceiptEntryRow extends StatelessWidget {
           padding: const EdgeInsets.only(left: 34),
           child: Row(
             children: [
-              Expanded(child: Text(entry.platform)),
-              Text('¥ ${_money(entry.amount)}'),
+              Expanded(
+                child: Text(
+                  content.text('$prefix.platform', entry.platform),
+                  style: TextStyle(
+                    fontSize: content.fontSize('$prefix.platform', 14),
+                  ),
+                ),
+              ),
+              Text(
+                content.text(
+                  '$prefix.amount',
+                  '¥ ${_money(entry.amount)}',
+                ),
+                style: TextStyle(
+                  fontSize: content.fontSize('$prefix.amount', 14),
+                ),
+              ),
             ],
           ),
         ),
@@ -1197,93 +1251,147 @@ class _ReceiptPaper extends StatelessWidget {
       data.basePrice,
       data.pricingAdjustments,
     );
+    final visibleHeader = content.text('header', headerText);
+
+    Widget pair({
+      required String labelId,
+      required String label,
+      required String valueId,
+      required String value,
+    }) {
+      return _ReceiptTextRow(
+        label: content.text(labelId, label),
+        value: content.text(valueId, value),
+        labelFontSize: content.fontSize(labelId, 14),
+        valueFontSize: content.fontSize(valueId, 14),
+      );
+    }
+
     return _ReceiptPaperFrame(
       fontColor: fontColor,
       backgroundImage: backgroundImage,
       transparentBackground: transparentBackground,
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (headerText.isNotEmpty) ...[
-              Text(
-                headerText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: fontColor,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 4),
-            ],
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (visibleHeader.isNotEmpty) ...[
             Text(
-              data.platform,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 18),
-            _DashedDivider(color: fontColor),
-            const SizedBox(height: 14),
-            _ReceiptTextRow(label: '项目', value: data.title),
-            if (data.clientName != null && data.clientName!.trim().isNotEmpty)
-              _ReceiptTextRow(label: '单主', value: data.clientName!),
-            const SizedBox(height: 10),
-            _ReceiptMoneyRow(label: '基础价格', amount: data.basePrice),
-            for (final adjustment in data.pricingAdjustments)
-              _ReceiptFormulaRow(adjustment: adjustment),
-            if (data.pricingAdjustments.isNotEmpty)
-              _ReceiptMoneyRow(label: '加价后', amount: pricedBase),
-            if (data.supplementAmount != 0) ...[
-              _ReceiptMoneyRow(
-                label: data.supplementPricingEnabled ? '补款原额' : '补款',
-                amount: data.supplementAmount,
-                prefix: '+',
-              ),
-              if (data.supplementPricingEnabled)
-                _ReceiptMoneyRow(
-                  label: '补款加价后',
-                  amount: data.pricedSupplementAmount,
-                  prefix: '+',
-                ),
-            ],
-            if (data.deductionAmount != 0)
-              _ReceiptMoneyRow(
-                label: '减款',
-                amount: data.deductionAmount,
-                prefix: '-',
-              ),
-            const SizedBox(height: 14),
-            _DashedDivider(color: fontColor),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '合计',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ),
-                Text(
-                  '¥ ${_money(data.total)}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 28),
-            Text(
-              'THANK YOU',
+              visibleHeader,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: fontColor,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 3,
+                fontSize: content.fontSize('header', 22),
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
               ),
             ),
+            const SizedBox(height: 4),
           ],
-        ),
+          Text(
+            content.text('platform', data.platform),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: content.fontSize('platform', 14),
+            ),
+          ),
+          const SizedBox(height: 18),
+          _DashedDivider(color: fontColor),
+          const SizedBox(height: 14),
+          pair(
+            labelId: 'item.label',
+            label: '项目',
+            valueId: 'item.value',
+            value: data.title,
+          ),
+          if (data.clientName != null && data.clientName!.trim().isNotEmpty)
+            pair(
+              labelId: 'client.label',
+              label: '单主',
+              valueId: 'client.value',
+              value: data.clientName!,
+            ),
+          const SizedBox(height: 10),
+          pair(
+            labelId: 'base.label',
+            label: '基础价格',
+            valueId: 'base.value',
+            value: '¥ ${_money(data.basePrice)}',
+          ),
+          for (var index = 0; index < data.pricingAdjustments.length; index++)
+            pair(
+              labelId: 'adjustment.$index.label',
+              label: data.pricingAdjustments[index].name,
+              valueId: 'adjustment.$index.value',
+              value: data.pricingAdjustments[index].formulaLabel,
+            ),
+          if (data.pricingAdjustments.isNotEmpty)
+            pair(
+              labelId: 'priced.label',
+              label: '加价后',
+              valueId: 'priced.value',
+              value: '¥ ${_money(pricedBase)}',
+            ),
+          if (data.supplementAmount != 0) ...[
+            pair(
+              labelId: 'supplement.label',
+              label: data.supplementPricingEnabled ? '补款原额' : '补款',
+              valueId: 'supplement.value',
+              value: '+¥ ${_money(data.supplementAmount)}',
+            ),
+            if (data.supplementPricingEnabled)
+              pair(
+                labelId: 'supplementPriced.label',
+                label: '补款加价后',
+                valueId: 'supplementPriced.value',
+                value: '+¥ ${_money(data.pricedSupplementAmount)}',
+              ),
+          ],
+          if (data.deductionAmount != 0)
+            pair(
+              labelId: 'deduction.label',
+              label: '减款',
+              valueId: 'deduction.value',
+              value: '-¥ ${_money(data.deductionAmount)}',
+            ),
+          const SizedBox(height: 14),
+          _DashedDivider(color: fontColor),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  content.text('total.label', '合计'),
+                  style: TextStyle(
+                    fontSize: content.fontSize('total.label', 18),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                content.text(
+                  'total.value',
+                  '¥ ${_money(data.total)}',
+                ),
+                style: TextStyle(
+                  fontSize: content.fontSize('total.value', 22),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Text(
+            content.text('footer', 'THANK YOU'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: fontColor,
+              fontSize: content.fontSize('footer', 14),
+              fontWeight: FontWeight.w700,
+              letterSpacing: 3,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
