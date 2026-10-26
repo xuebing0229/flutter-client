@@ -737,13 +737,14 @@ class _DeadlineStatusBadgeState extends State<_DeadlineStatusBadge> {
     final Color background;
     final Color foreground;
 
+    final urgent =
+        !widget.order.isCompleted && hasUrgentOrderTag(widget.order.tags);
+
     if (widget.order.isCompleted) {
       background = colors.primaryContainer;
       foreground = colors.onPrimaryContainer;
-    } else if (hasUrgentOrderTag(widget.order.tags)) {
-      background = colors.error;
-      foreground = colors.onError;
-    } else if (status.overdue) {
+    } else if (urgent || status.overdue) {
+      // Urgent deliberately reuses the same warning palette as overdue.
       background = colors.errorContainer;
       foreground = colors.onErrorContainer;
     } else if (status.within24Hours) {
@@ -765,7 +766,7 @@ class _DeadlineStatusBadgeState extends State<_DeadlineStatusBadge> {
           vertical: widget.compact ? 4 : 5,
         ),
         child: Text(
-          status.label,
+          urgent ? '$urgentOrderTag ${status.label}' : status.label,
           maxLines: 1,
           overflow: widget.neverEllipsize
               ? TextOverflow.visible
