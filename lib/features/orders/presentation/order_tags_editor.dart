@@ -48,7 +48,9 @@ class _OrderTagsEditorState extends State<OrderTagsEditor> {
   @override
   Widget build(BuildContext context) {
     final selected = widget.selectedTags.map((tag) => tag.toLowerCase()).toSet();
-    final suggestions = normalizeOrderTags(widget.availableTags)
+    final suggestions = normalizeOrderTags(
+      <String>[...builtInOrderTags, ...widget.availableTags],
+    )
         .where((tag) => !selected.contains(tag.toLowerCase()))
         .toList()
       ..sort();
