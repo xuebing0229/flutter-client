@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+208
-# beta-206: receipt center, annual client receipts, transparent PNG export, combined preset entry
+version: 0.0.1+209
+# beta-209: Windows OCR pipeline packaging fix and cross-platform runtime payload audit
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
