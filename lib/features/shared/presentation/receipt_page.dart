@@ -981,6 +981,127 @@ class _ReceiptPageState extends State<ReceiptPage> {
 }
 
 
+class _ReceiptContentEditorPage extends StatefulWidget {
+  const _ReceiptContentEditorPage({
+    required this.specs,
+    required this.initial,
+  });
+
+  final List<_ReceiptEditableSpec> specs;
+  final _ReceiptContentDraft initial;
+
+  @override
+  State<_ReceiptContentEditorPage> createState() =>
+      _ReceiptContentEditorPageState();
+}
+
+class _ReceiptContentEditorPageState extends State<_ReceiptContentEditorPage> {
+  late _ReceiptContentDraft _draft = widget.initial;
+
+  void _changeFontSize(_ReceiptEditableSpec spec, double delta) {
+    final current = _draft.fontSize(spec.id, spec.defaultFontSize);
+    setState(() {
+      _draft = _draft.withFontSize(spec.id, current + delta);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '编辑小票内容',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _draft = const _ReceiptContentDraft();
+              });
+            },
+            child: const Text('恢复本张默认'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_draft),
+            child: const Text('保存'),
+          ),
+          const SizedBox(width: 6),
+        ],
+      ),
+      body: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        itemCount: widget.specs.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final spec = widget.specs[index];
+          final size = _draft.fontSize(spec.id, spec.defaultFontSize);
+          return Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    spec.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    key: ValueKey('receipt-content-${spec.id}'),
+                    initialValue: _draft.text(spec.id, spec.defaultText),
+                    minLines: 1,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      _draft = _draft.withText(spec.id, value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('字号'),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: '减小字号',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: size <= 8
+                            ? null
+                            : () => _changeFontSize(spec, -1),
+                        icon: const Icon(Icons.remove_rounded),
+                      ),
+                      SizedBox(
+                        width: 44,
+                        child: Text(
+                          size.toStringAsFixed(0),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '增大字号',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: size >= 42
+                            ? null
+                            : () => _changeFontSize(spec, 1),
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _ReceiptPaperFrame extends StatelessWidget {
   const _ReceiptPaperFrame({
     required this.fontColor,
@@ -1397,9 +1518,17 @@ class _ReceiptPaper extends StatelessWidget {
 }
 
 class _ReceiptTextRow extends StatelessWidget {
-  const _ReceiptTextRow({required this.label, required this.value});
+  const _ReceiptTextRow({
+    required this.label,
+    required this.value,
+    required this.labelFontSize,
+    required this.valueFontSize,
+  });
+
   final String label;
   final String value;
+  final double labelFontSize;
+  final double valueFontSize;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1407,52 +1536,23 @@ class _ReceiptTextRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 62, child: Text(label)),
+            SizedBox(
+              width: 82,
+              child: Text(
+                label,
+                style: TextStyle(fontSize: labelFontSize),
+              ),
+            ),
             Expanded(
               child: Text(
                 value,
                 textAlign: TextAlign.right,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: valueFontSize,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ],
-        ),
-      );
-}
-
-class _ReceiptMoneyRow extends StatelessWidget {
-  const _ReceiptMoneyRow({
-    required this.label,
-    required this.amount,
-    this.prefix = '',
-  });
-  final String label;
-  final double amount;
-  final String prefix;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Expanded(child: Text(label)),
-            Text('$prefix¥ ${_money(amount)}'),
-          ],
-        ),
-      );
-}
-
-class _ReceiptFormulaRow extends StatelessWidget {
-  const _ReceiptFormulaRow({required this.adjustment});
-  final PricingAdjustment adjustment;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Expanded(child: Text(adjustment.name)),
-            Text(adjustment.formulaLabel),
           ],
         ),
       );
