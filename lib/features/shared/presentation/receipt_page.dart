@@ -317,49 +317,255 @@ class _ReceiptPageState extends State<ReceiptPage> {
     }
   }
 
-  Future<void> _editHeaderText() async {
-    final current = widget.styleStore.effectiveHeaderText(
+  List<_ReceiptEditableSpec> _contentSpecs() {
+    final header = widget.styleStore.effectiveHeaderText(
       widget.defaultHeaderText,
     );
-    final controller = TextEditingController(text: current);
-    final result = await showDialog<_ReceiptHeaderEditResult>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('编辑小票抬头'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 40,
-          decoration: const InputDecoration(
-            labelText: '抬头文字',
-            hintText: '可填写画师名、工作室名，也可留空',
-          ),
+    if (widget.annualData != null) {
+      final data = widget.annualData!;
+      return <_ReceiptEditableSpec>[
+        _ReceiptEditableSpec(
+          id: 'header',
+          name: '抬头',
+          defaultText: header,
+          defaultFontSize: 22,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(
-              const _ReceiptHeaderEditResult.followAccount(),
-            ),
-            child: const Text('使用账号名'),
+        _ReceiptEditableSpec(
+          id: 'annual.subtitle',
+          name: '副标题',
+          defaultText: '${data.year} 年度业务小票',
+          defaultFontSize: 14,
+        ),
+        const _ReceiptEditableSpec(
+          id: 'annual.client.label',
+          name: '单主字段名',
+          defaultText: '单主',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'annual.client.value',
+          name: '单主内容',
+          defaultText: data.clientName,
+          defaultFontSize: 14,
+        ),
+        const _ReceiptEditableSpec(
+          id: 'annual.count.label',
+          name: '业务数字段名',
+          defaultText: '业务数',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'annual.count.value',
+          name: '业务数内容',
+          defaultText: '${data.entries.length} 单',
+          defaultFontSize: 14,
+        ),
+        for (var index = 0; index < data.entries.length; index++) ...[
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.index',
+            name: '第 ${index + 1} 条编号',
+            defaultText: (index + 1).toString().padLeft(2, '0'),
+            defaultFontSize: 14,
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.title',
+            name: '第 ${index + 1} 条项目',
+            defaultText: data.entries[index].title,
+            defaultFontSize: 14,
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(
-              _ReceiptHeaderEditResult.custom(controller.text.trim()),
-            ),
-            child: const Text('保存'),
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.platform',
+            name: '第 ${index + 1} 条平台',
+            defaultText: data.entries[index].platform,
+            defaultFontSize: 14,
+          ),
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.amount',
+            name: '第 ${index + 1} 条金额',
+            defaultText: '¥ ${_money(data.entries[index].amount)}',
+            defaultFontSize: 14,
           ),
         ],
+        const _ReceiptEditableSpec(
+          id: 'annual.total.label',
+          name: '总额字段名',
+          defaultText: '全年总额',
+          defaultFontSize: 18,
+        ),
+        _ReceiptEditableSpec(
+          id: 'annual.total.value',
+          name: '总额内容',
+          defaultText: '¥ ${_money(data.total)}',
+          defaultFontSize: 22,
+        ),
+        const _ReceiptEditableSpec(
+          id: 'footer',
+          name: '底部文字',
+          defaultText: 'THANK YOU',
+          defaultFontSize: 14,
+        ),
+      ];
+    }
+
+    final data = widget.data!;
+    final pricedBase = applyPricingAdjustments(
+      data.basePrice,
+      data.pricingAdjustments,
+    );
+    return <_ReceiptEditableSpec>[
+      _ReceiptEditableSpec(
+        id: 'header',
+        name: '抬头',
+        defaultText: header,
+        defaultFontSize: 22,
+      ),
+      _ReceiptEditableSpec(
+        id: 'platform',
+        name: '平台',
+        defaultText: data.platform,
+        defaultFontSize: 14,
+      ),
+      const _ReceiptEditableSpec(
+        id: 'item.label',
+        name: '项目字段名',
+        defaultText: '项目',
+        defaultFontSize: 14,
+      ),
+      _ReceiptEditableSpec(
+        id: 'item.value',
+        name: '项目内容',
+        defaultText: data.title,
+        defaultFontSize: 14,
+      ),
+      if (data.clientName != null && data.clientName!.trim().isNotEmpty) ...[
+        const _ReceiptEditableSpec(
+          id: 'client.label',
+          name: '单主字段名',
+          defaultText: '单主',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'client.value',
+          name: '单主内容',
+          defaultText: data.clientName!,
+          defaultFontSize: 14,
+        ),
+      ],
+      const _ReceiptEditableSpec(
+        id: 'base.label',
+        name: '基础价格字段名',
+        defaultText: '基础价格',
+        defaultFontSize: 14,
+      ),
+      _ReceiptEditableSpec(
+        id: 'base.value',
+        name: '基础价格内容',
+        defaultText: '¥ ${_money(data.basePrice)}',
+        defaultFontSize: 14,
+      ),
+      for (var index = 0; index < data.pricingAdjustments.length; index++) ...[
+        _ReceiptEditableSpec(
+          id: 'adjustment.$index.label',
+          name: '第 ${index + 1} 条加价名称',
+          defaultText: data.pricingAdjustments[index].name,
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'adjustment.$index.value',
+          name: '第 ${index + 1} 条加价内容',
+          defaultText: data.pricingAdjustments[index].formulaLabel,
+          defaultFontSize: 14,
+        ),
+      ],
+      if (data.pricingAdjustments.isNotEmpty) ...[
+        const _ReceiptEditableSpec(
+          id: 'priced.label',
+          name: '加价后字段名',
+          defaultText: '加价后',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'priced.value',
+          name: '加价后内容',
+          defaultText: '¥ ${_money(pricedBase)}',
+          defaultFontSize: 14,
+        ),
+      ],
+      if (data.supplementAmount != 0) ...[
+        _ReceiptEditableSpec(
+          id: 'supplement.label',
+          name: '补款字段名',
+          defaultText: data.supplementPricingEnabled ? '补款原额' : '补款',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'supplement.value',
+          name: '补款内容',
+          defaultText: '+¥ ${_money(data.supplementAmount)}',
+          defaultFontSize: 14,
+        ),
+        if (data.supplementPricingEnabled) ...[
+          const _ReceiptEditableSpec(
+            id: 'supplementPriced.label',
+            name: '补款加价后字段名',
+            defaultText: '补款加价后',
+            defaultFontSize: 14,
+          ),
+          _ReceiptEditableSpec(
+            id: 'supplementPriced.value',
+            name: '补款加价后内容',
+            defaultText: '+¥ ${_money(data.pricedSupplementAmount)}',
+            defaultFontSize: 14,
+          ),
+        ],
+      ],
+      if (data.deductionAmount != 0) ...[
+        const _ReceiptEditableSpec(
+          id: 'deduction.label',
+          name: '减款字段名',
+          defaultText: '减款',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'deduction.value',
+          name: '减款内容',
+          defaultText: '-¥ ${_money(data.deductionAmount)}',
+          defaultFontSize: 14,
+        ),
+      ],
+      const _ReceiptEditableSpec(
+        id: 'total.label',
+        name: '合计字段名',
+        defaultText: '合计',
+        defaultFontSize: 18,
+      ),
+      _ReceiptEditableSpec(
+        id: 'total.value',
+        name: '合计内容',
+        defaultText: '¥ ${_money(data.total)}',
+        defaultFontSize: 22,
+      ),
+      const _ReceiptEditableSpec(
+        id: 'footer',
+        name: '底部文字',
+        defaultText: 'THANK YOU',
+        defaultFontSize: 14,
+      ),
+    ];
+  }
+
+  Future<void> _editContent() async {
+    final result = await Navigator.of(context).push<_ReceiptContentDraft>(
+      MaterialPageRoute<_ReceiptContentDraft>(
+        builder: (_) => _ReceiptContentEditorPage(
+          specs: _contentSpecs(),
+          initial: _contentDraft,
+        ),
       ),
     );
-    controller.dispose();
-    if (result == null || !mounted) return;
-    widget.styleStore.setHeaderText(
-      result.followAccount ? null : result.text,
-    );
+    if (result != null && mounted) {
+      setState(() => _contentDraft = result);
+    }
   }
 
   MemoryImage? _backgroundImage() {
