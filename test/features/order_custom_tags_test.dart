@@ -30,6 +30,10 @@ void main() {
   });
 
 
+  test('urgent tag is exposed as a built-in custom tag', () {
+    expect(builtInOrderTags, contains(urgentOrderTag));
+  });
+
   test('urgent tag toggles through the ordinary tag list', () {
     final source = <String>['定向企划', '商稿'];
 
