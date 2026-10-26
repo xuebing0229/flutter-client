@@ -177,6 +177,52 @@ class AnnualReceiptData {
       entries.fold<double>(0, (sum, entry) => sum + entry.amount);
 }
 
+class _ReceiptEditableSpec {
+  const _ReceiptEditableSpec({
+    required this.id,
+    required this.name,
+    required this.defaultText,
+    required this.defaultFontSize,
+  });
+
+  final String id;
+  final String name;
+  final String defaultText;
+  final double defaultFontSize;
+}
+
+class _ReceiptContentDraft {
+  const _ReceiptContentDraft({
+    this.textOverrides = const <String, String>{},
+    this.fontSizeOverrides = const <String, double>{},
+  });
+
+  final Map<String, String> textOverrides;
+  final Map<String, double> fontSizeOverrides;
+
+  String text(String id, String fallback) => textOverrides[id] ?? fallback;
+
+  double fontSize(String id, double fallback) =>
+      fontSizeOverrides[id] ?? fallback;
+
+  _ReceiptContentDraft withText(String id, String value) {
+    return _ReceiptContentDraft(
+      textOverrides: <String, String>{...textOverrides, id: value},
+      fontSizeOverrides: fontSizeOverrides,
+    );
+  }
+
+  _ReceiptContentDraft withFontSize(String id, double value) {
+    return _ReceiptContentDraft(
+      textOverrides: textOverrides,
+      fontSizeOverrides: <String, double>{
+        ...fontSizeOverrides,
+        id: value.clamp(8, 42).toDouble(),
+      },
+    );
+  }
+}
+
 double annualReceiptAmountForOrder(QueueOrder order) {
   if (order.archiveOutcome != OrderArchiveOutcome.terminated) {
     return order.originalTotal;
@@ -227,6 +273,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
   static const ReceiptStyleTransfer _styleTransfer = ReceiptStyleTransfer();
   bool _exporting = false;
   bool _transparentBackground = false;
+  _ReceiptContentDraft _contentDraft = const _ReceiptContentDraft();
   String? _cachedBackgroundBase64;
   MemoryImage? _cachedBackgroundImage;
 
@@ -270,49 +317,255 @@ class _ReceiptPageState extends State<ReceiptPage> {
     }
   }
 
-  Future<void> _editHeaderText() async {
-    final current = widget.styleStore.effectiveHeaderText(
+  List<_ReceiptEditableSpec> _contentSpecs() {
+    final header = widget.styleStore.effectiveHeaderText(
       widget.defaultHeaderText,
     );
-    final controller = TextEditingController(text: current);
-    final result = await showDialog<_ReceiptHeaderEditResult>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('编辑小票抬头'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 40,
-          decoration: const InputDecoration(
-            labelText: '抬头文字',
-            hintText: '可填写画师名、工作室名，也可留空',
-          ),
+    if (widget.annualData != null) {
+      final data = widget.annualData!;
+      return <_ReceiptEditableSpec>[
+        _ReceiptEditableSpec(
+          id: 'header',
+          name: '抬头',
+          defaultText: header,
+          defaultFontSize: 22,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(
-              const _ReceiptHeaderEditResult.followAccount(),
-            ),
-            child: const Text('使用账号名'),
+        _ReceiptEditableSpec(
+          id: 'annual.subtitle',
+          name: '副标题',
+          defaultText: '${data.year} 年度业务小票',
+          defaultFontSize: 14,
+        ),
+        const _ReceiptEditableSpec(
+          id: 'annual.client.label',
+          name: '单主字段名',
+          defaultText: '单主',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'annual.client.value',
+          name: '单主内容',
+          defaultText: data.clientName,
+          defaultFontSize: 14,
+        ),
+        const _ReceiptEditableSpec(
+          id: 'annual.count.label',
+          name: '业务数字段名',
+          defaultText: '业务数',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'annual.count.value',
+          name: '业务数内容',
+          defaultText: '${data.entries.length} 单',
+          defaultFontSize: 14,
+        ),
+        for (var index = 0; index < data.entries.length; index++) ...[
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.index',
+            name: '第 ${index + 1} 条编号',
+            defaultText: (index + 1).toString().padLeft(2, '0'),
+            defaultFontSize: 14,
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.title',
+            name: '第 ${index + 1} 条项目',
+            defaultText: data.entries[index].title,
+            defaultFontSize: 14,
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(
-              _ReceiptHeaderEditResult.custom(controller.text.trim()),
-            ),
-            child: const Text('保存'),
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.platform',
+            name: '第 ${index + 1} 条平台',
+            defaultText: data.entries[index].platform,
+            defaultFontSize: 14,
+          ),
+          _ReceiptEditableSpec(
+            id: 'annual.entry.$index.amount',
+            name: '第 ${index + 1} 条金额',
+            defaultText: '¥ ${_money(data.entries[index].amount)}',
+            defaultFontSize: 14,
           ),
         ],
+        const _ReceiptEditableSpec(
+          id: 'annual.total.label',
+          name: '总额字段名',
+          defaultText: '全年总额',
+          defaultFontSize: 18,
+        ),
+        _ReceiptEditableSpec(
+          id: 'annual.total.value',
+          name: '总额内容',
+          defaultText: '¥ ${_money(data.total)}',
+          defaultFontSize: 22,
+        ),
+        const _ReceiptEditableSpec(
+          id: 'footer',
+          name: '底部文字',
+          defaultText: 'THANK YOU',
+          defaultFontSize: 14,
+        ),
+      ];
+    }
+
+    final data = widget.data!;
+    final pricedBase = applyPricingAdjustments(
+      data.basePrice,
+      data.pricingAdjustments,
+    );
+    return <_ReceiptEditableSpec>[
+      _ReceiptEditableSpec(
+        id: 'header',
+        name: '抬头',
+        defaultText: header,
+        defaultFontSize: 22,
+      ),
+      _ReceiptEditableSpec(
+        id: 'platform',
+        name: '平台',
+        defaultText: data.platform,
+        defaultFontSize: 14,
+      ),
+      const _ReceiptEditableSpec(
+        id: 'item.label',
+        name: '项目字段名',
+        defaultText: '项目',
+        defaultFontSize: 14,
+      ),
+      _ReceiptEditableSpec(
+        id: 'item.value',
+        name: '项目内容',
+        defaultText: data.title,
+        defaultFontSize: 14,
+      ),
+      if (data.clientName != null && data.clientName!.trim().isNotEmpty) ...[
+        const _ReceiptEditableSpec(
+          id: 'client.label',
+          name: '单主字段名',
+          defaultText: '单主',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'client.value',
+          name: '单主内容',
+          defaultText: data.clientName!,
+          defaultFontSize: 14,
+        ),
+      ],
+      const _ReceiptEditableSpec(
+        id: 'base.label',
+        name: '基础价格字段名',
+        defaultText: '基础价格',
+        defaultFontSize: 14,
+      ),
+      _ReceiptEditableSpec(
+        id: 'base.value',
+        name: '基础价格内容',
+        defaultText: '¥ ${_money(data.basePrice)}',
+        defaultFontSize: 14,
+      ),
+      for (var index = 0; index < data.pricingAdjustments.length; index++) ...[
+        _ReceiptEditableSpec(
+          id: 'adjustment.$index.label',
+          name: '第 ${index + 1} 条加价名称',
+          defaultText: data.pricingAdjustments[index].name,
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'adjustment.$index.value',
+          name: '第 ${index + 1} 条加价内容',
+          defaultText: data.pricingAdjustments[index].formulaLabel,
+          defaultFontSize: 14,
+        ),
+      ],
+      if (data.pricingAdjustments.isNotEmpty) ...[
+        const _ReceiptEditableSpec(
+          id: 'priced.label',
+          name: '加价后字段名',
+          defaultText: '加价后',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'priced.value',
+          name: '加价后内容',
+          defaultText: '¥ ${_money(pricedBase)}',
+          defaultFontSize: 14,
+        ),
+      ],
+      if (data.supplementAmount != 0) ...[
+        _ReceiptEditableSpec(
+          id: 'supplement.label',
+          name: '补款字段名',
+          defaultText: data.supplementPricingEnabled ? '补款原额' : '补款',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'supplement.value',
+          name: '补款内容',
+          defaultText: '+¥ ${_money(data.supplementAmount)}',
+          defaultFontSize: 14,
+        ),
+        if (data.supplementPricingEnabled) ...[
+          const _ReceiptEditableSpec(
+            id: 'supplementPriced.label',
+            name: '补款加价后字段名',
+            defaultText: '补款加价后',
+            defaultFontSize: 14,
+          ),
+          _ReceiptEditableSpec(
+            id: 'supplementPriced.value',
+            name: '补款加价后内容',
+            defaultText: '+¥ ${_money(data.pricedSupplementAmount)}',
+            defaultFontSize: 14,
+          ),
+        ],
+      ],
+      if (data.deductionAmount != 0) ...[
+        const _ReceiptEditableSpec(
+          id: 'deduction.label',
+          name: '减款字段名',
+          defaultText: '减款',
+          defaultFontSize: 14,
+        ),
+        _ReceiptEditableSpec(
+          id: 'deduction.value',
+          name: '减款内容',
+          defaultText: '-¥ ${_money(data.deductionAmount)}',
+          defaultFontSize: 14,
+        ),
+      ],
+      const _ReceiptEditableSpec(
+        id: 'total.label',
+        name: '合计字段名',
+        defaultText: '合计',
+        defaultFontSize: 18,
+      ),
+      _ReceiptEditableSpec(
+        id: 'total.value',
+        name: '合计内容',
+        defaultText: '¥ ${_money(data.total)}',
+        defaultFontSize: 22,
+      ),
+      const _ReceiptEditableSpec(
+        id: 'footer',
+        name: '底部文字',
+        defaultText: 'THANK YOU',
+        defaultFontSize: 14,
+      ),
+    ];
+  }
+
+  Future<void> _editContent() async {
+    final result = await Navigator.of(context).push<_ReceiptContentDraft>(
+      MaterialPageRoute<_ReceiptContentDraft>(
+        builder: (_) => _ReceiptContentEditorPage(
+          specs: _contentSpecs(),
+          initial: _contentDraft,
+        ),
       ),
     );
-    controller.dispose();
-    if (result == null || !mounted) return;
-    widget.styleStore.setHeaderText(
-      result.followAccount ? null : result.text,
-    );
+    if (result != null && mounted) {
+      setState(() => _contentDraft = result);
+    }
   }
 
   MemoryImage? _backgroundImage() {
@@ -648,9 +901,9 @@ class _ReceiptPageState extends State<ReceiptPage> {
                     label: const Text('字体颜色'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: _editHeaderText,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('抬头文字'),
+                    onPressed: _editContent,
+                    icon: const Icon(Icons.edit_note_rounded),
+                    label: const Text('编辑内容'),
                   ),
                   OutlinedButton.icon(
                     onPressed: _showStylePresets,
@@ -691,6 +944,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                           headerText: style.effectiveHeaderText(
                             widget.defaultHeaderText,
                           ),
+                          content: _contentDraft,
                           fontColor: Color(style.fontColorValue),
                           backgroundImage: backgroundImage,
                           transparentBackground: _transparentBackground,
@@ -700,6 +954,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                           headerText: style.effectiveHeaderText(
                             widget.defaultHeaderText,
                           ),
+                          content: _contentDraft,
                           fontColor: Color(style.fontColorValue),
                           backgroundImage: backgroundImage,
                           transparentBackground: _transparentBackground,
@@ -726,14 +981,135 @@ class _ReceiptPageState extends State<ReceiptPage> {
 }
 
 
-class _ReceiptHeaderEditResult {
-  const _ReceiptHeaderEditResult.custom(this.text) : followAccount = false;
-  const _ReceiptHeaderEditResult.followAccount()
-      : followAccount = true,
-        text = '';
+class _ReceiptContentEditorPage extends StatefulWidget {
+  const _ReceiptContentEditorPage({
+    required this.specs,
+    required this.initial,
+  });
 
-  final bool followAccount;
-  final String text;
+  final List<_ReceiptEditableSpec> specs;
+  final _ReceiptContentDraft initial;
+
+  @override
+  State<_ReceiptContentEditorPage> createState() =>
+      _ReceiptContentEditorPageState();
+}
+
+class _ReceiptContentEditorPageState extends State<_ReceiptContentEditorPage> {
+  late _ReceiptContentDraft _draft;
+  int _resetGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _draft = widget.initial;
+  }
+
+  void _changeFontSize(_ReceiptEditableSpec spec, double delta) {
+    final current = _draft.fontSize(spec.id, spec.defaultFontSize);
+    setState(() {
+      _draft = _draft.withFontSize(spec.id, current + delta);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          '编辑小票内容',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _draft = const _ReceiptContentDraft();
+                _resetGeneration += 1;
+              });
+            },
+            child: const Text('恢复本张默认'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_draft),
+            child: const Text('保存'),
+          ),
+          const SizedBox(width: 6),
+        ],
+      ),
+      body: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        itemCount: widget.specs.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final spec = widget.specs[index];
+          final size = _draft.fontSize(spec.id, spec.defaultFontSize);
+          return Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    spec.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    key: ValueKey(
+                      'receipt-content-${spec.id}-$_resetGeneration',
+                    ),
+                    initialValue: _draft.text(spec.id, spec.defaultText),
+                    minLines: 1,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      _draft = _draft.withText(spec.id, value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('字号'),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: '减小字号',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: size <= 8
+                            ? null
+                            : () => _changeFontSize(spec, -1),
+                        icon: const Icon(Icons.remove_rounded),
+                      ),
+                      SizedBox(
+                        width: 44,
+                        child: Text(
+                          size.toStringAsFixed(0),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '增大字号',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: size >= 42
+                            ? null
+                            : () => _changeFontSize(spec, 1),
+                        icon: const Icon(Icons.add_rounded),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _ReceiptPaperFrame extends StatelessWidget {
@@ -791,6 +1167,7 @@ class _AnnualReceiptPaper extends StatelessWidget {
   const _AnnualReceiptPaper({
     required this.data,
     required this.headerText,
+    required this.content,
     required this.fontColor,
     required this.backgroundImage,
     required this.transparentBackground,
@@ -798,12 +1175,14 @@ class _AnnualReceiptPaper extends StatelessWidget {
 
   final AnnualReceiptData data;
   final String headerText;
+  final _ReceiptContentDraft content;
   final Color fontColor;
   final ImageProvider? backgroundImage;
   final bool transparentBackground;
 
   @override
   Widget build(BuildContext context) {
+    final visibleHeader = content.text('header', headerText);
     return _ReceiptPaperFrame(
       fontColor: fontColor,
       backgroundImage: backgroundImage,
@@ -811,13 +1190,13 @@ class _AnnualReceiptPaper extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (headerText.isNotEmpty) ...[
+          if (visibleHeader.isNotEmpty) ...[
             Text(
-              headerText,
+              visibleHeader,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: fontColor,
-                fontSize: 22,
+                fontSize: content.fontSize('header', 22),
                 fontWeight: FontWeight.w800,
                 letterSpacing: 2,
               ),
@@ -825,20 +1204,40 @@ class _AnnualReceiptPaper extends StatelessWidget {
             const SizedBox(height: 4),
           ],
           Text(
-            '${data.year} 年度业务小票',
+            content.text(
+              'annual.subtitle',
+              '${data.year} 年度业务小票',
+            ),
             textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: content.fontSize('annual.subtitle', 14),
+            ),
           ),
           const SizedBox(height: 18),
           _DashedDivider(color: fontColor),
           const SizedBox(height: 14),
-          _ReceiptTextRow(label: '单主', value: data.clientName),
-          _ReceiptTextRow(label: '业务数', value: '${data.entries.length} 单'),
+          _ReceiptTextRow(
+            label: content.text('annual.client.label', '单主'),
+            value: content.text('annual.client.value', data.clientName),
+            labelFontSize: content.fontSize('annual.client.label', 14),
+            valueFontSize: content.fontSize('annual.client.value', 14),
+          ),
+          _ReceiptTextRow(
+            label: content.text('annual.count.label', '业务数'),
+            value: content.text(
+              'annual.count.value',
+              '${data.entries.length} 单',
+            ),
+            labelFontSize: content.fontSize('annual.count.label', 14),
+            valueFontSize: content.fontSize('annual.count.value', 14),
+          ),
           const SizedBox(height: 12),
           for (var index = 0; index < data.entries.length; index++) ...[
             if (index > 0) const SizedBox(height: 13),
             _AnnualReceiptEntryRow(
-              index: index + 1,
+              index: index,
               entry: data.entries[index],
+              content: content,
             ),
           ],
           const SizedBox(height: 16),
@@ -848,19 +1247,22 @@ class _AnnualReceiptPaper extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '全年总额',
+                  content.text('annual.total.label', '全年总额'),
                   style: TextStyle(
                     color: fontColor,
-                    fontSize: 18,
+                    fontSize: content.fontSize('annual.total.label', 18),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
               Text(
-                '¥ ${_money(data.total)}',
+                content.text(
+                  'annual.total.value',
+                  '¥ ${_money(data.total)}',
+                ),
                 style: TextStyle(
                   color: fontColor,
-                  fontSize: 22,
+                  fontSize: content.fontSize('annual.total.value', 22),
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -868,10 +1270,11 @@ class _AnnualReceiptPaper extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           Text(
-            'THANK YOU',
+            content.text('footer', 'THANK YOU'),
             textAlign: TextAlign.center,
             style: TextStyle(
               color: fontColor,
+              fontSize: content.fontSize('footer', 14),
               fontWeight: FontWeight.w700,
               letterSpacing: 3,
             ),
@@ -886,13 +1289,16 @@ class _AnnualReceiptEntryRow extends StatelessWidget {
   const _AnnualReceiptEntryRow({
     required this.index,
     required this.entry,
+    required this.content,
   });
 
   final int index;
   final AnnualReceiptEntry entry;
+  final _ReceiptContentDraft content;
 
   @override
   Widget build(BuildContext context) {
+    final prefix = 'annual.entry.$index';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -901,13 +1307,24 @@ class _AnnualReceiptEntryRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 28,
-              child: Text(index.toString().padLeft(2, '0')),
+              child: Text(
+                content.text(
+                  '$prefix.index',
+                  (index + 1).toString().padLeft(2, '0'),
+                ),
+                style: TextStyle(
+                  fontSize: content.fontSize('$prefix.index', 14),
+                ),
+              ),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                entry.title,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                content.text('$prefix.title', entry.title),
+                style: TextStyle(
+                  fontSize: content.fontSize('$prefix.title', 14),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -917,8 +1334,23 @@ class _AnnualReceiptEntryRow extends StatelessWidget {
           padding: const EdgeInsets.only(left: 34),
           child: Row(
             children: [
-              Expanded(child: Text(entry.platform)),
-              Text('¥ ${_money(entry.amount)}'),
+              Expanded(
+                child: Text(
+                  content.text('$prefix.platform', entry.platform),
+                  style: TextStyle(
+                    fontSize: content.fontSize('$prefix.platform', 14),
+                  ),
+                ),
+              ),
+              Text(
+                content.text(
+                  '$prefix.amount',
+                  '¥ ${_money(entry.amount)}',
+                ),
+                style: TextStyle(
+                  fontSize: content.fontSize('$prefix.amount', 14),
+                ),
+              ),
             ],
           ),
         ),
@@ -931,6 +1363,7 @@ class _ReceiptPaper extends StatelessWidget {
   const _ReceiptPaper({
     required this.data,
     required this.headerText,
+    required this.content,
     required this.fontColor,
     required this.backgroundImage,
     required this.transparentBackground,
@@ -938,6 +1371,7 @@ class _ReceiptPaper extends StatelessWidget {
 
   final ReceiptData data;
   final String headerText;
+  final _ReceiptContentDraft content;
   final Color fontColor;
   final ImageProvider? backgroundImage;
   final bool transparentBackground;
@@ -948,101 +1382,163 @@ class _ReceiptPaper extends StatelessWidget {
       data.basePrice,
       data.pricingAdjustments,
     );
+    final visibleHeader = content.text('header', headerText);
+
+    Widget pair({
+      required String labelId,
+      required String label,
+      required String valueId,
+      required String value,
+    }) {
+      return _ReceiptTextRow(
+        label: content.text(labelId, label),
+        value: content.text(valueId, value),
+        labelFontSize: content.fontSize(labelId, 14),
+        valueFontSize: content.fontSize(valueId, 14),
+      );
+    }
+
     return _ReceiptPaperFrame(
       fontColor: fontColor,
       backgroundImage: backgroundImage,
       transparentBackground: transparentBackground,
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (headerText.isNotEmpty) ...[
-              Text(
-                headerText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: fontColor,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 4),
-            ],
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (visibleHeader.isNotEmpty) ...[
             Text(
-              data.platform,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 18),
-            _DashedDivider(color: fontColor),
-            const SizedBox(height: 14),
-            _ReceiptTextRow(label: '项目', value: data.title),
-            if (data.clientName != null && data.clientName!.trim().isNotEmpty)
-              _ReceiptTextRow(label: '单主', value: data.clientName!),
-            const SizedBox(height: 10),
-            _ReceiptMoneyRow(label: '基础价格', amount: data.basePrice),
-            for (final adjustment in data.pricingAdjustments)
-              _ReceiptFormulaRow(adjustment: adjustment),
-            if (data.pricingAdjustments.isNotEmpty)
-              _ReceiptMoneyRow(label: '加价后', amount: pricedBase),
-            if (data.supplementAmount != 0) ...[
-              _ReceiptMoneyRow(
-                label: data.supplementPricingEnabled ? '补款原额' : '补款',
-                amount: data.supplementAmount,
-                prefix: '+',
-              ),
-              if (data.supplementPricingEnabled)
-                _ReceiptMoneyRow(
-                  label: '补款加价后',
-                  amount: data.pricedSupplementAmount,
-                  prefix: '+',
-                ),
-            ],
-            if (data.deductionAmount != 0)
-              _ReceiptMoneyRow(
-                label: '减款',
-                amount: data.deductionAmount,
-                prefix: '-',
-              ),
-            const SizedBox(height: 14),
-            _DashedDivider(color: fontColor),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '合计',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ),
-                Text(
-                  '¥ ${_money(data.total)}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 28),
-            Text(
-              'THANK YOU',
+              visibleHeader,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: fontColor,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 3,
+                fontSize: content.fontSize('header', 22),
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
               ),
             ),
+            const SizedBox(height: 4),
           ],
-        ),
+          Text(
+            content.text('platform', data.platform),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: content.fontSize('platform', 14),
+            ),
+          ),
+          const SizedBox(height: 18),
+          _DashedDivider(color: fontColor),
+          const SizedBox(height: 14),
+          pair(
+            labelId: 'item.label',
+            label: '项目',
+            valueId: 'item.value',
+            value: data.title,
+          ),
+          if (data.clientName != null && data.clientName!.trim().isNotEmpty)
+            pair(
+              labelId: 'client.label',
+              label: '单主',
+              valueId: 'client.value',
+              value: data.clientName!,
+            ),
+          const SizedBox(height: 10),
+          pair(
+            labelId: 'base.label',
+            label: '基础价格',
+            valueId: 'base.value',
+            value: '¥ ${_money(data.basePrice)}',
+          ),
+          for (var index = 0; index < data.pricingAdjustments.length; index++)
+            pair(
+              labelId: 'adjustment.$index.label',
+              label: data.pricingAdjustments[index].name,
+              valueId: 'adjustment.$index.value',
+              value: data.pricingAdjustments[index].formulaLabel,
+            ),
+          if (data.pricingAdjustments.isNotEmpty)
+            pair(
+              labelId: 'priced.label',
+              label: '加价后',
+              valueId: 'priced.value',
+              value: '¥ ${_money(pricedBase)}',
+            ),
+          if (data.supplementAmount != 0) ...[
+            pair(
+              labelId: 'supplement.label',
+              label: data.supplementPricingEnabled ? '补款原额' : '补款',
+              valueId: 'supplement.value',
+              value: '+¥ ${_money(data.supplementAmount)}',
+            ),
+            if (data.supplementPricingEnabled)
+              pair(
+                labelId: 'supplementPriced.label',
+                label: '补款加价后',
+                valueId: 'supplementPriced.value',
+                value: '+¥ ${_money(data.pricedSupplementAmount)}',
+              ),
+          ],
+          if (data.deductionAmount != 0)
+            pair(
+              labelId: 'deduction.label',
+              label: '减款',
+              valueId: 'deduction.value',
+              value: '-¥ ${_money(data.deductionAmount)}',
+            ),
+          const SizedBox(height: 14),
+          _DashedDivider(color: fontColor),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  content.text('total.label', '合计'),
+                  style: TextStyle(
+                    fontSize: content.fontSize('total.label', 18),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                content.text(
+                  'total.value',
+                  '¥ ${_money(data.total)}',
+                ),
+                style: TextStyle(
+                  fontSize: content.fontSize('total.value', 22),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Text(
+            content.text('footer', 'THANK YOU'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: fontColor,
+              fontSize: content.fontSize('footer', 14),
+              fontWeight: FontWeight.w700,
+              letterSpacing: 3,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _ReceiptTextRow extends StatelessWidget {
-  const _ReceiptTextRow({required this.label, required this.value});
+  const _ReceiptTextRow({
+    required this.label,
+    required this.value,
+    required this.labelFontSize,
+    required this.valueFontSize,
+  });
+
   final String label;
   final String value;
+  final double labelFontSize;
+  final double valueFontSize;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1050,52 +1546,23 @@ class _ReceiptTextRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 62, child: Text(label)),
+            SizedBox(
+              width: 82,
+              child: Text(
+                label,
+                style: TextStyle(fontSize: labelFontSize),
+              ),
+            ),
             Expanded(
               child: Text(
                 value,
                 textAlign: TextAlign.right,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: valueFontSize,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ],
-        ),
-      );
-}
-
-class _ReceiptMoneyRow extends StatelessWidget {
-  const _ReceiptMoneyRow({
-    required this.label,
-    required this.amount,
-    this.prefix = '',
-  });
-  final String label;
-  final double amount;
-  final String prefix;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Expanded(child: Text(label)),
-            Text('$prefix¥ ${_money(amount)}'),
-          ],
-        ),
-      );
-}
-
-class _ReceiptFormulaRow extends StatelessWidget {
-  const _ReceiptFormulaRow({required this.adjustment});
-  final PricingAdjustment adjustment;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Expanded(child: Text(adjustment.name)),
-            Text(adjustment.formulaLabel),
           ],
         ),
       );
