@@ -407,6 +407,7 @@ class QueueOrder {
 
 
 const String urgentOrderTag = '加急';
+const List<String> builtInOrderTags = <String>[urgentOrderTag];
 
 bool hasUrgentOrderTag(Iterable<String> values) {
   final target = urgentOrderTag.toLowerCase();
