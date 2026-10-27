@@ -1357,7 +1357,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     await WidgetsBinding.instance.endOfFrame;
   }
 
-$methodAnchor
+  void _showTutorial() {
     unawaited(
       showFirstRunGuide(
         context,
