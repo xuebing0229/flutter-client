@@ -45,6 +45,7 @@ import '../features/shared/domain/collection_view_preferences.dart';
 import '../features/shared/domain/receipt_style_store.dart';
 import '../features/shared/presentation/preset_center_page.dart';
 import '../features/shared/presentation/receipt_center_page.dart';
+import '../features/shared/presentation/spotlight_guide.dart';
 
 Set<String> _desktopPetAssetPaths(Object? rawManifest) {
   if (rawManifest == null) return const <String>{};
@@ -731,6 +732,8 @@ class _WebWorkspace extends StatefulWidget {
 }
 
 class _WebWorkspaceState extends State<_WebWorkspace> {
+  final QuickStartGuideTargets _quickStartGuideTargets =
+      QuickStartGuideTargets();
   static const String _legacyWorkspaceKey =
       'adventurers-guild.web.workspace.v1';
   static const String _manifestName = 'backup.json';
@@ -1252,6 +1255,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             _scheduleSave();
           },
           sortModeName: _orderSortMode,
+          guideTargets: _quickStartGuideTargets,
           onSortModeChanged: (value) {
             setState(() {
               _collectionViews =
@@ -1345,7 +1349,13 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   void _showTutorial() {
-    unawaited(showFirstRunGuide(context, detailed: true));
+    unawaited(
+      showFirstRunGuide(
+        context,
+        detailed: true,
+        targets: _quickStartGuideTargets,
+      ),
+    );
   }
 
   Widget _buildWebToolPage(String tool) {
@@ -1737,12 +1747,15 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     final floatingAction = _busy || _desktopToolSelection != null
         ? null
         : switch (current.id) {
-            'orders' => FloatingActionButton.extended(
-                onPressed: () => unawaited(
-                  _chooseAddMethod(products: false),
+            'orders' => KeyedSubtree(
+                key: _quickStartGuideTargets.addOrderKey,
+                child: FloatingActionButton.extended(
+                  onPressed: () => unawaited(
+                    _chooseAddMethod(products: false),
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增排单'),
                 ),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增排单'),
               ),
             'products' => FloatingActionButton.extended(
                 onPressed: () => unawaited(
@@ -1773,6 +1786,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       toolSelected: _desktopToolSelection != null,
       floatingActionButton: floatingAction,
       showAppBar: _desktopToolSelection == null,
+      guideTargets: _quickStartGuideTargets,
     );
 
     if (!_busy) return shell;
