@@ -404,7 +404,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await WidgetsBinding.instance.endOfFrame;
   }
 
-$methodAnchor
+  Future<void> _showFirstRunGuideOnce() async {
     if (await _hintStore.hasSeenFirstRunGuide(widget.accountId)) return;
     if (!mounted) return;
 
