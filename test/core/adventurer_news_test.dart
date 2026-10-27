@@ -220,4 +220,12 @@ void main() {
       ['成品总概览与小票预设分享'],
     );
   });
+
+  test('207 包含工作台细节与新手指引完善见闻', () {
+    final picked = newsBetweenBuilds(206, 207);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['工作台细节与新手指引完善'],
+    );
+  });
 }
