@@ -40,6 +40,7 @@ import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/domain/collection_view_preferences.dart';
 import '../../shared/presentation/preset_center_page.dart';
 import '../../shared/presentation/receipt_center_page.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
@@ -107,6 +108,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
   final InteractionHintStore _hintStore = const InteractionHintStore();
+  final QuickStartGuideTargets _quickStartGuideTargets =
+      QuickStartGuideTargets();
   final DesktopPetService _desktopPetService = DesktopPetService();
   late final DesktopPetAccountSync _desktopPetAccountSync;
   late final SyncCoordinator _syncCoordinator;
@@ -399,7 +402,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     await _hintStore.markFirstRunGuideSeen(widget.accountId);
     if (!mounted) return;
-    await showFirstRunGuide(context);
+    await showFirstRunGuide(
+      context,
+      targets: _quickStartGuideTargets,
+    );
   }
 
   Future<void> _showTutorial() async {
@@ -407,7 +413,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (widget.featureStore.abstractMode) {
       await showAbstractModeGuide(context);
     } else {
-      await showFirstRunGuide(context, detailed: true);
+      await showFirstRunGuide(
+        context,
+        detailed: true,
+        targets: _quickStartGuideTargets,
+      );
     }
   }
 
@@ -1708,6 +1718,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onOverviewColumnsChanged: _setOrderOverviewColumns,
           sortModeName: _orderSortMode,
           onSortModeChanged: _setOrderSortMode,
+          guideTargets: _quickStartGuideTargets,
         ),
       ),
       if (widget.featureStore.products)
@@ -1836,10 +1847,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     _desktopRootRefreshPending))
         ? null
         : switch (current.id) {
-            'orders' => FloatingActionButton.extended(
-                onPressed: () => unawaited(_chooseAddMethod(products: false)),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增排单'),
+            'orders' => KeyedSubtree(
+                key: _quickStartGuideTargets.addOrderKey,
+                child: FloatingActionButton.extended(
+                  onPressed: () =>
+                      unawaited(_chooseAddMethod(products: false)),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增排单'),
+                ),
               ),
             'products' => FloatingActionButton.extended(
                 onPressed: () => unawaited(_chooseAddMethod(products: true)),
@@ -1866,6 +1881,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       toolSelected: _desktopToolSelection != null,
       floatingActionButton: floatingAction,
       showAppBar: _desktopToolSelection == null,
+      guideTargets: _quickStartGuideTargets,
     );
 
     final progress = _syncProgressOverlay;
