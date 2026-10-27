@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/presentation/spotlight_guide.dart';
+
 class _GuideStep {
   const _GuideStep({
     required this.icon,
@@ -12,7 +14,10 @@ class _GuideStep {
   final String body;
 }
 
-Future<void> _showDetailedGuide(BuildContext context) {
+Future<void> _showDetailedGuide(
+  BuildContext context, {
+  QuickStartGuideTargets? targets,
+}) {
   final size = MediaQuery.sizeOf(context);
 
   return showDialog<void>(
@@ -87,12 +92,30 @@ Future<void> _showDetailedGuide(BuildContext context) {
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('知道了'),
-                  ),
+                child: Row(
+                  children: [
+                    if (targets != null)
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          Navigator.of(dialogContext).pop();
+                          await Future<void>.delayed(
+                            const Duration(milliseconds: 120),
+                          );
+                          if (!context.mounted) return;
+                          await _showInteractiveQuickStart(
+                            context,
+                            targets,
+                          );
+                        },
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text('播放快速上手引导'),
+                      ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('知道了'),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -191,7 +214,7 @@ const _detailedGuide = <_GuideSection>[
     bullets: [
       '开关打开时，前台和后台都会自动交换设备数据；手机可能显示持续同步通知，这是后台同步服务的运行状态。',
       '开关关闭时，前台和后台都暂停交换数据，本地编辑会保留；重新打开后再继续同步。',
-      '“等待其他设备”表示本机同步核心已经就绪，正在等待已配对设备上线连接。',
+      '“等待其他设备”表示本机已经准备好，正在等待已连接的其他设备上线。',
       '出现数据冲突时，在同步页逐项选择要保留的设备版本，确认后才会继续合并。',
     ],
   ),
@@ -309,11 +332,58 @@ class _DetailedGuideCard extends StatelessWidget {
   }
 }
 
+Future<void> _showInteractiveQuickStart(
+  BuildContext context,
+  QuickStartGuideTargets targets,
+) async {
+  await WidgetsBinding.instance.endOfFrame;
+  if (!context.mounted) return;
+
+  final candidates = <SpotlightGuideStep>[
+    SpotlightGuideStep(
+      targetKey: targets.addOrderKey,
+      icon: Icons.add_circle_outline_rounded,
+      title: '先记下第一笔业务',
+      body: '点这里新增排单。既可以手动填写，也可以选择截图批量导入。',
+    ),
+    SpotlightGuideStep(
+      targetKey: targets.searchKey,
+      icon: Icons.search_rounded,
+      title: '快速找到排单',
+      body: '可以搜索图名、单主、平台等内容，右侧展开还能切换搜索范围。',
+    ),
+    SpotlightGuideStep(
+      targetKey: targets.toolbarKey,
+      icon: Icons.dashboard_customize_outlined,
+      title: '按你的习惯整理工作台',
+      body: '这里可以排序和切换列表、卡片、总概览等视图。',
+    ),
+    SpotlightGuideStep(
+      targetKey: targets.menuKey,
+      icon: Icons.menu_rounded,
+      title: '更多功能都在这里',
+      body: '同步、备份、截图识别、小票、节点＆加价预设和设置都可以从菜单进入。',
+    ),
+  ];
+  final steps = candidates
+      .where((step) => step.targetKey.currentContext != null)
+      .toList(growable: false);
+  if (steps.isEmpty) return;
+
+  await showSpotlightGuide(context, steps: steps);
+}
+
 Future<void> showFirstRunGuide(
   BuildContext context, {
   bool detailed = false,
+  QuickStartGuideTargets? targets,
 }) {
-  if (detailed) return _showDetailedGuide(context);
+  if (detailed) {
+    return _showDetailedGuide(context, targets: targets);
+  }
+  if (targets != null) {
+    return _showInteractiveQuickStart(context, targets);
+  }
 
   const steps = <_GuideStep>[
     _GuideStep(
