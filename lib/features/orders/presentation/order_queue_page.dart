@@ -8,6 +8,7 @@ import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../data/node_presets.dart';
 import '../domain/queue_order.dart';
@@ -45,6 +46,7 @@ class OrderQueuePage extends StatefulWidget {
     this.overviewColumns = 3,
     this.onOverviewColumnsChanged,
     required this.onSortModeChanged,
+    this.guideTargets,
     super.key,
   });
 
@@ -63,6 +65,7 @@ class OrderQueuePage extends StatefulWidget {
   final ValueChanged<int>? onOverviewColumnsChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<OrderQueuePage> createState() => _OrderQueuePageState();
@@ -1053,8 +1056,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         return Column(
           children: [
             if (widget.featureStore.search)
-              CollectionSearchField(
-                controller: _searchController,
+              KeyedSubtree(
+                key: widget.guideTargets?.searchKey,
+                child: CollectionSearchField(
+                  controller: _searchController,
                 query: _query,
                 hintText: '搜索排单',
                 filters: [
@@ -1070,10 +1075,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   setState(() => _searchField = value);
                 },
                 onChanged: (value) => setState(() => _query = value),
-                onClear: () {
-                  _searchController.clear();
-                  setState(() => _query = '');
-                },
+                  onClear: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
+                ),
               ),
             if (widget.featureStore.customTags && availableTags.isNotEmpty)
               SizedBox(
@@ -1114,8 +1120,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 ),
               ),
             if (widget.featureStore.sorting || widget.featureStore.viewSwitch)
-              CollectionToolbar(
-                title: '排单',
+              KeyedSubtree(
+                key: widget.guideTargets?.toolbarKey,
+                child: CollectionToolbar(
+                  title: '排单',
                 count: orders.length,
                 summaryText:
                     '待收入 ¥${_formatMoney(orders.fold<double>(0, (sum, order) => sum + order.realIncome))}',
@@ -1221,6 +1229,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         ),
                       )
                     : null,
+                ),
               ),
             if (useOverviewView)
               Padding(
