@@ -378,6 +378,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '小票中心与单主年度小票',
     description: '左侧栏新增统一“生成小票”中心：可按排单或成品生成单张小票，并按归档状态、时间和关键字筛选；也可按年份搜索单主，汇总其已归档的排单与成品业务，列出图名、平台、每单金额和全年总额。小票新增透明底 PNG 导出；成品每次售出可选记录单主，历史售出记录也能补填。原“节点预设”和“加价预设”合并为“节点＆加价预设”入口。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 211,
+    title: '快速上手引导与小票恢复完善',
+    description: '新增可重复播放的快速上手引导，会直接在真实界面上高亮“新增排单”、搜索、排序/视图和菜单入口，手机、电脑与网页版保持一致。小票“恢复默认”现在会同时恢复样式和已经编辑过的文字内容、字号，不再只恢复抬头或外观。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
