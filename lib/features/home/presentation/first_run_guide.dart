@@ -58,7 +58,7 @@ Future<void> _showDetailedGuide(
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '从接稿、交付到双端同步，按需要查看对应模块。',
+                            '从接稿、交付到多设备同步，按需要查看对应模块。',
                             style: TextStyle(
                               color: Theme.of(context)
                                   .colorScheme
@@ -93,7 +93,10 @@ Future<void> _showDetailedGuide(
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                child: Row(
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     if (targets != null)
                       OutlinedButton.icon(
@@ -112,7 +115,6 @@ Future<void> _showDetailedGuide(
                         icon: const Icon(Icons.play_arrow_rounded),
                         label: const Text('播放快速上手引导'),
                       ),
-                    const Spacer(),
                     FilledButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
                       child: const Text('知道了'),
