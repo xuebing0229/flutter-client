@@ -17,6 +17,7 @@ class _GuideStep {
 Future<void> _showDetailedGuide(
   BuildContext context, {
   QuickStartGuideTargets? targets,
+  Future<void> Function()? prepareQuickStart,
 }) {
   final size = MediaQuery.sizeOf(context);
 
@@ -105,6 +106,7 @@ Future<void> _showDetailedGuide(
                           await _showInteractiveQuickStart(
                             context,
                             targets,
+                            prepare: prepareQuickStart,
                           );
                         },
                         icon: const Icon(Icons.play_arrow_rounded),
@@ -334,8 +336,10 @@ class _DetailedGuideCard extends StatelessWidget {
 
 Future<void> _showInteractiveQuickStart(
   BuildContext context,
-  QuickStartGuideTargets targets,
-) async {
+  QuickStartGuideTargets targets, {
+  Future<void> Function()? prepare,
+}) async {
+  await prepare?.call();
   await WidgetsBinding.instance.endOfFrame;
   if (!context.mounted) return;
 
@@ -377,12 +381,21 @@ Future<void> showFirstRunGuide(
   BuildContext context, {
   bool detailed = false,
   QuickStartGuideTargets? targets,
+  Future<void> Function()? prepareQuickStart,
 }) {
   if (detailed) {
-    return _showDetailedGuide(context, targets: targets);
+    return _showDetailedGuide(
+      context,
+      targets: targets,
+      prepareQuickStart: prepareQuickStart,
+    );
   }
   if (targets != null) {
-    return _showInteractiveQuickStart(context, targets);
+    return _showInteractiveQuickStart(
+      context,
+      targets,
+      prepare: prepareQuickStart,
+    );
   }
 
   const steps = <_GuideStep>[
