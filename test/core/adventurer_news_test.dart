@@ -220,4 +220,12 @@ void main() {
       ['成品总概览与小票预设分享'],
     );
   });
+
+  test('211 包含快速上手引导与小票恢复完善见闻', () {
+    final picked = newsBetweenBuilds(210, 211);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['快速上手引导与小票恢复完善'],
+    );
+  });
 }
