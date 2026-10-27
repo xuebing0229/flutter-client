@@ -9,8 +9,6 @@ class QuickStartGuideTargets {
   final GlobalKey addOrderKey = GlobalKey(debugLabel: 'guide-add-order');
 }
 
-import 'package:flutter/material.dart';
-
 class SpotlightGuideStep {
   const SpotlightGuideStep({
     required this.targetKey,
@@ -79,7 +77,8 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   }
 
   void _move(int delta) {
-    final next = (_index + delta).clamp(0, widget.steps.length - 1);
+    final next =
+        (_index + delta).clamp(0, widget.steps.length - 1).toInt();
     if (next == _index) return;
     setState(() {
       _index = next;
@@ -98,7 +97,8 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final rect = _targetRect;
     final isLast = _index == widget.steps.length - 1;
 
-    final cardWidth = (size.width - 32).clamp(260.0, 420.0);
+    final cardWidth =
+        (size.width - 32).clamp(260.0, 420.0).toDouble();
     final cardHeight = 196.0;
     final preferBelow =
         rect == null || rect.bottom + cardHeight + 24 < size.height - safeBottom;
@@ -124,26 +124,26 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
               left: 0,
               top: 0,
               right: 0,
-              height: rect.top.clamp(0, size.height),
+              height: rect.top.clamp(0.0, size.height).toDouble(),
               child: const ColoredBox(color: Color(0xB8000000)),
             ),
             Positioned(
               left: 0,
-              top: rect.top.clamp(0, size.height),
-              width: rect.left.clamp(0, size.width),
-              height: rect.height.clamp(0, size.height),
+              top: rect.top.clamp(0.0, size.height).toDouble(),
+              width: rect.left.clamp(0.0, size.width).toDouble(),
+              height: rect.height.clamp(0.0, size.height).toDouble(),
               child: const ColoredBox(color: Color(0xB8000000)),
             ),
             Positioned(
-              left: rect.right.clamp(0, size.width),
-              top: rect.top.clamp(0, size.height),
+              left: rect.right.clamp(0.0, size.width).toDouble(),
+              top: rect.top.clamp(0.0, size.height).toDouble(),
               right: 0,
-              height: rect.height.clamp(0, size.height),
+              height: rect.height.clamp(0.0, size.height).toDouble(),
               child: const ColoredBox(color: Color(0xB8000000)),
             ),
             Positioned(
               left: 0,
-              top: rect.bottom.clamp(0, size.height),
+              top: rect.bottom.clamp(0.0, size.height).toDouble(),
               right: 0,
               bottom: 0,
               child: const ColoredBox(color: Color(0xB8000000)),
