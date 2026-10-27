@@ -1,6 +1,9 @@
 name: App Validation
 
 on:
+  push:
+    branches:
+      - validate/onboarding-spotlight
   pull_request:
     branches:
       - main
