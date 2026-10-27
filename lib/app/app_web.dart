@@ -1348,12 +1348,22 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     );
   }
 
-  void _showTutorial() {
+  Future<void> _prepareQuickStartGuide() async {
+    final tabs = _tabs();
+    final orderIndex = tabs.indexWhere((tab) => tab.id == 'orders');
+    if (orderIndex >= 0) {
+      _selectTab(orderIndex);
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+$methodAnchor
     unawaited(
       showFirstRunGuide(
         context,
         detailed: true,
         targets: _quickStartGuideTargets,
+        prepareQuickStart: _prepareQuickStartGuide,
       ),
     );
   }
