@@ -396,7 +396,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showFirstRunGuideOnce() async {
+  Future<void> _prepareQuickStartGuide() async {
+    if (!mounted) return;
+    if (_index != 0 || _desktopToolSelection != null) {
+      _selectDesktopTab(0);
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+$methodAnchor
     if (await _hintStore.hasSeenFirstRunGuide(widget.accountId)) return;
     if (!mounted) return;
 
@@ -405,6 +413,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await showFirstRunGuide(
       context,
       targets: _quickStartGuideTargets,
+      prepareQuickStart: _prepareQuickStartGuide,
     );
   }
 
@@ -417,6 +426,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context,
         detailed: true,
         targets: _quickStartGuideTargets,
+        prepareQuickStart: _prepareQuickStartGuide,
       );
     }
   }
