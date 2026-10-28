@@ -14,10 +14,42 @@ class _GuideStep {
   final String body;
 }
 
+enum QuickStartGuideDestination {
+  orders,
+  screenshotImport,
+  products,
+  schedule,
+  statistics,
+  presetCenter,
+  receiptCenter,
+  archive,
+  sync,
+  account,
+  settings,
+  featureToggle,
+}
+
+class QuickStartGuideActions {
+  const QuickStartGuideActions({
+    required this.goTo,
+    required this.createFirstOrder,
+    required this.waitForFirstOrderArchive,
+    required this.isAvailable,
+    required this.finish,
+  });
+
+  final Future<void> Function(QuickStartGuideDestination destination) goTo;
+  final Future<String?> Function() createFirstOrder;
+  final Future<bool> Function(String orderId) waitForFirstOrderArchive;
+  final bool Function(QuickStartGuideDestination destination) isAvailable;
+  final Future<void> Function() finish;
+}
+
 Future<void> _showDetailedGuide(
   BuildContext context, {
   QuickStartGuideTargets? targets,
   Future<void> Function()? prepareQuickStart,
+  QuickStartGuideActions? actions,
 }) {
   final size = MediaQuery.sizeOf(context);
 
@@ -110,6 +142,7 @@ Future<void> _showDetailedGuide(
                             context,
                             targets,
                             prepare: prepareQuickStart,
+                            actions: actions,
                           );
                         },
                         icon: const Icon(Icons.play_arrow_rounded),
@@ -336,47 +369,331 @@ class _DetailedGuideCard extends StatelessWidget {
   }
 }
 
+Future<bool> _showVisibleSpotlights(
+  BuildContext context,
+  List<SpotlightGuideStep> candidates, {
+  String finalLabel = '下一步',
+}) async {
+  if (!context.mounted) return false;
+  final steps = candidates
+      .where((step) => step.targetKey.currentContext != null)
+      .toList(growable: false);
+  if (steps.isEmpty) return true;
+  return showSpotlightGuide(
+    context,
+    steps: steps,
+    finalLabel: finalLabel,
+  );
+}
+
 Future<void> _showInteractiveQuickStart(
   BuildContext context,
   QuickStartGuideTargets targets, {
   Future<void> Function()? prepare,
+  QuickStartGuideActions? actions,
 }) async {
-  await prepare?.call();
+  if (actions == null) {
+    await prepare?.call();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return;
+    await showSpotlightGuide(
+      context,
+      finalLabel: '开始使用',
+      steps: [
+        SpotlightGuideStep(
+          targetKey: targets.addOrderKey,
+          icon: Icons.add_circle_outline_rounded,
+          title: '先记下第一笔业务',
+          body: '从这里新增排单。手动填写适合单笔记录，截图导入适合一次整理多张平台订单截图。',
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.searchKey,
+          icon: Icons.search_rounded,
+          title: '快速找到排单',
+          body: '可以搜索图名、单主、平台等内容，右侧展开还能切换搜索范围。',
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.toolbarKey,
+          icon: Icons.dashboard_customize_outlined,
+          title: '按你的习惯整理工作台',
+          body: '这里可以排序和切换列表、卡片、总概览等视图。',
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.menuKey,
+          icon: Icons.menu_rounded,
+          title: '更多功能都在这里',
+          body: '同步、备份、截图导入、小票、节点＆加价预设和设置都可以从菜单进入。',
+        ),
+      ].where((step) => step.targetKey.currentContext != null).toList(),
+    );
+    return;
+  }
+
+  Future<bool> showSection(
+    QuickStartGuideDestination destination,
+    List<SpotlightGuideStep> steps,
+  ) async {
+    if (!actions.isAvailable(destination)) return true;
+    await actions.goTo(destination);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return false;
+    return _showVisibleSpotlights(context, steps);
+  }
+
+  Future<void> stop() async {
+    await actions.finish();
+  }
+
+  await actions.goTo(QuickStartGuideDestination.orders);
   await WidgetsBinding.instance.endOfFrame;
   if (!context.mounted) return;
 
-  final candidates = <SpotlightGuideStep>[
-    SpotlightGuideStep(
-      targetKey: targets.addOrderKey,
-      icon: Icons.add_circle_outline_rounded,
-      title: '先记下第一笔业务',
-      body: '点这里新增排单。既可以手动填写，也可以选择截图批量导入。',
-    ),
-    SpotlightGuideStep(
-      targetKey: targets.searchKey,
-      icon: Icons.search_rounded,
-      title: '快速找到排单',
-      body: '可以搜索图名、单主、平台等内容，右侧展开还能切换搜索范围。',
-    ),
-    SpotlightGuideStep(
-      targetKey: targets.toolbarKey,
-      icon: Icons.dashboard_customize_outlined,
-      title: '按你的习惯整理工作台',
-      body: '这里可以排序和切换列表、卡片、总概览等视图。',
-    ),
-    SpotlightGuideStep(
-      targetKey: targets.menuKey,
-      icon: Icons.menu_rounded,
-      title: '更多功能都在这里',
-      body: '同步、备份、截图识别、小票、节点＆加价预设和设置都可以从菜单进入。',
-    ),
-  ];
-  final steps = candidates
-      .where((step) => step.targetKey.currentContext != null)
-      .toList(growable: false);
-  if (steps.isEmpty) return;
+  final startFirstOrder = await _showVisibleSpotlights(
+    context,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.addOrderKey,
+        icon: Icons.add_circle_outline_rounded,
+        title: '先完整走一遍第一笔排单',
+        body: '先从新增排单开始。接下来会带你实际创建一笔自己的业务，再继续认识节点推进和归档。',
+      ),
+    ],
+    finalLabel: '去创建',
+  );
+  if (!startFirstOrder || !context.mounted) {
+    await stop();
+    return;
+  }
 
-  await showSpotlightGuide(context, steps: steps);
+  final firstOrderId = await actions.createFirstOrder();
+  if (!context.mounted) return;
+
+  if (firstOrderId != null) {
+    await actions.goTo(QuickStartGuideDestination.orders);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return;
+
+    final continueFirstFlow = await _showVisibleSpotlights(
+      context,
+      [
+        SpotlightGuideStep(
+          targetKey: targets.firstOrderCardKey,
+          icon: Icons.account_tree_outlined,
+          title: '这就是刚刚创建的排单',
+          body: '卡片上的－/＋用来调整当前节点的小进度；“确认节点”会推进到下一节点。长按这张卡片还能置顶、归档、删除或进入批量操作。',
+        ),
+      ],
+      finalLabel: '练习归档',
+    );
+    if (!continueFirstFlow || !context.mounted) {
+      await stop();
+      return;
+    }
+
+    final archived = await actions.waitForFirstOrderArchive(firstOrderId);
+    if (!context.mounted) return;
+    if (archived) {
+      final archiveShown = await showSection(
+        QuickStartGuideDestination.archive,
+        [
+          SpotlightGuideStep(
+            targetKey: targets.archivedOrderKey,
+            icon: Icons.archive_outlined,
+            title: '归档后的记录会留在这里',
+            body: '归档会把它移出当前排单列表，并按顺利完成或中止结算保存最终收入。这里可以查看、恢复，也可以按时间清理旧归档。',
+          ),
+        ],
+      );
+      if (!archiveShown || !context.mounted) {
+        await stop();
+        return;
+      }
+    }
+  }
+
+  final orderToolsShown = await showSection(
+    QuickStartGuideDestination.orders,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.searchKey,
+        icon: Icons.search_rounded,
+        title: '日常找单不用翻卡片',
+        body: '搜索支持图名、单主、平台等字段；自定义标签开启后，还可以直接按标签筛选。',
+      ),
+      SpotlightGuideStep(
+        targetKey: targets.toolbarKey,
+        icon: Icons.dashboard_customize_outlined,
+        title: '这里控制排序和视图',
+        body: '可以按收入、剩余截稿等方式排序，并切换列表、卡片和总概览；总概览的列数也能自己填。',
+      ),
+    ],
+  );
+  if (!orderToolsShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final screenshotShown = await showSection(
+    QuickStartGuideDestination.screenshotImport,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.screenshotImportKey,
+        icon: Icons.document_scanner_outlined,
+        title: '截图可以批量导入',
+        body: '选择一张或多张平台订单截图后，会先在本机识别成可检查的条目。确认图名、时间、节点和疑似重复后，才会真正写入排单。',
+      ),
+    ],
+  );
+  if (!screenshotShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final presetShown = await showSection(
+    QuickStartGuideDestination.presetCenter,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.presetCenterKey,
+        icon: Icons.account_tree_outlined,
+        title: '把常用流程先做成预设',
+        body: '节点预设保存草图、线稿、上色、成稿等工作阶段；同页的加价预设可以保存固定额、比例或阶梯加价，新增排单时直接复用。',
+      ),
+    ],
+  );
+  if (!presetShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final productsShown = await showSection(
+    QuickStartGuideDestination.products,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.addProductKey,
+        icon: Icons.image_outlined,
+        title: '成品是另一类业务记录',
+        body: '这里记录已经完成、可以售卖的作品。可以新增单次售卖或多次售卖成品，每次售出都会留下单独的售出时间记录。',
+      ),
+    ],
+  );
+  if (!productsShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final scheduleShown = await showSection(
+    QuickStartGuideDestination.schedule,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.scheduleTabKey,
+        icon: Icons.calendar_month_outlined,
+        title: '日程集中看截稿和交付',
+        body: '日程会把待交稿、已交稿和当天收入按日期集中起来，适合每天检查接下来要赶哪些稿。',
+      ),
+    ],
+  );
+  if (!scheduleShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final statisticsShown = await showSection(
+    QuickStartGuideDestination.statistics,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.statisticsTabKey,
+        icon: Icons.bar_chart_rounded,
+        title: '收入都在统计里汇总',
+        body: '这里看月收入、年收入、本月待收入、平台分布和笔数。排单正式归档后才会计入已收入；未归档且本月截稿的排单会进入待收入。',
+      ),
+    ],
+  );
+  if (!statisticsShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final receiptShown = await showSection(
+    QuickStartGuideDestination.receiptCenter,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.receiptCenterKey,
+        icon: Icons.receipt_long_outlined,
+        title: '小票有两种生成方式',
+        body: '“按单子生成”可以挑排单或成品；“按单主生成”会统计某个单主某一年的已归档业务。生成后文字、字号、背景和字体颜色都可以继续编辑。',
+      ),
+    ],
+  );
+  if (!receiptShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final syncShown = await showSection(
+    QuickStartGuideDestination.sync,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.syncKey,
+        icon: Icons.sync_alt_rounded,
+        title: '设备同步平时可以自动工作',
+        body: '第一次加设备需要两边确认配对；完成后，已绑定设备会在打开时交换数据。这里也可以暂停同步、查看状态和手动立即同步。',
+      ),
+    ],
+  );
+  if (!syncShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final accountShown = await showSection(
+    QuickStartGuideDestination.account,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.accountDevicesKey,
+        icon: Icons.add_to_home_screen_rounded,
+        title: '新设备从这里加入',
+        body: '可以扫码、选二维码图片或使用配对码。注意“退出登录”和“解绑设备”不是一回事：解绑才会把设备从账号的使用中设备里移除。',
+      ),
+    ],
+  );
+  if (!accountShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final settingsShown = await showSection(
+    QuickStartGuideDestination.settings,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.settingsBackupKey,
+        icon: Icons.inventory_2_outlined,
+        title: '同步之外也要知道完整备份',
+        body: '完整备份会带走排单、成品、预设、设置、设备记录、同步历史和参考图。换设备或做大改动前，可以先在这里留一份。',
+      ),
+    ],
+  );
+  if (!settingsShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final featureShown = await showSection(
+    QuickStartGuideDestination.featureToggle,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.featureToggleKey,
+        icon: Icons.extension_outlined,
+        title: '不需要的功能可以收起来',
+        body: '搜索、标签、参考图、节点小进度、成品、日程、统计和截稿提醒等都可以单独开关。关闭只是隐藏入口，不会删除已有数据。',
+      ),
+    ],
+  );
+  if (!featureShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  await actions.finish();
 }
 
 Future<void> showFirstRunGuide(
@@ -384,12 +701,14 @@ Future<void> showFirstRunGuide(
   bool detailed = false,
   QuickStartGuideTargets? targets,
   Future<void> Function()? prepareQuickStart,
+  QuickStartGuideActions? actions,
 }) {
   if (detailed) {
     return _showDetailedGuide(
       context,
       targets: targets,
       prepareQuickStart: prepareQuickStart,
+      actions: actions,
     );
   }
   if (targets != null) {
@@ -397,6 +716,7 @@ Future<void> showFirstRunGuide(
       context,
       targets,
       prepare: prepareQuickStart,
+      actions: actions,
     );
   }
 
