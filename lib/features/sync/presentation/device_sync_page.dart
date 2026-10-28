@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import '../../shared/presentation/spotlight_guide.dart';
 
 import 'package:flutter/material.dart';
 
@@ -10,10 +11,12 @@ import '../../../core/theme/guild_visual_theme.dart';
 class DeviceSyncPage extends StatefulWidget {
   const DeviceSyncPage({
     required this.coordinator,
+    this.guideTargets,
     super.key,
   });
 
   final SyncCoordinator coordinator;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<DeviceSyncPage> createState() => _DeviceSyncPageState();
@@ -85,7 +88,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
               : ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              _Card(
+              KeyedSubtree(
+                key: widget.guideTargets?.syncKey,
+                child: _Card(
                 title: '同步控制',
                 icon: coordinator.syncPaused
                     ? Icons.pause_circle_outline_rounded
@@ -149,6 +154,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                             ? '同步中…'
                             : '同步',
                   ),
+                ),
                 ),
               ),
               const SizedBox(height: 14),
