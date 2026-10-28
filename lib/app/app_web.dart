@@ -2047,10 +2047,12 @@ class _WebAccountPage extends StatefulWidget {
   const _WebAccountPage({
     required this.store,
     required this.peerSync,
+    this.guideTargets,
   });
 
   final WebAccountStore store;
   final PublicPeerSyncService? peerSync;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<_WebAccountPage> createState() => _WebAccountPageState();
@@ -2332,10 +2334,12 @@ class _WebSettingsPage extends StatelessWidget {
   const _WebSettingsPage({
     required this.themeStore,
     required this.dataPage,
+    this.guideTargets,
   });
 
   final AppThemeStore themeStore;
   final Widget dataPage;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   Widget build(BuildContext context) {
@@ -2360,6 +2364,7 @@ class _WebSettingsPage extends StatelessWidget {
             ),
           ),
           ListTile(
+            key: guideTargets?.settingsBackupKey,
             leading: const Icon(Icons.sync_alt_rounded),
             title: const Text('设备同步与完整备份'),
             trailing: const Icon(Icons.chevron_right_rounded),
@@ -2398,6 +2403,7 @@ class _WebDataPage extends StatelessWidget {
     required this.onExport,
     required this.onImport,
     required this.peerSync,
+    this.guideTargets,
   });
 
   final String? linkedAccountName;
@@ -2405,6 +2411,7 @@ class _WebDataPage extends StatelessWidget {
   final Future<void> Function(BuildContext context) onExport;
   final Future<void> Function(BuildContext context) onImport;
   final PublicPeerSyncService? peerSync;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   Widget build(BuildContext context) {
@@ -2446,6 +2453,7 @@ class _WebDataPage extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Card(
+            key: guideTargets?.syncKey,
             margin: EdgeInsets.zero,
             child: ListTile(
               leading: Icon(
