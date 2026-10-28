@@ -10,6 +10,10 @@ class QuickStartGuideTargets {
   final GlobalKey addOrderFormKey = GlobalKey(debugLabel: 'guide-add-order-form');
   final GlobalKey addOrderSaveKey = GlobalKey(debugLabel: 'guide-add-order-save');
   final GlobalKey firstOrderCardKey = GlobalKey(debugLabel: 'guide-first-order-card');
+  final GlobalKey firstOrderProgressKey =
+      GlobalKey(debugLabel: 'guide-first-order-progress');
+  final GlobalKey firstOrderConfirmNodeKey =
+      GlobalKey(debugLabel: 'guide-first-order-confirm-node');
   final GlobalKey archivedOrderKey = GlobalKey(debugLabel: 'guide-archived-order');
   final GlobalKey screenshotImportKey = GlobalKey(debugLabel: 'guide-screenshot-import');
   final GlobalKey addProductKey = GlobalKey(debugLabel: 'guide-add-product');
