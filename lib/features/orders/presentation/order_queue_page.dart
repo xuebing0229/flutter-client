@@ -47,6 +47,7 @@ class OrderQueuePage extends StatefulWidget {
     this.onOverviewColumnsChanged,
     required this.onSortModeChanged,
     this.guideTargets,
+    this.guideOrderId,
     super.key,
   });
 
@@ -66,6 +67,12 @@ class OrderQueuePage extends StatefulWidget {
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
   final QuickStartGuideTargets? guideTargets;
+  final String? guideOrderId;
+
+  Key? guideKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderCardKey
+          : null;
 
   @override
   State<OrderQueuePage> createState() => _OrderQueuePageState();
@@ -1285,6 +1292,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       itemBuilder: (context, index) {
                         final order = orders[index];
                         return OrderOverviewSummaryCard(
+                          key: widget.guideKeyFor(order),
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
@@ -1322,6 +1330,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           cardWidth: cardWidth,
                         );
                         return OrderSummaryCard(
+                          key: widget.guideKeyFor(order),
                           order: order,
                           compactLayout: compactLayout,
                           hasSyncConflict: widget
@@ -1371,6 +1380,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       itemBuilder: (context, index) {
                         final order = orders[index];
                         return OrderSummaryCard(
+                          key: widget.guideKeyFor(order),
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
