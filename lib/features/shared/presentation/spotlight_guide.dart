@@ -7,6 +7,28 @@ class QuickStartGuideTargets {
   final GlobalKey searchKey = GlobalKey(debugLabel: 'guide-search');
   final GlobalKey toolbarKey = GlobalKey(debugLabel: 'guide-toolbar');
   final GlobalKey addOrderKey = GlobalKey(debugLabel: 'guide-add-order');
+  final GlobalKey addOrderFormKey = GlobalKey(debugLabel: 'guide-add-order-form');
+  final GlobalKey addOrderSaveKey = GlobalKey(debugLabel: 'guide-add-order-save');
+  final GlobalKey firstOrderCardKey = GlobalKey(debugLabel: 'guide-first-order-card');
+  final GlobalKey archivedOrderKey = GlobalKey(debugLabel: 'guide-archived-order');
+  final GlobalKey screenshotImportKey = GlobalKey(debugLabel: 'guide-screenshot-import');
+  final GlobalKey addProductKey = GlobalKey(debugLabel: 'guide-add-product');
+  final GlobalKey productsTabKey = GlobalKey(debugLabel: 'guide-tab-products');
+  final GlobalKey scheduleTabKey = GlobalKey(debugLabel: 'guide-tab-schedule');
+  final GlobalKey statisticsTabKey = GlobalKey(debugLabel: 'guide-tab-statistics');
+  final GlobalKey presetCenterKey = GlobalKey(debugLabel: 'guide-preset-center');
+  final GlobalKey receiptCenterKey = GlobalKey(debugLabel: 'guide-receipt-center');
+  final GlobalKey syncKey = GlobalKey(debugLabel: 'guide-sync');
+  final GlobalKey accountDevicesKey = GlobalKey(debugLabel: 'guide-account-devices');
+  final GlobalKey settingsBackupKey = GlobalKey(debugLabel: 'guide-settings-backup');
+  final GlobalKey featureToggleKey = GlobalKey(debugLabel: 'guide-feature-toggle');
+
+  GlobalKey? tabKey(String id) => switch (id) {
+        'products' => productsTabKey,
+        'schedule' => scheduleTabKey,
+        'statistics' => statisticsTabKey,
+        _ => null,
+      };
 }
 
 class SpotlightGuideStep {
@@ -23,13 +45,13 @@ class SpotlightGuideStep {
   final String body;
 }
 
-Future<void> showSpotlightGuide(
+Future<bool> showSpotlightGuide(
   BuildContext context, {
   required List<SpotlightGuideStep> steps,
 }) async {
   if (steps.isEmpty) return;
 
-  await showGeneralDialog<void>(
+  final completed = await showGeneralDialog<bool>(
     context: context,
     barrierDismissible: false,
     barrierLabel: '新手指引',
@@ -38,6 +60,7 @@ Future<void> showSpotlightGuide(
       return _SpotlightGuideOverlay(steps: steps);
     },
   );
+  return completed ?? false;
 }
 
 class _SpotlightGuideOverlay extends StatefulWidget {
@@ -209,7 +232,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                           ),
                           const Spacer(),
                           TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: () => Navigator.of(context).pop(false),
                             child: const Text('跳过'),
                           ),
                           if (_index > 0)
@@ -220,7 +243,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                           FilledButton(
                             onPressed: () {
                               if (isLast) {
-                                Navigator.of(context).pop();
+                                Navigator.of(context).pop(true);
                               } else {
                                 _move(1);
                               }
