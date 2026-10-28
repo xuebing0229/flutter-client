@@ -122,6 +122,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                           }
                         },
                 ),
+                ),
               ),
               const SizedBox(height: 14),
               SizedBox(
