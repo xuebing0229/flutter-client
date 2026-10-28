@@ -49,7 +49,7 @@ Future<bool> showSpotlightGuide(
   BuildContext context, {
   required List<SpotlightGuideStep> steps,
 }) async {
-  if (steps.isEmpty) return;
+  if (steps.isEmpty) return false;
 
   final completed = await showGeneralDialog<bool>(
     context: context,
