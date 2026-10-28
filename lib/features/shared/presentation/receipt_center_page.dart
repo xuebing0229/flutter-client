@@ -1,3 +1,4 @@
+import 'spotlight_guide.dart';
 import 'package:flutter/material.dart';
 
 import '../../orders/domain/queue_order.dart';
@@ -32,6 +33,7 @@ class ReceiptCenterPage extends StatefulWidget {
     required this.productStore,
     required this.receiptStyleStore,
     required this.accountName,
+    this.guideTargets,
     super.key,
   });
 
@@ -39,6 +41,7 @@ class ReceiptCenterPage extends StatefulWidget {
   final ProductStore productStore;
   final ReceiptStyleStore receiptStyleStore;
   final String accountName;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<ReceiptCenterPage> createState() => _ReceiptCenterPageState();
@@ -294,8 +297,9 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
             '生成小票',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          bottom: const TabBar(
-            tabs: [
+          bottom: TabBar(
+            key: widget.guideTargets?.receiptCenterKey,
+            tabs: const [
               Tab(text: '按单子生成'),
               Tab(text: '按单主生成'),
             ],
