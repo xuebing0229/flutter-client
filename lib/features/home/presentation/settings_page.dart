@@ -19,6 +19,7 @@ import '../../../core/portability/full_backup_bundle_service.dart';
 import '../../focus/state/focus_store.dart';
 import '../../imports/data/screenshot_import_history.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
@@ -40,6 +41,7 @@ class SettingsPage extends StatefulWidget {
     required this.syncCoordinator,
     required this.onApplyWorkspaceSettings,
     this.onOpenThemeColor,
+    this.guideTargets,
     super.key,
   });
 
@@ -55,6 +57,7 @@ class SettingsPage extends StatefulWidget {
   final Future<void> Function(Map<String, dynamic> settings)
   onApplyWorkspaceSettings;
   final VoidCallback? onOpenThemeColor;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -728,7 +731,9 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ),
           const SizedBox(height: 14),
-          _SettingsCard(
+          KeyedSubtree(
+            key: widget.guideTargets?.settingsBackupKey,
+            child: _SettingsCard(
             title: '数据与备份',
             icon: Icons.inventory_2_outlined,
             child: Column(
@@ -760,6 +765,7 @@ class _SettingsPageState extends State<SettingsPage>
                   onTap: _backupBusy ? null : _importBackup,
                 ),
               ],
+            ),
             ),
           ),
 
