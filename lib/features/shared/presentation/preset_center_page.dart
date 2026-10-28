@@ -4,16 +4,19 @@ import '../../../core/finance/pricing_preset_store.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/presentation/node_preset_page.dart';
 import 'pricing_preset_page.dart';
+import 'spotlight_guide.dart';
 
 class PresetCenterPage extends StatelessWidget {
   const PresetCenterPage({
     required this.nodePresetStore,
     required this.pricingPresetStore,
+    this.guideTargets,
     super.key,
   });
 
   final NodePresetStore nodePresetStore;
   final PricingPresetStore pricingPresetStore;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +31,7 @@ class PresetCenterPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           Card(
+            key: guideTargets?.presetCenterKey,
             child: ListTile(
               leading: const Icon(Icons.account_tree_outlined),
               title: const Text('节点预设'),
