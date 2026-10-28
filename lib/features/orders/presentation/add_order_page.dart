@@ -8,6 +8,7 @@ import '../../../core/finance/pricing_adjustments.dart';
 import '../../../core/finance/pricing_preset_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../shared/presentation/pricing_preset_selector.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../data/node_presets.dart';
 import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
@@ -22,6 +23,7 @@ class AddOrderPage extends StatefulWidget {
     required this.nodePresetStore,
     required this.featureStore,
     this.pricingPresetStore,
+    this.guideTargets,
     super.key,
   });
 
@@ -30,6 +32,7 @@ class AddOrderPage extends StatefulWidget {
   final NodePresetStore nodePresetStore;
   final PricingPresetStore? pricingPresetStore;
   final AppFeatureStore featureStore;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<AddOrderPage> createState() => _AddOrderPageState();
@@ -68,6 +71,33 @@ class _AddOrderPageState extends State<AddOrderPage> {
     _draftOrderId = 'order-${DateTime.now().microsecondsSinceEpoch}';
     final preset = widget.nodePresetStore.byId(_presetId);
     _currentNodeId = preset.nodes.first.id;
+    if (widget.guideTargets != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showGuide());
+      });
+    }
+  }
+
+  Future<void> _showGuide() async {
+    final targets = widget.guideTargets;
+    if (targets == null || !mounted) return;
+    await showSpotlightGuide(
+      context,
+      steps: [
+        SpotlightGuideStep(
+          targetKey: targets.addOrderFormKey,
+          icon: Icons.edit_note_rounded,
+          title: '先把这笔业务记下来',
+          body: '先填写图名、单主、平台和稿价。继续往下还能设置加价、截稿时间、节点预设、参考图、标签和备注。',
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.addOrderSaveKey,
+          icon: Icons.check_rounded,
+          title: '填完后保存',
+          body: '不用一次把所有附加项都填满。基础信息确认后保存，之后随时可以进详情继续修改。',
+        ),
+      ],
+    );
   }
 
   @override
@@ -227,6 +257,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
         ),
         actions: [
           TextButton(
+            key: widget.guideTargets?.addOrderSaveKey,
             onPressed: _pickingReferenceImages ? null : _save,
             child: const Text('保存'),
           ),
@@ -255,7 +286,9 @@ class _AddOrderPageState extends State<AddOrderPage> {
             ),
           ],
           const SizedBox(height: 14),
-          CommissionSettingsEditor(
+          KeyedSubtree(
+            key: widget.guideTargets?.addOrderFormKey,
+            child: CommissionSettingsEditor(
             platform: _platform,
             feeEnabled: _feeEnabled,
             huajiaLoveLevel: _huajiaLoveLevel,
@@ -292,6 +325,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
                   decoration: const InputDecoration(prefixText: '¥ '),
                 ),
               ],
+            ),
             ),
           ),
           const SizedBox(height: 14),
