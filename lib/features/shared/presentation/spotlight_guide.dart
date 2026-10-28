@@ -148,27 +148,6 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
               bottom: 0,
               child: const ColoredBox(color: Color(0xB8000000)),
             ),
-            Positioned.fromRect(
-              rect: rect,
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: colors.primary,
-                      width: 3,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colors.primary.withValues(alpha: .42),
-                        blurRadius: 18,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           ],
           Positioned(
             left: (size.width - cardWidth) / 2,
