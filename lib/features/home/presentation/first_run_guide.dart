@@ -478,9 +478,21 @@ Future<void> _showInteractiveQuickStart(
       [
         SpotlightGuideStep(
           targetKey: targets.firstOrderCardKey,
-          icon: Icons.account_tree_outlined,
+          icon: Icons.view_agenda_outlined,
           title: '这就是刚刚创建的排单',
-          body: '卡片上的－/＋用来调整当前节点的小进度；“确认节点”会推进到下一节点。长按这张卡片还能置顶、归档、删除或进入批量操作。',
+          body: '之后大部分日常操作都可以直接从排单卡片完成。点卡片进详情，长按卡片则会打开置顶、归档、删除和批量操作。',
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.firstOrderProgressKey,
+          icon: Icons.stacked_line_chart_rounded,
+          title: '先推进节点里的小进度',
+          body: '－/＋每次调整 10%，适合记录当前节点做到哪了。这个功能也可以在附加功能里关闭。',
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.firstOrderConfirmNodeKey,
+          icon: Icons.check_circle_outline_rounded,
+          title: '一个阶段完成后确认节点',
+          body: '点“确认节点”会进入下一工作阶段；最后一个节点完成时，也可以直接进入顺利归档。',
         ),
       ],
       finalLabel: '练习归档',
