@@ -156,7 +156,6 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                             : '同步',
                   ),
                 ),
-                ),
               ),
               const SizedBox(height: 14),
               _Card(
