@@ -734,6 +734,8 @@ class _WebWorkspace extends StatefulWidget {
 class _WebWorkspaceState extends State<_WebWorkspace> {
   final QuickStartGuideTargets _quickStartGuideTargets =
       QuickStartGuideTargets();
+  String? _guidedOrderId;
+  bool _guidePreviewRouteOpen = false;
   static const String _legacyWorkspaceKey =
       'adventurers-guild.web.workspace.v1';
   static const String _manifestName = 'backup.json';
@@ -1256,6 +1258,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           },
           sortModeName: _orderSortMode,
           guideTargets: _quickStartGuideTargets,
+          guideOrderId: _guidedOrderId,
           onSortModeChanged: (value) {
             setState(() {
               _collectionViews =
@@ -1357,6 +1360,202 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     await WidgetsBinding.instance.endOfFrame;
   }
 
+  QuickStartGuideActions get _quickStartGuideActions => QuickStartGuideActions(
+        goTo: _goToGuideDestination,
+        createFirstOrder: _createFirstOrderForGuide,
+        waitForFirstOrderArchive: _waitForFirstOrderArchive,
+        isAvailable: _isGuideDestinationAvailable,
+        finish: _finishGuideNavigation,
+      );
+
+  bool _isGuideDestinationAvailable(QuickStartGuideDestination destination) {
+    return switch (destination) {
+      QuickStartGuideDestination.products => widget.featureStore.products,
+      QuickStartGuideDestination.schedule => widget.featureStore.schedule,
+      QuickStartGuideDestination.statistics => widget.featureStore.statistics,
+      // PWA is already an account-linked device; adding a new native device
+      // is taught on Android/Windows instead of showing a misleading action.
+      QuickStartGuideDestination.account => false,
+      _ => true,
+    };
+  }
+
+  int? _guideTabIndex(QuickStartGuideDestination destination) {
+    final id = switch (destination) {
+      QuickStartGuideDestination.orders => 'orders',
+      QuickStartGuideDestination.products => 'products',
+      QuickStartGuideDestination.schedule => 'schedule',
+      QuickStartGuideDestination.statistics => 'statistics',
+      _ => null,
+    };
+    if (id == null) return null;
+    final tabs = _tabs();
+    final index = tabs.indexWhere((tab) => tab.id == id);
+    return index < 0 ? null : index;
+  }
+
+  String? _guideTool(QuickStartGuideDestination destination) {
+    return switch (destination) {
+      QuickStartGuideDestination.presetCenter => AppToolMenu.presetTool,
+      QuickStartGuideDestination.receiptCenter => AppToolMenu.receiptTool,
+      QuickStartGuideDestination.archive => AppToolMenu.archiveTool,
+      QuickStartGuideDestination.sync => AppToolMenu.syncTool,
+      QuickStartGuideDestination.settings => AppToolMenu.settingsTool,
+      QuickStartGuideDestination.featureToggle => AppToolMenu.featureToggleTool,
+      _ => null,
+    };
+  }
+
+  Future<void> _closeGuidePreviewRoute() async {
+    if (!_guidePreviewRouteOpen || !mounted) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
+    _guidePreviewRouteOpen = false;
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<void> _pushGuidePreviewPage(Widget page) async {
+    if (!mounted) return;
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => page),
+      ),
+    );
+    _guidePreviewRouteOpen = true;
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<void> _goToGuideDestination(
+    QuickStartGuideDestination destination,
+  ) async {
+    if (!mounted || !_isGuideDestinationAvailable(destination)) return;
+    await _closeGuidePreviewRoute();
+    if (!mounted) return;
+
+    final tabIndex = _guideTabIndex(destination);
+    if (tabIndex != null) {
+      _selectTab(tabIndex);
+      if (MediaQuery.sizeOf(context).width >= 900 &&
+          !_desktopNavigationOpen) {
+        setState(() => _desktopNavigationOpen = true);
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      return;
+    }
+
+    if (destination == QuickStartGuideDestination.screenshotImport) {
+      if (_desktopToolSelection != null) {
+        setState(() => _desktopToolSelection = null);
+      }
+      await _pushGuidePreviewPage(
+        ScreenshotImportPage(
+          kind: ScreenshotImportKind.orders,
+          accountId: _accountId,
+          orderStore: _orderStore,
+          productStore: _productStore,
+          presetStore: _nodePresetStore,
+          guideTargets: _quickStartGuideTargets,
+          autoPick: false,
+        ),
+      );
+      return;
+    }
+
+    final tool = _guideTool(destination);
+    if (tool == null) return;
+    if (MediaQuery.sizeOf(context).width >= 900) {
+      _selectDesktopTool(tool);
+      if (!_desktopNavigationOpen) {
+        setState(() => _desktopNavigationOpen = true);
+      }
+      await WidgetsBinding.instance.endOfFrame;
+    } else {
+      await _pushGuidePreviewPage(_buildWebToolPage(tool));
+    }
+  }
+
+  Future<String?> _createFirstOrderForGuide() async {
+    await _goToGuideDestination(QuickStartGuideDestination.orders);
+    if (!mounted) return null;
+    final beforeIds = _orderStore.orders.map((order) => order.id).toSet();
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AddOrderPage(
+          accountId: _accountId,
+          store: _orderStore,
+          nodePresetStore: _nodePresetStore,
+          pricingPresetStore: _pricingPresetStore,
+          featureStore: widget.featureStore,
+          guideTargets: _quickStartGuideTargets,
+        ),
+      ),
+    );
+    if (!mounted) return null;
+
+    String? createdId;
+    for (final order in _orderStore.orders.reversed) {
+      if (!beforeIds.contains(order.id)) {
+        createdId = order.id;
+        break;
+      }
+    }
+    setState(() => _guidedOrderId = createdId);
+    await WidgetsBinding.instance.endOfFrame;
+    return createdId;
+  }
+
+  Future<bool> _waitForFirstOrderArchive(String orderId) async {
+    if (!mounted || !_orderStore.contains(orderId)) return false;
+    if (_orderStore.byId(orderId).isArchived) return true;
+
+    final completer = Completer<bool>();
+    void checkArchive() {
+      if (completer.isCompleted) return;
+      if (!_orderStore.contains(orderId)) {
+        completer.complete(false);
+      } else if (_orderStore.byId(orderId).isArchived) {
+        completer.complete(true);
+      }
+    }
+
+    _orderStore.addListener(checkArchive);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(minutes: 30),
+        content: const Text('现在试着长按刚创建的排单 → 归档。完成归档后，新手引导会自动继续。'),
+        action: SnackBarAction(
+          label: '跳过',
+          onPressed: () {
+            if (!completer.isCompleted) completer.complete(false);
+          },
+        ),
+      ),
+    );
+    try {
+      final archived = await completer.future;
+      controller.close();
+      return archived;
+    } finally {
+      _orderStore.removeListener(checkArchive);
+    }
+  }
+
+  Future<void> _finishGuideNavigation() async {
+    await _closeGuidePreviewRoute();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    setState(() {
+      _guidedOrderId = null;
+      _desktopToolSelection = null;
+    });
+    final tabs = _tabs();
+    final orderIndex = tabs.indexWhere((tab) => tab.id == 'orders');
+    if (orderIndex >= 0) _selectTab(orderIndex);
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   void _showTutorial() {
     unawaited(
       showFirstRunGuide(
@@ -1364,6 +1563,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         detailed: true,
         targets: _quickStartGuideTargets,
         prepareQuickStart: _prepareQuickStartGuide,
+        actions: _quickStartGuideActions,
       ),
     );
   }
@@ -1373,15 +1573,18 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       AppToolMenu.presetTool => PresetCenterPage(
           nodePresetStore: _nodePresetStore,
           pricingPresetStore: _pricingPresetStore,
+          guideTargets: _quickStartGuideTargets,
         ),
       AppToolMenu.receiptTool => ReceiptCenterPage(
           orderStore: _orderStore,
           productStore: _productStore,
           receiptStyleStore: _receiptStyleStore,
           accountName: widget.accountStore.accountName ?? '',
+          guideTargets: _quickStartGuideTargets,
         ),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
           store: widget.featureStore,
+          guideTargets: _quickStartGuideTargets,
         ),
       AppToolMenu.desktopPetTool => Scaffold(
           appBar: AppBar(
@@ -1405,6 +1608,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           receiptStyleStore: _receiptStyleStore,
           featureStore: widget.featureStore,
           syncCoordinator: _syncUi,
+          guideTargets: _quickStartGuideTargets,
+          guideOrderId: _guidedOrderId,
         ),
       AppToolMenu.syncTool => _WebDataPage(
           linkedAccountName: _accountState.accountName,
@@ -1412,19 +1617,23 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           onExport: _exportBackup,
           onImport: _importBackup,
           peerSync: _peerSync,
+          guideTargets: _quickStartGuideTargets,
         ),
       AppToolMenu.accountTool => _WebAccountPage(
           store: widget.accountStore,
           peerSync: _peerSync,
+          guideTargets: _quickStartGuideTargets,
         ),
       AppToolMenu.settingsTool => _WebSettingsPage(
           themeStore: widget.themeStore,
+          guideTargets: _quickStartGuideTargets,
           dataPage: _WebDataPage(
             linkedAccountName: _accountState.accountName,
             busy: () => _busy,
             onExport: _exportBackup,
             onImport: _importBackup,
             peerSync: _peerSync,
+            guideTargets: _quickStartGuideTargets,
           ),
         ),
       _ => const SizedBox.shrink(),
@@ -1767,12 +1976,15 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                   label: const Text('新增排单'),
                 ),
               ),
-            'products' => FloatingActionButton.extended(
-                onPressed: () => unawaited(
-                  _chooseAddMethod(products: true),
+            'products' => KeyedSubtree(
+                key: _quickStartGuideTargets.addProductKey,
+                child: FloatingActionButton.extended(
+                  onPressed: () => unawaited(
+                    _chooseAddMethod(products: true),
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增成品'),
                 ),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增成品'),
               ),
             _ => null,
           };
