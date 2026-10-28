@@ -183,6 +183,9 @@ class GuildWorkspaceShell extends StatelessWidget {
                                                   index++
                                                 )
                                                   AppMenuTile(
+                                                    key: guideTargets?.tabKey(
+                                                      tabs[index].id,
+                                                    ),
                                                     icon: tabs[index].icon,
                                                     selectedIcon:
                                                         tabs[index]
@@ -243,6 +246,7 @@ class GuildWorkspaceShell extends StatelessWidget {
                     destinations: [
                       for (final tab in tabs)
                         NavigationDestination(
+                          key: guideTargets?.tabKey(tab.id),
                           icon: Icon(tab.icon),
                           selectedIcon: Icon(tab.selectedIcon),
                           label: tab.label,
