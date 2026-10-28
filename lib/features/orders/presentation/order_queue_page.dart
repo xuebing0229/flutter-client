@@ -74,6 +74,16 @@ class OrderQueuePage extends StatefulWidget {
           ? guideTargets!.firstOrderCardKey
           : null;
 
+  Key? guideProgressKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderProgressKey
+          : null;
+
+  Key? guideConfirmNodeKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderConfirmNodeKey
+          : null;
+
   @override
   State<OrderQueuePage> createState() => _OrderQueuePageState();
 }
@@ -1331,6 +1341,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         );
                         return OrderSummaryCard(
                           key: widget.guideKeyFor(order),
+                          nodeProgressKey: widget.guideProgressKeyFor(order),
+                          confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
                           compactLayout: compactLayout,
                           hasSyncConflict: widget
@@ -1381,6 +1393,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         final order = orders[index];
                         return OrderSummaryCard(
                           key: widget.guideKeyFor(order),
+                          nodeProgressKey: widget.guideProgressKeyFor(order),
+                          confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
