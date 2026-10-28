@@ -48,6 +48,7 @@ class SpotlightGuideStep {
 Future<bool> showSpotlightGuide(
   BuildContext context, {
   required List<SpotlightGuideStep> steps,
+  String finalLabel = '开始使用',
 }) async {
   if (steps.isEmpty) return false;
 
@@ -57,16 +58,23 @@ Future<bool> showSpotlightGuide(
     barrierLabel: '新手指引',
     barrierColor: Colors.transparent,
     pageBuilder: (dialogContext, _, __) {
-      return _SpotlightGuideOverlay(steps: steps);
+      return _SpotlightGuideOverlay(
+        steps: steps,
+        finalLabel: finalLabel,
+      );
     },
   );
   return completed ?? false;
 }
 
 class _SpotlightGuideOverlay extends StatefulWidget {
-  const _SpotlightGuideOverlay({required this.steps});
+  const _SpotlightGuideOverlay({
+    required this.steps,
+    required this.finalLabel,
+  });
 
   final List<SpotlightGuideStep> steps;
+  final String finalLabel;
 
   @override
   State<_SpotlightGuideOverlay> createState() => _SpotlightGuideOverlayState();
@@ -248,7 +256,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                                 _move(1);
                               }
                             },
-                            child: Text(isLast ? '开始使用' : '下一步'),
+                            child: Text(isLast ? widget.finalLabel : '下一步'),
                           ),
                         ],
                       ),
