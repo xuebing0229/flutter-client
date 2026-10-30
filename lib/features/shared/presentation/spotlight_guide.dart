@@ -42,6 +42,18 @@ class QuickStartGuideTargets {
       };
 }
 
+class SpotlightTarget extends StatelessWidget {
+  const SpotlightTarget({
+    GlobalKey? targetKey,
+    required this.child,
+  }) : super(key: targetKey);
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
 class SpotlightGuideStep {
   const SpotlightGuideStep({
     required this.targetKey,
