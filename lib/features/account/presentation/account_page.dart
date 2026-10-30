@@ -11,6 +11,7 @@ import '../../shared/presentation/layout_spacing.dart';
 import 'avatar_crop_page.dart';
 import 'share_account_device_page.dart';
 
+import '../../shared/presentation/spotlight_guide.dart';
 class AccountPage extends StatelessWidget {
   const AccountPage({
     required this.store,
@@ -18,6 +19,7 @@ class AccountPage extends StatelessWidget {
     required this.syncCoordinator,
     required this.onBeforeSignOut,
     required this.onRevokeDevice,
+    this.guideTargets,
     super.key,
   });
 
@@ -26,6 +28,7 @@ class AccountPage extends StatelessWidget {
   final SyncCoordinator syncCoordinator;
   final Future<void> Function() onBeforeSignOut;
   final Future<void> Function(String deviceId) onRevokeDevice;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   Widget build(BuildContext context) {
@@ -37,9 +40,12 @@ class AccountPage extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text(
-              '账号与设备',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            title: SpotlightTarget(
+              targetKey: guideTargets?.accountTitleKey,
+              child: const Text(
+                '账号与设备',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
             ),
           ),
           body: ListView(
@@ -97,7 +103,9 @@ class AccountPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              GuildContentPanel(
+              SpotlightTarget(
+                targetKey: guideTargets?.accountDevicesKey,
+                child: GuildContentPanel(
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 18,
@@ -118,6 +126,7 @@ class AccountPage extends StatelessWidget {
                       ),
                     ),
                   ),
+                ),
                 ),
               ),
               const SizedBox(height: 14),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../orders/domain/queue_order.dart';
+import 'spotlight_guide.dart';
 
 class FormFieldLabel extends StatelessWidget {
   const FormFieldLabel(this.text, {super.key});
@@ -72,6 +73,7 @@ class CommissionSettingsEditor extends StatelessWidget {
     required this.onHuajiaLoveLevelChanged,
     required this.onOnlinePercentChanged,
     this.afterPlatform,
+    this.platformKey,
     super.key,
   });
 
@@ -85,6 +87,7 @@ class CommissionSettingsEditor extends StatelessWidget {
   final ValueChanged<HuajiaLoveLevel> onHuajiaLoveLevelChanged;
   final ValueChanged<double> onOnlinePercentChanged;
   final Widget? afterPlatform;
+  final GlobalKey? platformKey;
 
   @override
   Widget build(BuildContext context) {
@@ -92,19 +95,22 @@ class CommissionSettingsEditor extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const FormFieldLabel('平台'),
-        DropdownButtonFormField<CommissionPlatform>(
-          initialValue: platform,
-          items: CommissionPlatform.values
-              .map(
-                (item) => DropdownMenuItem(
-                  value: item,
-                  child: Text(item.label),
-                ),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) onPlatformChanged(value);
-          },
+        SpotlightTarget(
+          targetKey: platformKey,
+          child: DropdownButtonFormField<CommissionPlatform>(
+            initialValue: platform,
+            items: CommissionPlatform.values
+                .map(
+                  (item) => DropdownMenuItem(
+                    value: item,
+                    child: Text(item.label),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) onPlatformChanged(value);
+            },
+          ),
         ),
         if (afterPlatform != null) ...[
           const SizedBox(height: 14),

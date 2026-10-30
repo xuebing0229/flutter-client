@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+210
-# beta-210: canonical mainline integration; latest receipt/urgent changes plus packaging audit; full-suite regression fix
+version: 0.0.1+214
+# beta-214: onboarding highlighter targets real controls without synthetic layout
 
 environment:
   sdk: ">=3.10.0 <4.0.0"

@@ -220,4 +220,36 @@ void main() {
       ['成品总概览与小票预设分享'],
     );
   });
+
+  test('211 包含快速上手引导与小票恢复完善见闻', () {
+    final picked = newsBetweenBuilds(210, 211);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['快速上手引导与小票恢复完善'],
+    );
+  });
+
+  test('212 包含完整新手引导见闻', () {
+    final picked = newsBetweenBuilds(211, 212);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['完整新手引导'],
+    );
+  });
+
+  test('213 包含新手引导高亮与网页版安装完善见闻', () {
+    final picked = newsBetweenBuilds(212, 213);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导高亮与网页版安装完善'],
+    );
+  });
+
+  test('214 包含新手引导定位修正见闻', () {
+    final picked = newsBetweenBuilds(213, 214);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导定位修正'],
+    );
+  });
 }

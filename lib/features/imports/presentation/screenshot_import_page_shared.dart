@@ -1,3 +1,4 @@
+import '../../shared/presentation/spotlight_guide.dart';
 // ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:async';
 import 'dart:math' as math;
@@ -35,6 +36,8 @@ class ScreenshotImportPage extends StatefulWidget {
     required this.orderStore,
     required this.productStore,
     required this.presetStore,
+    this.guideTargets,
+    this.autoPick = true,
     super.key,
   });
 
@@ -43,6 +46,8 @@ class ScreenshotImportPage extends StatefulWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore presetStore;
+  final QuickStartGuideTargets? guideTargets;
+  final bool autoPick;
 
   @override
   State<ScreenshotImportPage> createState() => _ScreenshotImportPageState();
@@ -74,9 +79,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   void initState() {
     super.initState();
     _kind = widget.kind;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_resumeOrSelectScreenshot());
-    });
+    if (widget.autoPick) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_resumeOrSelectScreenshot());
+      });
+    }
   }
 
   Future<void> _resumeOrSelectScreenshot() async {
@@ -1081,12 +1088,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 : () => unawaited(_copyOcrDiagnostic()),
             icon: const Icon(Icons.bug_report_outlined),
           ),
-          TextButton.icon(
-            onPressed: _working || _committing
-                ? null
-                : () => unawaited(_pickAndRecognize()),
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: const Text('选择截图'),
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.screenshotImportKey,
+            child: TextButton.icon(
+              onPressed: _working || _committing
+                  ? null
+                  : () => unawaited(_pickAndRecognize()),
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('选择截图'),
+            ),
           ),
         ],
       ),
