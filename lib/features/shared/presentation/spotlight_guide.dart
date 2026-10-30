@@ -67,6 +67,8 @@ class SpotlightGuideStep {
     this.targetShape,
     this.targetPadding = 4,
     this.borderRadius = 12,
+    this.preferCardAbove = false,
+    this.allowOutsideTargetInteraction = false,
   });
 
   final GlobalKey targetKey;
@@ -76,12 +78,16 @@ class SpotlightGuideStep {
   final ShapeBorder? targetShape;
   final double targetPadding;
   final double borderRadius;
+  final bool preferCardAbove;
+  final bool allowOutsideTargetInteraction;
 }
 
 Future<bool> showSpotlightGuide(
   BuildContext context, {
   required List<SpotlightGuideStep> steps,
   String finalLabel = '开始使用',
+  int progressStart = 0,
+  int? progressTotal,
 }) async {
   if (steps.isEmpty) return false;
 
@@ -99,6 +105,8 @@ Future<bool> showSpotlightGuide(
       child: _SpotlightGuideOverlay(
         steps: steps,
         finalLabel: finalLabel,
+        progressStart: progressStart,
+        progressTotal: progressTotal,
         onComplete: complete,
       ),
     ),
@@ -112,11 +120,15 @@ class _SpotlightGuideOverlay extends StatefulWidget {
   const _SpotlightGuideOverlay({
     required this.steps,
     required this.finalLabel,
+    required this.progressStart,
+    required this.progressTotal,
     required this.onComplete,
   });
 
   final List<SpotlightGuideStep> steps;
   final String finalLabel;
+  final int progressStart;
+  final int? progressTotal;
   final ValueChanged<bool> onComplete;
 
   @override
@@ -225,19 +237,23 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
         : size.height - safeBottom - rect.bottom - 16;
     final preferBelow =
         rect == null || rect.bottom + cardHeight + 24 < size.height - safeBottom;
+    final preferAbove =
+        rect != null && _step.preferCardAbove && spaceAbove >= cardHeight;
     final cardTop = rect == null
         ? (size.height - cardHeight) / 2
-        : _targetRouteCovered
-            ? (spaceAbove >= cardHeight && spaceBelow >= cardHeight
-                ? (spaceAbove <= spaceBelow
-                    ? rect.top - cardHeight - 16
-                    : rect.bottom + 16)
-                : spaceAbove >= cardHeight
-                    ? rect.top - cardHeight - 16
-                    : rect.bottom + 16)
-            : preferBelow
-                ? (rect.bottom + 16)
-                : (rect.top - cardHeight - 16);
+        : preferAbove
+            ? (rect.top - cardHeight - 16)
+            : _targetRouteCovered
+                ? (spaceAbove >= cardHeight && spaceBelow >= cardHeight
+                    ? (spaceAbove <= spaceBelow
+                        ? rect.top - cardHeight - 16
+                        : rect.bottom + 16)
+                    : spaceAbove >= cardHeight
+                        ? rect.top - cardHeight - 16
+                        : rect.bottom + 16)
+                : preferBelow
+                    ? (rect.bottom + 16)
+                    : (rect.top - cardHeight - 16);
     final clampedTop = cardTop
         .clamp(safeTop, size.height - safeBottom - cardHeight)
         .toDouble();
@@ -257,7 +273,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
               ),
             ),
           ),
-        if (!_targetRouteCovered)
+        if (!_targetRouteCovered && !_step.allowOutsideTargetInteraction)
           Positioned.fill(
             child: _SpotlightPointerBarrier(
               targetRect: rect,
@@ -316,17 +332,18 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Text(
-                            '${_index + 1} / ${widget.steps.length}',
-                            style: TextStyle(
-                              color: colors.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
+                          if ((widget.progressTotal ?? widget.steps.length) > 1)
+                            Text(
+                              '${widget.progressStart + _index + 1} / ${widget.progressTotal ?? widget.steps.length}',
+                              style: TextStyle(
+                                color: colors.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
                           const Spacer(),
                           TextButton(
                             onPressed: () => unawaited(_finish(false)),
-                            child: const Text('跳过'),
+                            child: const Text('退出教程'),
                           ),
                           if (_index > 0)
                             TextButton(
