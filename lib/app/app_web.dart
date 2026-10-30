@@ -1401,6 +1401,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       QuickStartGuideDestination.archive => AppToolMenu.archiveTool,
       QuickStartGuideDestination.sync => AppToolMenu.syncTool,
       QuickStartGuideDestination.settings => AppToolMenu.settingsTool,
+      QuickStartGuideDestination.pwaInstall => AppToolMenu.settingsTool,
       QuickStartGuideDestination.featureToggle => AppToolMenu.featureToggleTool,
       _ => null,
     };
