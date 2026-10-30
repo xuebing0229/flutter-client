@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+213
-# beta-213: shape-aware onboarding highlights and PWA install guide; changelog finalized
+version: 0.0.1+214
+# beta-214: onboarding highlighter targets real controls without synthetic layout
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
