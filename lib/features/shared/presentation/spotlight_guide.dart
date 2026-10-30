@@ -42,7 +42,7 @@ class QuickStartGuideTargets {
 
 class SpotlightTarget extends SingleChildRenderObjectWidget {
   const SpotlightTarget({
-    required GlobalKey targetKey,
+    GlobalKey? targetKey,
     required Widget child,
   }) : super(key: targetKey, child: child);
 
