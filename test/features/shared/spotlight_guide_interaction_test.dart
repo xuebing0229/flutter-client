@@ -315,6 +315,7 @@ void main() {
     expect(find.text('2 / 3'), findsOneWidget);
     expect(find.text('1 / 1'), findsNothing);
     expect(find.text('退出教程'), findsOneWidget);
+    expect(find.text('跳过本节'), findsOneWidget);
 
     await tester.tap(find.text('退出教程'));
     await tester.pumpAndSettle();
@@ -369,6 +370,61 @@ void main() {
 
     await tester.tap(find.text('退出教程'));
     await tester.pumpAndSettle();
+  });
+
+
+
+  testWidgets('skip section completes current spotlight without exiting flow',
+      (tester) async {
+    final targetKey = GlobalKey();
+    bool? result;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Column(
+                children: [
+                  SpotlightTarget(
+                    targetKey: targetKey,
+                    child: const SizedBox(width: 160, height: 48),
+                  ),
+                  FilledButton(
+                    onPressed: () async {
+                      result = await showSpotlightGuide(
+                        context,
+                        steps: [
+                          SpotlightGuideStep(
+                            targetKey: targetKey,
+                            icon: Icons.info_outline,
+                            title: '当前小节',
+                            body: '用于测试跳过本节。',
+                          ),
+                        ],
+                      );
+                    },
+                    child: const Text('打开可跳过小节'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开可跳过小节'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('跳过本节'), findsOneWidget);
+    expect(find.text('退出教程'), findsOneWidget);
+
+    await tester.tap(find.text('跳过本节'));
+    await tester.pumpAndSettle();
+
+    expect(result, isTrue);
   });
 
 }
