@@ -30,9 +30,10 @@ class PresetCenterPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          Card(
-            key: guideTargets?.presetCenterKey,
-            child: ListTile(
+          SpotlightTarget(
+            targetKey: guideTargets?.presetCenterKey,
+            child: Card(
+              child: ListTile(
               leading: const Icon(Icons.account_tree_outlined),
               title: const Text('节点预设'),
               subtitle: const Text('管理草图、线稿、上色、成稿等流程节点'),
@@ -43,6 +44,7 @@ class PresetCenterPage extends StatelessWidget {
                 ),
               ),
             ),
+          ),
           ),
           const SizedBox(height: 10),
           Card(
