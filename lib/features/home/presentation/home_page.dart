@@ -421,6 +421,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       QuickStartGuideDestination.products => widget.featureStore.products,
       QuickStartGuideDestination.schedule => widget.featureStore.schedule,
       QuickStartGuideDestination.statistics => widget.featureStore.statistics,
+      QuickStartGuideDestination.pwaInstall => false,
       QuickStartGuideDestination.featureToggle =>
         !widget.featureStore.abstractMode ||
             !widget.featureStore.abstractEffects ||
