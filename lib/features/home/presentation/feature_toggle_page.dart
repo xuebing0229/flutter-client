@@ -89,8 +89,8 @@ class FeatureTogglePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              KeyedSubtree(
-                key: guideTargets?.featureToggleKey,
+              SpotlightTarget(
+                targetKey: guideTargets?.featureToggleKey,
                 child: _FeatureSection(
                 title: '排单附加项',
                 children: [
