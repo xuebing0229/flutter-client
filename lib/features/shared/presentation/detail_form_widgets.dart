@@ -72,6 +72,7 @@ class CommissionSettingsEditor extends StatelessWidget {
     required this.onHuajiaLoveLevelChanged,
     required this.onOnlinePercentChanged,
     this.afterPlatform,
+    this.platformKey,
     super.key,
   });
 
@@ -85,6 +86,7 @@ class CommissionSettingsEditor extends StatelessWidget {
   final ValueChanged<HuajiaLoveLevel> onHuajiaLoveLevelChanged;
   final ValueChanged<double> onOnlinePercentChanged;
   final Widget? afterPlatform;
+  final Key? platformKey;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +95,7 @@ class CommissionSettingsEditor extends StatelessWidget {
       children: [
         const FormFieldLabel('平台'),
         DropdownButtonFormField<CommissionPlatform>(
+          key: platformKey,
           initialValue: platform,
           items: CommissionPlatform.values
               .map(
