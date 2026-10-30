@@ -398,6 +398,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新手引导定位修正',
     description: '修正部分高亮只覆盖控件一部分或把不存在的区域当成高亮目标的问题。新增排单不再框一整块虚拟区域，而是依次指向图名、单主、平台、稿价和保存；新增排单按钮直接绑定真实按钮，并沿用实际按钮圆角形状。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 215,
+    title: '新手引导可以直接操作高亮控件',
+    description: '高亮输入框、下拉框和按钮现在可以直接点击操作，不需要先退出引导；暗色遮罩区域仍会阻止误触。图名、单主、平台和稿价改用严格跟随真实控件尺寸的定位方式，修正首个输入框横向偏移的问题。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
