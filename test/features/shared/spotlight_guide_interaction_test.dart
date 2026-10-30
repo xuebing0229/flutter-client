@@ -202,6 +202,8 @@ void main() {
                                   body: '下拉菜单应保持可操作。',
                                   targetPadding: 0,
                                   borderRadius: 0,
+                                  preferCardAbove: true,
+                                  allowOutsideTargetInteraction: true,
                                 ),
                                 SpotlightGuideStep(
                                   targetKey: secondKey,
@@ -231,6 +233,12 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    final dropdownRect = tester.getRect(
+      find.byType(DropdownButtonFormField<String>),
+    );
+    final guideCardRect = tester.getRect(find.byType(Card));
+    expect(guideCardRect.bottom, lessThanOrEqualTo(dropdownRect.top));
+
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
 
@@ -254,6 +262,61 @@ void main() {
     expect(ModalRoute.of(dropdownKey.currentContext!)!.isCurrent, isTrue);
 
     await tester.tap(find.text('开始使用'));
+    await tester.pumpAndSettle();
+  });
+
+
+
+  testWidgets('group progress is continuous and single steps hide 1 / 1',
+      (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Column(
+                children: [
+                  SpotlightTarget(
+                    targetKey: targetKey,
+                    child: const SizedBox(width: 160, height: 48),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      showSpotlightGuide(
+                        context,
+                        progressStart: 1,
+                        progressTotal: 3,
+                        steps: [
+                          SpotlightGuideStep(
+                            targetKey: targetKey,
+                            icon: Icons.calendar_month_outlined,
+                            title: '分组步骤',
+                            body: '显示跨页面连续进度。',
+                          ),
+                        ],
+                      );
+                    },
+                    child: const Text('打开分组引导'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开分组引导'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('2 / 3'), findsOneWidget);
+    expect(find.text('1 / 1'), findsNothing);
+    expect(find.text('退出教程'), findsOneWidget);
+
+    await tester.tap(find.text('退出教程'));
     await tester.pumpAndSettle();
   });
 
