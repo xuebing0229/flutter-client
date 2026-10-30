@@ -40,9 +40,12 @@ class AccountPage extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text(
-              '账号与设备',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            title: SpotlightTarget(
+              targetKey: guideTargets?.accountTitleKey,
+              child: const Text(
+                '账号与设备',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
             ),
           ),
           body: ListView(
