@@ -252,4 +252,12 @@ void main() {
       ['新手引导定位修正'],
     );
   });
+
+  test('215 包含新手引导直接操作见闻', () {
+    final picked = newsBetweenBuilds(214, 215);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导可以直接操作高亮控件'],
+    );
+  });
 }
