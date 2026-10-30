@@ -1088,13 +1088,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 : () => unawaited(_copyOcrDiagnostic()),
             icon: const Icon(Icons.bug_report_outlined),
           ),
-          TextButton.icon(
-            key: widget.guideTargets?.screenshotImportKey,
-            onPressed: _working || _committing
-                ? null
-                : () => unawaited(_pickAndRecognize()),
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: const Text('选择截图'),
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.screenshotImportKey,
+            child: TextButton.icon(
+              onPressed: _working || _committing
+                  ? null
+                  : () => unawaited(_pickAndRecognize()),
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('选择截图'),
+            ),
           ),
         ],
       ),
