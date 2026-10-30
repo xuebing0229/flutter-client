@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+216
-# beta-216: interactive dropdown pass-through, menu close-on-step, and product-tab spotlight
+version: 0.0.1+217
+# beta-217: measured guide placement, grouped tutorial progress, and clearer exit actions
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
