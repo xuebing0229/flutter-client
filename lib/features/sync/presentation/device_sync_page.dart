@@ -88,8 +88,8 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
               : ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              KeyedSubtree(
-                key: widget.guideTargets?.syncKey,
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.syncKey,
                 child: _Card(
                 title: '同步控制',
                 icon: coordinator.syncPaused
