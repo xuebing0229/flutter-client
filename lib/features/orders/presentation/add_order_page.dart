@@ -81,170 +81,60 @@ class _AddOrderPageState extends State<AddOrderPage> {
   Future<void> _showGuide() async {
     final targets = widget.guideTargets;
     if (targets == null || !mounted) return;
+    final theme = Theme.of(context);
+    final saveShape =
+        TextButtonTheme.of(context).style?.shape?.resolve(const <WidgetState>{}) ??
+        (theme.useMaterial3
+            ? const StadiumBorder()
+            : const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(4)),
+              ));
     await showSpotlightGuide(
       context,
       steps: [
         SpotlightGuideStep(
-          targetKey: targets.addOrderFormKey,
-          icon: Icons.edit_note_rounded,
-          title: '先把这笔业务记下来',
-          body: '先填写图名、单主、平台和稿价。继续往下还能设置加价、截稿时间、节点预设、参考图、标签和备注。',
+          targetKey: targets.addOrderTitleKey,
+          icon: Icons.title_rounded,
+          title: '先填图名',
+          body: '图名是这笔排单最主要的识别信息，之后搜索和小票都会用到。',
+          targetPadding: 0,
+          borderRadius: 0,
+        ),
+        if (widget.featureStore.clientInfo)
+          SpotlightGuideStep(
+            targetKey: targets.addOrderClientKey,
+            icon: Icons.person_outline_rounded,
+            title: '再记下单主',
+            body: '单主信息可以用于搜索，也会用于按单主生成年度小票。',
+            targetPadding: 0,
+            borderRadius: 0,
+          ),
+        SpotlightGuideStep(
+          targetKey: targets.addOrderPlatformKey,
+          icon: Icons.storefront_outlined,
+          title: '选择平台',
+          body: '平台会影响手续费规则，也会用于后续统计和筛选。',
+          targetPadding: 0,
+          borderRadius: 0,
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.addOrderPriceKey,
+          icon: Icons.payments_outlined,
+          title: '填写原始稿价',
+          body: '这里填写基础稿价；加价预设和其他调整项会在此基础上计算。',
+          targetPadding: 0,
+          borderRadius: 0,
         ),
         SpotlightGuideStep(
           targetKey: targets.addOrderSaveKey,
           icon: Icons.check_rounded,
           title: '填完后保存',
-          body: '不用一次把所有附加项都填满。基础信息确认后保存，之后随时可以进详情继续修改。',
-          shape: SpotlightTargetShape.stadium,
-          targetPadding: 3,
+          body: '基础信息确认后就可以保存，截稿、节点、参考图、标签等都可以继续补充。',
+          targetShape: saveShape,
+          targetPadding: 0,
         ),
-      ],
+      ].where((step) => step.targetKey.currentContext != null).toList(),
     );
-  }
-
-  @override
-  void dispose() {
-    if (!_saved && _referenceImages.isNotEmpty) {
-      unawaited(
-        _referenceImageStore.deleteImages(
-          accountId: widget.accountId,
-          images: List<OrderReferenceImage>.from(_referenceImages),
-        ),
-      );
-    }
-    _titleController.dispose();
-    _clientController.dispose();
-    _priceController.dispose();
-    _descriptionController.dispose();
-    _onlineController.dispose();
-    _offlineController.dispose();
-    if (widget.pricingPresetStore == null) {
-      _effectivePricingPresetStore.dispose();
-    }
-    super.dispose();
-  }
-
-  void _setOnlinePercent(double value) {
-    final clamped = value.clamp(0, 100).toDouble();
-    setState(() {
-      _onlinePercent = clamped;
-      _onlineController.text = formatPercentValue(clamped);
-      _offlineController.text = formatPercentValue(100 - clamped);
-    });
-  }
-
-  Future<void> _addReferenceImages() async {
-    if (_pickingReferenceImages) return;
-    setState(() => _pickingReferenceImages = true);
-
-    try {
-      final accountId = widget.accountId;
-      final imported = await _referenceImageStore.pickAndImport(
-        accountId: accountId,
-        orderId: _draftOrderId,
-      );
-      if (!mounted) {
-        if (imported.isNotEmpty) {
-          await _referenceImageStore.deleteImages(
-            accountId: accountId,
-            images: imported,
-          );
-        }
-        return;
-      }
-      if (imported.isEmpty) return;
-      setState(() => _referenceImages.addAll(imported));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('添加参考图失败：$error'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _pickingReferenceImages = false);
-      }
-    }
-  }
-
-  void _removeReferenceImage(OrderReferenceImage image) {
-    setState(() {
-      _referenceImages.removeWhere((item) => item.id == image.id);
-    });
-    unawaited(
-      _referenceImageStore.deleteImages(
-        accountId: widget.accountId,
-        images: <OrderReferenceImage>[image],
-      ),
-    );
-  }
-
-  void _save() {
-    final title = _titleController.text.trim();
-    final client = _clientController.text.trim();
-
-    if (title.isEmpty ||
-        (widget.featureStore.clientInfo && client.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.featureStore.clientInfo
-                ? '图名和单主需要填写'
-                : '图名需要填写',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final price = double.tryParse(_priceController.text.trim()) ?? 0;
-    if (!price.isFinite || price < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请输入有效的价格'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final preset = widget.nodePresetStore.byId(_presetId).snapshot();
-    final currentNodeId = preset.nodes.any((node) => node.id == _currentNodeId)
-        ? _currentNodeId
-        : preset.nodes.first.id;
-
-    final order = QueueOrder(
-      id: _draftOrderId,
-      platform: _platform,
-      title: title,
-      clientName: client,
-      deadline: _deadline,
-      nodePresetId: _presetId,
-      nodePresetSnapshot: preset,
-      currentNodeId: currentNodeId,
-      price: price,
-      feeEnabled: _feeEnabled,
-      huajiaLoveLevel: _huajiaLoveLevel,
-      onlinePercent: _onlinePercent,
-      supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
-      pricingAdjustments: List<PricingAdjustment>.unmodifiable(
-        _pricingAdjustments.map((item) => item.snapshot()),
-      ),
-      deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
-      description: _descriptionController.text.trim(),
-      tags: normalizeOrderTags(_tags),
-      defaultOrder: DateTime.now().microsecondsSinceEpoch,
-      referenceImages: List<OrderReferenceImage>.unmodifiable(
-        _referenceImages,
-      ),
-    );
-
-    _saved = true;
-    widget.store.addOrder(order);
-    Navigator.of(context).pop();
   }
 
   @override
@@ -258,12 +148,10 @@ class _AddOrderPageState extends State<AddOrderPage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
-          SpotlightTarget(
-            targetKey: widget.guideTargets?.addOrderSaveKey,
-            child: TextButton(
-              onPressed: _pickingReferenceImages ? null : _save,
-              child: const Text('保存'),
-            ),
+          TextButton(
+            key: widget.guideTargets?.addOrderSaveKey,
+            onPressed: _pickingReferenceImages ? null : _save,
+            child: const Text('保存'),
           ),
           const SizedBox(width: 6),
         ],
@@ -276,63 +164,59 @@ class _AddOrderPageState extends State<AddOrderPage> {
           right: 18,
         ),
         children: [
-          SpotlightTarget(
-            targetKey: widget.guideTargets?.addOrderFormKey,
-            child: Column(
+          const FormFieldLabel('图名'),
+          TextField(
+            key: widget.guideTargets?.addOrderTitleKey,
+            controller: _titleController,
+            textInputAction: TextInputAction.next,
+          ),
+          if (widget.featureStore.clientInfo) ...[
+            const SizedBox(height: 14),
+            const FormFieldLabel('单主'),
+            TextField(
+              key: widget.guideTargets?.addOrderClientKey,
+              controller: _clientController,
+              textInputAction: TextInputAction.next,
+            ),
+          ],
+          const SizedBox(height: 14),
+          CommissionSettingsEditor(
+            platform: _platform,
+            feeEnabled: _feeEnabled,
+            huajiaLoveLevel: _huajiaLoveLevel,
+            onlineController: _onlineController,
+            offlineController: _offlineController,
+            platformKey: widget.guideTargets?.addOrderPlatformKey,
+            onPlatformChanged: (value) {
+              setState(() {
+                _platform = value;
+                _feeEnabled = value.defaultFeeEnabled;
+                _huajiaLoveLevel = HuajiaLoveLevel.none;
+                if (!value.usesOnlineOfflineSplit) {
+                  _onlinePercent = 100;
+                  _onlineController.text = '100';
+                  _offlineController.text = '0';
+                }
+              });
+            },
+            onFeeEnabledChanged: (value) {
+              setState(() => _feeEnabled = value);
+            },
+            onHuajiaLoveLevelChanged: (value) {
+              setState(() => _huajiaLoveLevel = value);
+            },
+            onOnlinePercentChanged: _setOnlinePercent,
+            afterPlatform: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const FormFieldLabel('图名'),
+                const FormFieldLabel('原始稿价'),
                 TextField(
-                  controller: _titleController,
-                  textInputAction: TextInputAction.next,
-                ),
-                if (widget.featureStore.clientInfo) ...[
-                  const SizedBox(height: 14),
-                  const FormFieldLabel('单主'),
-                  TextField(
-                    controller: _clientController,
-                    textInputAction: TextInputAction.next,
+                  key: widget.guideTargets?.addOrderPriceKey,
+                  controller: _priceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
                   ),
-                ],
-                const SizedBox(height: 14),
-                CommissionSettingsEditor(
-                  platform: _platform,
-                  feeEnabled: _feeEnabled,
-                  huajiaLoveLevel: _huajiaLoveLevel,
-                  onlineController: _onlineController,
-                  offlineController: _offlineController,
-                  onPlatformChanged: (value) {
-                    setState(() {
-                      _platform = value;
-                      _feeEnabled = value.defaultFeeEnabled;
-                      _huajiaLoveLevel = HuajiaLoveLevel.none;
-                      if (!value.usesOnlineOfflineSplit) {
-                        _onlinePercent = 100;
-                        _onlineController.text = '100';
-                        _offlineController.text = '0';
-                      }
-                    });
-                  },
-                  onFeeEnabledChanged: (value) {
-                    setState(() => _feeEnabled = value);
-                  },
-                  onHuajiaLoveLevelChanged: (value) {
-                    setState(() => _huajiaLoveLevel = value);
-                  },
-                  onOnlinePercentChanged: _setOnlinePercent,
-                  afterPlatform: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const FormFieldLabel('原始稿价'),
-                      TextField(
-                        controller: _priceController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: const InputDecoration(prefixText: '¥ '),
-                      ),
-                    ],
-                  ),
+                  decoration: const InputDecoration(prefixText: '¥ '),
                 ),
               ],
             ),
