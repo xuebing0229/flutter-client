@@ -236,4 +236,12 @@ void main() {
       ['完整新手引导'],
     );
   });
+
+  test('213 包含新手引导高亮与网页版安装完善见闻', () {
+    final picked = newsBetweenBuilds(212, 213);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导高亮与网页版安装完善'],
+    );
+  });
 }
