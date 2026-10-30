@@ -138,6 +138,151 @@ class _AddOrderPageState extends State<AddOrderPage> {
   }
 
   @override
+  void dispose() {
+    if (!_saved && _referenceImages.isNotEmpty) {
+      unawaited(
+        _referenceImageStore.deleteImages(
+          accountId: widget.accountId,
+          images: List<OrderReferenceImage>.from(_referenceImages),
+        ),
+      );
+    }
+    _titleController.dispose();
+    _clientController.dispose();
+    _priceController.dispose();
+    _descriptionController.dispose();
+    _onlineController.dispose();
+    _offlineController.dispose();
+    if (widget.pricingPresetStore == null) {
+      _effectivePricingPresetStore.dispose();
+    }
+    super.dispose();
+  }
+
+  void _setOnlinePercent(double value) {
+    final clamped = value.clamp(0, 100).toDouble();
+    setState(() {
+      _onlinePercent = clamped;
+      _onlineController.text = formatPercentValue(clamped);
+      _offlineController.text = formatPercentValue(100 - clamped);
+    });
+  }
+
+  Future<void> _addReferenceImages() async {
+    if (_pickingReferenceImages) return;
+    setState(() => _pickingReferenceImages = true);
+
+    try {
+      final accountId = widget.accountId;
+      final imported = await _referenceImageStore.pickAndImport(
+        accountId: accountId,
+        orderId: _draftOrderId,
+      );
+      if (!mounted) {
+        if (imported.isNotEmpty) {
+          await _referenceImageStore.deleteImages(
+            accountId: accountId,
+            images: imported,
+          );
+        }
+        return;
+      }
+      if (imported.isEmpty) return;
+      setState(() => _referenceImages.addAll(imported));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('添加参考图失败：$error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _pickingReferenceImages = false);
+      }
+    }
+  }
+
+  void _removeReferenceImage(OrderReferenceImage image) {
+    setState(() {
+      _referenceImages.removeWhere((item) => item.id == image.id);
+    });
+    unawaited(
+      _referenceImageStore.deleteImages(
+        accountId: widget.accountId,
+        images: <OrderReferenceImage>[image],
+      ),
+    );
+  }
+
+  void _save() {
+    final title = _titleController.text.trim();
+    final client = _clientController.text.trim();
+
+    if (title.isEmpty ||
+        (widget.featureStore.clientInfo && client.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.featureStore.clientInfo
+                ? '图名和单主需要填写'
+                : '图名需要填写',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final price = double.tryParse(_priceController.text.trim()) ?? 0;
+    if (!price.isFinite || price < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的价格'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final preset = widget.nodePresetStore.byId(_presetId).snapshot();
+    final currentNodeId = preset.nodes.any((node) => node.id == _currentNodeId)
+        ? _currentNodeId
+        : preset.nodes.first.id;
+
+    final order = QueueOrder(
+      id: _draftOrderId,
+      platform: _platform,
+      title: title,
+      clientName: client,
+      deadline: _deadline,
+      nodePresetId: _presetId,
+      nodePresetSnapshot: preset,
+      currentNodeId: currentNodeId,
+      price: price,
+      feeEnabled: _feeEnabled,
+      huajiaLoveLevel: _huajiaLoveLevel,
+      onlinePercent: _onlinePercent,
+      supplementFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
+      pricingAdjustments: List<PricingAdjustment>.unmodifiable(
+        _pricingAdjustments.map((item) => item.snapshot()),
+      ),
+      deductionFeeEnabled: _platform.defaultAdjustmentFeeEnabled,
+      description: _descriptionController.text.trim(),
+      tags: normalizeOrderTags(_tags),
+      defaultOrder: DateTime.now().microsecondsSinceEpoch,
+      referenceImages: List<OrderReferenceImage>.unmodifiable(
+        _referenceImages,
+      ),
+    );
+
+    _saved = true;
+    widget.store.addOrder(order);
+    Navigator.of(context).pop();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final preset = widget.nodePresetStore.byId(_presetId);
 
