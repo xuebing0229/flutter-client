@@ -116,6 +116,8 @@ class _AddOrderPageState extends State<AddOrderPage> {
           body: '平台会影响手续费规则，也会用于后续统计和筛选。',
           targetPadding: 0,
           borderRadius: 0,
+          preferCardAbove: true,
+          allowOutsideTargetInteraction: true,
         ),
         SpotlightGuideStep(
           targetKey: targets.addOrderPriceKey,
