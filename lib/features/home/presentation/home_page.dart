@@ -2107,22 +2107,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     _desktopRootRefreshPending))
         ? null
         : switch (current.id) {
-            'orders' => SpotlightTarget(
-                targetKey: _quickStartGuideTargets.addOrderKey,
-                child: FloatingActionButton.extended(
-                  onPressed: () =>
+            'orders' => FloatingActionButton.extended(
+                key: _quickStartGuideTargets.addOrderKey,
+                onPressed: () =>
                       unawaited(_chooseAddMethod(products: false)),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('新增排单'),
-                ),
               ),
-            'products' => SpotlightTarget(
-                targetKey: _quickStartGuideTargets.addProductKey,
-                child: FloatingActionButton.extended(
-                  onPressed: () => unawaited(_chooseAddMethod(products: true)),
+            'products' => FloatingActionButton.extended(
+                key: _quickStartGuideTargets.addProductKey,
+                onPressed: () => unawaited(_chooseAddMethod(products: true)),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('新增成品'),
-                ),
               ),
             _ => null,
           };
