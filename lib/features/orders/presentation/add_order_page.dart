@@ -293,10 +293,12 @@ class _AddOrderPageState extends State<AddOrderPage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
-          TextButton(
-            key: widget.guideTargets?.addOrderSaveKey,
-            onPressed: _pickingReferenceImages ? null : _save,
-            child: const Text('保存'),
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.addOrderSaveKey,
+            child: TextButton(
+              onPressed: _pickingReferenceImages ? null : _save,
+              child: const Text('保存'),
+            ),
           ),
           const SizedBox(width: 6),
         ],
@@ -310,18 +312,22 @@ class _AddOrderPageState extends State<AddOrderPage> {
         ),
         children: [
           const FormFieldLabel('图名'),
-          TextField(
-            key: widget.guideTargets?.addOrderTitleKey,
-            controller: _titleController,
-            textInputAction: TextInputAction.next,
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.addOrderTitleKey,
+            child: TextField(
+              controller: _titleController,
+              textInputAction: TextInputAction.next,
+            ),
           ),
           if (widget.featureStore.clientInfo) ...[
             const SizedBox(height: 14),
             const FormFieldLabel('单主'),
-            TextField(
-              key: widget.guideTargets?.addOrderClientKey,
-              controller: _clientController,
-              textInputAction: TextInputAction.next,
+            SpotlightTarget(
+              targetKey: widget.guideTargets?.addOrderClientKey,
+              child: TextField(
+                controller: _clientController,
+                textInputAction: TextInputAction.next,
+              ),
             ),
           ],
           const SizedBox(height: 14),
@@ -355,13 +361,15 @@ class _AddOrderPageState extends State<AddOrderPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const FormFieldLabel('原始稿价'),
-                TextField(
-                  key: widget.guideTargets?.addOrderPriceKey,
-                  controller: _priceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                SpotlightTarget(
+                  targetKey: widget.guideTargets?.addOrderPriceKey,
+                  child: TextField(
+                    controller: _priceController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(prefixText: '¥ '),
                   ),
-                  decoration: const InputDecoration(prefixText: '¥ '),
                 ),
               ],
             ),
