@@ -1967,25 +1967,21 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     final floatingAction = _busy || _desktopToolSelection != null
         ? null
         : switch (current.id) {
-            'orders' => SpotlightTarget(
-                targetKey: _quickStartGuideTargets.addOrderKey,
-                child: FloatingActionButton.extended(
-                  onPressed: () => unawaited(
+            'orders' => FloatingActionButton.extended(
+                key: _quickStartGuideTargets.addOrderKey,
+                onPressed: () => unawaited(
                     _chooseAddMethod(products: false),
                   ),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('新增排单'),
-                ),
               ),
-            'products' => SpotlightTarget(
-                targetKey: _quickStartGuideTargets.addProductKey,
-                child: FloatingActionButton.extended(
-                  onPressed: () => unawaited(
+            'products' => FloatingActionButton.extended(
+                key: _quickStartGuideTargets.addProductKey,
+                onPressed: () => unawaited(
                     _chooseAddMethod(products: true),
                   ),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('新增成品'),
-                ),
               ),
             _ => null,
           };
