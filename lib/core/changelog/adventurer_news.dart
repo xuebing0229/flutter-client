@@ -388,6 +388,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '完整新手引导',
     description: '快速上手升级为跨页面实操引导：会带着创建第一笔排单，继续认识节点小进度、确认节点与归档，再依次跳到截图导入、节点＆加价预设、成品、日程、统计、小票、同步、设备、完整备份和附加功能。手机、电脑与网页版共用同一套引导逻辑；网页版会自动跳过不适用的原生设备步骤。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 213,
+    title: '新手引导高亮与网页版安装完善',
+    description: '新手引导的高亮会按完整控件尺寸和按钮形状显示，不再只亮局部或用生硬矩形框住圆角按钮；账号与附加功能改为高亮页面标题介绍整体用途。网页版新增“添加到桌面”引导，支持直接调用浏览器安装提示，也会在不支持直接安装的浏览器里给出对应操作说明。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
