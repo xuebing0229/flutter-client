@@ -244,4 +244,12 @@ void main() {
       ['新手引导高亮与网页版安装完善'],
     );
   });
+
+  test('214 包含新手引导定位修正见闻', () {
+    final picked = newsBetweenBuilds(213, 214);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导定位修正'],
+    );
+  });
 }
