@@ -383,6 +383,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '快速上手引导与小票恢复完善',
     description: '新增可重复播放的快速上手引导，会直接在真实界面上高亮“新增排单”、搜索、排序/视图和菜单入口，手机、电脑与网页版保持一致。小票“恢复默认”现在会同时恢复样式和已经编辑过的文字内容、字号，不再只恢复抬头或外观。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 212,
+    title: '完整新手引导',
+    description: '快速上手升级为跨页面实操引导：会带着创建第一笔排单，继续认识节点小进度、确认节点与归档，再依次跳到截图导入、节点＆加价预设、成品、日程、统计、小票、同步、设备、完整备份和附加功能。手机、电脑与网页版共用同一套引导逻辑；网页版会自动跳过不适用的原生设备步骤。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
