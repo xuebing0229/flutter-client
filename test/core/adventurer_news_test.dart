@@ -228,4 +228,12 @@ void main() {
       ['快速上手引导与小票恢复完善'],
     );
   });
+
+  test('212 包含完整新手引导见闻', () {
+    final picked = newsBetweenBuilds(211, 212);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['完整新手引导'],
+    );
+  });
 }
