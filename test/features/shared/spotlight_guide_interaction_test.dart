@@ -229,6 +229,7 @@ void main() {
 
     await tester.tap(find.text('打开下拉引导'));
     await tester.pump();
+    await tester.pump();
 
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
