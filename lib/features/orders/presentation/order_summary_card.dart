@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../shared/presentation/summary_card_widgets.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../domain/queue_order.dart';
 
 class OrderSummaryCardCompactLayout {
@@ -161,8 +162,8 @@ class OrderSummaryCard extends StatelessWidget {
   final bool compact;
   final bool hasSyncConflict;
   final OrderSummaryCardCompactLayout? compactLayout;
-  final Key? nodeProgressKey;
-  final Key? confirmNodeKey;
+  final GlobalKey? nodeProgressKey;
+  final GlobalKey? confirmNodeKey;
 
   @override
   Widget build(BuildContext context) {
@@ -336,8 +337,8 @@ class OrderSummaryCard extends StatelessWidget {
                 SizedBox(height: compact ? 9 : 11),
                 if (onDecreaseNodeProgress != null ||
                     onIncreaseNodeProgress != null)
-                  KeyedSubtree(
-                    key: nodeProgressKey,
+                  SpotlightTarget(
+                    targetKey: nodeProgressKey,
                     child: _NodeWorkProgress(
                       progress: order.currentNodeProgress,
                       compact: compact,
@@ -395,8 +396,9 @@ class OrderSummaryCard extends StatelessWidget {
               if (onConfirmNode != null ||
                   (compact && compactLayout?.reserveAction == true)) ...[
                 SizedBox(height: compact ? 10 : 12),
-                SizedBox(
-                  key: confirmNodeKey,
+                SpotlightTarget(
+                  targetKey: confirmNodeKey,
+                  child: SizedBox(
                   width: double.infinity,
                   child: onConfirmNode != null
                       ? ResponsiveCardActionButton(
@@ -416,6 +418,7 @@ class OrderSummaryCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                  ),
                 ),
               ],
         ],
