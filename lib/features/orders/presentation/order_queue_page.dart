@@ -69,17 +69,17 @@ class OrderQueuePage extends StatefulWidget {
   final QuickStartGuideTargets? guideTargets;
   final String? guideOrderId;
 
-  Key? guideKeyFor(QueueOrder order) =>
+  GlobalKey? guideKeyFor(QueueOrder order) =>
       guideTargets != null && guideOrderId == order.id
           ? guideTargets!.firstOrderCardKey
           : null;
 
-  Key? guideProgressKeyFor(QueueOrder order) =>
+  GlobalKey? guideProgressKeyFor(QueueOrder order) =>
       guideTargets != null && guideOrderId == order.id
           ? guideTargets!.firstOrderProgressKey
           : null;
 
-  Key? guideConfirmNodeKeyFor(QueueOrder order) =>
+  GlobalKey? guideConfirmNodeKeyFor(QueueOrder order) =>
       guideTargets != null && guideOrderId == order.id
           ? guideTargets!.firstOrderConfirmNodeKey
           : null;
@@ -1301,8 +1301,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       childAspectRatio: OrderOverviewSummaryCard.aspectRatio,
                       itemBuilder: (context, index) {
                         final order = orders[index];
-                        return OrderOverviewSummaryCard(
-                          key: widget.guideKeyFor(order),
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderOverviewSummaryCard(
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
@@ -1311,6 +1312,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           showClient: widget.featureStore.clientInfo,
                           onTap: () => _openOrder(order),
                           onLongPress: () => _showQuickActions(order),
+                          ),
                         );
                       },
                     )
@@ -1339,8 +1341,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           rowIndices: rowIndices,
                           cardWidth: cardWidth,
                         );
-                        return OrderSummaryCard(
-                          key: widget.guideKeyFor(order),
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderSummaryCard(
                           nodeProgressKey: widget.guideProgressKeyFor(order),
                           confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
@@ -1378,6 +1381,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                                   order.id,
                                   10,
                                 ),
+                          ),
                         );
                       },
                     )
@@ -1391,8 +1395,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final order = orders[index];
-                        return OrderSummaryCard(
-                          key: widget.guideKeyFor(order),
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderSummaryCard(
                           nodeProgressKey: widget.guideProgressKeyFor(order),
                           confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
@@ -1428,6 +1433,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                                   order.id,
                                   10,
                                 ),
+                          ),
                         );
                       },
                     ),
