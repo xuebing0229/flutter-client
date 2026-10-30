@@ -317,6 +317,7 @@ class _SpotlightMaskPainter extends CustomPainter {
             Radius.circular(borderRadius),
           ),
         );
+        break;
       case SpotlightTargetShape.stadium:
         hole.addRRect(
           RRect.fromRectAndRadius(
@@ -324,8 +325,10 @@ class _SpotlightMaskPainter extends CustomPainter {
             Radius.circular(clipped.shortestSide / 2),
           ),
         );
+        break;
       case SpotlightTargetShape.circle:
         hole.addOval(clipped);
+        break;
     }
 
     final dimmed = Path.combine(PathOperation.difference, screen, hole);
