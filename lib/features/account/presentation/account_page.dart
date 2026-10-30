@@ -103,8 +103,8 @@ class AccountPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              KeyedSubtree(
-                key: guideTargets?.accountDevicesKey,
+              SpotlightTarget(
+                targetKey: guideTargets?.accountDevicesKey,
                 child: GuildContentPanel(
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(
