@@ -297,12 +297,17 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
             '生成小票',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          bottom: TabBar(
-            key: widget.guideTargets?.receiptCenterKey,
-            tabs: const [
-              Tab(text: '按单子生成'),
-              Tab(text: '按单主生成'),
-            ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(48),
+            child: SpotlightTarget(
+              targetKey: widget.guideTargets?.receiptCenterKey,
+              child: const TabBar(
+                tabs: [
+                  Tab(text: '按单子生成'),
+                  Tab(text: '按单主生成'),
+                ],
+              ),
+            ),
           ),
         ),
         body: AnimatedBuilder(
