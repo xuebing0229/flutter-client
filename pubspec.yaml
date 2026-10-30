@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+211
-# beta-211: interactive quick-start guide and receipt content reset polish on canonical 210 mainline
+version: 0.0.1+212
+# beta-212: full multi-page onboarding guide with first-order workflow practice
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
