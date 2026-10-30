@@ -95,6 +95,8 @@ class _AddOrderPageState extends State<AddOrderPage> {
           icon: Icons.check_rounded,
           title: '填完后保存',
           body: '不用一次把所有附加项都填满。基础信息确认后保存，之后随时可以进详情继续修改。',
+          shape: SpotlightTargetShape.stadium,
+          targetPadding: 3,
         ),
       ],
     );
