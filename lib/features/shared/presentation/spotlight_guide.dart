@@ -126,6 +126,7 @@ class _SpotlightGuideOverlay extends StatefulWidget {
 class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   int _index = 0;
   Rect? _targetRect;
+  bool _targetRouteCovered = false;
 
   SpotlightGuideStep get _step => widget.steps[_index];
 
@@ -144,26 +145,62 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   void _refreshTarget() {
     if (!mounted) return;
     final targetContext = _step.targetKey.currentContext;
+    final targetRoute =
+        targetContext == null ? null : ModalRoute.of(targetContext);
+    final targetRouteCovered = targetRoute != null && !targetRoute.isCurrent;
     final box = targetContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) {
-      setState(() => _targetRect = null);
+      if (_targetRect == null &&
+          _targetRouteCovered == targetRouteCovered) {
+        return;
+      }
+      setState(() {
+        _targetRect = null;
+        _targetRouteCovered = targetRouteCovered;
+      });
       return;
     }
     final origin = box.localToGlobal(Offset.zero);
     final rect = (origin & box.size).inflate(_step.targetPadding);
-    if (_targetRect == rect) return;
+    if (_targetRect == rect &&
+        _targetRouteCovered == targetRouteCovered) {
+      return;
+    }
     setState(() {
       _targetRect = rect;
+      _targetRouteCovered = targetRouteCovered;
     });
   }
 
-  void _move(int delta) {
+  Future<void> _dismissTransientRouteAboveTarget() async {
+    final targetContext = _step.targetKey.currentContext;
+    if (targetContext == null) return;
+    final targetRoute = ModalRoute.of(targetContext);
+    if (targetRoute == null || targetRoute.isCurrent) return;
+
+    final navigator = Navigator.maybeOf(targetContext);
+    if (navigator == null) return;
+    await navigator.maybePop();
+    if (!mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<void> _finish(bool value) async {
+    await _dismissTransientRouteAboveTarget();
+    if (!mounted) return;
+    widget.onComplete(value);
+  }
+
+  Future<void> _move(int delta) async {
+    await _dismissTransientRouteAboveTarget();
+    if (!mounted) return;
     final next =
         (_index + delta).clamp(0, widget.steps.length - 1).toInt();
     if (next == _index) return;
     setState(() {
       _index = next;
       _targetRect = null;
+      _targetRouteCovered = false;
     });
   }
 
@@ -181,13 +218,26 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final cardWidth =
         (size.width - 32).clamp(260.0, 420.0).toDouble();
     final cardHeight = 196.0;
+    final spaceAbove =
+        rect == null ? 0.0 : rect.top - safeTop - 16;
+    final spaceBelow = rect == null
+        ? 0.0
+        : size.height - safeBottom - rect.bottom - 16;
     final preferBelow =
         rect == null || rect.bottom + cardHeight + 24 < size.height - safeBottom;
     final cardTop = rect == null
         ? (size.height - cardHeight) / 2
-        : preferBelow
-            ? (rect.bottom + 16)
-            : (rect.top - cardHeight - 16);
+        : _targetRouteCovered
+            ? (spaceAbove >= cardHeight && spaceBelow >= cardHeight
+                ? (spaceAbove <= spaceBelow
+                    ? rect.top - cardHeight - 16
+                    : rect.bottom + 16)
+                : spaceAbove >= cardHeight
+                    ? rect.top - cardHeight - 16
+                    : rect.bottom + 16)
+            : preferBelow
+                ? (rect.bottom + 16)
+                : (rect.top - cardHeight - 16);
     final clampedTop = cardTop
         .clamp(safeTop, size.height - safeBottom - cardHeight)
         .toDouble();
@@ -195,24 +245,26 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Positioned.fill(
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: _SpotlightMaskPainter(
-                targetRect: rect,
-                targetShape: _step.targetShape,
-                borderRadius: _step.borderRadius,
+        if (!_targetRouteCovered)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _SpotlightMaskPainter(
+                  targetRect: rect,
+                  targetShape: _step.targetShape,
+                  borderRadius: _step.borderRadius,
+                ),
               ),
             ),
           ),
-        ),
-        Positioned.fill(
-          child: _SpotlightPointerBarrier(
-            targetRect: rect,
-            targetShape: _step.targetShape,
-            borderRadius: _step.borderRadius,
+        if (!_targetRouteCovered)
+          Positioned.fill(
+            child: _SpotlightPointerBarrier(
+              targetRect: rect,
+              targetShape: _step.targetShape,
+              borderRadius: _step.borderRadius,
+            ),
           ),
-        ),
           Positioned(
             left: (size.width - cardWidth) / 2,
             top: clampedTop,
@@ -273,20 +325,20 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                           ),
                           const Spacer(),
                           TextButton(
-                            onPressed: () => widget.onComplete(false),
+                            onPressed: () => unawaited(_finish(false)),
                             child: const Text('跳过'),
                           ),
                           if (_index > 0)
                             TextButton(
-                              onPressed: () => _move(-1),
+                              onPressed: () => unawaited(_move(-1)),
                               child: const Text('上一步'),
                             ),
                           FilledButton(
                             onPressed: () {
                               if (isLast) {
-                                widget.onComplete(true);
+                                unawaited(_finish(true));
                               } else {
-                                _move(1);
+                                unawaited(_move(1));
                               }
                             },
                             child: Text(isLast ? widget.finalLabel : '下一步'),
