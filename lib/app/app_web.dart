@@ -1966,8 +1966,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     final floatingAction = _busy || _desktopToolSelection != null
         ? null
         : switch (current.id) {
-            'orders' => KeyedSubtree(
-                key: _quickStartGuideTargets.addOrderKey,
+            'orders' => SpotlightTarget(
+                targetKey: _quickStartGuideTargets.addOrderKey,
                 child: FloatingActionButton.extended(
                   onPressed: () => unawaited(
                     _chooseAddMethod(products: false),
@@ -1976,8 +1976,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
                   label: const Text('新增排单'),
                 ),
               ),
-            'products' => KeyedSubtree(
-                key: _quickStartGuideTargets.addProductKey,
+            'products' => SpotlightTarget(
+                targetKey: _quickStartGuideTargets.addProductKey,
                 child: FloatingActionButton.extended(
                   onPressed: () => unawaited(
                     _chooseAddMethod(products: true),
