@@ -2341,6 +2341,54 @@ class _WebSettingsPage extends StatelessWidget {
   final Widget dataPage;
   final QuickStartGuideTargets? guideTargets;
 
+  Future<void> _installPwa(BuildContext context) async {
+    final state = webPwaInstallState();
+    if (state == 'installed') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('冒险者公会已经作为应用添加到桌面。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (state == 'prompt') {
+      final result = await webPromptPwaInstall();
+      if (!context.mounted) return;
+      if (result == 'accepted' || result == 'installed') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已添加到桌面，可以像普通应用一样打开。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (result == 'dismissed') return;
+    }
+
+    if (!context.mounted) return;
+    final ios = webPwaInstallState() == 'ios';
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加到桌面'),
+        content: Text(
+          ios
+              ? '在浏览器底部或顶部点“分享”，再选择“添加到主屏幕”。之后就可以从桌面直接打开冒险者公会。'
+              : '打开浏览器菜单，选择“安装应用”“添加到主屏幕”或“创建快捷方式”（名称会因浏览器不同略有差异）。',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2363,13 +2411,27 @@ class _WebSettingsPage extends StatelessWidget {
               ),
             ),
           ),
-          ListTile(
-            key: guideTargets?.settingsBackupKey,
-            leading: const Icon(Icons.sync_alt_rounded),
-            title: const Text('设备同步与完整备份'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => dataPage),
+          SpotlightTarget(
+            targetKey: guideTargets?.settingsBackupKey,
+            child: ListTile(
+              leading: const Icon(Icons.sync_alt_rounded),
+              title: const Text('设备同步与完整备份'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => dataPage),
+              ),
+            ),
+          ),
+          SpotlightTarget(
+            targetKey: guideTargets?.pwaInstallKey,
+            child: ListTile(
+              leading: const Icon(Icons.install_desktop_rounded),
+              title: Text(
+                webPwaInstallState() == 'installed' ? '已添加到桌面' : '添加到桌面',
+              ),
+              subtitle: const Text('作为独立应用打开，使用时不需要先进入浏览器标签页'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _installPwa(context),
             ),
           ),
           ListTile(
@@ -2452,8 +2514,9 @@ class _WebDataPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          Card(
-            key: guideTargets?.syncKey,
+          SpotlightTarget(
+            targetKey: guideTargets?.syncKey,
+            child: Card(
             margin: EdgeInsets.zero,
             child: ListTile(
               leading: Icon(
@@ -2477,6 +2540,7 @@ class _WebDataPage extends StatelessWidget {
                     : () => peerSync!.requestSync(immediate: true),
                 child: const Text('立即同步'),
               ),
+            ),
             ),
           ),
           const SizedBox(height: 14),
