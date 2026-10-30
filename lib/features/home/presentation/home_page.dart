@@ -613,7 +613,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         duration: const Duration(minutes: 30),
         content: const Text('现在试着长按刚创建的排单 → 归档。完成归档后，新手引导会自动继续。'),
         action: SnackBarAction(
-          label: '跳过',
+          label: '跳过练习',
           onPressed: () {
             if (!completer.isCompleted) completer.complete(false);
           },
