@@ -393,6 +393,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新手引导高亮与网页版安装完善',
     description: '新手引导的高亮会按完整控件尺寸和按钮形状显示，不再只亮局部或用生硬矩形框住圆角按钮；账号与附加功能改为高亮页面标题介绍整体用途。网页版新增“添加到桌面”引导，支持直接调用浏览器安装提示，也会在不支持直接安装的浏览器里给出对应操作说明。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 214,
+    title: '新手引导定位修正',
+    description: '修正部分高亮只覆盖控件一部分或把不存在的区域当成高亮目标的问题。新增排单不再框一整块虚拟区域，而是依次指向图名、单主、平台、稿价和保存；新增排单按钮直接绑定真实按钮，并沿用实际按钮圆角形状。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
