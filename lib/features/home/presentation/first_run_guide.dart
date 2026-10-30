@@ -611,12 +611,10 @@ Future<void> _showInteractiveQuickStart(
     QuickStartGuideDestination.products,
     [
       SpotlightGuideStep(
-        targetKey: targets.addProductKey,
+        targetKey: targets.productsTabKey,
         icon: Icons.image_outlined,
         title: '成品是另一类业务记录',
         body: '这里记录已经完成、可以售卖的作品。可以新增单次售卖或多次售卖成品，每次售出都会留下单独的售出时间记录。',
-        targetShape: _extendedFabGuideShape(context),
-        targetPadding: 0,
       ),
     ],
   );
