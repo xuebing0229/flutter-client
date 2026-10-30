@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 class QuickStartGuideTargets {
   QuickStartGuideTargets();
@@ -42,17 +45,18 @@ class QuickStartGuideTargets {
       };
 }
 
-class SpotlightTarget extends StatelessWidget {
+class SpotlightTarget extends SingleChildRenderObjectWidget {
   const SpotlightTarget({
     GlobalKey? targetKey,
-    required this.child,
-  }) : super(key: targetKey);
-
-  final Widget child;
+    required Widget child,
+  }) : super(key: targetKey, child: child);
 
   @override
-  Widget build(BuildContext context) => child;
+  RenderProxyBox createRenderObject(BuildContext context) =>
+      _RenderSpotlightTarget();
 }
+
+class _RenderSpotlightTarget extends RenderProxyBox {}
 
 class SpotlightGuideStep {
   const SpotlightGuideStep({
@@ -81,29 +85,39 @@ Future<bool> showSpotlightGuide(
 }) async {
   if (steps.isEmpty) return false;
 
-  final completed = await showGeneralDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    barrierLabel: '新手指引',
-    barrierColor: Colors.transparent,
-    pageBuilder: (dialogContext, _, __) {
-      return _SpotlightGuideOverlay(
+  final overlay = Overlay.of(context);
+  final completer = Completer<bool>();
+  late final OverlayEntry entry;
+
+  void complete(bool value) {
+    if (entry.mounted) entry.remove();
+    if (!completer.isCompleted) completer.complete(value);
+  }
+
+  entry = OverlayEntry(
+    builder: (_) => Positioned.fill(
+      child: _SpotlightGuideOverlay(
         steps: steps,
         finalLabel: finalLabel,
-      );
-    },
+        onComplete: complete,
+      ),
+    ),
   );
-  return completed ?? false;
+  overlay.insert(entry);
+
+  return completer.future;
 }
 
 class _SpotlightGuideOverlay extends StatefulWidget {
   const _SpotlightGuideOverlay({
     required this.steps,
     required this.finalLabel,
+    required this.onComplete,
   });
 
   final List<SpotlightGuideStep> steps;
   final String finalLabel;
+  final ValueChanged<bool> onComplete;
 
   @override
   State<_SpotlightGuideOverlay> createState() => _SpotlightGuideOverlayState();
@@ -118,7 +132,13 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshTarget());
+    WidgetsBinding.instance.addPostFrameCallback(_trackTarget);
+  }
+
+  void _trackTarget(Duration _) {
+    if (!mounted) return;
+    _refreshTarget();
+    WidgetsBinding.instance.addPostFrameCallback(_trackTarget);
   }
 
   void _refreshTarget() {
@@ -129,12 +149,11 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
       setState(() => _targetRect = null);
       return;
     }
-    final paintBounds = box.paintBounds;
-    final topLeft = box.localToGlobal(paintBounds.topLeft);
-    final bottomRight = box.localToGlobal(paintBounds.bottomRight);
-    final rect = Rect.fromPoints(topLeft, bottomRight);
+    final origin = box.localToGlobal(Offset.zero);
+    final rect = (origin & box.size).inflate(_step.targetPadding);
+    if (_targetRect == rect) return;
     setState(() {
-      _targetRect = rect.inflate(_step.targetPadding);
+      _targetRect = rect;
     });
   }
 
@@ -146,7 +165,6 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
       _index = next;
       _targetRect = null;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshTarget());
   }
 
   @override
@@ -154,7 +172,8 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final media = MediaQuery.of(context);
     final size = media.size;
     final safeTop = media.padding.top + 12;
-    final safeBottom = media.padding.bottom + 12;
+    final safeBottom =
+        media.padding.bottom + media.viewInsets.bottom + 12;
     final colors = Theme.of(context).colorScheme;
     final rect = _targetRect;
     final isLast = _index == widget.steps.length - 1;
@@ -173,21 +192,27 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
         .clamp(safeTop, size.height - safeBottom - cardHeight)
         .toDouble();
 
-    return Material(
-      type: MaterialType.transparency,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _SpotlightMaskPainter(
-                  targetRect: rect,
-                  targetShape: _step.targetShape,
-                  borderRadius: _step.borderRadius,
-                ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _SpotlightMaskPainter(
+                targetRect: rect,
+                targetShape: _step.targetShape,
+                borderRadius: _step.borderRadius,
               ),
             ),
           ),
+        ),
+        Positioned.fill(
+          child: _SpotlightPointerBarrier(
+            targetRect: rect,
+            targetShape: _step.targetShape,
+            borderRadius: _step.borderRadius,
+          ),
+        ),
           Positioned(
             left: (size.width - cardWidth) / 2,
             top: clampedTop,
@@ -248,7 +273,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                           ),
                           const Spacer(),
                           TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
+                            onPressed: () => widget.onComplete(false),
                             child: const Text('跳过'),
                           ),
                           if (_index > 0)
@@ -259,7 +284,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                           FilledButton(
                             onPressed: () {
                               if (isLast) {
-                                Navigator.of(context).pop(true);
+                                widget.onComplete(true);
                               } else {
                                 _move(1);
                               }
@@ -273,13 +298,100 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
+
+class _SpotlightPointerBarrier extends LeafRenderObjectWidget {
+  const _SpotlightPointerBarrier({
+    required this.targetRect,
+    required this.targetShape,
+    required this.borderRadius,
+  });
+
+  final Rect? targetRect;
+  final ShapeBorder? targetShape;
+  final double borderRadius;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderSpotlightPointerBarrier(
+        targetRect: targetRect,
+        targetShape: targetShape,
+        borderRadius: borderRadius,
+      );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderSpotlightPointerBarrier renderObject,
+  ) {
+    renderObject
+      ..targetRect = targetRect
+      ..targetShape = targetShape
+      ..borderRadius = borderRadius;
+  }
+}
+
+class _RenderSpotlightPointerBarrier extends RenderBox {
+  _RenderSpotlightPointerBarrier({
+    required Rect? targetRect,
+    required ShapeBorder? targetShape,
+    required double borderRadius,
+  })  : _targetRect = targetRect,
+        _targetShape = targetShape,
+        _borderRadius = borderRadius;
+
+  Rect? _targetRect;
+  ShapeBorder? _targetShape;
+  double _borderRadius;
+
+  set targetRect(Rect? value) {
+    if (_targetRect == value) return;
+    _targetRect = value;
+  }
+
+  set targetShape(ShapeBorder? value) {
+    if (_targetShape == value) return;
+    _targetShape = value;
+  }
+
+  set borderRadius(double value) {
+    if (_borderRadius == value) return;
+    _borderRadius = value;
+  }
+
+  @override
+  void performLayout() {
+    size = constraints.biggest;
+  }
+
+  bool _insideTarget(Offset position) {
+    final rect = _targetRect;
+    if (rect == null) return false;
+    final clipped = Rect.fromLTRB(
+      rect.left.clamp(0.0, size.width),
+      rect.top.clamp(0.0, size.height),
+      rect.right.clamp(0.0, size.width),
+      rect.bottom.clamp(0.0, size.height),
+    );
+    final path = _targetShape?.getOuterPath(clipped) ??
+        (Path()
+          ..addRRect(
+            RRect.fromRectAndRadius(
+              clipped,
+              Radius.circular(_borderRadius),
+            ),
+          ));
+    return path.contains(position);
+  }
+
+  @override
+  bool hitTestSelf(Offset position) => !_insideTarget(position);
+}
 
 class _SpotlightMaskPainter extends CustomPainter {
   const _SpotlightMaskPainter({
