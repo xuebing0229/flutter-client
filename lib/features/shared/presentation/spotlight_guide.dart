@@ -139,6 +139,8 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   int _index = 0;
   Rect? _targetRect;
   bool _targetRouteCovered = false;
+  final GlobalKey _cardKey = GlobalKey(debugLabel: 'spotlight-guide-card');
+  double _cardHeight = 196;
 
   SpotlightGuideStep get _step => widget.steps[_index];
 
@@ -156,6 +158,14 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
 
   void _refreshTarget() {
     if (!mounted) return;
+    final cardRenderObject = _cardKey.currentContext?.findRenderObject();
+    final measuredCardHeight =
+        cardRenderObject is RenderBox &&
+                cardRenderObject.attached &&
+                cardRenderObject.hasSize
+            ? cardRenderObject.size.height
+            : _cardHeight;
+
     final targetContext = _step.targetKey.currentContext;
     final targetRoute =
         targetContext == null ? null : ModalRoute.of(targetContext);
@@ -163,24 +173,28 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final box = targetContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) {
       if (_targetRect == null &&
-          _targetRouteCovered == targetRouteCovered) {
+          _targetRouteCovered == targetRouteCovered &&
+          (measuredCardHeight - _cardHeight).abs() < .5) {
         return;
       }
       setState(() {
         _targetRect = null;
         _targetRouteCovered = targetRouteCovered;
+        _cardHeight = measuredCardHeight;
       });
       return;
     }
     final origin = box.localToGlobal(Offset.zero);
     final rect = (origin & box.size).inflate(_step.targetPadding);
     if (_targetRect == rect &&
-        _targetRouteCovered == targetRouteCovered) {
+        _targetRouteCovered == targetRouteCovered &&
+        (measuredCardHeight - _cardHeight).abs() < .5) {
       return;
     }
     setState(() {
       _targetRect = rect;
       _targetRouteCovered = targetRouteCovered;
+      _cardHeight = measuredCardHeight;
     });
   }
 
@@ -229,7 +243,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
 
     final cardWidth =
         (size.width - 32).clamp(260.0, 420.0).toDouble();
-    final cardHeight = 196.0;
+    final cardHeight = _cardHeight;
     final spaceAbove =
         rect == null ? 0.0 : rect.top - safeTop - 16;
     final spaceBelow = rect == null
@@ -287,6 +301,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
             width: cardWidth,
             child: SafeArea(
               child: Card(
+                key: _cardKey,
                 elevation: 12,
                 margin: EdgeInsets.zero,
                 child: Padding(
