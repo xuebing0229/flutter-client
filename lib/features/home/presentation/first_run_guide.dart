@@ -370,6 +370,27 @@ class _DetailedGuideCard extends StatelessWidget {
   }
 }
 
+ShapeBorder _extendedFabGuideShape(BuildContext context) {
+  final themed = FloatingActionButtonTheme.of(context).shape;
+  if (themed != null) return themed;
+  return Theme.of(context).useMaterial3
+      ? const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        )
+      : const StadiumBorder();
+}
+
+ShapeBorder _textButtonGuideShape(BuildContext context) {
+  final themed =
+      TextButtonTheme.of(context).style?.shape?.resolve(const <WidgetState>{});
+  if (themed != null) return themed;
+  return Theme.of(context).useMaterial3
+      ? const StadiumBorder()
+      : const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(4)),
+        );
+}
+
 Future<bool> _showVisibleSpotlights(
   BuildContext context,
   List<SpotlightGuideStep> candidates, {
@@ -406,8 +427,8 @@ Future<void> _showInteractiveQuickStart(
           icon: Icons.add_circle_outline_rounded,
           title: '先记下第一笔业务',
           body: '从这里新增排单。手动填写适合单笔记录，截图导入适合一次整理多张平台订单截图。',
-          shape: SpotlightTargetShape.stadium,
-          targetPadding: 4,
+          targetShape: _extendedFabGuideShape(context),
+          targetPadding: 0,
         ),
         SpotlightGuideStep(
           targetKey: targets.searchKey,
@@ -459,8 +480,8 @@ Future<void> _showInteractiveQuickStart(
         icon: Icons.add_circle_outline_rounded,
         title: '先完整走一遍第一笔排单',
         body: '先从新增排单开始。接下来会带你实际创建一笔自己的业务，再继续认识节点推进和归档。',
-        shape: SpotlightTargetShape.stadium,
-        targetPadding: 4,
+        targetShape: _extendedFabGuideShape(context),
+        targetPadding: 0,
       ),
     ],
     finalLabel: '去创建',
@@ -498,8 +519,8 @@ Future<void> _showInteractiveQuickStart(
           icon: Icons.check_circle_outline_rounded,
           title: '一个阶段完成后确认节点',
           body: '点“确认节点”会进入下一工作阶段；最后一个节点完成时，也可以直接进入顺利归档。',
-          shape: SpotlightTargetShape.stadium,
-          targetPadding: 3,
+          targetPadding: 0,
+          borderRadius: 0,
         ),
       ],
       finalLabel: '练习归档',
@@ -560,8 +581,8 @@ Future<void> _showInteractiveQuickStart(
         icon: Icons.document_scanner_outlined,
         title: '截图可以批量导入',
         body: '选择一张或多张平台订单截图后，会先在本机识别成可检查的条目。确认图名、时间、节点和疑似重复后，才会真正写入排单。',
-        shape: SpotlightTargetShape.stadium,
-        targetPadding: 3,
+        targetShape: _textButtonGuideShape(context),
+        targetPadding: 0,
       ),
     ],
   );
@@ -594,8 +615,8 @@ Future<void> _showInteractiveQuickStart(
         icon: Icons.image_outlined,
         title: '成品是另一类业务记录',
         body: '这里记录已经完成、可以售卖的作品。可以新增单次售卖或多次售卖成品，每次售出都会留下单独的售出时间记录。',
-        shape: SpotlightTargetShape.stadium,
-        targetPadding: 4,
+        targetShape: _extendedFabGuideShape(context),
+        targetPadding: 0,
       ),
     ],
   );
