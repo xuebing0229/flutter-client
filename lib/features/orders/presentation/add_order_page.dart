@@ -256,11 +256,19 @@ class _AddOrderPageState extends State<AddOrderPage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
-          TextButton(
-            key: widget.guideTargets?.addOrderSaveKey,
-            onPressed: _pickingReferenceImages ? null : _save,
-            child: const Text('保存'),
-          ),
+          if (widget.guideTargets != null)
+            SpotlightTarget(
+              targetKey: widget.guideTargets!.addOrderSaveKey,
+              child: TextButton(
+                onPressed: _pickingReferenceImages ? null : _save,
+                child: const Text('保存'),
+              ),
+            )
+          else
+            TextButton(
+              onPressed: _pickingReferenceImages ? null : _save,
+              child: const Text('保存'),
+            ),
           const SizedBox(width: 6),
         ],
       ),
@@ -286,9 +294,10 @@ class _AddOrderPageState extends State<AddOrderPage> {
             ),
           ],
           const SizedBox(height: 14),
-          KeyedSubtree(
-            key: widget.guideTargets?.addOrderFormKey,
-            child: CommissionSettingsEditor(
+          if (widget.guideTargets != null)
+            SpotlightTarget(
+              targetKey: widget.guideTargets!.addOrderFormKey,
+              child: CommissionSettingsEditor(
             platform: _platform,
             feeEnabled: _feeEnabled,
             huajiaLoveLevel: _huajiaLoveLevel,
@@ -327,7 +336,46 @@ class _AddOrderPageState extends State<AddOrderPage> {
               ],
             ),
             ),
-          ),
+          else
+            CommissionSettingsEditor(
+              platform: _platform,
+              feeEnabled: _feeEnabled,
+              huajiaLoveLevel: _huajiaLoveLevel,
+              onlineController: _onlineController,
+              offlineController: _offlineController,
+              onPlatformChanged: (value) {
+                setState(() {
+                  _platform = value;
+                  _feeEnabled = value.defaultFeeEnabled;
+                  _huajiaLoveLevel = HuajiaLoveLevel.none;
+                  if (!value.usesOnlineOfflineSplit) {
+                    _onlinePercent = 100;
+                    _onlineController.text = '100';
+                    _offlineController.text = '0';
+                  }
+                });
+              },
+              onFeeEnabledChanged: (value) {
+                setState(() => _feeEnabled = value);
+              },
+              onHuajiaLoveLevelChanged: (value) {
+                setState(() => _huajiaLoveLevel = value);
+              },
+              onOnlinePercentChanged: _setOnlinePercent,
+              afterPlatform: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FormFieldLabel('原始稿价'),
+                  TextField(
+                    controller: _priceController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(prefixText: '¥ '),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 14),
           PricingPresetSelector(
             store: _effectivePricingPresetStore,
