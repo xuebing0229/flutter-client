@@ -399,15 +399,17 @@ class _ArchivePageState extends State<ArchivePage> {
               if (orders.isNotEmpty) ...[
                 const _SectionTitle('排单'),
                 for (final order in orders) ...[
-                  OrderSummaryCard(
-                    key: widget.guideTargets != null &&
+                  SpotlightTarget(
+                    targetKey: widget.guideTargets != null &&
                             widget.guideOrderId == order.id
                         ? widget.guideTargets!.archivedOrderKey
                         : null,
+                    child: OrderSummaryCard(
                     order: order,
                     onTap: () => _openOrder(context, order.id),
                     showClient: widget.featureStore.clientInfo,
                     showNodeProgress: widget.featureStore.nodeProgress,
+                    ),
                   ),
                   SwitchListTile(
                     contentPadding:
