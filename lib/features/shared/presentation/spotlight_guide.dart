@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 class QuickStartGuideTargets {
   QuickStartGuideTargets();
@@ -24,8 +25,12 @@ class QuickStartGuideTargets {
   final GlobalKey receiptCenterKey = GlobalKey(debugLabel: 'guide-receipt-center');
   final GlobalKey syncKey = GlobalKey(debugLabel: 'guide-sync');
   final GlobalKey accountDevicesKey = GlobalKey(debugLabel: 'guide-account-devices');
+  final GlobalKey accountTitleKey = GlobalKey(debugLabel: 'guide-account-title');
   final GlobalKey settingsBackupKey = GlobalKey(debugLabel: 'guide-settings-backup');
   final GlobalKey featureToggleKey = GlobalKey(debugLabel: 'guide-feature-toggle');
+  final GlobalKey featureToggleTitleKey =
+      GlobalKey(debugLabel: 'guide-feature-toggle-title');
+  final GlobalKey pwaInstallKey = GlobalKey(debugLabel: 'guide-pwa-install');
 
   GlobalKey? tabKey(String id) => switch (id) {
         'products' => productsTabKey,
@@ -35,18 +40,40 @@ class QuickStartGuideTargets {
       };
 }
 
+class SpotlightTarget extends SingleChildRenderObjectWidget {
+  const SpotlightTarget({
+    required GlobalKey targetKey,
+    required Widget child,
+  }) : super(key: targetKey, child: child);
+
+  @override
+  RenderProxyBox createRenderObject(BuildContext context) => RenderProxyBox();
+}
+
+enum SpotlightTargetShape {
+  roundedRect,
+  stadium,
+  circle,
+}
+
 class SpotlightGuideStep {
   const SpotlightGuideStep({
     required this.targetKey,
     required this.icon,
     required this.title,
     required this.body,
+    this.shape = SpotlightTargetShape.roundedRect,
+    this.targetPadding = 6,
+    this.borderRadius = 14,
   });
 
   final GlobalKey targetKey;
   final IconData icon;
   final String title;
   final String body;
+  final SpotlightTargetShape shape;
+  final double targetPadding;
+  final double borderRadius;
 }
 
 Future<bool> showSpotlightGuide(
@@ -107,7 +134,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final origin = box.localToGlobal(Offset.zero);
     final rect = origin & box.size;
     setState(() {
-      _targetRect = rect.inflate(8);
+      _targetRect = rect.inflate(_step.targetPadding);
     });
   }
 
@@ -150,40 +177,17 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
       type: MaterialType.transparency,
       child: Stack(
         children: [
-          if (rect == null)
-            const Positioned.fill(
-              child: ColoredBox(color: Color(0xB8000000)),
-            )
-          else ...[
-            Positioned(
-              left: 0,
-              top: 0,
-              right: 0,
-              height: rect.top.clamp(0.0, size.height).toDouble(),
-              child: const ColoredBox(color: Color(0xB8000000)),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _SpotlightMaskPainter(
+                  targetRect: rect,
+                  shape: _step.shape,
+                  borderRadius: _step.borderRadius,
+                ),
+              ),
             ),
-            Positioned(
-              left: 0,
-              top: rect.top.clamp(0.0, size.height).toDouble(),
-              width: rect.left.clamp(0.0, size.width).toDouble(),
-              height: rect.height.clamp(0.0, size.height).toDouble(),
-              child: const ColoredBox(color: Color(0xB8000000)),
-            ),
-            Positioned(
-              left: rect.right.clamp(0.0, size.width).toDouble(),
-              top: rect.top.clamp(0.0, size.height).toDouble(),
-              right: 0,
-              height: rect.height.clamp(0.0, size.height).toDouble(),
-              child: const ColoredBox(color: Color(0xB8000000)),
-            ),
-            Positioned(
-              left: 0,
-              top: rect.bottom.clamp(0.0, size.height).toDouble(),
-              right: 0,
-              bottom: 0,
-              child: const ColoredBox(color: Color(0xB8000000)),
-            ),
-          ],
+          ),
           Positioned(
             left: (size.width - cardWidth) / 2,
             top: clampedTop,
@@ -273,5 +277,65 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
         ],
       ),
     );
+  }
+}
+
+
+class _SpotlightMaskPainter extends CustomPainter {
+  const _SpotlightMaskPainter({
+    required this.targetRect,
+    required this.shape,
+    required this.borderRadius,
+  });
+
+  final Rect? targetRect;
+  final SpotlightTargetShape shape;
+  final double borderRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final screen = Path()..addRect(Offset.zero & size);
+    final target = targetRect;
+    if (target == null) {
+      canvas.drawPath(screen, Paint()..color = const Color(0xB8000000));
+      return;
+    }
+
+    final clipped = Rect.fromLTRB(
+      target.left.clamp(0.0, size.width),
+      target.top.clamp(0.0, size.height),
+      target.right.clamp(0.0, size.width),
+      target.bottom.clamp(0.0, size.height),
+    );
+
+    final hole = Path();
+    switch (shape) {
+      case SpotlightTargetShape.roundedRect:
+        hole.addRRect(
+          RRect.fromRectAndRadius(
+            clipped,
+            Radius.circular(borderRadius),
+          ),
+        );
+      case SpotlightTargetShape.stadium:
+        hole.addRRect(
+          RRect.fromRectAndRadius(
+            clipped,
+            Radius.circular(clipped.shortestSide / 2),
+          ),
+        );
+      case SpotlightTargetShape.circle:
+        hole.addOval(clipped);
+    }
+
+    final dimmed = Path.combine(PathOperation.difference, screen, hole);
+    canvas.drawPath(dimmed, Paint()..color = const Color(0xB8000000));
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpotlightMaskPainter oldDelegate) {
+    return oldDelegate.targetRect != targetRect ||
+        oldDelegate.shape != shape ||
+        oldDelegate.borderRadius != borderRadius;
   }
 }
