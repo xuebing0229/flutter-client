@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 class QuickStartGuideTargets {
   QuickStartGuideTargets();
@@ -8,7 +7,10 @@ class QuickStartGuideTargets {
   final GlobalKey searchKey = GlobalKey(debugLabel: 'guide-search');
   final GlobalKey toolbarKey = GlobalKey(debugLabel: 'guide-toolbar');
   final GlobalKey addOrderKey = GlobalKey(debugLabel: 'guide-add-order');
-  final GlobalKey addOrderFormKey = GlobalKey(debugLabel: 'guide-add-order-form');
+  final GlobalKey addOrderTitleKey = GlobalKey(debugLabel: 'guide-add-order-title');
+  final GlobalKey addOrderClientKey = GlobalKey(debugLabel: 'guide-add-order-client');
+  final GlobalKey addOrderPlatformKey = GlobalKey(debugLabel: 'guide-add-order-platform');
+  final GlobalKey addOrderPriceKey = GlobalKey(debugLabel: 'guide-add-order-price');
   final GlobalKey addOrderSaveKey = GlobalKey(debugLabel: 'guide-add-order-save');
   final GlobalKey firstOrderCardKey = GlobalKey(debugLabel: 'guide-first-order-card');
   final GlobalKey firstOrderProgressKey =
@@ -40,38 +42,22 @@ class QuickStartGuideTargets {
       };
 }
 
-class SpotlightTarget extends SingleChildRenderObjectWidget {
-  const SpotlightTarget({
-    GlobalKey? targetKey,
-    required Widget child,
-  }) : super(key: targetKey, child: child);
-
-  @override
-  RenderProxyBox createRenderObject(BuildContext context) => RenderProxyBox();
-}
-
-enum SpotlightTargetShape {
-  roundedRect,
-  stadium,
-  circle,
-}
-
 class SpotlightGuideStep {
   const SpotlightGuideStep({
     required this.targetKey,
     required this.icon,
     required this.title,
     required this.body,
-    this.shape = SpotlightTargetShape.roundedRect,
-    this.targetPadding = 6,
-    this.borderRadius = 14,
+    this.targetShape,
+    this.targetPadding = 4,
+    this.borderRadius = 12,
   });
 
   final GlobalKey targetKey;
   final IconData icon;
   final String title;
   final String body;
-  final SpotlightTargetShape shape;
+  final ShapeBorder? targetShape;
   final double targetPadding;
   final double borderRadius;
 }
@@ -131,8 +117,10 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
       setState(() => _targetRect = null);
       return;
     }
-    final origin = box.localToGlobal(Offset.zero);
-    final rect = origin & box.size;
+    final paintBounds = box.paintBounds;
+    final topLeft = box.localToGlobal(paintBounds.topLeft);
+    final bottomRight = box.localToGlobal(paintBounds.bottomRight);
+    final rect = Rect.fromPoints(topLeft, bottomRight);
     setState(() {
       _targetRect = rect.inflate(_step.targetPadding);
     });
@@ -182,7 +170,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
               child: CustomPaint(
                 painter: _SpotlightMaskPainter(
                   targetRect: rect,
-                  shape: _step.shape,
+                  targetShape: _step.targetShape,
                   borderRadius: _step.borderRadius,
                 ),
               ),
@@ -284,12 +272,12 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
 class _SpotlightMaskPainter extends CustomPainter {
   const _SpotlightMaskPainter({
     required this.targetRect,
-    required this.shape,
+    required this.targetShape,
     required this.borderRadius,
   });
 
   final Rect? targetRect;
-  final SpotlightTargetShape shape;
+  final ShapeBorder? targetShape;
   final double borderRadius;
 
   @override
@@ -308,28 +296,14 @@ class _SpotlightMaskPainter extends CustomPainter {
       target.bottom.clamp(0.0, size.height),
     );
 
-    final hole = Path();
-    switch (shape) {
-      case SpotlightTargetShape.roundedRect:
-        hole.addRRect(
-          RRect.fromRectAndRadius(
-            clipped,
-            Radius.circular(borderRadius),
-          ),
-        );
-        break;
-      case SpotlightTargetShape.stadium:
-        hole.addRRect(
-          RRect.fromRectAndRadius(
-            clipped,
-            Radius.circular(clipped.shortestSide / 2),
-          ),
-        );
-        break;
-      case SpotlightTargetShape.circle:
-        hole.addOval(clipped);
-        break;
-    }
+    final hole = targetShape?.getOuterPath(clipped) ??
+        (Path()
+          ..addRRect(
+            RRect.fromRectAndRadius(
+              clipped,
+              Radius.circular(borderRadius),
+            ),
+          ));
 
     final dimmed = Path.combine(PathOperation.difference, screen, hole);
     canvas.drawPath(dimmed, Paint()..color = const Color(0xB8000000));
@@ -338,7 +312,7 @@ class _SpotlightMaskPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SpotlightMaskPainter oldDelegate) {
     return oldDelegate.targetRect != targetRect ||
-        oldDelegate.shape != shape ||
+        oldDelegate.targetShape != targetShape ||
         oldDelegate.borderRadius != borderRadius;
   }
 }
