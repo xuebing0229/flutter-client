@@ -274,60 +274,65 @@ class _AddOrderPageState extends State<AddOrderPage> {
           right: 18,
         ),
         children: [
-          const FormFieldLabel('图名'),
-          TextField(
-            controller: _titleController,
-            textInputAction: TextInputAction.next,
-          ),
-          if (widget.featureStore.clientInfo) ...[
-            const SizedBox(height: 14),
-            const FormFieldLabel('单主'),
-            TextField(
-              controller: _clientController,
-              textInputAction: TextInputAction.next,
-            ),
-          ],
-          const SizedBox(height: 14),
           SpotlightTarget(
             targetKey: widget.guideTargets?.addOrderFormKey,
-            child: CommissionSettingsEditor(
-              platform: _platform,
-              feeEnabled: _feeEnabled,
-              huajiaLoveLevel: _huajiaLoveLevel,
-              onlineController: _onlineController,
-              offlineController: _offlineController,
-              onPlatformChanged: (value) {
-                setState(() {
-                  _platform = value;
-                  _feeEnabled = value.defaultFeeEnabled;
-                  _huajiaLoveLevel = HuajiaLoveLevel.none;
-                  if (!value.usesOnlineOfflineSplit) {
-                    _onlinePercent = 100;
-                    _onlineController.text = '100';
-                    _offlineController.text = '0';
-                  }
-                });
-              },
-              onFeeEnabledChanged: (value) {
-                setState(() => _feeEnabled = value);
-              },
-              onHuajiaLoveLevelChanged: (value) {
-                setState(() => _huajiaLoveLevel = value);
-              },
-              onOnlinePercentChanged: _setOnlinePercent,
-              afterPlatform: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const FormFieldLabel('原始稿价'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const FormFieldLabel('图名'),
+                TextField(
+                  controller: _titleController,
+                  textInputAction: TextInputAction.next,
+                ),
+                if (widget.featureStore.clientInfo) ...[
+                  const SizedBox(height: 14),
+                  const FormFieldLabel('单主'),
                   TextField(
-                    controller: _priceController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(prefixText: '¥ '),
+                    controller: _clientController,
+                    textInputAction: TextInputAction.next,
                   ),
                 ],
-              ),
+                const SizedBox(height: 14),
+                CommissionSettingsEditor(
+                  platform: _platform,
+                  feeEnabled: _feeEnabled,
+                  huajiaLoveLevel: _huajiaLoveLevel,
+                  onlineController: _onlineController,
+                  offlineController: _offlineController,
+                  onPlatformChanged: (value) {
+                    setState(() {
+                      _platform = value;
+                      _feeEnabled = value.defaultFeeEnabled;
+                      _huajiaLoveLevel = HuajiaLoveLevel.none;
+                      if (!value.usesOnlineOfflineSplit) {
+                        _onlinePercent = 100;
+                        _onlineController.text = '100';
+                        _offlineController.text = '0';
+                      }
+                    });
+                  },
+                  onFeeEnabledChanged: (value) {
+                    setState(() => _feeEnabled = value);
+                  },
+                  onHuajiaLoveLevelChanged: (value) {
+                    setState(() => _huajiaLoveLevel = value);
+                  },
+                  onOnlinePercentChanged: _setOnlinePercent,
+                  afterPlatform: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const FormFieldLabel('原始稿价'),
+                      TextField(
+                        controller: _priceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(prefixText: '¥ '),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 14),
