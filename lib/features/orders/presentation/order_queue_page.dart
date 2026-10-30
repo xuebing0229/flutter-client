@@ -1074,8 +1074,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         return Column(
           children: [
             if (widget.featureStore.search)
-              KeyedSubtree(
-                key: widget.guideTargets?.searchKey,
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.searchKey,
                 child: CollectionSearchField(
                   controller: _searchController,
                 query: _query,
@@ -1138,8 +1138,8 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 ),
               ),
             if (widget.featureStore.sorting || widget.featureStore.viewSwitch)
-              KeyedSubtree(
-                key: widget.guideTargets?.toolbarKey,
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.toolbarKey,
                 child: CollectionToolbar(
                   title: '排单',
                 count: orders.length,
