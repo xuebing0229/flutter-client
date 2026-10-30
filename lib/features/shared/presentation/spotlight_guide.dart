@@ -360,6 +360,15 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                             onPressed: () => unawaited(_finish(false)),
                             child: const Text('退出教程'),
                           ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => unawaited(_finish(true)),
+                            child: const Text('跳过本节'),
+                          ),
+                          const Spacer(),
                           if (_index > 0)
                             TextButton(
                               onPressed: () => unawaited(_move(-1)),
