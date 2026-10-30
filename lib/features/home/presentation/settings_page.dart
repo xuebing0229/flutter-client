@@ -731,8 +731,8 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ),
           const SizedBox(height: 14),
-          KeyedSubtree(
-            key: widget.guideTargets?.settingsBackupKey,
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.settingsBackupKey,
             child: _SettingsCard(
             title: '数据与备份',
             icon: Icons.inventory_2_outlined,
