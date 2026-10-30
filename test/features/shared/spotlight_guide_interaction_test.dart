@@ -320,4 +320,55 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+
+
+  testWidgets('single-step spotlight does not show 1 / 1', (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Column(
+                children: [
+                  SpotlightTarget(
+                    targetKey: targetKey,
+                    child: const SizedBox(width: 160, height: 48),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      showSpotlightGuide(
+                        context,
+                        steps: [
+                          SpotlightGuideStep(
+                            targetKey: targetKey,
+                            icon: Icons.info_outline,
+                            title: '单步介绍',
+                            body: '单步不需要显示 1 / 1。',
+                          ),
+                        ],
+                      );
+                    },
+                    child: const Text('打开单步引导'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开单步引导'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('1 / 1'), findsNothing);
+    expect(find.text('退出教程'), findsOneWidget);
+
+    await tester.tap(find.text('退出教程'));
+    await tester.pumpAndSettle();
+  });
+
 }
