@@ -61,9 +61,12 @@ class FeatureTogglePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '附加功能开关',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: SpotlightTarget(
+          targetKey: guideTargets?.featureToggleTitleKey,
+          child: const Text(
+            '附加功能开关',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
         ),
       ),
       body: AnimatedBuilder(
