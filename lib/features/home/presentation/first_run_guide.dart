@@ -26,6 +26,7 @@ enum QuickStartGuideDestination {
   sync,
   account,
   settings,
+  pwaInstall,
   featureToggle,
 }
 
@@ -405,6 +406,8 @@ Future<void> _showInteractiveQuickStart(
           icon: Icons.add_circle_outline_rounded,
           title: '先记下第一笔业务',
           body: '从这里新增排单。手动填写适合单笔记录，截图导入适合一次整理多张平台订单截图。',
+          shape: SpotlightTargetShape.stadium,
+          targetPadding: 4,
         ),
         SpotlightGuideStep(
           targetKey: targets.searchKey,
@@ -456,6 +459,8 @@ Future<void> _showInteractiveQuickStart(
         icon: Icons.add_circle_outline_rounded,
         title: '先完整走一遍第一笔排单',
         body: '先从新增排单开始。接下来会带你实际创建一笔自己的业务，再继续认识节点推进和归档。',
+        shape: SpotlightTargetShape.stadium,
+        targetPadding: 4,
       ),
     ],
     finalLabel: '去创建',
@@ -493,6 +498,8 @@ Future<void> _showInteractiveQuickStart(
           icon: Icons.check_circle_outline_rounded,
           title: '一个阶段完成后确认节点',
           body: '点“确认节点”会进入下一工作阶段；最后一个节点完成时，也可以直接进入顺利归档。',
+          shape: SpotlightTargetShape.stadium,
+          targetPadding: 3,
         ),
       ],
       finalLabel: '练习归档',
@@ -553,6 +560,8 @@ Future<void> _showInteractiveQuickStart(
         icon: Icons.document_scanner_outlined,
         title: '截图可以批量导入',
         body: '选择一张或多张平台订单截图后，会先在本机识别成可检查的条目。确认图名、时间、节点和疑似重复后，才会真正写入排单。',
+        shape: SpotlightTargetShape.stadium,
+        targetPadding: 3,
       ),
     ],
   );
@@ -585,6 +594,8 @@ Future<void> _showInteractiveQuickStart(
         icon: Icons.image_outlined,
         title: '成品是另一类业务记录',
         body: '这里记录已经完成、可以售卖的作品。可以新增单次售卖或多次售卖成品，每次售出都会留下单独的售出时间记录。',
+        shape: SpotlightTargetShape.stadium,
+        targetPadding: 4,
       ),
     ],
   );
@@ -661,10 +672,12 @@ Future<void> _showInteractiveQuickStart(
     QuickStartGuideDestination.account,
     [
       SpotlightGuideStep(
-        targetKey: targets.accountDevicesKey,
-        icon: Icons.add_to_home_screen_rounded,
-        title: '新设备从这里加入',
-        body: '可以扫码、选二维码图片或使用配对码。注意“退出登录”和“解绑设备”不是一回事：解绑才会把设备从账号的使用中设备里移除。',
+        targetKey: targets.accountTitleKey,
+        icon: Icons.manage_accounts_outlined,
+        title: '账号与设备都在这里管理',
+        body: '这里可以查看账号信息、当前使用中的设备、添加新设备和解绑设备。退出登录只退出当前账号；解绑才会把设备从账号的使用中设备里移除。',
+        targetPadding: 4,
+        borderRadius: 6,
       ),
     ],
   );
@@ -689,14 +702,33 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
+  final pwaInstallShown = await showSection(
+    QuickStartGuideDestination.pwaInstall,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.pwaInstallKey,
+        icon: Icons.install_desktop_rounded,
+        title: '网页版也可以添加到桌面',
+        body: '添加后可以像普通应用一样从桌面或主屏幕直接打开。支持安装提示的浏览器可以直接点这里安装；其他浏览器会告诉你对应的菜单操作。',
+        borderRadius: 12,
+      ),
+    ],
+  );
+  if (!pwaInstallShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
   final featureShown = await showSection(
     QuickStartGuideDestination.featureToggle,
     [
       SpotlightGuideStep(
-        targetKey: targets.featureToggleKey,
+        targetKey: targets.featureToggleTitleKey,
         icon: Icons.extension_outlined,
-        title: '不需要的功能可以收起来',
-        body: '搜索、标签、参考图、节点小进度、成品、日程、统计和截稿提醒等都可以单独开关。关闭只是隐藏入口，不会删除已有数据。',
+        title: '附加功能可以按需要开关',
+        body: '这一页集中管理搜索、标签、参考图、节点小进度、成品、日程、统计和截稿提醒等附加功能。关闭只是隐藏入口，不会删除已有数据。',
+        targetPadding: 4,
+        borderRadius: 6,
       ),
     ],
   );
