@@ -2106,8 +2106,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     _desktopRootRefreshPending))
         ? null
         : switch (current.id) {
-            'orders' => KeyedSubtree(
-                key: _quickStartGuideTargets.addOrderKey,
+            'orders' => SpotlightTarget(
+                targetKey: _quickStartGuideTargets.addOrderKey,
                 child: FloatingActionButton.extended(
                   onPressed: () =>
                       unawaited(_chooseAddMethod(products: false)),
@@ -2115,8 +2115,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   label: const Text('新增排单'),
                 ),
               ),
-            'products' => KeyedSubtree(
-                key: _quickStartGuideTargets.addProductKey,
+            'products' => SpotlightTarget(
+                targetKey: _quickStartGuideTargets.addProductKey,
                 child: FloatingActionButton.extended(
                   onPressed: () => unawaited(_chooseAddMethod(products: true)),
                   icon: const Icon(Icons.add_rounded),
