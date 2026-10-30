@@ -395,6 +395,8 @@ Future<bool> _showVisibleSpotlights(
   BuildContext context,
   List<SpotlightGuideStep> candidates, {
   String finalLabel = '下一步',
+  int progressStart = 0,
+  int? progressTotal,
 }) async {
   if (!context.mounted) return false;
   final steps = candidates
@@ -405,6 +407,8 @@ Future<bool> _showVisibleSpotlights(
     context,
     steps: steps,
     finalLabel: finalLabel,
+    progressStart: progressStart,
+    progressTotal: progressTotal,
   );
 }
 
@@ -455,13 +459,38 @@ Future<void> _showInteractiveQuickStart(
 
   Future<bool> showSection(
     QuickStartGuideDestination destination,
-    List<SpotlightGuideStep> steps,
-  ) async {
+    List<SpotlightGuideStep> steps, {
+    int progressStart = 0,
+    int? progressTotal,
+  }) async {
     if (!actions.isAvailable(destination)) return true;
     await actions.goTo(destination);
     await WidgetsBinding.instance.endOfFrame;
     if (!context.mounted) return false;
-    return _showVisibleSpotlights(context, steps);
+    return _showVisibleSpotlights(
+      context,
+      steps,
+      progressStart: progressStart,
+      progressTotal: progressTotal,
+    );
+  }
+
+  Future<bool> showGroupedSection(
+    List<QuickStartGuideDestination> group,
+    QuickStartGuideDestination destination,
+    List<SpotlightGuideStep> steps,
+  ) async {
+    if (!actions.isAvailable(destination)) return true;
+    final available = group
+        .where(actions.isAvailable)
+        .toList(growable: false);
+    final index = available.indexOf(destination);
+    return showSection(
+      destination,
+      steps,
+      progressStart: index < 0 ? 0 : index,
+      progressTotal: available.length,
+    );
   }
 
   Future<void> stop() async {
@@ -573,7 +602,14 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final screenshotShown = await showSection(
+  const toolGroup = <QuickStartGuideDestination>[
+    QuickStartGuideDestination.screenshotImport,
+    QuickStartGuideDestination.presetCenter,
+    QuickStartGuideDestination.receiptCenter,
+  ];
+
+  final screenshotShown = await showGroupedSection(
+    toolGroup,
     QuickStartGuideDestination.screenshotImport,
     [
       SpotlightGuideStep(
@@ -591,7 +627,8 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final presetShown = await showSection(
+  final presetShown = await showGroupedSection(
+    toolGroup,
     QuickStartGuideDestination.presetCenter,
     [
       SpotlightGuideStep(
@@ -607,55 +644,8 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final productsShown = await showSection(
-    QuickStartGuideDestination.products,
-    [
-      SpotlightGuideStep(
-        targetKey: targets.productsTabKey,
-        icon: Icons.image_outlined,
-        title: '成品是另一类业务记录',
-        body: '这里记录已经完成、可以售卖的作品。可以新增单次售卖或多次售卖成品，每次售出都会留下单独的售出时间记录。',
-      ),
-    ],
-  );
-  if (!productsShown || !context.mounted) {
-    await stop();
-    return;
-  }
-
-  final scheduleShown = await showSection(
-    QuickStartGuideDestination.schedule,
-    [
-      SpotlightGuideStep(
-        targetKey: targets.scheduleTabKey,
-        icon: Icons.calendar_month_outlined,
-        title: '日程集中看截稿和交付',
-        body: '日程会把待交稿、已交稿和当天收入按日期集中起来，适合每天检查接下来要赶哪些稿。',
-      ),
-    ],
-  );
-  if (!scheduleShown || !context.mounted) {
-    await stop();
-    return;
-  }
-
-  final statisticsShown = await showSection(
-    QuickStartGuideDestination.statistics,
-    [
-      SpotlightGuideStep(
-        targetKey: targets.statisticsTabKey,
-        icon: Icons.bar_chart_rounded,
-        title: '收入都在统计里汇总',
-        body: '这里看月收入、年收入、本月待收入、平台分布和笔数。排单正式归档后才会计入已收入；未归档且本月截稿的排单会进入待收入。',
-      ),
-    ],
-  );
-  if (!statisticsShown || !context.mounted) {
-    await stop();
-    return;
-  }
-
-  final receiptShown = await showSection(
+  final receiptShown = await showGroupedSection(
+    toolGroup,
     QuickStartGuideDestination.receiptCenter,
     [
       SpotlightGuideStep(
@@ -671,7 +661,72 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final syncShown = await showSection(
+  const workspaceGroup = <QuickStartGuideDestination>[
+    QuickStartGuideDestination.products,
+    QuickStartGuideDestination.schedule,
+    QuickStartGuideDestination.statistics,
+  ];
+
+  final productsShown = await showGroupedSection(
+    workspaceGroup,
+    QuickStartGuideDestination.products,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.productsTabKey,
+        icon: Icons.image_outlined,
+        title: '成品是另一类业务记录',
+        body: '这里记录已经完成、可以售卖的作品。可以新增单次售卖或多次售卖成品，每次售出都会留下单独的售出时间记录。',
+      ),
+    ],
+  );
+  if (!productsShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final scheduleShown = await showGroupedSection(
+    workspaceGroup,
+    QuickStartGuideDestination.schedule,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.scheduleTabKey,
+        icon: Icons.calendar_month_outlined,
+        title: '日程集中看截稿和交付',
+        body: '日程会把待交稿、已交稿和当天收入按日期集中起来，适合每天检查接下来要赶哪些稿。',
+      ),
+    ],
+  );
+  if (!scheduleShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final statisticsShown = await showGroupedSection(
+    workspaceGroup,
+    QuickStartGuideDestination.statistics,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.statisticsTabKey,
+        icon: Icons.bar_chart_rounded,
+        title: '收入都在统计里汇总',
+        body: '这里看月收入、年收入、本月待收入、平台分布和笔数。排单正式归档后才会计入已收入；未归档且本月截稿的排单会进入待收入。',
+      ),
+    ],
+  );
+  if (!statisticsShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  const dataGroup = <QuickStartGuideDestination>[
+    QuickStartGuideDestination.sync,
+    QuickStartGuideDestination.account,
+    QuickStartGuideDestination.settings,
+    QuickStartGuideDestination.featureToggle,
+  ];
+
+  final syncShown = await showGroupedSection(
+    dataGroup,
     QuickStartGuideDestination.sync,
     [
       SpotlightGuideStep(
@@ -687,7 +742,8 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final accountShown = await showSection(
+  final accountShown = await showGroupedSection(
+    dataGroup,
     QuickStartGuideDestination.account,
     [
       SpotlightGuideStep(
@@ -705,7 +761,8 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final settingsShown = await showSection(
+  final settingsShown = await showGroupedSection(
+    dataGroup,
     QuickStartGuideDestination.settings,
     [
       SpotlightGuideStep(
@@ -738,7 +795,8 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final featureShown = await showSection(
+  final featureShown = await showGroupedSection(
+    dataGroup,
     QuickStartGuideDestination.featureToggle,
     [
       SpotlightGuideStep(
@@ -839,7 +897,7 @@ Future<void> showFirstRunGuide(
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('跳过'),
+                child: const Text('退出教程'),
               ),
               if (index > 0)
                 TextButton(
