@@ -83,7 +83,7 @@ class SpotlightGuideStep {
   final bool allowOutsideTargetInteraction;
 
   /// When a transient route such as a dropdown popup covers the target route,
-  /// keep only the guide controls visible on the opposite side of the screen.
+  /// keep only the guide controls visible at the nearest safe screen edge.
   /// This leaves the popup options unobstructed while still allowing the user
   /// to move/skip/exit; those actions already dismiss the transient route.
   final bool compactWhenTargetRouteCovered;
