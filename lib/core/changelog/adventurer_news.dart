@@ -413,6 +413,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新手引导不再遮挡高亮内容',
     description: '教程卡片现在会严格避开当前高亮区域：自动选择上方或下方安全空间，空间不足时改为卡片内部滚动，不再因为小屏幕或长说明压住节点进度、确认节点等正在介绍的控件。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 221,
+    title: '新手引导自动找到屏幕外目标',
+    description: '教程介绍长页面下方的功能前会先自动滚到对应位置再高亮；教程说明过长时只滚动正文，退出、跳过、上一步和下一步始终固定可见，不再被挤出卡片。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
