@@ -423,6 +423,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '电脑端新手引导定位修复',
     description: '修复电脑端右侧工作区使用独立页面层时，高亮仍按整窗坐标计算导致整体横向错位的问题。新增排单里的图名、单主、平台、稿价和保存等教程现在会按实际工作区位置准确高亮。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 223,
+    title: '电脑端首次添加设备流程修复',
+    description: '电脑端首次添加设备会先等待设备同步组件真正启动，再创建临时加入目录并开始扫描，修复冷启动时偶发“no such folder”导致第一次添加失败的问题。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
