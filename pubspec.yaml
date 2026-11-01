@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+222
-# beta-222: align desktop tutorial highlights to the local work-area overlay
+version: 0.0.1+223
+# beta-223: follow Syncthing REST startup-before-folder-config ordering on Windows
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
