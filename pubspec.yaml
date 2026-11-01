@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+220
-# beta-220: never let onboarding cards overlap highlighted targets; safe-region layout
+version: 0.0.1+221
+# beta-221: reveal offscreen guide targets and keep tutorial actions visible
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
