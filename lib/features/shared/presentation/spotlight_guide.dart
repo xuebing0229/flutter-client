@@ -171,6 +171,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   int _index = 0;
   Rect? _targetRect;
   bool _targetRouteCovered = false;
+  final GlobalKey _overlayKey = GlobalKey(debugLabel: 'spotlight-guide-overlay');
   final GlobalKey _cardKey = GlobalKey(debugLabel: 'spotlight-guide-card');
 
   SpotlightGuideStep get _step => widget.steps[_index];
@@ -206,8 +207,21 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
       });
       return;
     }
-    final origin = box.localToGlobal(Offset.zero);
-    final rect = (origin & box.size).inflate(_step.targetPadding);
+    final overlayRenderObject =
+        _overlayKey.currentContext?.findRenderObject();
+    final rect = overlayRenderObject is RenderBox &&
+            overlayRenderObject.attached &&
+            overlayRenderObject.hasSize
+        ? Rect.fromPoints(
+            overlayRenderObject.globalToLocal(
+              box.localToGlobal(Offset.zero),
+            ),
+            overlayRenderObject.globalToLocal(
+              box.localToGlobal(box.size.bottomRight(Offset.zero)),
+            ),
+          ).inflate(_step.targetPadding)
+        : (box.localToGlobal(Offset.zero) & box.size)
+            .inflate(_step.targetPadding);
     if (_targetRect == rect &&
         _targetRouteCovered == targetRouteCovered) {
       return;
@@ -257,7 +271,13 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final size = media.size;
+    final overlayRenderObject =
+        _overlayKey.currentContext?.findRenderObject();
+    final size = overlayRenderObject is RenderBox &&
+            overlayRenderObject.attached &&
+            overlayRenderObject.hasSize
+        ? overlayRenderObject.size
+        : media.size;
     final safeTop = media.padding.top + 12;
     final safeBottom =
         media.padding.bottom + media.viewInsets.bottom + 12;
@@ -303,6 +323,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
         (cardRegionBottom - cardRegionTop).clamp(0.0, size.height).toDouble();
 
     return Stack(
+      key: _overlayKey,
       fit: StackFit.expand,
       children: [
         if (!_targetRouteCovered)
