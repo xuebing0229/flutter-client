@@ -276,4 +276,12 @@ void main() {
       ['新手引导不再遮挡高亮内容'],
     );
   });
+
+  test('221 包含新手引导自动找到屏幕外目标见闻', () {
+    final picked = newsBetweenBuilds(220, 221);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导自动找到屏幕外目标'],
+    );
+  });
 }
