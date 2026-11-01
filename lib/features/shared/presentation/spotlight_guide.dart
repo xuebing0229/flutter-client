@@ -252,36 +252,37 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final compactAtTop =
         rect != null && rect.center.dy <= size.height / 2;
 
+    const targetGap = 16.0;
+    const comfortableCardHeight = 220.0;
     final cardWidth =
         (size.width - 32).clamp(260.0, 420.0).toDouble();
-    final cardHeight = _cardHeight;
-    final spaceAbove =
-        rect == null ? 0.0 : rect.top - safeTop - 16;
+    final spaceAbove = rect == null
+        ? 0.0
+        : (rect.top - safeTop - targetGap).clamp(0.0, size.height);
     final spaceBelow = rect == null
         ? 0.0
-        : size.height - safeBottom - rect.bottom - 16;
-    final preferBelow =
-        rect == null || rect.bottom + cardHeight + 24 < size.height - safeBottom;
-    final preferAbove =
-        rect != null && _step.preferCardAbove && spaceAbove >= cardHeight;
-    final cardTop = rect == null
-        ? (size.height - cardHeight) / 2
-        : preferAbove
-            ? (rect.top - cardHeight - 16)
-            : _targetRouteCovered
-                ? (spaceAbove >= cardHeight && spaceBelow >= cardHeight
-                    ? (spaceAbove <= spaceBelow
-                        ? rect.top - cardHeight - 16
-                        : rect.bottom + 16)
-                    : spaceAbove >= cardHeight
-                        ? rect.top - cardHeight - 16
-                        : rect.bottom + 16)
-                : preferBelow
-                    ? (rect.bottom + 16)
-                    : (rect.top - cardHeight - 16);
-    final clampedTop = cardTop
-        .clamp(safeTop, size.height - safeBottom - cardHeight)
-        .toDouble();
+        : (size.height - safeBottom - rect.bottom - targetGap)
+            .clamp(0.0, size.height);
+
+    // Card placement is a hard non-overlap rule. Pick one safe region around
+    // the highlighted target, then constrain the whole card to that region.
+    // If the natural card is taller, its content scrolls inside the card
+    // instead of allowing the card to cross the highlight boundary.
+    final placeAbove = rect != null &&
+        ((_step.preferCardAbove && spaceAbove >= comfortableCardHeight) ||
+            (!_step.preferCardAbove && spaceAbove >= spaceBelow));
+    final cardRegionTop = rect == null
+        ? safeTop
+        : placeAbove
+            ? safeTop
+            : rect.bottom + targetGap;
+    final cardRegionBottom = rect == null
+        ? size.height - safeBottom
+        : placeAbove
+            ? rect.top - targetGap
+            : size.height - safeBottom;
+    final cardRegionHeight =
+        (cardRegionBottom - cardRegionTop).clamp(0.0, size.height).toDouble();
 
     return Stack(
       fit: StackFit.expand,
@@ -390,19 +391,28 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
         if (!compactForTransientRoute)
           Positioned(
             left: (size.width - cardWidth) / 2,
-            top: clampedTop,
+            top: cardRegionTop,
             width: cardWidth,
-            child: SafeArea(
-              child: Card(
-                key: _cardKey,
-                elevation: 12,
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+            height: cardRegionHeight,
+            child: Align(
+              alignment: rect == null
+                  ? Alignment.center
+                  : placeAbove
+                      ? Alignment.bottomCenter
+                      : Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: cardRegionHeight),
+                child: Card(
+                  key: _cardKey,
+                  elevation: 12,
+                  margin: EdgeInsets.zero,
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -479,11 +489,14 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                           ),
                         ],
                       ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
+          ),
         ),
       ],
     );
