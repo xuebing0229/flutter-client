@@ -268,4 +268,12 @@ void main() {
       ['新手引导下拉菜单遮挡修复'],
     );
   });
+
+  test('220 包含新手引导不遮挡高亮内容见闻', () {
+    final picked = newsBetweenBuilds(219, 220);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导不再遮挡高亮内容'],
+    );
+  });
 }
