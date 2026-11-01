@@ -258,11 +258,12 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
         (size.width - 32).clamp(260.0, 420.0).toDouble();
     final spaceAbove = rect == null
         ? 0.0
-        : (rect.top - safeTop - targetGap).clamp(0.0, size.height);
+        : (rect.top - safeTop - targetGap).clamp(0.0, size.height).toDouble();
     final spaceBelow = rect == null
         ? 0.0
         : (size.height - safeBottom - rect.bottom - targetGap)
-            .clamp(0.0, size.height);
+            .clamp(0.0, size.height)
+            .toDouble();
 
     // Card placement is a hard non-overlap rule. Pick one safe region around
     // the highlighted target, then constrain the whole card to that region.
