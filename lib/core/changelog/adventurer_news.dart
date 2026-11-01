@@ -403,6 +403,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新手引导可以直接操作高亮控件',
     description: '高亮输入框、下拉框和按钮现在可以直接点击操作，不需要先退出引导；暗色遮罩区域仍会阻止误触。图名、单主、平台和稿价改用严格跟随真实控件尺寸的定位方式，修正首个输入框横向偏移的问题。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 219,
+    title: '新手引导下拉菜单遮挡修复',
+    description: '新增排单教程打开平台下拉菜单时，教程会暂时收成屏幕边缘控制条，不再遮挡平台选项；选项仍可直接点击，上一/下一步、跳过本节和退出教程也会继续保留。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
