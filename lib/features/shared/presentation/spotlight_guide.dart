@@ -498,7 +498,6 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
               ),
             ),
           ),
-        ),
       ],
     );
   }
