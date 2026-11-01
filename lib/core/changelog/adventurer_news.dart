@@ -418,6 +418,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新手引导自动找到屏幕外目标',
     description: '教程介绍长页面下方的功能前会先自动滚到对应位置再高亮；教程说明过长时只滚动正文，退出、跳过、上一步和下一步始终固定可见，不再被挤出卡片。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 222,
+    title: '电脑端新手引导定位修复',
+    description: '修复电脑端右侧工作区使用独立页面层时，高亮仍按整窗坐标计算导致整体横向错位的问题。新增排单里的图名、单主、平台、稿价和保存等教程现在会按实际工作区位置准确高亮。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
