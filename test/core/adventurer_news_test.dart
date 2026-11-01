@@ -260,4 +260,12 @@ void main() {
       ['新手引导可以直接操作高亮控件'],
     );
   });
+
+  test('219 包含新手引导下拉菜单遮挡修复见闻', () {
+    final picked = newsBetweenBuilds(218, 219);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导下拉菜单遮挡修复'],
+    );
+  });
 }
