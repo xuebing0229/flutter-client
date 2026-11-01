@@ -284,4 +284,12 @@ void main() {
       ['新手引导自动找到屏幕外目标'],
     );
   });
+
+  test('222 包含电脑端新手引导定位修复见闻', () {
+    final picked = newsBetweenBuilds(221, 222);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['电脑端新手引导定位修复'],
+    );
+  });
 }
