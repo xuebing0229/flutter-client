@@ -69,6 +69,7 @@ class SpotlightGuideStep {
     this.borderRadius = 12,
     this.preferCardAbove = false,
     this.allowOutsideTargetInteraction = false,
+    this.compactWhenTargetRouteCovered = false,
   });
 
   final GlobalKey targetKey;
@@ -80,6 +81,12 @@ class SpotlightGuideStep {
   final double borderRadius;
   final bool preferCardAbove;
   final bool allowOutsideTargetInteraction;
+
+  /// When a transient route such as a dropdown popup covers the target route,
+  /// keep only the guide controls visible on the opposite side of the screen.
+  /// This leaves the popup options unobstructed while still allowing the user
+  /// to move/skip/exit; those actions already dismiss the transient route.
+  final bool compactWhenTargetRouteCovered;
 }
 
 Future<bool> showSpotlightGuide(
@@ -240,6 +247,10 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final colors = Theme.of(context).colorScheme;
     final rect = _targetRect;
     final isLast = _index == widget.steps.length - 1;
+    final compactForTransientRoute =
+        _targetRouteCovered && _step.compactWhenTargetRouteCovered;
+    final compactAtTop =
+        rect != null && rect.center.dy > size.height / 2;
 
     final cardWidth =
         (size.width - 32).clamp(260.0, 420.0).toDouble();
@@ -295,6 +306,88 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
               borderRadius: _step.borderRadius,
             ),
           ),
+        if (compactForTransientRoute)
+          Positioned(
+            left: 16,
+            right: 16,
+            top: compactAtTop ? 0 : null,
+            bottom: compactAtTop ? null : 0,
+            child: SafeArea(
+              child: Card(
+                elevation: 12,
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _step.icon,
+                            size: 20,
+                            color: colors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _step.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          if ((widget.progressTotal ?? widget.steps.length) > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                '${widget.progressStart + _index + 1} / ${widget.progressTotal ?? widget.steps.length}',
+                                style: TextStyle(
+                                  color: colors.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          TextButton(
+                            onPressed: () => unawaited(_finish(false)),
+                            child: const Text('退出教程'),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => unawaited(_finish(true)),
+                            child: const Text('跳过本节'),
+                          ),
+                          const Spacer(),
+                          if (_index > 0)
+                            TextButton(
+                              onPressed: () => unawaited(_move(-1)),
+                              child: const Text('上一步'),
+                            ),
+                          FilledButton(
+                            onPressed: () {
+                              if (isLast) {
+                                unawaited(_finish(true));
+                              } else {
+                                unawaited(_move(1));
+                              }
+                            },
+                            child: Text(isLast ? widget.finalLabel : '下一步'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (!compactForTransientRoute)
           Positioned(
             left: (size.width - cardWidth) / 2,
             top: clampedTop,
