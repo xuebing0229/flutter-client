@@ -360,6 +360,98 @@ void main() {
   });
 
 
+  testWidgets(
+      'nested desktop overlay uses local coordinates instead of window coordinates',
+      (tester) async {
+    final targetKey = GlobalKey();
+    final paneKey = GlobalKey();
+    var targetTapCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              const SizedBox(width: 220),
+              Expanded(
+                key: paneKey,
+                child: Navigator(
+                  onGenerateRoute: (_) => MaterialPageRoute<void>(
+                    builder: (context) {
+                      return Scaffold(
+                        body: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SpotlightTarget(
+                                targetKey: targetKey,
+                                child: SizedBox(
+                                  width: 320,
+                                  height: 56,
+                                  child: FilledButton(
+                                    onPressed: () => targetTapCount += 1,
+                                    child: const Text('桌面目标'),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 40),
+                              FilledButton(
+                                onPressed: () {
+                                  showSpotlightGuide(
+                                    context,
+                                    steps: [
+                                      SpotlightGuideStep(
+                                        targetKey: targetKey,
+                                        icon: Icons.title_rounded,
+                                        title: '桌面坐标测试',
+                                        body: '高亮必须和右侧工作区里的真实控件完全对齐。',
+                                        targetPadding: 0,
+                                        borderRadius: 0,
+                                      ),
+                                    ],
+                                  );
+                                },
+                                child: const Text('打开桌面引导'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开桌面引导'));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('桌面目标'));
+    await tester.pump();
+    expect(targetTapCount, 1);
+
+    final paneRect = tester.getRect(find.byKey(paneKey));
+    final guideCard = find
+        .ancestor(
+          of: find.text('桌面坐标测试'),
+          matching: find.byType(Card),
+        )
+        .first;
+    final guideRect = tester.getRect(guideCard);
+    expect(guideRect.left, greaterThanOrEqualTo(paneRect.left));
+    expect(guideRect.right, lessThanOrEqualTo(paneRect.right));
+
+    await tester.tap(find.text('开始使用'));
+    await tester.pumpAndSettle();
+  });
+
+
   testWidgets('offscreen spotlight target is revealed before guide is shown',
       (tester) async {
     final targetKey = GlobalKey();
