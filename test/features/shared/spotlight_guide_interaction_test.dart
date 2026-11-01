@@ -280,6 +280,79 @@ void main() {
 
 
 
+
+  testWidgets('guide card never overlaps highlighted target when space is tight',
+      (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Column(
+                children: [
+                  const SizedBox(height: 330),
+                  SpotlightTarget(
+                    targetKey: targetKey,
+                    child: const SizedBox(
+                      width: 280,
+                      height: 56,
+                      child: ColoredBox(color: Colors.white),
+                    ),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () {
+                      showSpotlightGuide(
+                        context,
+                        steps: [
+                          SpotlightGuideStep(
+                            targetKey: targetKey,
+                            icon: Icons.account_tree_outlined,
+                            title: '很长的教程说明',
+                            body:
+                                '这是一段故意写得很长的教程正文，用来模拟小屏幕上教程卡片高度超过高亮上方安全区域的情况。'
+                                '教程卡片必须被限制在高亮区域之外，正文装不下时只能在卡片内部滚动，不能压住当前高亮。'
+                                '这是一段故意写得很长的教程正文，用来继续撑高卡片，确保测试真的覆盖空间不足的情况。'
+                                '即使按钮、进度和说明一起变得很高，也必须继续遵守不覆盖高亮区域的规则。',
+                            targetPadding: 0,
+                            borderRadius: 0,
+                          ),
+                        ],
+                      );
+                    },
+                    child: const Text('打开长教程'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开长教程'));
+    await tester.pump();
+    await tester.pump();
+
+    final targetRect = tester.getRect(find.byKey(targetKey));
+    final guideCard = find
+        .ancestor(
+          of: find.text('很长的教程说明'),
+          matching: find.byType(Card),
+        )
+        .first;
+    final guideRect = tester.getRect(guideCard);
+
+    expect(guideRect.overlaps(targetRect), isFalse);
+    expect(guideRect.bottom, lessThanOrEqualTo(targetRect.top - 15));
+
+    await tester.tap(find.text('开始使用'));
+    await tester.pumpAndSettle();
+  });
+
+
   testWidgets('group progress is continuous and single steps hide 1 / 1',
       (tester) async {
     final targetKey = GlobalKey();
