@@ -348,9 +348,87 @@ void main() {
     expect(guideRect.overlaps(targetRect), isFalse);
     expect(guideRect.bottom, lessThanOrEqualTo(targetRect.top - 15));
 
+    final exitRect = tester.getRect(find.text('退出教程'));
+    final nextRect = tester.getRect(find.text('开始使用'));
+    expect(exitRect.top, greaterThanOrEqualTo(guideRect.top));
+    expect(exitRect.bottom, lessThanOrEqualTo(guideRect.bottom));
+    expect(nextRect.top, greaterThanOrEqualTo(guideRect.top));
+    expect(nextRect.bottom, lessThanOrEqualTo(guideRect.bottom));
+
     await tester.tap(find.text('开始使用'));
     await tester.pumpAndSettle();
   });
+
+
+  testWidgets('offscreen spotlight target is revealed before guide is shown',
+      (tester) async {
+    final targetKey = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 900),
+                    SpotlightTarget(
+                      targetKey: targetKey,
+                      child: const SizedBox(
+                        width: 300,
+                        height: 120,
+                        child: ColoredBox(color: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 500),
+                  ],
+                ),
+              ),
+              floatingActionButton: FloatingActionButton(
+                onPressed: () {
+                  showSpotlightGuide(
+                    context,
+                    steps: [
+                      SpotlightGuideStep(
+                        targetKey: targetKey,
+                        icon: Icons.inventory_2_outlined,
+                        title: '屏幕外的备份卡',
+                        body: '开始介绍前应先把目标自动滚进屏幕。',
+                        targetPadding: 0,
+                      ),
+                    ],
+                  );
+                },
+                child: const Icon(Icons.play_arrow_rounded),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    expect(tester.getRect(find.byKey(targetKey)).top, greaterThan(600));
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+
+    final targetRect = tester.getRect(find.byKey(targetKey));
+    expect(targetRect.top, greaterThanOrEqualTo(0));
+    expect(targetRect.bottom, lessThanOrEqualTo(600));
+
+    final guideCard = find
+        .ancestor(
+          of: find.text('屏幕外的备份卡'),
+          matching: find.byType(Card),
+        )
+        .first;
+    expect(tester.getRect(guideCard).overlaps(targetRect), isFalse);
+
+    await tester.tap(find.text('开始使用'));
+    await tester.pumpAndSettle();
+  });
+
 
 
   testWidgets('group progress is continuous and single steps hide 1 / 1',
