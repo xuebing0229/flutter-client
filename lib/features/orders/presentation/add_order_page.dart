@@ -118,6 +118,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
           borderRadius: 0,
           preferCardAbove: true,
           allowOutsideTargetInteraction: true,
+          compactWhenTargetRouteCovered: true,
         ),
         SpotlightGuideStep(
           targetKey: targets.addOrderPriceKey,
