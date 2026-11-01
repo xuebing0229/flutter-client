@@ -204,6 +204,7 @@ void main() {
                                   borderRadius: 0,
                                   preferCardAbove: true,
                                   allowOutsideTargetInteraction: true,
+                                  compactWhenTargetRouteCovered: true,
                                 ),
                                 SpotlightGuideStep(
                                   targetKey: secondKey,
@@ -243,6 +244,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(ModalRoute.of(dropdownKey.currentContext!)!.isCurrent, isFalse);
+
+    final compactGuideCard = find
+        .ancestor(
+          of: find.text('选择平台'),
+          matching: find.byType(Card),
+        )
+        .first;
+    final compactGuideRect = tester.getRect(compactGuideCard);
+    final optionRect = tester.getRect(find.text('画加').last);
+    expect(compactGuideRect.overlaps(optionRect), isFalse);
+    expect(find.text('下一步'), findsOneWidget);
+    expect(find.text('退出教程'), findsOneWidget);
 
     await tester.tap(find.text('画加').last);
     await tester.pumpAndSettle();
