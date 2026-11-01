@@ -292,4 +292,12 @@ void main() {
       ['电脑端新手引导定位修复'],
     );
   });
+
+  test('223 包含电脑端首次添加设备流程修复见闻', () {
+    final picked = newsBetweenBuilds(222, 223);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['电脑端首次添加设备流程修复'],
+    );
+  });
 }
