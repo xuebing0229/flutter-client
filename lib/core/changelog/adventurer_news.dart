@@ -408,6 +408,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新手引导下拉菜单遮挡修复',
     description: '新增排单教程打开平台下拉菜单时，教程会暂时收成屏幕边缘控制条，不再遮挡平台选项；选项仍可直接点击，上一/下一步、跳过本节和退出教程也会继续保留。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 220,
+    title: '新手引导不再遮挡高亮内容',
+    description: '教程卡片现在会严格避开当前高亮区域：自动选择上方或下方安全空间，空间不足时改为卡片内部滚动，不再因为小屏幕或长说明压住节点进度、确认节点等正在介绍的控件。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
