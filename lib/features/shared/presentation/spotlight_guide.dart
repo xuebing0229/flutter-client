@@ -250,7 +250,7 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final compactForTransientRoute =
         _targetRouteCovered && _step.compactWhenTargetRouteCovered;
     final compactAtTop =
-        rect != null && rect.center.dy > size.height / 2;
+        rect != null && rect.center.dy <= size.height / 2;
 
     final cardWidth =
         (size.width - 32).clamp(260.0, 420.0).toDouble();
