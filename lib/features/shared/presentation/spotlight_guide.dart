@@ -89,6 +89,28 @@ class SpotlightGuideStep {
   final bool compactWhenTargetRouteCovered;
 }
 
+Future<void> _revealSpotlightTarget(GlobalKey targetKey) async {
+  final targetContext = targetKey.currentContext;
+  if (targetContext == null) return;
+
+  final media = MediaQuery.maybeOf(targetContext);
+  final box = targetContext.findRenderObject();
+  if (media != null && box is RenderBox && box.attached && box.hasSize) {
+    final origin = box.localToGlobal(Offset.zero);
+    final rect = origin & box.size;
+    final visibleTop = media.padding.top + 12;
+    final visibleBottom = media.size.height - media.padding.bottom - 12;
+    if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return;
+  }
+
+  await Scrollable.ensureVisible(
+    targetContext,
+    alignment: .5,
+    duration: Duration.zero,
+  );
+  await WidgetsBinding.instance.endOfFrame;
+}
+
 Future<bool> showSpotlightGuide(
   BuildContext context, {
   required List<SpotlightGuideStep> steps,
@@ -97,6 +119,9 @@ Future<bool> showSpotlightGuide(
   int? progressTotal,
 }) async {
   if (steps.isEmpty) return false;
+
+  await _revealSpotlightTarget(steps.first.targetKey);
+  if (!context.mounted) return false;
 
   final overlay = Overlay.of(context);
   final completer = Completer<bool>();
@@ -147,7 +172,6 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
   Rect? _targetRect;
   bool _targetRouteCovered = false;
   final GlobalKey _cardKey = GlobalKey(debugLabel: 'spotlight-guide-card');
-  double _cardHeight = 196;
 
   SpotlightGuideStep get _step => widget.steps[_index];
 
@@ -165,13 +189,6 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
 
   void _refreshTarget() {
     if (!mounted) return;
-    final cardRenderObject = _cardKey.currentContext?.findRenderObject();
-    final measuredCardHeight =
-        cardRenderObject is RenderBox &&
-                cardRenderObject.attached &&
-                cardRenderObject.hasSize
-            ? cardRenderObject.size.height
-            : _cardHeight;
 
     final targetContext = _step.targetKey.currentContext;
     final targetRoute =
@@ -180,28 +197,24 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final box = targetContext?.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) {
       if (_targetRect == null &&
-          _targetRouteCovered == targetRouteCovered &&
-          (measuredCardHeight - _cardHeight).abs() < .5) {
+          _targetRouteCovered == targetRouteCovered) {
         return;
       }
       setState(() {
         _targetRect = null;
         _targetRouteCovered = targetRouteCovered;
-        _cardHeight = measuredCardHeight;
       });
       return;
     }
     final origin = box.localToGlobal(Offset.zero);
     final rect = (origin & box.size).inflate(_step.targetPadding);
     if (_targetRect == rect &&
-        _targetRouteCovered == targetRouteCovered &&
-        (measuredCardHeight - _cardHeight).abs() < .5) {
+        _targetRouteCovered == targetRouteCovered) {
       return;
     }
     setState(() {
       _targetRect = rect;
       _targetRouteCovered = targetRouteCovered;
-      _cardHeight = measuredCardHeight;
     });
   }
 
@@ -230,6 +243,10 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final next =
         (_index + delta).clamp(0, widget.steps.length - 1).toInt();
     if (next == _index) return;
+
+    await _revealSpotlightTarget(widget.steps[next].targetKey);
+    if (!mounted) return;
+
     setState(() {
       _index = next;
       _targetRect = null;
@@ -401,104 +418,154 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                   : placeAbove
                       ? Alignment.bottomCenter
                       : Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: cardRegionHeight),
-                child: Card(
-                  key: _cardKey,
-                  elevation: 12,
-                  margin: EdgeInsets.zero,
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: colors.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              _step.icon,
-                              color: colors.onPrimaryContainer,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _step.title,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 5),
-                                Text(_step.body),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          if ((widget.progressTotal ?? widget.steps.length) > 1)
-                            Text(
-                              '${widget.progressStart + _index + 1} / ${widget.progressTotal ?? widget.steps.length}',
-                              style: TextStyle(
-                                color: colors.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () => unawaited(_finish(false)),
-                            child: const Text('退出教程'),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => unawaited(_finish(true)),
-                            child: const Text('跳过本节'),
-                          ),
-                          const Spacer(),
-                          if (_index > 0)
-                            TextButton(
-                              onPressed: () => unawaited(_move(-1)),
-                              child: const Text('上一步'),
-                            ),
-                          FilledButton(
-                            onPressed: () {
-                              if (isLast) {
-                                unawaited(_finish(true));
-                              } else {
-                                unawaited(_move(1));
-                              }
-                            },
-                            child: Text(isLast ? widget.finalLabel : '下一步'),
-                          ),
-                        ],
-                      ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              child: _SpotlightGuideCard(
+                cardKey: _cardKey,
+                maxHeight: cardRegionHeight,
+                step: _step,
+                progressText:
+                    (widget.progressTotal ?? widget.steps.length) > 1
+                        ? '${widget.progressStart + _index + 1} / ${widget.progressTotal ?? widget.steps.length}'
+                        : null,
+                showPrevious: _index > 0,
+                finalLabel: isLast ? widget.finalLabel : '下一步',
+                onExit: () => unawaited(_finish(false)),
+                onSkip: () => unawaited(_finish(true)),
+                onPrevious: () => unawaited(_move(-1)),
+                onNext: () {
+                  if (isLast) {
+                    unawaited(_finish(true));
+                  } else {
+                    unawaited(_move(1));
+                  }
+                },
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+
+class _SpotlightGuideCard extends StatelessWidget {
+  const _SpotlightGuideCard({
+    required this.cardKey,
+    required this.maxHeight,
+    required this.step,
+    required this.progressText,
+    required this.showPrevious,
+    required this.finalLabel,
+    required this.onExit,
+    required this.onSkip,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final GlobalKey cardKey;
+  final double maxHeight;
+  final SpotlightGuideStep step;
+  final String? progressText;
+  final bool showPrevious;
+  final String finalLabel;
+  final VoidCallback onExit;
+  final VoidCallback onSkip;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Card(
+        key: cardKey,
+        elevation: 12,
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                fit: FlexFit.loose,
+                child: SingleChildScrollView(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: colors.primaryContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          step.icon,
+                          color: colors.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              step.title,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(step.body),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (progressText != null)
+                    Text(
+                      progressText!,
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: onExit,
+                    child: const Text('退出教程'),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: onSkip,
+                    child: const Text('跳过本节'),
+                  ),
+                  const Spacer(),
+                  if (showPrevious)
+                    TextButton(
+                      onPressed: onPrevious,
+                      child: const Text('上一步'),
+                    ),
+                  FilledButton(
+                    onPressed: onNext,
+                    child: Text(finalLabel),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
