@@ -48,8 +48,11 @@ class WindowsSyncthingTransport {
     if (!Platform.isWindows) return false;
     if (!force && !await isAutoStartEnabled(folderId)) return false;
 
-    final ready = await _ensureStarted();
-    if (!ready) return false;
+    // Follow Syncthing's REST contract strictly: the API must be ready
+    // before changing /rest/config/folders, and folder configuration must
+    // succeed before any caller can issue /rest/db/scan for this folder.
+    // Do not treat "startup has been requested" as "Syncthing is ready".
+    await _ensureReady();
     await _configureFolder(
       folderId: folderId,
       label: label,
