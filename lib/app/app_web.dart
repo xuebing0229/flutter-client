@@ -19,6 +19,7 @@ import '../core/portability/app_backup_data.dart';
 import '../core/portability/backup_asset_rules.dart';
 import '../core/portability/web_backup_reader.dart';
 import '../core/sync/public_peer_sync_service.dart';
+import '../core/settings/workspace_settings_codec.dart';
 import '../core/sync/sync_coordinator_web.dart';
 import '../core/theme/app_theme_store.dart';
 import '../core/theme/app_ui_style.dart';
@@ -776,84 +777,40 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   Map<String, dynamic> _captureSettings() {
-    final features = widget.featureStore.toJson();
-    return <String, dynamic>{
-      ..._retainedSettings,
-      'id': 'app',
-      'themeMode': widget.themeStore.mode.name,
-      'themePaletteId': widget.themeStore.paletteId,
-      'customThemePalettes': widget.themeStore.exportCustomPalettes(),
-      'uiStyle': widget.themeStore.style.id,
-      'pricingAdjustmentPresets': _pricingPresetStore.toJson(),
-      'receiptStyle': _receiptStyleStore.toJson(),
-      for (final entry in features.entries)
-        'feature.${entry.key}': entry.key == AppFeature.deadlineReminders.name
-            ? _nativeDeadlineReminderPreference
-            : entry.value,
-      ..._collectionViews.toSettings(),
-      'desktopNavigationOpen': _desktopNavigationOpen,
-    };
+    return WorkspaceSettingsCodec.capture(
+      themeStore: widget.themeStore,
+      featureStore: widget.featureStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      collectionViews: _collectionViews,
+      desktopNavigationOpen: _desktopNavigationOpen,
+      retainedSettings: _retainedSettings,
+      featureOverrides: <AppFeature, bool>{
+        AppFeature.deadlineReminders: _nativeDeadlineReminderPreference,
+      },
+    );
   }
 
   Future<void> _applySettings(Map<String, dynamic> settings) async {
-    final modeName = settings['themeMode'];
-    if (modeName is String) {
-      await widget.themeStore.setMode(
-        switch (modeName) {
-          'light' => ThemeMode.light,
-          'dark' => ThemeMode.dark,
-          _ => ThemeMode.system,
-        },
-      );
-    }
-
-    final customPalettes = settings['customThemePalettes'];
-    if (customPalettes is List) {
-      await widget.themeStore.replaceCustomPalettesFromJson(customPalettes);
-    }
-
-    final paletteId = settings['themePaletteId'];
-    if (paletteId is String && widget.themeStore.containsPaletteId(paletteId)) {
-      await widget.themeStore.setPaletteId(paletteId);
-    }
-
-    final styleId = settings['uiStyle'] ?? settings['uiTexture'];
-    if (styleId is String) {
-      await widget.themeStore.setStyle(AppUiStyle.byId(styleId));
-    }
-
-    if (settings.containsKey('pricingAdjustmentPresets')) {
-      _pricingPresetStore.applyJson(settings['pricingAdjustmentPresets']);
-    }
-    if (settings.containsKey('receiptStyle')) {
-      _receiptStyleStore.applyJson(settings['receiptStyle']);
-    }
-
-    final legacyFeatures = settings['features'];
-    final nextFeatures = widget.featureStore.toJson();
-    if (legacyFeatures is Map) {
-      for (final entry in legacyFeatures.entries) {
-        if (entry.key is String && entry.value is bool) {
-          nextFeatures[entry.key as String] = entry.value as bool;
-        }
-      }
-    }
-    for (final feature in AppFeature.values) {
-      final value = settings['feature.${feature.name}'];
-      if (value is bool) {
+    final applied = await WorkspaceSettingsCodec.apply(
+      settings: settings,
+      themeStore: widget.themeStore,
+      featureStore: widget.featureStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      collectionViews: _collectionViews,
+      desktopNavigationOpen: _desktopNavigationOpen,
+      passthroughFeatures: const <AppFeature>{
+        AppFeature.deadlineReminders,
+      },
+      onPassthroughFeature: (feature, value) {
         if (feature == AppFeature.deadlineReminders) {
           _nativeDeadlineReminderPreference = value;
-        } else {
-          nextFeatures[feature.name] = value;
         }
-      }
-    }
-    nextFeatures[AppFeature.deadlineReminders.name] = false;
-    await widget.featureStore.applyJson(nextFeatures);
-
-    _collectionViews = _collectionViews.applySettings(settings);
-    final desktopOpen = settings['desktopNavigationOpen'];
-    if (desktopOpen is bool) _desktopNavigationOpen = desktopOpen;
+      },
+    );
+    _collectionViews = applied.collectionViews;
+    _desktopNavigationOpen = applied.desktopNavigationOpen;
   }
 
   AppBackupData _captureLocalBackup({bool portable = false}) {
