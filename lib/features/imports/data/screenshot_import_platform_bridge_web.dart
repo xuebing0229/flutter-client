@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'web_screenshot_files.dart';
+import 'web_screenshot_files.dart';\nimport 'screenshot_import_platform_types.dart';
 
 class ScreenshotImportPickedImage {
   const ScreenshotImportPickedImage({
