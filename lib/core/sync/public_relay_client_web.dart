@@ -1,15 +1,9 @@
 // ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:html' as html;
 
-class PublicRelayMessage {
-  const PublicRelayMessage({required this.topic, required this.payload});
-
-  final String topic;
-  final String payload;
-}
+import 'public_relay_protocol.dart';
 
 /// Browser side of the Cloudflare WebSocket relay.
 ///
@@ -45,11 +39,11 @@ class PublicRelayClient {
     if (connected && _connectedTopic == topic) return;
 
     await disconnect();
-    final target = _RelayTarget.parse(topic);
-    final endpoint = _relayUri(
+    final endpoint = buildPublicRelayUri(
       configured: _configuredRelayUrl,
-      target: target,
+      topic: topic,
       clientId: clientId,
+      fallbackOrigin: Uri.parse(html.window.location.href).origin,
     );
 
     final socket = html.WebSocket(endpoint.toString());
@@ -91,26 +85,13 @@ class PublicRelayClient {
     if (socket == null || socket.readyState != html.WebSocket.OPEN) {
       throw StateError('在线同步尚未连接');
     }
-    socket.sendString(jsonEncode(<String, dynamic>{
-      'type': 'publish',
-      'topic': topic,
-      'payload': payload,
-    }));
+    socket.sendString(encodePublicRelayPublish(topic, payload));
   }
 
   void _handleIncoming(String event) {
     if (_messages.isClosed) return;
-    try {
-      final decoded = jsonDecode(event);
-      if (decoded is! Map) return;
-      final topic = decoded['topic'];
-      final payload = decoded['payload'];
-      if (topic is! String || payload is! String) return;
-      _messages.add(PublicRelayMessage(topic: topic, payload: payload));
-    } catch (_) {
-      // Ignore malformed relay frames. AES-GCM authentication is performed by
-      // PublicPeerSyncService before any workspace data is accepted.
-    }
+    final message = decodePublicRelayMessage(event);
+    if (message != null) _messages.add(message);
   }
 
   Future<void> disconnect() async {
@@ -135,53 +116,3 @@ class PublicRelayClient {
   }
 }
 
-class _RelayTarget {
-  const _RelayTarget({required this.room, required this.inbox});
-
-  final String room;
-  final String inbox;
-
-  static final RegExp _topic = RegExp(
-    r'^adventurers-guild-peer/v1/([0-9a-f]{32})/inbox/([A-Za-z0-9_-]+)$',
-  );
-
-  factory _RelayTarget.parse(String topic) {
-    final match = _topic.firstMatch(topic);
-    if (match == null) {
-      throw const FormatException('同步收件箱地址格式无效');
-    }
-    return _RelayTarget(room: match.group(1)!, inbox: match.group(2)!);
-  }
-}
-
-Uri _relayUri({
-  required String configured,
-  required _RelayTarget target,
-  required String clientId,
-}) {
-  final raw = configured.trim();
-  final parsed = raw.isEmpty
-      ? Uri.parse(Uri.parse(html.window.location.href).origin)
-      : Uri.parse(raw);
-
-  final scheme = switch (parsed.scheme) {
-    'https' => 'wss',
-    'http' => 'ws',
-    'wss' || 'ws' => parsed.scheme,
-    _ => throw const FormatException('在线同步地址配置无效'),
-  };
-  final path = raw.isEmpty || parsed.path.isEmpty || parsed.path == '/'
-      ? '/sync'
-      : parsed.path;
-
-  return parsed.replace(
-    scheme: scheme,
-    path: path,
-    queryParameters: <String, String>{
-      ...parsed.queryParameters,
-      'room': target.room,
-      'inbox': target.inbox,
-      'client': clientId,
-    },
-  );
-}
