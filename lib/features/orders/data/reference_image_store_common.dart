@@ -49,16 +49,36 @@ class ReferenceImageRules {
   }
 
   static List<String> validateReferencePath(String value) {
-    if (value.contains('\\') || value.startsWith('/')) {
+    final segments = _safeFourSegmentPath(value, error: '参考图路径无效。');
+    if (segments[0] != 'assets' ||
+        segments[1] != 'order-reference-images') {
       throw const FormatException('参考图路径无效。');
     }
+    return segments;
+  }
+
+  static List<String> validateAssetPath(String value) {
+    final segments = _safeFourSegmentPath(value, error: '本地素材路径无效。');
+    final referenceImage =
+        segments[0] == 'assets' && segments[1] == 'order-reference-images';
+    final desktopPet =
+        segments[0] == 'desktop-pet' && segments[1] == 'presets';
+    if (!referenceImage && !desktopPet) {
+      throw const FormatException('本地素材路径无效。');
+    }
+    return segments;
+  }
+
+  static List<String> _safeFourSegmentPath(
+    String value, {
+    required String error,
+  }) {
+    if (value.contains('\\') || value.startsWith('/')) {
+      throw FormatException(error);
+    }
     final segments = value.split('/');
-    final valid = segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
-        segments.skip(2).every(isSafeSegment);
-    if (!valid) {
-      throw const FormatException('参考图路径无效。');
+    if (segments.length != 4 || !segments.skip(2).every(isSafeSegment)) {
+      throw FormatException(error);
     }
     return segments;
   }
