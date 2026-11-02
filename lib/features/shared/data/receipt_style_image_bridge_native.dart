@@ -1,15 +1,8 @@
 import 'dart:io';
-import '../../../core/portability/data_portability_file_bridge.dart';\nimport 'receipt_style_image_types.dart';
+import 'dart:typed_data';
 
-class PickedReceiptStyleImage {
-  const PickedReceiptStyleImage({
-    required this.name,
-    required this.bytes,
-  });
-
-  final String name;
-  final Uint8List bytes;
-}
+import '../../../core/portability/data_portability_file_bridge.dart';
+import 'receipt_style_image_types.dart';
 
 class ReceiptStyleImageBridge {
   const ReceiptStyleImageBridge();
