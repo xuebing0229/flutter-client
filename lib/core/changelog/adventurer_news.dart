@@ -433,6 +433,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '手机端首次添加设备启动流程修复',
     description: '手机端首次加入设备时会等待设备同步组件的接口真正可用后再继续，不再把正常的启动过程直接当作“同步核心正在启动，请稍后重试”。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 225,
+    title: '首次添加设备增加备用连接',
+    description: '首次添加设备仍优先使用原来的设备同步通道；如果临时连接握手失败、传输迟迟没有完成，会自动切换备用在线连接传递同一份加密账号信息，加入成功后继续回到原来的正式同步通道。同时加强手机和电脑端设备同步启动边界，并在发布前真实检查同步核心与备用连接能否运行。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
