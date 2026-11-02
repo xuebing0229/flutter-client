@@ -26,9 +26,9 @@ import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
 import 'sync_reference_image_gc.dart';
+import 'sync_workspace_engine.dart';
 
-typedef SyncSettingsCapture = Map<String, dynamic> Function();
-typedef SyncSettingsApply = Future<void> Function(Map<String, dynamic> settings);
+export 'sync_workspace_engine.dart' show SyncConflictView, syncFieldLabel;
 
 @visibleForTesting
 Future<void> runWorkspaceRestoreTransaction({
@@ -79,97 +79,6 @@ class PortableWorkspaceSnapshot {
   final List<Map<String, dynamic>> syncRecords;
 }
 
-class SyncConflictView {
-  const SyncConflictView({
-    required this.kind,
-    required this.recordId,
-    required this.conflict,
-  });
-
-  final SyncEntityKind kind;
-  final String recordId;
-  final SyncConflict conflict;
-
-  String get entityLabel => switch (kind) {
-    SyncEntityKind.order => '排单',
-    SyncEntityKind.product => '成品',
-    SyncEntityKind.nodePreset => '节点预设',
-    SyncEntityKind.focusSession => '专注记录',
-    SyncEntityKind.settings => '界面设置',
-  };
-
-  String get fieldLabel => syncFieldLabel(conflict.field);
-}
-
-String syncFieldLabel(String field) {
-  return switch (field) {
-    'title' => '名称',
-    'clientName' => '单主',
-    'platform' => '平台',
-    'deadline' => '截稿日期',
-    'nodePresetId' => '节点预设',
-    'nodePresetSnapshot' => '节点预设快照',
-    'currentNodeId' => '当前节点',
-    'currentNodeProgress' => '节点小进度',
-    'price' => '稿费',
-    'feeEnabled' => '手续费',
-    'huajiaLoveLevel' => '真爱永恒',
-    'onlinePercent' => '线上比例',
-    'supplementAmount' => '补款基准',
-    'supplementFeeEnabled' => '补款手续费',
-    'deductionAmount' => '减款基准',
-    'deductionFeeEnabled' => '减款手续费',
-    'description' => '备注',
-    'tags' => '自定义标签',
-    'referenceImages' => '参考图',
-    'completedAt' => '交稿时间',
-    'settledAt' => '结算时间',
-    'settledIncome' => '结算收入',
-    'archiveOutcome' => '归档结果',
-    'settlementNodeId' => '结算节点',
-    'customRefundAmount' => '退款金额',
-    'isArchived' => '归档状态',
-    'isPinned' => '置顶状态',
-    'saleType' => '售卖方式',
-    'soldCount' => '售出数量基准',
-    'saleRecords' => '售出记录',
-    'saleClientNames' => '售出单主',
-    'archivedAt' => '归档时间',
-    'themeMode' => '主题模式',
-    'themePaletteId' => '主题色',
-    'customThemePalettes' => '自定义主题色方案',
-    'uiStyle' => 'UI风格',
-    'uiTexture' => 'UI风格',
-    'features' => '功能开关',
-    'feature.clientInfo' => '显示单主信息',
-    'feature.customTags' => '自定义标签开关',
-    'feature.referenceImages' => '参考图开关',
-    'feature.nodeProgress' => '节点小进度',
-    'feature.search' => '搜索',
-    'feature.sorting' => '排序',
-    'feature.viewSwitch' => '列表 / 卡片视图切换',
-    'feature.products' => '成品功能开关',
-    'feature.schedule' => '日程功能开关',
-    'feature.statistics' => '统计功能开关',
-    'feature.deadlineReminders' => '截稿提醒开关',
-    'feature.abstractMode' => '抽象版开关',
-    'feature.abstractEffects' => '抽象版表现',
-    'orderCardView' => '排单卡片视图',
-    'productCardView' => '成品卡片视图',
-    'orderSortMode' => '排单排序',
-    'productSortMode' => '成品排序',
-    'desktopNavigationOpen' => '电脑导航栏状态',
-    'name' => '预设名称',
-    'nodes' => '节点内容',
-    'startedAt' => '专注开始时间',
-    'endedAt' => '专注结束时间',
-    'orderId' => '专注排单',
-    'orderTitleSnapshot' => '排单标题快照',
-    SyncRecord.deletedField => '删除状态',
-    _ => field,
-  };
-}
-
 class SyncCoordinator extends ChangeNotifier {
   static const settingsRecordId = 'app';
   static const _transportReauthorizationLifetime = Duration(minutes: 30);
@@ -198,7 +107,18 @@ class SyncCoordinator extends ChangeNotifier {
        ),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
-       _bridge = bridge;
+       _bridge = bridge {
+    _workspaceEngine = SyncWorkspaceEngine(
+      orderStore: orderStore,
+      productStore: productStore,
+      nodePresetStore: nodePresetStore,
+      focusStore: this.focusStore,
+      captureSettings: captureSettings,
+      applySettings: applySettings,
+      mergeEngine: _mergeEngine,
+      settingsRecordId: settingsRecordId,
+    );
+  }
 
   final String accountId;
   String deviceId;
@@ -216,6 +136,7 @@ class SyncCoordinator extends ChangeNotifier {
   final AccountSyncRecordStore _accountSyncStore;
   final SyncGcAckStore _gcAckStore;
   final EmbeddedSyncthingBridge _bridge;
+  late final SyncWorkspaceEngine _workspaceEngine;
   final Lock _pauseLock = Lock();
 
   bool _initialized = false;
