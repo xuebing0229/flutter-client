@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 TOKEN = "__PWA_PRECACHE_FILES__"
-EXCLUDED = {"pwa_service_worker.js"}
+EXCLUDED = {"pwa_service_worker.js", "flutter_service_worker.js"}
 
 
 def main() -> None:
