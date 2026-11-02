@@ -2,16 +2,8 @@ import 'dart:convert';
 
 import '../../../core/web/web_platform_bridge.dart';
 
-import 'package:cryptography/cryptography.dart';
-
 import 'web_screenshot_files.dart';
-
-String screenshotCardFingerprint({
-  required String imageSha256,
-  required int cardIndex,
-  required bool products,
-}) =>
-    '${products ? 'products' : 'orders'}|$imageSha256|$cardIndex';
+import 'screenshot_import_history_common.dart';
 
 class ScreenshotImportHistory {
   const ScreenshotImportHistory();
@@ -20,10 +12,7 @@ class ScreenshotImportHistory {
       'adventurers-guild.web.ocr-history.v1.$accountId';
 
   Future<String> hashImage(String token) async {
-    final hash = await Sha256().hash(WebScreenshotFiles.bytes(token));
-    return hash.bytes
-        .map((value) => value.toRadixString(16).padLeft(2, '0'))
-        .join();
+    return hashScreenshotBytes(WebScreenshotFiles.bytes(token));
   }
 
   Future<Set<String>> read({required String accountId}) async {
@@ -52,7 +41,9 @@ class ScreenshotImportHistory {
     required Iterable<String> fingerprints,
   }) async {
     final current = await read(accountId: accountId);
-    current.addAll(fingerprints.where((item) => item.isNotEmpty));
-    await replaceAll(accountId: accountId, fingerprints: current);
+    await replaceAll(
+      accountId: accountId,
+      fingerprints: mergeScreenshotImportFingerprints(current, fingerprints),
+    );
   }
 }
