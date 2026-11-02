@@ -38,6 +38,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
   String? _error;
   bool _transferred = false;
   bool _receiverConfirmed = false;
+  bool _usingRelayFallback = false;
   bool _responseBusy = false;
   bool _pairingBusy = false;
   bool _pollBusy = false;
@@ -144,6 +145,7 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       _error = null;
       _transferred = false;
       _receiverConfirmed = false;
+      _usingRelayFallback = false;
       _pollBusy = false;
       _finalizingPermanentPeer = false;
       _responseCodeController.clear();
@@ -209,9 +211,14 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
       if (!mounted) return;
       setState(() {
         _receiverConfirmed = true;
+        _usingRelayFallback = server.relayFallbackActive;
         _responseCodeController.clear();
       });
-      _message('新设备已确认，正在传输账号信息。请继续保持本页打开直到显示完成。');
+      _message(
+        server.relayFallbackActive
+            ? '新设备已确认，原连接未能及时完成，已自动使用备用连接传输账号信息。'
+            : '新设备已确认，正在传输账号信息。请继续保持本页打开直到显示完成。',
+      );
     } on FormatException catch (error) {
       if (mounted) _message(error.message);
     } catch (error) {
@@ -226,6 +233,13 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
     _pollBusy = true;
     try {
       await server.poll();
+      if (mounted &&
+          identical(_server, server) &&
+          server.relayFallbackActive &&
+          !_usingRelayFallback) {
+        setState(() => _usingRelayFallback = true);
+        _message('原连接未能及时传完账号信息，已自动切换备用连接。');
+      }
       if (server.receiverFinished &&
           !server.transferred &&
           !_finalizingPermanentPeer) {
@@ -495,7 +509,9 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
                         _transferred
                             ? '账号信息已经传给新设备，首次绑定完成。以后正常同步不需要再打开这个页面。'
                             : _receiverConfirmed
-                            ? '新设备已经确认，正在传输账号信息。请继续保持本页打开，直到这里显示完成。'
+                            ? _usingRelayFallback
+                                ? '新设备已经确认，当前正在通过备用连接传输账号信息。完成后仍会回到原来的设备同步通道。'
+                                : '新设备已经确认，正在传输账号信息。请继续保持本页打开，直到这里显示完成。'
                             : '让未登录的新设备扫描此码后，新设备会显示一枚“回应二维码”。请保持本页打开，不要返回或关闭应用。',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: colors.onSurfaceVariant),
