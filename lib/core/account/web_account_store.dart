@@ -4,87 +4,14 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'account_models.dart';
+import 'account_local_state.dart';
+
+export 'account_local_state.dart' show AccountStatus, LocalAccountSummary;
 import 'account_activation_flow.dart';
 import 'activation_api.dart';
 import 'account_state_mutations.dart';
 import 'offline_license.dart';
 import '../web/web_platform_bridge.dart';
-
-enum WebAccountStatus { loading, unactivated, locked, unlocked, revoked }
-
-class WebLocalAccountSummary {
-  const WebLocalAccountSummary({
-    required this.accountId,
-    required this.accountName,
-  });
-
-  final String accountId;
-  final String accountName;
-}
-
-class _WebAccountRecord {
-  const _WebAccountRecord({
-    required this.syncState,
-    required this.currentDeviceId,
-    required this.stayLoggedIn,
-    this.activationSerial,
-  });
-
-  final AccountSyncState syncState;
-  final String currentDeviceId;
-  final bool stayLoggedIn;
-  final String? activationSerial;
-
-  _WebAccountRecord copyWith({
-    AccountSyncState? syncState,
-    String? currentDeviceId,
-    bool? stayLoggedIn,
-    String? activationSerial,
-  }) {
-    return _WebAccountRecord(
-      syncState: syncState ?? this.syncState,
-      currentDeviceId: currentDeviceId ?? this.currentDeviceId,
-      stayLoggedIn: stayLoggedIn ?? this.stayLoggedIn,
-      activationSerial: activationSerial ?? this.activationSerial,
-    );
-  }
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'syncState': syncState.toJson(),
-        'currentDeviceId': currentDeviceId,
-        'stayLoggedIn': stayLoggedIn,
-        if (activationSerial != null) 'activationSerial': activationSerial,
-      };
-
-  factory _WebAccountRecord.fromJson(Map<String, dynamic> json) {
-    final rawState = json['syncState'];
-    final currentDeviceId = json['currentDeviceId'];
-    final stayLoggedIn = json['stayLoggedIn'];
-    final activationSerial = json['activationSerial'];
-    if (rawState is! Map ||
-        currentDeviceId is! String ||
-        currentDeviceId.isEmpty ||
-        stayLoggedIn is! bool ||
-        (activationSerial != null && activationSerial is! String)) {
-      throw const FormatException('网页账号记录格式无效。');
-    }
-
-    final state = AccountSyncState.fromCompatibleJson(
-      rawState.map((key, value) => MapEntry(key.toString(), value)),
-      allowMissingPassword: false,
-    );
-    if (!state.devices.containsKey(currentDeviceId)) {
-      throw const FormatException('网页账号记录缺少当前设备。');
-    }
-
-    return _WebAccountRecord(
-      syncState: state,
-      currentDeviceId: currentDeviceId,
-      stayLoggedIn: stayLoggedIn,
-      activationSerial: activationSerial as String?,
-    );
-  }
-}
 
 class WebAccountStore extends ChangeNotifier {
   WebAccountStore({
@@ -97,14 +24,14 @@ class WebAccountStore extends ChangeNotifier {
 
   final OfflineLicenseVerifier _verifier;
   final ActivationApiClient _activationApi;
-  final Map<String, _WebAccountRecord> _accounts =
-      <String, _WebAccountRecord>{};
+  final Map<String, LocalAccountRecord> _accounts =
+      <String, LocalAccountRecord>{};
   final Random _random = Random.secure();
 
-  WebAccountStatus status = WebAccountStatus.loading;
+  AccountStatus status = AccountStatus.loading;
   String? _selectedAccountId;
 
-  _WebAccountRecord? get _selectedRecord {
+  LocalAccountRecord? get _selectedRecord {
     final id = _selectedAccountId;
     return id == null ? null : _accounts[id];
   }
@@ -112,10 +39,10 @@ class WebAccountStore extends ChangeNotifier {
   String? get accountId => _selectedAccountId;
   String? get accountName => _selectedRecord?.syncState.accountName;
   String? get accountPassword =>
-      status == WebAccountStatus.unlocked ? _selectedRecord?.syncState.password : null;
+      status == AccountStatus.unlocked ? _selectedRecord?.syncState.password : null;
   String? get currentDeviceId => _selectedRecord?.currentDeviceId;
   AccountSyncState? get syncSnapshot => _selectedRecord?.syncState;
-  bool get isUnlocked => status == WebAccountStatus.unlocked;
+  bool get isUnlocked => status == AccountStatus.unlocked;
 
   List<AccountDevice> get activeDevices {
     final state = syncSnapshot;
@@ -125,10 +52,10 @@ class WebAccountStore extends ChangeNotifier {
     return devices;
   }
 
-  List<WebLocalAccountSummary> get localAccounts {
-    final result = <WebLocalAccountSummary>[
+  List<LocalAccountSummary> get localAccounts {
+    final result = <LocalAccountSummary>[
       for (final entry in _accounts.entries)
-        WebLocalAccountSummary(
+        LocalAccountSummary(
           accountId: entry.key,
           accountName: entry.value.syncState.accountName,
         ),
@@ -144,7 +71,7 @@ class WebAccountStore extends ChangeNotifier {
     try {
       final source = webStorageGet(_storageKey);
       if (source == null || source.trim().isEmpty) {
-        status = WebAccountStatus.unactivated;
+        status = AccountStatus.unactivated;
         notifyListeners();
         return;
       }
@@ -163,7 +90,7 @@ class WebAccountStore extends ChangeNotifier {
         if (item is! Map) {
           throw const FormatException('网页账号记录格式无效。');
         }
-        final record = _WebAccountRecord.fromJson(
+        final record = LocalAccountRecord.fromJson(
           item.map((key, value) => MapEntry(key.toString(), value)),
         );
         _accounts[record.syncState.accountId] = record;
@@ -186,7 +113,7 @@ class WebAccountStore extends ChangeNotifier {
     } catch (_) {
       _accounts.clear();
       _selectedAccountId = null;
-      status = WebAccountStatus.unactivated;
+      status = AccountStatus.unactivated;
     }
     notifyListeners();
   }
@@ -194,16 +121,16 @@ class WebAccountStore extends ChangeNotifier {
   void _restoreStatus() {
     final record = _selectedRecord;
     if (record == null) {
-      status = WebAccountStatus.unactivated;
+      status = AccountStatus.unactivated;
       return;
     }
     if (record.syncState.isRevoked(record.currentDeviceId)) {
-      status = WebAccountStatus.revoked;
+      status = AccountStatus.revoked;
       return;
     }
     status = record.stayLoggedIn
-        ? WebAccountStatus.unlocked
-        : WebAccountStatus.locked;
+        ? AccountStatus.unlocked
+        : AccountStatus.locked;
   }
 
   Future<void> activate({
@@ -244,14 +171,14 @@ class WebAccountStore extends ChangeNotifier {
       revocations: const <String, DeviceRevocation>{},
     );
 
-    _accounts[license.accountId] = _WebAccountRecord(
+    _accounts[license.accountId] = LocalAccountRecord(
       syncState: state,
       currentDeviceId: deviceId,
       stayLoggedIn: true,
       activationSerial: license.serial,
     );
     _selectedAccountId = license.accountId;
-    status = WebAccountStatus.unlocked;
+    status = AccountStatus.unlocked;
     await _persist();
     await _clearActivationClaim(license.accountId);
     notifyListeners();
@@ -286,7 +213,7 @@ class WebAccountStore extends ChangeNotifier {
         deviceId = _randomDeviceId();
       }
       _rememberDeviceId(incoming.accountId, deviceId);
-      _accounts[incoming.accountId] = _WebAccountRecord(
+      _accounts[incoming.accountId] = LocalAccountRecord(
         syncState: _touchDevice(incoming, deviceId, createIfMissing: true),
         currentDeviceId: deviceId,
         stayLoggedIn: stayLoggedIn,
@@ -367,7 +294,7 @@ class WebAccountStore extends ChangeNotifier {
       syncState: touched,
       stayLoggedIn: true,
     );
-    status = WebAccountStatus.unlocked;
+    status = AccountStatus.unlocked;
     await _persist();
     notifyListeners();
     return true;
@@ -439,7 +366,7 @@ class WebAccountStore extends ChangeNotifier {
   Future<void> lock() async {
     final record = _selectedRecord;
     if (record == null) {
-      status = WebAccountStatus.unactivated;
+      status = AccountStatus.unactivated;
       notifyListeners();
       return;
     }
@@ -457,7 +384,7 @@ class WebAccountStore extends ChangeNotifier {
           record.copyWith(stayLoggedIn: false);
     }
     _selectedAccountId = null;
-    status = WebAccountStatus.unactivated;
+    status = AccountStatus.unactivated;
     await _persist();
     notifyListeners();
   }
@@ -474,7 +401,7 @@ class WebAccountStore extends ChangeNotifier {
     } catch (_) {}
     _accounts.remove(id);
     _selectedAccountId = null;
-    status = WebAccountStatus.unactivated;
+    status = AccountStatus.unactivated;
     await _persist();
     notifyListeners();
   }
