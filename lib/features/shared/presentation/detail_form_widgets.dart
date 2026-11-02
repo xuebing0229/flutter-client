@@ -94,22 +94,27 @@ class CommissionSettingsEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const FormFieldLabel('平台'),
         SpotlightTarget(
           targetKey: platformKey,
-          child: DropdownButtonFormField<CommissionPlatform>(
-            initialValue: platform,
-            items: CommissionPlatform.values
-                .map(
-                  (item) => DropdownMenuItem(
-                    value: item,
-                    child: Text(item.label),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) onPlatformChanged(value);
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const FormFieldLabel('平台'),
+              DropdownButtonFormField<CommissionPlatform>(
+                initialValue: platform,
+                items: CommissionPlatform.values
+                    .map(
+                      (item) => DropdownMenuItem(
+                        value: item,
+                        child: Text(item.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) onPlatformChanged(value);
+                },
+              ),
+            ],
           ),
         ),
         if (afterPlatform != null) ...[
