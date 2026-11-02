@@ -296,20 +296,20 @@ class _WebAccountGateState extends State<_WebAccountGate> {
   @override
   Widget build(BuildContext context) {
     return switch (widget.accountStore.status) {
-      WebAccountStatus.loading => const Scaffold(
+      AccountStatus.loading => const Scaffold(
           body: Center(child: CircularProgressIndicator()),
         ),
-      WebAccountStatus.unlocked => _WebWorkspace(
+      AccountStatus.unlocked => _WebWorkspace(
           accountStore: widget.accountStore,
           themeStore: widget.themeStore,
           featureStore: widget.featureStore,
         ),
-      WebAccountStatus.locked => _WebLoginPage(store: widget.accountStore),
-      WebAccountStatus.revoked => _WebRevokedPage(
+      AccountStatus.locked => _WebLoginPage(store: widget.accountStore),
+      AccountStatus.revoked => _WebRevokedPage(
           store: widget.accountStore,
           onImportBackup: _importAccountBackup,
         ),
-      WebAccountStatus.unactivated => _WebAccountEntryPage(
+      AccountStatus.unactivated => _WebAccountEntryPage(
           store: widget.accountStore,
           importing: _importing,
           onImportBackup: _importAccountBackup,
