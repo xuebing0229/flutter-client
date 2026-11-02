@@ -36,6 +36,7 @@ import '../features/home/presentation/workspace_shell.dart';
 import '../features/home/presentation/workspace_main_pages.dart';
 import '../features/home/presentation/workspace_common_tool_pages.dart';
 import '../features/home/presentation/quick_start_guide_helpers.dart';
+import '../features/home/presentation/workspace_add_pages.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/imports/data/screenshot_import_history.dart';
 import '../features/focus/state/focus_store.dart';
@@ -966,40 +967,25 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     final picked = await showGuildAddMethodPicker(context);
     if (!mounted || picked == null) return;
 
-    if (picked == GuildAddMethod.screenshot) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ScreenshotImportPage(
-            kind: products
-                ? ScreenshotImportKind.products
-                : ScreenshotImportKind.orders,
+    final page = picked == GuildAddMethod.screenshot
+        ? buildWorkspaceScreenshotImportPage(
+            products: products,
             accountId: _accountId,
             orderStore: _orderStore,
             productStore: _productStore,
-            presetStore: _nodePresetStore,
-          ),
-        ),
-      );
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => products
-            ? AddProductPage(
-                accountId: _accountId,
-                store: _productStore,
-                pricingPresetStore: _pricingPresetStore,
-                featureStore: widget.featureStore,
-              )
-            : AddOrderPage(
-                accountId: _accountId,
-                store: _orderStore,
-                nodePresetStore: _nodePresetStore,
-                pricingPresetStore: _pricingPresetStore,
-                featureStore: widget.featureStore,
-              ),
-      ),
+            nodePresetStore: _nodePresetStore,
+          )
+        : buildWorkspaceManualAddPage(
+            products: products,
+            accountId: _accountId,
+            orderStore: _orderStore,
+            productStore: _productStore,
+            nodePresetStore: _nodePresetStore,
+            pricingPresetStore: _pricingPresetStore,
+            featureStore: widget.featureStore,
+          );
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => page),
     );
   }
 
