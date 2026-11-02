@@ -428,6 +428,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '电脑端首次添加设备流程修复',
     description: '电脑端首次添加设备会先等待设备同步组件真正启动，再创建临时加入目录并开始扫描，修复冷启动时偶发“no such folder”导致第一次添加失败的问题。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 224,
+    title: '手机端首次添加设备启动流程修复',
+    description: '手机端首次加入设备时会等待设备同步组件的接口真正可用后再继续，不再把正常的启动过程直接当作“同步核心正在启动，请稍后重试”。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
