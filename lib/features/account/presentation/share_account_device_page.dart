@@ -270,23 +270,40 @@ class _ShareAccountDevicePageState extends State<ShareAccountDevicePage> {
 
     _finalizingPermanentPeer = true;
     try {
-      // Only after the receiver proves it actually received transfer.json do
-      // we share the permanent account folder. Then return transfer.ack so the
-      // new device knows both bootstrap transfer and permanent pairing are
-      // safely committed before it tears down the temporary folder.
-      await widget.syncCoordinator.bootstrapPeerTransport(
-        deviceId: deviceId,
-        name: deviceName,
-        appDeviceId: server.acceptedReceiverAppDeviceId,
-        platform: server.acceptedReceiverPlatform,
-      );
+      // Only after the receiver proves it actually received the encrypted
+      // bootstrap payload do we commit its permanent device identity. Native
+      // devices keep the Syncthing transport; browsers are registered as
+      // relay-only peers and immediately fall into the existing CF web sync.
+      final platform = server.acceptedReceiverPlatform?.trim();
+      final appDeviceId = server.acceptedReceiverAppDeviceId?.trim();
+      if (platform == 'web') {
+        if (appDeviceId == null || appDeviceId.length < 16) {
+          throw StateError('网页设备身份尚未确认。');
+        }
+        await widget.syncCoordinator.bootstrapRelayPeer(
+          appDeviceId: appDeviceId,
+          name: deviceName,
+          platform: platform!,
+        );
+      } else {
+        await widget.syncCoordinator.bootstrapPeerTransport(
+          deviceId: deviceId,
+          name: deviceName,
+          appDeviceId: appDeviceId,
+          platform: platform,
+        );
+      }
       await server.completeTransfer();
       if (mounted && identical(_server, server)) {
         setState(() {
           _error = null;
           _transferred = true;
         });
-        _message('账号信息与正式同步通道都已确认，新设备可以继续登录。');
+        _message(
+          platform == 'web'
+              ? '账号信息已确认，网页设备可以继续登录并通过在线同步保持更新。'
+              : '账号信息与正式同步通道都已确认，新设备可以继续登录。',
+        );
       }
     } finally {
       _finalizingPermanentPeer = false;
