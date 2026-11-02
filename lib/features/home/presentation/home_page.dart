@@ -7,6 +7,7 @@ import '../../../core/account/account_models.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
 import '../../../core/cloud_sync/native_cloudflare_record_bridge.dart';
+import '../../../core/cloud_sync/public_peer_sync_factory.dart';
 import '../../../core/cloud_sync/native_sync_coordinator_view_adapter.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
@@ -677,36 +678,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final state = widget.accountStore.syncSnapshot;
     if (currentDeviceId == null || state == null) return;
 
-    final service = PublicPeerSyncService(
+    final service = createWorkspacePublicPeerSyncService(
       accountId: widget.accountId,
       deviceId: currentDeviceId,
-      captureAccountState: () =>
-          widget.accountStore.syncSnapshot ?? state,
+      captureAccountState: () => widget.accountStore.syncSnapshot ?? state,
       mergeAccountState: widget.accountStore.mergeSyncedState,
       exportRecords: _cloudflareRecordBridge.exportRecords,
       mergeRecords: _cloudflareRecordBridge.mergeRecords,
+      orderStore: _orderStore,
+      productStore: _productStore,
+      referenceImageStore: _referenceImageStore,
       shouldTargetDevice: (device) => device.platform == 'web',
-      captureAssetPaths: () => <String>{
-        for (final order in _orderStore.orders)
-          for (final image in order.referenceImages) image.relativePath,
-        for (final product in _productStore.products)
-          for (final image in product.referenceImages) image.relativePath,
-      },
-      assetExists: (path) async =>
-          (await _referenceImageStore.readAssetBytes(
-            accountId: widget.accountId,
-            relativePath: path,
-          )) !=
-          null,
-      readAsset: (path) => _referenceImageStore.readAssetBytes(
-        accountId: widget.accountId,
-        relativePath: path,
-      ),
-      writeAsset: (path, bytes) => _referenceImageStore.writeAssetBytes(
-        accountId: widget.accountId,
-        relativePath: path,
-        bytes: bytes,
-      ),
     );
     _publicPeerSync = service;
     unawaited(service.start());
