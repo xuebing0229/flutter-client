@@ -1192,6 +1192,173 @@ class SyncthingAccountTransferClientSession {
   }
 }
 
+class _AccountTransferRelayFrame {
+  const _AccountTransferRelayFrame({
+    required this.type,
+    required this.folderId,
+    required this.receiverDeviceId,
+    required this.body,
+  });
+
+  final String type;
+  final String folderId;
+  final String receiverDeviceId;
+  final String body;
+
+  String encode() => jsonEncode(<String, dynamic>{
+        'kind': 'artist_queue_account_transfer_relay',
+        'version': 1,
+        'type': type,
+        'folderId': folderId,
+        'receiverDeviceId': receiverDeviceId,
+        'body': body,
+      });
+
+  factory _AccountTransferRelayFrame.decode(String source) {
+    final decoded = jsonDecode(source);
+    if (decoded is! Map ||
+        decoded['kind'] != 'artist_queue_account_transfer_relay' ||
+        decoded['version'] != 1) {
+      throw const FormatException('设备加入中继消息格式无效。');
+    }
+    final type = decoded['type'];
+    final folderId = decoded['folderId'];
+    final receiverDeviceId = decoded['receiverDeviceId'];
+    final body = decoded['body'];
+    if (type is! String ||
+        !<String>{'payload', 'done', 'ack'}.contains(type) ||
+        folderId is! String ||
+        !_validBootstrapFolderId(folderId) ||
+        receiverDeviceId is! String ||
+        receiverDeviceId.trim().length < 20 ||
+        body is! String ||
+        body.isEmpty) {
+      throw const FormatException('设备加入中继消息内容无效。');
+    }
+    return _AccountTransferRelayFrame(
+      type: type,
+      folderId: folderId,
+      receiverDeviceId: receiverDeviceId.trim(),
+      body: body,
+    );
+  }
+}
+
+class _AccountTransferRelaySession {
+  _AccountTransferRelaySession._({
+    required this.descriptor,
+    required this.localDeviceId,
+    required this.roomHash,
+    required this.ownTopic,
+    required PublicRelayClient relay,
+    required StreamSubscription<PublicRelayMessage> subscription,
+  })  : _relay = relay,
+        _subscription = subscription;
+
+  final AccountTransferDescriptor descriptor;
+  final String localDeviceId;
+  final String roomHash;
+  final String ownTopic;
+  final PublicRelayClient _relay;
+  final StreamSubscription<PublicRelayMessage> _subscription;
+
+  bool get connected => _relay.connected;
+
+  static Future<_AccountTransferRelaySession> connect({
+    required AccountTransferDescriptor descriptor,
+    required String localDeviceId,
+    required Future<void> Function(_AccountTransferRelayFrame frame) onFrame,
+  }) async {
+    final normalizedLocalId = localDeviceId.trim();
+    if (normalizedLocalId.length < 20) {
+      throw const FormatException('设备加入中继缺少有效的本机同步身份。');
+    }
+    final roomHash = await _accountTransferRelayRoomHash(descriptor);
+    final ownTopic = _accountTransferRelayTopic(roomHash, normalizedLocalId);
+    final relay = PublicRelayClient(
+      clientId: 'ag-join-${_randomToken().substring(0, 12)}',
+    );
+    late final StreamSubscription<PublicRelayMessage> subscription;
+    subscription = relay.messages.listen((message) {
+      if (message.topic != ownTopic) return;
+      try {
+        final frame = _AccountTransferRelayFrame.decode(message.payload);
+        if (frame.folderId != descriptor.folderId) return;
+        unawaited(onFrame(frame));
+      } catch (_) {
+        // Relay frames are authenticated again by the bootstrap AES-GCM key.
+      }
+    });
+    try {
+      await relay.connect(<String>[ownTopic]);
+      return _AccountTransferRelaySession._(
+        descriptor: descriptor,
+        localDeviceId: normalizedLocalId,
+        roomHash: roomHash,
+        ownTopic: ownTopic,
+        relay: relay,
+        subscription: subscription,
+      );
+    } catch (_) {
+      await subscription.cancel();
+      await relay.dispose();
+      rethrow;
+    }
+  }
+
+  void publish({
+    required String targetDeviceId,
+    required _AccountTransferRelayFrame frame,
+  }) {
+    final target = targetDeviceId.trim();
+    if (target.length < 20) {
+      throw const FormatException('设备加入中继缺少有效的目标设备身份。');
+    }
+    _relay.publish(
+      _accountTransferRelayTopic(roomHash, target),
+      frame.encode(),
+    );
+  }
+
+  Future<void> close() async {
+    await _subscription.cancel();
+    await _relay.dispose();
+  }
+}
+
+Future<String> _accountTransferRelayRoomHash(
+  AccountTransferDescriptor descriptor,
+) async {
+  final keyBytes = _decodeTransferKey(descriptor.encryptionKey);
+  if (keyBytes == null) {
+    throw const FormatException('设备加入二维码的加密密钥无效。');
+  }
+  final seed = <int>[
+    ...utf8.encode('guild-account-bootstrap-relay-v1\u0000'),
+    ...utf8.encode(descriptor.folderId),
+    0,
+    ...keyBytes,
+  ];
+  final digest = await Sha256().hash(seed);
+  return digest.bytes
+      .take(16)
+      .map((value) => value.toRadixString(16).padLeft(2, '0'))
+      .join();
+}
+
+String _accountTransferRelayTopic(String roomHash, String deviceId) {
+  final inbox = base64Url.encode(utf8.encode(deviceId)).replaceAll('=', '');
+  return 'adventurers-guild-peer/v1/$roomHash/inbox/$inbox';
+}
+
+String _relayControlMessage({
+  required String type,
+  required String folderId,
+  required String receiverDeviceId,
+}) {
+  return 'account-transfer-relay-$type-v1\n$folderId\n$receiverDeviceId';
+}
+
 bool _validBootstrapFolderId(String value) {
   return RegExp(
     r'^artist-workbench-bootstrap-[A-Za-z0-9_-]{20,}$',
