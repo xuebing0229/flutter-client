@@ -1473,6 +1473,11 @@ class SyncthingAccountTransferClientSession {
     if (_closed) return;
     _closed = true;
     _diagnostics.event('client.close.begin');
+    final relay = _relaySession;
+    _relaySession = null;
+    try {
+      await relay?.close();
+    } catch (_) {}
     try {
       await _bridge.removeFolderById(descriptor.folderId);
       _diagnostics.event('client.close.removeFolder.ok');
