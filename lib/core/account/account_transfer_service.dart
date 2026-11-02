@@ -585,93 +585,61 @@ class SyncthingAccountTransferServer {
     _acceptedReceiverAppDeviceId = response.receiverAppDeviceId;
     _acceptedReceiverPlatform = response.receiverPlatform;
 
-    // Device-level connectivity is not enough. Wait until Syncthing confirms
-    // that the receiver shares THIS bootstrap folder back (remoteState=valid).
-    final deadline = DateTime.now().add(const Duration(seconds: 45));
+    // Give the native Syncthing bootstrap path a short first chance. It remains
+    // the preferred path, but account adoption must not fail just because the
+    // temporary folder cannot complete its handshake on this network.
+    final nativeDeadline = DateTime.now().add(const Duration(seconds: 10));
     String? lastRemoteState;
     String? lastFolderError;
+    Object? nativeFailure;
     var attempt = 0;
-    while (!_closed && DateTime.now().isBefore(deadline)) {
+    while (!_closed && DateTime.now().isBefore(nativeDeadline)) {
       attempt++;
       try {
         await _bridge.pairFolder(
-        folderId: descriptor.folderId,
-        deviceId: response.receiverDeviceId,
+          folderId: descriptor.folderId,
+          deviceId: response.receiverDeviceId,
           name: response.receiverName,
         );
-        if (attempt == 1) {
-          _diagnostics.event('server.pairFolder.ok', <String, Object?>{
-            'attempt': attempt,
-            'receiverDeviceId': response.receiverDeviceId,
-          });
-        }
-      } catch (error) {
-        _diagnostics.event('server.pairFolder.error', <String, Object?>{
-          'attempt': attempt,
-          'error': '$error',
-        });
-        rethrow;
-      }
-      try {
         await _bridge.setFolderPaused(
-        folderId: descriptor.folderId,
+          folderId: descriptor.folderId,
           paused: false,
         );
-        if (attempt == 1) {
-          _diagnostics.event('server.unpauseFolder.ok');
-        }
-      } catch (error) {
-        _diagnostics.event('server.unpauseFolder.error', <String, Object?>{
-          'attempt': attempt,
-          'error': '$error',
-        });
-        rethrow;
-      }
-      try {
         await _bridge.requestScanFolder(descriptor.folderId);
-        if (attempt == 1) {
-          _diagnostics.event('server.scanAfterAccept.ok');
-        }
-      } catch (error) {
-        _diagnostics.event('server.scanAfterAccept.error', <String, Object?>{
-          'attempt': attempt,
-          'error': '$error',
-        });
-        rethrow;
-      }
 
-      final status = await _bridge.statusFolder(descriptor.folderId);
-      _diagnostics.status(
-        'server.acceptResponse.status',
-        status,
-        folderId: descriptor.folderId,
-      );
-      lastRemoteState =
-          status.remoteFolderStates[response.receiverDeviceId]?.trim();
-      if (status.folderErrors.isNotEmpty) {
-        lastFolderError = status.folderErrors.first;
-      }
-
-      final connected = status.connectedDeviceIds.contains(
-        response.receiverDeviceId,
-      );
-      if (connected && lastRemoteState == 'valid') {
-        _diagnostics.event('server.acceptResponse.folder.valid', <String, Object?>{
-          'attempt': attempt,
-          'receiverDeviceId': response.receiverDeviceId,
-        });
-        await _bridge.requestScanFolder(descriptor.folderId);
-        return;
-      }
-
-      if (lastRemoteState == 'paused') {
-        _diagnostics.event('server.acceptResponse.folder.paused', <String, Object?>{
-          'attempt': attempt,
-        });
-        throw const FormatException(
-          '新设备已经连接，但临时账号同步目录在对端处于暂停状态。'
-          '请让新设备保持在“确认新设备”页面后重新尝试。',
+        final status = await _bridge.statusFolder(descriptor.folderId);
+        _diagnostics.status(
+          'server.acceptResponse.status',
+          status,
+          folderId: descriptor.folderId,
         );
+        lastRemoteState =
+            status.remoteFolderStates[response.receiverDeviceId]?.trim();
+        if (status.folderErrors.isNotEmpty) {
+          lastFolderError = status.folderErrors.first;
+        }
+
+        final connected = status.connectedDeviceIds.contains(
+          response.receiverDeviceId,
+        );
+        if (connected && lastRemoteState == 'valid') {
+          _diagnostics.event(
+            'server.acceptResponse.folder.valid',
+            <String, Object?>{
+              'attempt': attempt,
+              'receiverDeviceId': response.receiverDeviceId,
+            },
+          );
+          await _bridge.requestScanFolder(descriptor.folderId);
+          return;
+        }
+      } catch (error) {
+        nativeFailure = error;
+        _diagnostics.event('server.nativeBootstrap.error', <String, Object?>{
+          'attempt': attempt,
+          'error': '$error',
+        });
+        break;
       }
 
       await Future<void>.delayed(const Duration(milliseconds: 750));
@@ -681,25 +649,108 @@ class SyncthingAccountTransferServer {
       _diagnostics.event('server.acceptResponse.closed');
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
-    _diagnostics.event('server.acceptResponse.timeout', <String, Object?>{
+
+    _diagnostics.event('server.nativeBootstrap.fallback', <String, Object?>{
       'attempts': attempt,
       'lastRemoteState': lastRemoteState,
       'lastFolderError': lastFolderError,
+      'nativeFailure': nativeFailure == null ? null : '$nativeFailure',
     });
+    if (await _activateRelayFallback(response)) {
+      return;
+    }
+
+    if (nativeFailure != null) {
+      throw FormatException('临时账号连接失败：$nativeFailure');
+    }
     if (lastFolderError != null && lastFolderError.isNotEmpty) {
       throw FormatException('临时账号同步目录建立失败：$lastFolderError');
     }
-    if (lastRemoteState == 'notSharing') {
-      throw const FormatException(
-        '两台设备已经连接，但新设备没有真正共享临时账号目录。'
-        '请让新设备保持在“确认新设备”页面并重新生成配对。',
-      );
-    }
     throw FormatException(
-      '临时账号同步目录没有完成握手'
-      '${lastRemoteState == null || lastRemoteState.isEmpty ? '' : '（状态：$lastRemoteState）'}。'
-      '请让两台设备都保持当前页面后重试。',
+      '临时账号连接没有完成'
+      '${lastRemoteState == null || lastRemoteState.isEmpty ? '' : '（状态：$lastRemoteState）'}，'
+      '并且备用连接也暂时不可用。',
     );
+  }
+
+  Future<bool> _activateRelayFallback(
+    AccountTransferResponseCode response,
+  ) async {
+    try {
+      var relay = _relaySession;
+      if (relay == null) {
+        relay = await _AccountTransferRelaySession.connect(
+          descriptor: descriptor,
+          localDeviceId: descriptor.sourceDeviceId,
+          onFrame: _handleRelayFrame,
+        );
+        _relaySession = relay;
+      }
+      _relayReceiverDeviceId = response.receiverDeviceId;
+      _relayFallbackActive = true;
+      _diagnostics.event('server.relay.connected', <String, Object?>{
+        'receiverDeviceId': response.receiverDeviceId,
+      });
+      _publishRelayPayload();
+      return true;
+    } catch (error) {
+      _diagnostics.event('server.relay.connect.error', <String, Object?>{
+        'error': '$error',
+      });
+      return false;
+    }
+  }
+
+  void _publishRelayPayload() {
+    final relay = _relaySession;
+    final receiverDeviceId = _relayReceiverDeviceId;
+    if (!_relayFallbackActive ||
+        relay == null ||
+        !relay.connected ||
+        receiverDeviceId == null) {
+      return;
+    }
+    relay.publish(
+      targetDeviceId: receiverDeviceId,
+      frame: _AccountTransferRelayFrame(
+        type: 'payload',
+        folderId: descriptor.folderId,
+        receiverDeviceId: receiverDeviceId,
+        body: _encryptedPayload,
+      ),
+    );
+    _lastRelayPayloadPublishAt = DateTime.now();
+    _diagnostics.event('server.relay.payload.publish');
+  }
+
+  Future<void> _handleRelayFrame(_AccountTransferRelayFrame frame) async {
+    final receiverDeviceId = _acceptedReceiverDeviceId;
+    if (_closed ||
+        receiverDeviceId == null ||
+        frame.receiverDeviceId != receiverDeviceId ||
+        frame.type != 'done') {
+      return;
+    }
+    try {
+      final clear = await _decryptTransferPayload(
+        frame.body,
+        descriptor.encryptionKey,
+      );
+      final expected = _relayControlMessage(
+        type: 'done',
+        folderId: descriptor.folderId,
+        receiverDeviceId: receiverDeviceId,
+      );
+      if (clear != expected) return;
+      if (!_receiverFinished) {
+        _receiverFinished = true;
+        _diagnostics.event('server.relay.done.received');
+      }
+    } catch (error) {
+      _diagnostics.event('server.relay.done.invalid', <String, Object?>{
+        'error': '$error',
+      });
+    }
   }
 
   Future<void> poll() async {
