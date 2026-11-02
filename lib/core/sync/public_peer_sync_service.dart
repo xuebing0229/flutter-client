@@ -547,6 +547,27 @@ class PublicPeerSyncService extends ChangeNotifier {
       }
 
       switch (payload['type'] as String) {
+        case 'manifest':
+          await _receiveManifest(sender, payload);
+          break;
+        case 'record-request':
+          final rawKeys = payload['keys'];
+          if (rawKeys is! List) return;
+          await _sendRequestedRecords(
+            sender,
+            rawKeys.whereType<String>(),
+          );
+          break;
+        case 'delta':
+          await _receiveDelta(sender, payload);
+          break;
+        case 'delta-ack':
+          final changeId = payload['changeId'];
+          if (changeId is! String || changeId.isEmpty) return;
+          _lastSuccessfulSyncAt = DateTime.now();
+          _lastError = null;
+          if (!_disposed) notifyListeners();
+          break;
         case 'snapshot':
           final snapshotId = payload['snapshotId'];
           if (snapshotId is! String || snapshotId.isEmpty) return;
@@ -601,6 +622,161 @@ class PublicPeerSyncService extends ChangeNotifier {
     } catch (_) {
       // Wrong rooms, stale chunks and tampered public-relay messages are
       // intentionally ignored without surfacing their contents.
+    }
+  }
+
+  Future<void> _receiveManifest(
+    String sender,
+    Map<String, dynamic> payload,
+  ) async {
+    final accountRaw = payload['account'];
+    final manifestRaw = payload['records'];
+    if (accountRaw is! Map || manifestRaw is! Map) return;
+
+    final incomingAccount = AccountSyncState.fromCompatibleJson(
+      accountRaw.map((key, value) => MapEntry(key.toString(), value)),
+    );
+    if (incomingAccount.accountId != accountId) return;
+
+    await mergeAccountState(incomingAccount);
+    if (captureAccountState().isRevoked(deviceId)) return;
+
+    final remoteManifest = <String, String>{
+      for (final entry in manifestRaw.entries)
+        if (entry.key is String && entry.value is String)
+          entry.key as String: entry.value as String,
+    };
+    final localIndex = await _recordIndex();
+    final needed = <String>[
+      for (final entry in remoteManifest.entries)
+        if (localIndex.fingerprints[entry.key] != entry.value) entry.key,
+    ];
+
+    if (needed.isNotEmpty) {
+      await _sendEncrypted(sender, <String, dynamic>{
+        'type': 'record-request',
+        'accountId': accountId,
+        'sender': deviceId,
+        'keys': needed,
+      });
+    }
+
+    await _requestMissingAssets(sender);
+
+    if (payload['requestReply'] != false) {
+      unawaited(
+        _publishManifest(
+          onlyTarget: sender,
+          requestReply: false,
+        ),
+      );
+    }
+
+    _lastSuccessfulSyncAt = DateTime.now();
+    _lastError = null;
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _sendRequestedRecords(
+    String sender,
+    Iterable<String> keys,
+  ) async {
+    final requested = keys.toSet();
+    if (requested.isEmpty) return;
+
+    final index = await _recordIndex();
+    final records = <Map<String, dynamic>>[
+      for (final key in requested)
+        if (index.records[key] != null) index.records[key]!,
+    ];
+    if (records.isEmpty) return;
+
+    final changeId =
+        '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+        '${_random.nextInt(0x7fffffff).toRadixString(36)}';
+    await _sendEncrypted(sender, <String, dynamic>{
+      'type': 'delta',
+      'changeId': changeId,
+      'accountId': accountId,
+      'sender': deviceId,
+      'account': captureAccountState().toJson(),
+      'records': records,
+    });
+  }
+
+  Future<void> _receiveDelta(
+    String sender,
+    Map<String, dynamic> payload,
+  ) async {
+    final changeId = payload['changeId'];
+    final rawRecords = payload['records'];
+    if (changeId is! String || changeId.isEmpty || rawRecords is! List) {
+      return;
+    }
+
+    final accountRaw = payload['account'];
+    if (accountRaw is Map) {
+      final incomingAccount = AccountSyncState.fromCompatibleJson(
+        accountRaw.map((key, value) => MapEntry(key.toString(), value)),
+      );
+      if (incomingAccount.accountId != accountId) return;
+      await mergeAccountState(incomingAccount);
+      if (captureAccountState().isRevoked(deviceId)) return;
+    }
+
+    final records = <Map<String, dynamic>>[
+      for (final item in rawRecords)
+        if (item is Map)
+          item.map((key, value) => MapEntry(key.toString(), value)),
+    ];
+    if (records.isNotEmpty) {
+      await mergeRecords(records);
+    }
+
+    // Remote merges may notify the same local stores that normally trigger
+    // requestSync(). Refresh the local relay baseline immediately so those
+    // notifications cannot echo the just-received records back to the sender.
+    final localIndex = await _recordIndex();
+    _lastLocalRecordFingerprints =
+        Map<String, String>.from(localIndex.fingerprints);
+    _lastLocalAccountFingerprint =
+        await _fingerprint(captureAccountState().toJson());
+
+    await _requestMissingAssets(sender);
+
+    await _sendEncrypted(sender, <String, dynamic>{
+      'type': 'delta-ack',
+      'changeId': changeId,
+      'accountId': accountId,
+      'sender': deviceId,
+    });
+
+    _lastSuccessfulSyncAt = DateTime.now();
+    _lastError = null;
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _requestMissingAssets(String sender) async {
+    final exists = assetExists;
+    final paths = captureAssetPaths;
+    if (exists == null || paths == null) return;
+
+    final missing = <String>[];
+    for (final path in paths().toSet()) {
+      if (path.isEmpty) continue;
+      try {
+        if (!await exists(path)) missing.add(path);
+      } catch (_) {}
+    }
+
+    for (var start = 0; start < missing.length; start += 200) {
+      final end = min(missing.length, start + 200);
+      await _sendEncrypted(sender, <String, dynamic>{
+        'type': 'asset-request',
+        'accountId': accountId,
+        'sender': deviceId,
+        'paths': missing.sublist(start, end),
+      });
     }
   }
 
@@ -737,6 +913,16 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (relay != null) unawaited(relay.dispose());
     super.dispose();
   }
+}
+
+class _RecordIndex {
+  const _RecordIndex({
+    required this.records,
+    required this.fingerprints,
+  });
+
+  final Map<String, Map<String, dynamic>> records;
+  final Map<String, String> fingerprints;
 }
 
 class _PendingSnapshot {
