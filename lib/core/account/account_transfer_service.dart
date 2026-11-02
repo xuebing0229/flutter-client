@@ -449,6 +449,117 @@ class SyncthingAccountTransferServer {
   String? get acceptedReceiverPlatform => _acceptedReceiverPlatform;
   String get diagnosticReport => _diagnostics.report();
 
+  Future<bool> _startRelayListener() async {
+    try {
+      final relay = await _AccountTransferRelaySession.connect(
+        descriptor: descriptor,
+        localDeviceId: response.receiverDeviceId,
+        onFrame: _handleRelayFrame,
+      );
+      if (_closed) {
+        await relay.close();
+        return false;
+      }
+      _relaySession = relay;
+      _diagnostics.event('client.relay.connected');
+      return true;
+    } catch (error) {
+      _diagnostics.event('client.relay.connect.error', <String, Object?>{
+        'error': '$error',
+      });
+      return false;
+    }
+  }
+
+  Future<void> _handleRelayFrame(_AccountTransferRelayFrame frame) async {
+    if (_closed || frame.receiverDeviceId != response.receiverDeviceId) return;
+    try {
+      if (frame.type == 'payload') {
+        final clear = await _decryptTransferPayload(
+          frame.body,
+          descriptor.encryptionKey,
+        );
+        _relayClearPayload = clear;
+        _relayPayloadObserved = true;
+        _diagnostics.event('client.relay.payload.received');
+        return;
+      }
+      if (frame.type == 'ack') {
+        final clear = await _decryptTransferPayload(
+          frame.body,
+          descriptor.encryptionKey,
+        );
+        final expected = _relayControlMessage(
+          type: 'ack',
+          folderId: descriptor.folderId,
+          receiverDeviceId: response.receiverDeviceId,
+        );
+        if (clear == expected) {
+          _relayAckReceived = true;
+          _diagnostics.event('client.relay.ack.received');
+        }
+      }
+    } catch (error) {
+      _diagnostics.event('client.relay.frame.invalid', <String, Object?>{
+        'type': frame.type,
+        'error': '$error',
+      });
+    }
+  }
+
+  Future<String> _finishRelayReceive(String clear) async {
+    final relay = _relaySession;
+    if (relay == null || !relay.connected) {
+      throw const FormatException('备用设备连接已经断开，请保持两台设备在线后重试。');
+    }
+    final keyBytes = _decodeTransferKey(descriptor.encryptionKey);
+    if (keyBytes == null) {
+      throw const FormatException('设备加入二维码的加密密钥无效。');
+    }
+    final doneBody = await _encryptTransferPayload(
+      _relayControlMessage(
+        type: 'done',
+        folderId: descriptor.folderId,
+        receiverDeviceId: response.receiverDeviceId,
+      ),
+      keyBytes,
+    );
+    final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
+    var lastDonePublishAt = DateTime.fromMillisecondsSinceEpoch(0);
+    while (!_closed && DateTime.now().isBefore(ackDeadline)) {
+      if (_relayAckReceived) return clear;
+      if (DateTime.now().difference(lastDonePublishAt) >=
+          const Duration(seconds: 1)) {
+        relay.publish(
+          targetDeviceId: descriptor.sourceDeviceId,
+          frame: _AccountTransferRelayFrame(
+            type: 'done',
+            folderId: descriptor.folderId,
+            receiverDeviceId: response.receiverDeviceId,
+            body: doneBody,
+          ),
+        );
+        lastDonePublishAt = DateTime.now();
+        _diagnostics.event('client.relay.done.publish');
+      }
+      if (await _ackFile.exists()) {
+        _diagnostics.event('client.nativeAck.detected.afterRelay');
+        return clear;
+      }
+      try {
+        await _bridge.requestScanFolder(descriptor.folderId);
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (_closed) {
+      throw const FormatException('设备加入已取消。');
+    }
+    throw const FormatException(
+      '账号数据已经通过备用连接收到，但原设备没有完成最终确认。'
+      '请让原设备继续停留在“添加设备”页面后重试。',
+    );
+  }
+
   Future<String> captureDiagnosticReport() async {
     try {
       final status = await _bridge.statusFolder(descriptor.folderId);
@@ -952,24 +1063,7 @@ class SyncthingAccountTransferClient {
         'receiverPlatform': device.platform,
       });
 
-      diagnostics.event('client.pairSource.begin', <String, Object?>{
-        'sourceDeviceId': descriptor.sourceDeviceId,
-      });
-      await bridge.pairFolder(
-        folderId: descriptor.folderId,
-        deviceId: descriptor.sourceDeviceId,
-        name: '原设备',
-      );
-      diagnostics.event('client.pairSource.ok');
-      final afterPairStatus = await bridge.statusFolder(descriptor.folderId);
-      diagnostics.status(
-        'client.afterPairStatus',
-        afterPairStatus,
-        folderId: descriptor.folderId,
-        force: true,
-      );
-
-      return SyncthingAccountTransferClientSession._(
+      final session = SyncthingAccountTransferClientSession._(
         descriptor: descriptor,
         response: response,
         bridge: bridge,
@@ -979,6 +1073,38 @@ class SyncthingAccountTransferClient {
         ackFile: ackFile,
         diagnostics: diagnostics,
       );
+      final relayReady = await session._startRelayListener();
+
+      diagnostics.event('client.pairSource.begin', <String, Object?>{
+        'sourceDeviceId': descriptor.sourceDeviceId,
+        'relayReady': relayReady,
+      });
+      try {
+        await bridge.pairFolder(
+          folderId: descriptor.folderId,
+          deviceId: descriptor.sourceDeviceId,
+          name: '原设备',
+        );
+        diagnostics.event('client.pairSource.ok');
+        final afterPairStatus = await bridge.statusFolder(descriptor.folderId);
+        diagnostics.status(
+          'client.afterPairStatus',
+          afterPairStatus,
+          folderId: descriptor.folderId,
+          force: true,
+        );
+      } catch (error) {
+        diagnostics.event('client.pairSource.error', <String, Object?>{
+          'error': '$error',
+          'relayReady': relayReady,
+        });
+        if (!relayReady) {
+          await session.close();
+          rethrow;
+        }
+      }
+
+      return session;
     } catch (_) {
       await _cleanupBootstrapFolder(bridge, descriptor.folderId, folder);
       rethrow;
@@ -1047,8 +1173,14 @@ class SyncthingAccountTransferClientSession {
   final File _ackFile;
   final _AccountTransferDiagnostics _diagnostics;
 
+  _AccountTransferRelaySession? _relaySession;
+  String? _relayClearPayload;
+  bool _relayAckReceived = false;
+  bool _relayPayloadObserved = false;
   bool _closed = false;
 
+  bool get relayAvailable => _relaySession?.connected == true;
+  bool get relayFallbackObserved => _relayPayloadObserved;
   String get diagnosticReport => _diagnostics.report();
 
   Future<String> captureDiagnosticReport() async {
