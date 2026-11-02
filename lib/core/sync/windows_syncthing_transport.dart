@@ -22,6 +22,7 @@ class WindowsSyncthingTransport {
   static const String _stateFileName = 'embedded-syncthing-windows.json';
   static const Duration _localApiRequestTimeout = Duration(seconds: 8);
   static const Duration _processStartTimeout = Duration(seconds: 10);
+  static const Duration _readyTimeout = Duration(seconds: 30);
   static const Duration _gracefulShutdownTimeout = Duration(seconds: 10);
   static const Duration _shutdownPollInterval = Duration(milliseconds: 100);
 
@@ -793,7 +794,8 @@ class WindowsSyncthingTransport {
       ),
     );
 
-    while (true) {
+    final readyDeadline = DateTime.now().add(_readyTimeout);
+    while (DateTime.now().isBefore(readyDeadline)) {
       if (await _pingAt(apiKey, port)) {
         await _applyIntegrationPolicy(apiKey);
         return;
@@ -809,6 +811,10 @@ class WindowsSyncthingTransport {
       }
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
+    throw StateError(
+      '${await _startupFailureMessage(logFile, port)}'
+      '（启动后 30 秒内 REST API 未就绪）',
+    );
   }
 
   Future<Process> _startProcess(
@@ -835,6 +841,7 @@ class WindowsSyncthingTransport {
         apiKey,
         '--no-browser',
         '--no-console',
+        '--no-default-folder',
         '--no-restart',
         '--no-upgrade',
         '--log-file=${logFile.path}',
