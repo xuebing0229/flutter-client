@@ -48,6 +48,7 @@ import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
 import 'app_drawer.dart';
 import 'workspace_shell.dart';
+import 'workspace_main_pages.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
@@ -1840,54 +1841,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _mainTabPage(String id) {
-    return switch (id) {
-      'products' => ProductPage(
-          accountId: widget.accountId,
-          store: _productStore,
-          pricingPresetStore: _pricingPresetStore,
-          receiptStyleStore: _receiptStyleStore,
-          featureStore: widget.featureStore,
-          syncCoordinator: _syncCoordinatorView,
-          cardView: _productCardView,
-          onCardViewChanged: _setProductCardView,
-          overviewView: _productOverviewView,
-          onOverviewViewChanged: _setProductOverviewView,
-          overviewColumns: _productOverviewColumns,
-          onOverviewColumnsChanged: _setProductOverviewColumns,
-          sortModeName: _productSortMode,
-          onSortModeChanged: _setProductSortMode,
-        ),
-      'schedule' => SchedulePage(
-          accountId: widget.accountId,
-          store: _orderStore,
-          productStore: _productStore,
-          nodePresetStore: _nodePresetStore,
-          featureStore: widget.featureStore,
-        ),
-      'statistics' => StatisticsPage(
-          store: _orderStore,
-          productStore: _productStore,
-        ),
-      _ => OrderQueuePage(
-          accountId: widget.accountId,
-          store: _orderStore,
-          nodePresetStore: _nodePresetStore,
-          pricingPresetStore: _pricingPresetStore,
-          receiptStyleStore: _receiptStyleStore,
-          featureStore: widget.featureStore,
-          syncCoordinator: _syncCoordinatorView,
-          cardView: _orderCardView,
-          onCardViewChanged: _setOrderCardView,
-          overviewView: _orderOverviewView,
-          onOverviewViewChanged: _setOrderOverviewView,
-          overviewColumns: _orderOverviewColumns,
-          onOverviewColumnsChanged: _setOrderOverviewColumns,
-          sortModeName: _orderSortMode,
-          onSortModeChanged: _setOrderSortMode,
-          guideTargets: _quickStartGuideTargets,
-          guideOrderId: _guidedOrderId,
-        ),
-    };
+    return buildWorkspaceMainPage(
+      id: id,
+      accountId: widget.accountId,
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      featureStore: widget.featureStore,
+      syncCoordinator: _syncCoordinatorView,
+      orderCardView: _orderCardView,
+      onOrderCardViewChanged: _setOrderCardView,
+      orderOverviewView: _orderOverviewView,
+      onOrderOverviewViewChanged: _setOrderOverviewView,
+      orderOverviewColumns: _orderOverviewColumns,
+      onOrderOverviewColumnsChanged: _setOrderOverviewColumns,
+      orderSortMode: _orderSortMode,
+      onOrderSortModeChanged: _setOrderSortMode,
+      productCardView: _productCardView,
+      onProductCardViewChanged: _setProductCardView,
+      productOverviewView: _productOverviewView,
+      onProductOverviewViewChanged: _setProductOverviewView,
+      productOverviewColumns: _productOverviewColumns,
+      onProductOverviewColumnsChanged: _setProductOverviewColumns,
+      productSortMode: _productSortMode,
+      onProductSortModeChanged: _setProductSortMode,
+      guideTargets: _quickStartGuideTargets,
+      guideOrderId: _guidedOrderId,
+    );
   }
 
   @override
