@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -7,19 +6,9 @@ import 'package:file_selector/file_selector.dart';
 import '../../../core/web/web_platform_bridge.dart';
 
 import '../domain/queue_order.dart';
+import 'reference_image_store_common.dart';
 
 class OrderReferenceImageStore {
-  static const Set<String> _supportedImageExtensions = <String>{
-    '.png',
-    '.jpg',
-    '.jpeg',
-    '.webp',
-    '.gif',
-    '.bmp',
-    '.heic',
-    '.heif',
-  };
-
   final Random _random = Random.secure();
 
   Future<List<OrderReferenceImage>> pickAndImport({
@@ -44,16 +33,14 @@ class OrderReferenceImageStore {
     );
     if (files.isEmpty) return const <OrderReferenceImage>[];
 
-    final orderKey = base64Url
-        .encode(utf8.encode(orderId))
-        .replaceAll('=', '');
+    final orderKey = ReferenceImageRules.orderKey(orderId);
     final imported = <OrderReferenceImage>[];
 
     try {
       for (final file in files) {
-        final extension = _safeExtension(file.name);
+        final extension = ReferenceImageRules.safeExtension(file.name);
         if (extension == null ||
-            !_supportedImageExtensions.contains(extension)) {
+            !ReferenceImageRules.supportedImageExtensions.contains(extension)) {
           throw const FormatException('参考图只支持图片文件。');
         }
 
@@ -73,9 +60,7 @@ class OrderReferenceImageStore {
         imported.add(
           OrderReferenceImage(
             id: id,
-            fileName: file.name.trim().isEmpty
-                ? '参考图$extension'
-                : file.name,
+            fileName: ReferenceImageRules.displayName(file.name, extension),
             relativePath: relativePath,
             addedAt: DateTime.now(),
             sizeBytes: bytes.length,
@@ -105,7 +90,7 @@ class OrderReferenceImageStore {
     required String accountId,
     required String relativePath,
   }) async {
-    _validateRelativePath(relativePath);
+    ReferenceImageRules.validateAssetPath(relativePath);
     return webAssetRead(_assetKey(accountId, relativePath));
   }
 
@@ -114,7 +99,7 @@ class OrderReferenceImageStore {
     required String relativePath,
     required Uint8List bytes,
   }) async {
-    _validateRelativePath(relativePath);
+    ReferenceImageRules.validateAssetPath(relativePath);
     await webAssetWrite(_assetKey(accountId, relativePath), bytes);
   }
 
@@ -125,7 +110,7 @@ class OrderReferenceImageStore {
   }) async {
     for (final image in images) {
       try {
-        _validateRelativePath(image.relativePath);
+        ReferenceImageRules.validateAssetPath(image.relativePath);
         await webAssetDelete(_assetKey(accountId, image.relativePath));
       } catch (_) {
         // Stale metadata should not block normal editing.
@@ -139,7 +124,7 @@ class OrderReferenceImageStore {
   }) async {
     for (final path in relativePaths.toSet()) {
       try {
-        _validateRelativePath(path);
+        ReferenceImageRules.validateAssetPath(path);
         await webAssetDelete(_assetKey(accountId, path));
       } catch (_) {
         // A stale optional bundle asset must not block the rest of import.
@@ -166,7 +151,7 @@ class OrderReferenceImageStore {
     webDownloadBytes(
       fileName: image.fileName,
       bytes: bytes,
-      mimeType: _mimeType(image.fileName),
+      mimeType: ReferenceImageRules.mimeType(image.fileName),
     );
     return true;
   }
@@ -174,53 +159,4 @@ class OrderReferenceImageStore {
   String _assetKey(String accountId, String relativePath) =>
       '$accountId\u0000$relativePath';
 
-  void _validateRelativePath(String value) {
-    if (value.contains('\\') || value.startsWith('/')) {
-      throw const FormatException('本地素材路径无效。');
-    }
-    final segments = value.split('/');
-    final safeSegments = segments.length == 4 &&
-        segments.skip(2).every(
-              (segment) =>
-                  segment.isNotEmpty &&
-                  segment != '.' &&
-                  segment != '..' &&
-                  RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
-            );
-    final referenceImage = safeSegments &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images';
-    final desktopPetAsset = safeSegments &&
-        segments[0] == 'desktop-pet' &&
-        segments[1] == 'presets';
-    if (!referenceImage && !desktopPetAsset) {
-      throw const FormatException('本地素材路径无效。');
-    }
-  }
-
-  String? _safeExtension(String value) {
-    final name = value.split(RegExp(r'[\\/]')).last;
-    final dot = name.lastIndexOf('.');
-    if (dot < 0 || dot == name.length - 1) return null;
-    final extension = name.substring(dot + 1).toLowerCase();
-    if (extension.length > 8 ||
-        !RegExp(r'^[a-z0-9]+$').hasMatch(extension)) {
-      return null;
-    }
-    return '.$extension';
-  }
-
-  String _mimeType(String fileName) {
-    final extension = _safeExtension(fileName)?.toLowerCase();
-    return switch (extension) {
-      '.jpg' || '.jpeg' => 'image/jpeg',
-      '.png' => 'image/png',
-      '.webp' => 'image/webp',
-      '.gif' => 'image/gif',
-      '.bmp' => 'image/bmp',
-      '.heic' => 'image/heic',
-      '.heif' => 'image/heif',
-      _ => 'application/octet-stream',
-    };
-  }
 }
