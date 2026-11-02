@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+227
-# beta-227: full Web/PWA quick-start spotlight audit, target binding fixes, and late-target regression coverage
+version: 0.0.1+228
+# beta-228: share Web/native account, settings, theme, sync and reference-image UI; fix guide tab targets and PWA app icon
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
