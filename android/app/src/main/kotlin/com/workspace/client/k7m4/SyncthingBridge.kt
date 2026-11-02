@@ -186,16 +186,26 @@ class SyncthingBridge(
         if (state["available"] != true) {
             throw IllegalStateException(state["error"]?.toString() ?: "同步核心不可用")
         }
-        if (state["running"] != true) {
-            val reason = state["error"]?.toString()
-            throw IllegalStateException(
-                if (reason == "SYNCTHING_STARTING") {
-                    "同步核心正在启动，请稍后重试"
-                } else {
-                    reason ?: "同步核心正在启动，请稍后重试"
-                },
-            )
+        if (state["running"] == true) return
+
+        val reason = state["error"]?.toString()
+        if (reason == "APP_BACKGROUND_START_DEFERRED") {
+            throw IllegalStateException(reason)
         }
+
+        // Syncthing's REST API is the readiness boundary. Starting the Android
+        // Service only launches the process; it does not mean the REST API is
+        // already accepting requests. Wait for /rest/system/ping to answer
+        // before any config/folder/scan operation is allowed to continue.
+        val deadlineNanos = System.nanoTime() + 15_000_000_000L
+        while (System.nanoTime() < deadlineNanos) {
+            if (pingReady()) {
+                applyIntegrationPolicy()
+                return
+            }
+            Thread.sleep(100L)
+        }
+        throw IllegalStateException("同步核心启动超时")
     }
 
     private fun status(folderId: String): Map<String, Any?> {
