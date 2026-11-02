@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'account_models.dart';
+import 'account_activation_flow.dart';
 import 'account_state_mutations.dart';
 import 'activation_api.dart';
 import 'device_descriptor.dart';
@@ -503,44 +504,18 @@ class AccountStore extends ChangeNotifier {
     required String activationCode,
     required String accountName,
     required String password,
-  }) async {
+  }) async 
     final trimmedName = accountName.trim();
-    if (trimmedName.length < 2 || trimmedName.length > 32) {
-      throw const FormatException('账号名长度需要在 2–32 个字符之间。');
-    }
-    if (password.length < 6) {
-      throw const FormatException('密码至少需要 6 个字符。');
-    }
-
-    // Verify the signed code locally first. The server never receives the
-    // account name or password; it only atomically consumes this signed code.
-    final license = await _verifier.verify(activationCode);
-    if (_accounts.containsKey(license.accountId)) {
-      throw const FormatException('这个激活码对应的账号已经存在于本机，请直接登录该账号。');
-    }
-
-    // Persist the claim before the network request. If the server commits the
-    // redemption but the response is lost (or the app crashes before local
-    // save), retrying the same code reuses this claim and is idempotent.
-    final claimId = await _activationClaimFor(license);
-    try {
-      final redemption = await _activationApi.redeem(
-        activationCode: activationCode,
-        claimId: claimId,
-      );
-      if (redemption.accountId != license.accountId ||
-          redemption.serial != license.serial) {
-        throw const FormatException('激活服务器返回的账号身份与激活码不一致。');
-      }
-    } on ActivationApiException catch (error) {
-      // A definitive rejection can never become the same successful claim.
-      // Network/time-out failures deliberately retain the claim for safe retry.
-      if (error.code == 'already_redeemed' ||
-          error.code == 'invalid_code') {
-        await _clearActivationClaim(license.accountId);
-      }
-      throw FormatException(error.message);
-    }
+    final license = await verifyAndRedeemAccountActivation(
+      activationCode: activationCode,
+      accountName: accountName,
+      password: password,
+      verifier: _verifier,
+      activationApi: _activationApi,
+      hasLocalAccount: _accounts.containsKey,
+      claimFor: _activationClaimFor,
+      clearClaim: _clearActivationClaim,
+    );
 
     final now = DateTime.now().toUtc();
     final descriptor = await DeviceDescriptor.current();
