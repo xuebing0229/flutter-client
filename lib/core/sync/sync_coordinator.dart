@@ -996,6 +996,39 @@ class SyncCoordinator extends ChangeNotifier {
     });
   }
 
+  Future<void> bootstrapRelayPeer({
+    required String appDeviceId,
+    required String name,
+    required String platform,
+  }) {
+    return _enqueue(() async {
+      if (_syncPaused) {
+        throw StateError('同步已暂停，请先恢复同步后再添加设备。');
+      }
+
+      final normalizedPlatform = platform.trim();
+      if (normalizedPlatform != 'web') {
+        throw const FormatException('当前设备需要使用正式同步通道加入。');
+      }
+
+      await accountStore.registerRelayOnlyDevice(
+        appDeviceId: appDeviceId,
+        name: name,
+        platform: normalizedPlatform,
+      );
+
+      // Persist the browser device into the same account state graph before
+      // acknowledging bootstrap. HomePage's existing PublicPeerSyncService
+      // will then discover platform=web and start normal encrypted CF sync.
+      await _syncAccountState();
+      if (_transportPrepared) {
+        try {
+          await _bridge.requestScan(accountId: accountId);
+        } catch (_) {}
+      }
+    });
+  }
+
   Future<void> refreshNow() {
     return _enqueue(() async {
       // A manual sync is also an explicit repair request. Re-prepare the
