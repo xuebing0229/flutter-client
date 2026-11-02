@@ -53,6 +53,9 @@ jobs:
       - name: Run full Flutter test suite
         run: flutter test
 
+      - name: Smoke test Cloudflare relay runtime
+        run: dart tool/test_public_relay_runtime.dart
+
   android:
     needs: check
     runs-on: ubuntu-latest
