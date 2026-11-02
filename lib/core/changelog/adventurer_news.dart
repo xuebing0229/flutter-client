@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
-
-import '../storage/atomic_file.dart';
+import 'adventurer_news_storage_native.dart'
+    if (dart.library.html) 'adventurer_news_storage_web.dart';
 
 /// Each feature is recorded once, against the FIRST build where it ships.
 /// Keep historical entries when publishing later builds: skipping versions
@@ -488,31 +485,16 @@ class AdventurerNewsNotice {
 class AdventurerNewsStore {
   const AdventurerNewsStore();
 
-  static const _fileName = 'adventurer-news-last-seen-build-v1.txt';
-
-  Future<File> _file() async {
-    final dir = await getApplicationSupportDirectory();
-    return File('${dir.path}/$_fileName');
-  }
+  static const AdventurerNewsStorage _storage = AdventurerNewsStorage();
 
   Future<int> installedBuild() async {
     final info = await PackageInfo.fromPlatform();
     return int.tryParse(info.buildNumber) ?? 0;
   }
 
-  Future<int?> _readLastSeen() async {
-    final file = await _file();
-    if (!await file.exists()) return null;
-    // Corrupt files must not accidentally mark a newer version as read.
-    final value = int.tryParse((await file.readAsString()).trim());
-    return value != null && value >= 0 ? value : null;
-  }
+  Future<int?> _readLastSeen() => _storage.readLastSeen();
 
-  Future<void> _writeLastSeen(int build) async {
-    final file = await _file();
-    await file.parent.create(recursive: true);
-    await atomicWriteString(file, build.toString());
-  }
+  Future<void> _writeLastSeen(int build) => _storage.writeLastSeen(build);
 
   /// Called once on startup after account discovery but before the app can
   /// create its first account. A clean install has no update to announce.
