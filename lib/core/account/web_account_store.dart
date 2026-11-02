@@ -137,7 +137,7 @@ class WebAccountStore extends ChangeNotifier {
     required String activationCode,
     required String accountName,
     required String password,
-  }) async 
+  }) async {
     final trimmedName = accountName.trim();
     final license = await verifyAndRedeemAccountActivation(
       activationCode: activationCode,
