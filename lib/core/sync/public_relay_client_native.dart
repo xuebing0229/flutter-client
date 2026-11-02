@@ -8,8 +8,8 @@ import 'public_relay_client_base.dart';
 ///
 /// The relay only sees an opaque room id, an opaque inbox id and encrypted
 /// application frames. It does not persist workspace payloads.
-class PublicRelayClient {
-  PublicRelayClient({required this.clientId});
+class PublicRelayClient extends PublicRelayClientBase {
+  PublicRelayClient({required super.clientId});
 
   static const String _configuredRelayUrl = String.fromEnvironment(
     'PUBLIC_SYNC_RELAY_URL',
