@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-export 'account_transfer_protocol.dart';
-
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../sync/embedded_syncthing_bridge.dart';
 import 'account_transfer_protocol.dart';
 import 'device_descriptor.dart';
+
+export 'account_transfer_protocol.dart';
 
 class _AccountTransferDiagnostics {
   _AccountTransferDiagnostics({required this.role});
