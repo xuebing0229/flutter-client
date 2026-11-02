@@ -19,6 +19,9 @@ typedef PeerAssetReader = Future<Uint8List?> Function(String relativePath);
 typedef PeerAssetWriter =
     Future<void> Function(String relativePath, Uint8List bytes);
 typedef PeerTargetFilter = bool Function(AccountDevice device);
+typedef PeerImportHistoryReader = Future<Set<String>> Function();
+typedef PeerImportHistoryMerger =
+    Future<void> Function(Iterable<String> fingerprints);
 typedef PeerRelayFactory = PublicRelayClient Function(String clientId);
 
 /// Browser-compatible online sync that keeps the native Syncthing path intact.
@@ -40,6 +43,8 @@ class PublicPeerSyncService extends ChangeNotifier {
     this.assetExists,
     this.readAsset,
     this.writeAsset,
+    this.captureImportHistory,
+    this.mergeImportHistory,
     this.shouldTargetDevice,
     PeerRelayFactory? relayFactory,
     Duration heartbeatInterval = _defaultHeartbeat,
@@ -65,6 +70,8 @@ class PublicPeerSyncService extends ChangeNotifier {
   final PeerAssetExists? assetExists;
   final PeerAssetReader? readAsset;
   final PeerAssetWriter? writeAsset;
+  final PeerImportHistoryReader? captureImportHistory;
+  final PeerImportHistoryMerger? mergeImportHistory;
   final PeerTargetFilter? shouldTargetDevice;
   final PeerRelayFactory _relayFactory;
   final Duration _heartbeatInterval;
@@ -78,6 +85,7 @@ class PublicPeerSyncService extends ChangeNotifier {
   final Map<String, _PendingSnapshot> _pendingSnapshotByTarget =
       <String, _PendingSnapshot>{};
   Map<String, String> _lastLocalRecordFingerprints = <String, String>{};
+  Set<String> _lastLocalImportHistory = <String>{};
   String? _lastLocalAccountFingerprint;
 
   PublicRelayClient? _relay;
@@ -253,6 +261,18 @@ class PublicPeerSyncService extends ChangeNotifier {
     return _hex((await Sha256().hash(utf8.encode(jsonEncode(value)))).bytes);
   }
 
+  Future<Set<String>> _importHistory() async {
+    final reader = captureImportHistory;
+    if (reader == null) return const <String>{};
+    final values = await reader();
+    return values.where((item) => item.isNotEmpty).toSet();
+  }
+
+  Future<String> _importHistoryFingerprint(Set<String> values) async {
+    final sorted = values.toList()..sort();
+    return _fingerprint(sorted);
+  }
+
   Future<void> _publishManifest({
     String? onlyTarget,
     bool requestReply = true,
@@ -271,6 +291,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     try {
       final state = captureAccountState();
       final index = await _recordIndex();
+      final importHistory = await _importHistory();
       final accountFingerprint = await _fingerprint(state.toJson());
       final payload = <String, dynamic>{
         'type': 'manifest',
@@ -279,12 +300,16 @@ class PublicPeerSyncService extends ChangeNotifier {
         'requestReply': requestReply,
         'account': state.toJson(),
         'records': index.fingerprints,
+        if (captureImportHistory != null)
+          'importHistoryFingerprint':
+              await _importHistoryFingerprint(importHistory),
       };
       for (final target in targets) {
         await _sendEncrypted(target, payload);
       }
       _lastLocalRecordFingerprints =
           Map<String, String>.from(index.fingerprints);
+      _lastLocalImportHistory = Set<String>.from(importHistory);
       _lastLocalAccountFingerprint = accountFingerprint;
       _lastError = null;
     } catch (error) {
@@ -312,6 +337,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     try {
       final state = captureAccountState();
       final index = await _recordIndex();
+      final importHistory = await _importHistory();
       final accountFingerprint = await _fingerprint(state.toJson());
 
       final changedKeys = <String>{
@@ -319,9 +345,13 @@ class PublicPeerSyncService extends ChangeNotifier {
           if (_lastLocalRecordFingerprints[entry.key] != entry.value)
             entry.key,
       };
+      final addedImportHistory =
+          importHistory.difference(_lastLocalImportHistory);
       final accountChanged =
           _lastLocalAccountFingerprint != accountFingerprint;
-      if (changedKeys.isEmpty && !accountChanged) {
+      if (changedKeys.isEmpty &&
+          addedImportHistory.isEmpty &&
+          !accountChanged) {
         _lastError = null;
         return;
       }
@@ -339,6 +369,8 @@ class PublicPeerSyncService extends ChangeNotifier {
           for (final key in changedKeys)
             if (index.records[key] != null) index.records[key]!,
         ],
+        if (addedImportHistory.isNotEmpty)
+          'importHistoryAdded': addedImportHistory.toList(growable: false),
       };
       for (final target in targets) {
         await _sendEncrypted(target, payload);
@@ -346,6 +378,7 @@ class PublicPeerSyncService extends ChangeNotifier {
 
       _lastLocalRecordFingerprints =
           Map<String, String>.from(index.fingerprints);
+      _lastLocalImportHistory = Set<String>.from(importHistory);
       _lastLocalAccountFingerprint = accountFingerprint;
       _lastError = null;
     } catch (error) {
@@ -560,6 +593,12 @@ class PublicPeerSyncService extends ChangeNotifier {
             rawKeys.whereType<String>(),
           );
           break;
+        case 'import-history-request':
+          await _sendImportHistory(sender);
+          break;
+        case 'import-history':
+          await _receiveImportHistory(payload);
+          break;
         case 'delta':
           await _receiveDelta(sender, payload);
           break;
@@ -663,6 +702,22 @@ class PublicPeerSyncService extends ChangeNotifier {
       });
     }
 
+    final remoteHistoryFingerprint = payload['importHistoryFingerprint'];
+    if (remoteHistoryFingerprint is String &&
+        captureImportHistory != null &&
+        mergeImportHistory != null) {
+      final localHistory = await _importHistory();
+      if (await _importHistoryFingerprint(localHistory) !=
+          remoteHistoryFingerprint) {
+        await _sendEncrypted(sender, <String, dynamic>{
+          'type': 'import-history-request',
+          'accountId': accountId,
+          'sender': deviceId,
+        });
+      }
+      _lastLocalImportHistory = Set<String>.from(localHistory);
+    }
+
     await _requestMissingAssets(sender);
 
     if (payload['requestReply'] != false) {
@@ -677,6 +732,29 @@ class PublicPeerSyncService extends ChangeNotifier {
     _lastSuccessfulSyncAt = DateTime.now();
     _lastError = null;
     if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _sendImportHistory(String sender) async {
+    if (captureImportHistory == null) return;
+    final values = await _importHistory();
+    await _sendEncrypted(sender, <String, dynamic>{
+      'type': 'import-history',
+      'accountId': accountId,
+      'sender': deviceId,
+      'fingerprints': values.toList(growable: false)..sort(),
+    });
+    _lastLocalImportHistory = Set<String>.from(values);
+  }
+
+  Future<void> _receiveImportHistory(Map<String, dynamic> payload) async {
+    final merger = mergeImportHistory;
+    final raw = payload['fingerprints'];
+    if (merger == null || raw is! List) return;
+    final values =
+        raw.whereType<String>().where((item) => item.isNotEmpty).toSet();
+    if (values.isEmpty) return;
+    await merger(values);
+    _lastLocalImportHistory = await _importHistory();
   }
 
   Future<void> _sendRequestedRecords(
@@ -735,12 +813,22 @@ class PublicPeerSyncService extends ChangeNotifier {
       await mergeRecords(records);
     }
 
+    final historyAdded = payload['importHistoryAdded'];
+    if (historyAdded is List && mergeImportHistory != null) {
+      final values = historyAdded
+          .whereType<String>()
+          .where((item) => item.isNotEmpty)
+          .toSet();
+      if (values.isNotEmpty) await mergeImportHistory!(values);
+    }
+
     // Remote merges may notify the same local stores that normally trigger
     // requestSync(). Refresh the local relay baseline immediately so those
     // notifications cannot echo the just-received records back to the sender.
     final localIndex = await _recordIndex();
     _lastLocalRecordFingerprints =
         Map<String, String>.from(localIndex.fingerprints);
+    _lastLocalImportHistory = await _importHistory();
     _lastLocalAccountFingerprint =
         await _fingerprint(captureAccountState().toJson());
 
