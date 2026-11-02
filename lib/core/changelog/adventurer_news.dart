@@ -438,6 +438,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '首次添加设备增加备用连接',
     description: '首次添加设备仍优先使用原来的设备同步通道；如果临时连接握手失败、传输迟迟没有完成，会自动切换备用在线连接传递同一份加密账号信息，加入成功后继续回到原来的正式同步通道。同时加强手机和电脑端设备同步启动边界，并在发布前真实检查同步核心与备用连接能否运行。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 226,
+    title: '网页版可以直接加入已有账号',
+    description: '网页版新增从已登录手机或电脑直接加入账号：复制设备码后生成网页回应码，确认后通过加密在线连接接收账号身份，不再必须先导出再导入完整备份。不同浏览器会作为独立网页设备加入同一账号，并继续使用现有在线同步保持工作数据更新。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
