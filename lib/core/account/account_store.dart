@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 
 import 'account_models.dart';
 import 'account_local_state.dart';
+
+export 'account_local_state.dart' show AccountStatus, LocalAccountSummary;
 import 'account_activation_flow.dart';
 import 'account_state_mutations.dart';
 import 'activation_api.dart';
@@ -422,7 +424,7 @@ class AccountStore extends ChangeNotifier {
     required String activationCode,
     required String accountName,
     required String password,
-  }) async 
+  }) async {
     final trimmedName = accountName.trim();
     final license = await verifyAndRedeemAccountActivation(
       activationCode: activationCode,
