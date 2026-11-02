@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+223
-# beta-223: follow Syncthing REST startup-before-folder-config ordering on Windows
+version: 0.0.1+224
+# beta-224: wait for Syncthing REST readiness on Android before sync operations
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
