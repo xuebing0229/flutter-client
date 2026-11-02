@@ -452,6 +452,14 @@ class SyncthingAccountTransferServer {
   String get diagnosticReport => _diagnostics.report();
 
   Future<String> captureDiagnosticReport() async {
+    if (_relayOnly) {
+      _diagnostics.event('client.manualSnapshot.relayOnly', <String, Object?>{
+        'relayConnected': relayAvailable,
+        'relayPayloadObserved': _relayPayloadObserved,
+        'relayAckReceived': _relayAckReceived,
+      });
+      return _diagnostics.report();
+    }
     try {
       final status = await _bridge.statusFolder(descriptor.folderId);
       _diagnostics.status(
@@ -588,6 +596,23 @@ class SyncthingAccountTransferServer {
     _acceptedReceiverPlatform = response.receiverPlatform;
     _acceptedResponse = response;
     _responseAcceptedAt = DateTime.now();
+
+    // Browsers do not have a Syncthing transport identity. Their response uses
+    // the app-device ID as the temporary relay address, so skip the native
+    // handshake entirely and enter the same encrypted Cloudflare fallback that
+    // native clients use when Syncthing cannot bootstrap in time.
+    if (response.receiverPlatform?.trim() == 'web') {
+      _diagnostics.event('server.webBootstrap.relayOnly', <String, Object?>{
+        'receiverDeviceId': response.receiverDeviceId,
+        'receiverAppDeviceId': response.receiverAppDeviceId,
+      });
+      if (!await _activateRelayFallback(response)) {
+        throw const FormatException(
+          '网页设备已确认，但备用连接暂时不可用，请保持两端联网后重试。',
+        );
+      }
+      return;
+    }
 
     // Give the native Syncthing bootstrap path a short first chance. It remains
     // the preferred path, but account adoption must not fail just because the
@@ -888,12 +913,57 @@ class SyncthingAccountTransferServer {
       _diagnostics.event('server.close.removeFolder.ok');
     } finally {
       try {
-        if (await _payloadFile.exists()) await _payloadFile.delete();
+        if (await payloadFile.exists()) await _payloadFile.delete();
         if (await _doneFile.exists()) await _doneFile.delete();
-        if (await _ackFile.exists()) await _ackFile.delete();
+        if (await ackFile.exists()) await _ackFile.delete();
         if (await _folder.exists()) await _folder.delete(recursive: true);
       } catch (_) {}
     }
+  }
+}
+
+class RelayAccountTransferClient {
+  const RelayAccountTransferClient();
+
+  Future<SyncthingAccountTransferClientSession> start(
+    AccountTransferDescriptor descriptor, {
+    String receiverName = '网页设备',
+    String receiverPlatform = 'web',
+  }) async {
+    final normalizedName = receiverName.trim();
+    final normalizedPlatform = receiverPlatform.trim();
+    if (normalizedName.isEmpty || normalizedPlatform.isEmpty) {
+      throw const FormatException('网页设备信息不完整。');
+    }
+
+    final diagnostics = _AccountTransferDiagnostics(role: 'receiver-relay');
+    final provisionalAppDeviceId = 'web-${_randomToken()}';
+    final response = await AccountTransferResponseCode.create(
+      descriptor: descriptor,
+      receiverDeviceId: provisionalAppDeviceId,
+      receiverName: normalizedName,
+      receiverAppDeviceId: provisionalAppDeviceId,
+      receiverPlatform: normalizedPlatform,
+    );
+    diagnostics.event('client.webResponse.created', <String, Object?>{
+      'receiverDeviceId': provisionalAppDeviceId,
+      'receiverName': normalizedName,
+      'receiverAppDeviceId': provisionalAppDeviceId,
+      'receiverPlatform': normalizedPlatform,
+    });
+
+    final session = SyncthingAccountTransferClientSession._relayOnly(
+      descriptor: descriptor,
+      response: response,
+      diagnostics: diagnostics,
+    );
+    if (!await session._startRelayListener()) {
+      await session.close();
+      throw const FormatException(
+        '网页设备无法连接备用同步通道，请检查网络后重试。',
+      );
+    }
+    return session;
   }
 }
 
@@ -1066,15 +1136,29 @@ class SyncthingAccountTransferClientSession {
        _payloadFile = payloadFile,
        _doneFile = doneFile,
        _ackFile = ackFile,
+       _relayOnly = false,
+       _diagnostics = diagnostics;
+
+  SyncthingAccountTransferClientSession._relayOnly({
+    required this.descriptor,
+    required this.response,
+    required _AccountTransferDiagnostics diagnostics,
+  }) : _bridge = const EmbeddedSyncthingBridge(),
+       _folder = null,
+       _payloadFile = null,
+       _doneFile = null,
+       _ackFile = null,
+       _relayOnly = true,
        _diagnostics = diagnostics;
 
   final AccountTransferDescriptor descriptor;
   final AccountTransferResponseCode response;
   final EmbeddedSyncthingBridge _bridge;
-  final Directory _folder;
-  final File _payloadFile;
-  final File _doneFile;
-  final File _ackFile;
+  final Directory? _folder;
+  final File? _payloadFile;
+  final File? _doneFile;
+  final File? _ackFile;
+  final bool _relayOnly;
   final _AccountTransferDiagnostics _diagnostics;
 
   _AccountTransferRelaySession? _relaySession;
@@ -1180,13 +1264,16 @@ class SyncthingAccountTransferClientSession {
         lastDonePublishAt = DateTime.now();
         _diagnostics.event('client.relay.done.publish');
       }
-      if (await _ackFile.exists()) {
-        _diagnostics.event('client.nativeAck.detected.afterRelay');
-        return clear;
+      if (!_relayOnly) {
+        final ackFile = _ackFile;
+        if (ackFile != null && await ackFile.exists()) {
+          _diagnostics.event('client.nativeAck.detected.afterRelay');
+          return clear;
+        }
+        try {
+          await _bridge.requestScanFolder(descriptor.folderId);
+        } catch (_) {}
       }
-      try {
-        await _bridge.requestScanFolder(descriptor.folderId);
-      } catch (_) {}
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
     if (_closed) {
@@ -1216,6 +1303,16 @@ class SyncthingAccountTransferClientSession {
   }
 
   Future<AccountTransferStatus> transferStatus() async {
+    if (_relayOnly) {
+      return (
+        sourceConnected: false,
+        folderReady: false,
+        remoteFolderState: null,
+        folderState: 'relay',
+        folderErrors: const <String>[],
+        progress: null,
+      );
+    }
     final status = await _bridge.statusFolder(descriptor.folderId);
     _diagnostics.status(
       'client.status',
@@ -1276,6 +1373,34 @@ class SyncthingAccountTransferClientSession {
     var repairTick = 0;
 
     _diagnostics.event('client.receive.begin');
+    if (_relayOnly) {
+      while (!_closed && DateTime.now().isBefore(overallDeadline)) {
+        final relayPayload = _relayClearPayload;
+        if (relayPayload != null) {
+          _diagnostics.event('client.relayOnly.takeover');
+          return _finishRelayReceive(relayPayload);
+        }
+        onStatus?.call((
+          sourceConnected: false,
+          folderReady: false,
+          remoteFolderState: null,
+          folderState: 'relay',
+          folderErrors: const <String>[],
+          progress: null,
+        ));
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (_closed) {
+        throw const FormatException('设备加入已取消。');
+      }
+      throw const FormatException(
+        '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面并保持联网。',
+      );
+    }
+
+    final payloadFile = _payloadFile!;
+    final doneFile = _doneFile!;
+    final ackFile = _ackFile!;
     while (!_closed) {
       final relayPayloadAtLoopStart = _relayClearPayload;
       if (relayPayloadAtLoopStart != null) {
@@ -1379,15 +1504,15 @@ class SyncthingAccountTransferClientSession {
         return _finishRelayReceive(relayPayload);
       }
 
-      if (await _payloadFile.exists()) {
+      if (await payloadFile.exists()) {
         _diagnostics.event('client.payload.detected');
-        final encrypted = await _payloadFile.readAsString();
+        final encrypted = await payloadFile.readAsString();
         final clear = await _decryptTransferPayload(
           encrypted,
           descriptor.encryptionKey,
         );
 
-        await _doneFile.writeAsString('done', flush: true);
+        await doneFile.writeAsString('done', flush: true);
         _diagnostics.event('client.doneFile.write.ok');
         try {
           await _runBridgeOperation(
@@ -1417,7 +1542,7 @@ class SyncthingAccountTransferClientSession {
             });
             if (!relayAvailable) rethrow;
           }
-          if (await _ackFile.exists()) {
+          if (await ackFile.exists()) {
             _diagnostics.event('client.ack.detected');
             return clear;
           }
@@ -1510,12 +1635,19 @@ class SyncthingAccountTransferClientSession {
     try {
       await relay?.close();
     } catch (_) {}
+    if (_relayOnly) {
+      _diagnostics.event('client.close.relayOnly');
+      return;
+    }
+    final folder = _folder;
     try {
       await _bridge.removeFolderById(descriptor.folderId);
       _diagnostics.event('client.close.removeFolder.ok');
     } finally {
       try {
-        if (await _folder.exists()) await _folder.delete(recursive: true);
+        if (folder != null && await folder.exists()) {
+          await folder.delete(recursive: true);
+        }
       } catch (_) {}
     }
   }
