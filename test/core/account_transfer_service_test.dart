@@ -14,7 +14,7 @@ void main() {
         'artist-workbench-bootstrap-abcdefghijklmnopqrstuvwxyz123456',
   );
 
-  for (final platform in <String>['windows', 'android']) {
+  for (final platform in <String>['windows', 'android', 'web']) {
     test('v175 response authenticates $platform provisional binding', () async {
       final response = await AccountTransferResponseCode.create(
         descriptor: descriptor,
