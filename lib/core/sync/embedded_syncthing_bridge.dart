@@ -122,7 +122,6 @@ class EmbeddedSyncthingBridge {
         force: force,
       );
     }
-    await _channel.invokeMapMethod<Object?, Object?>('ensureStarted');
     await _channel.invokeMethod<void>('configureFolder', <String, dynamic>{
       'folderId': folderId,
       'label': label,
