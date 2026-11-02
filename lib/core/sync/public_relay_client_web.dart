@@ -10,8 +10,8 @@ import 'public_relay_client_base.dart';
 ///
 /// When PUBLIC_SYNC_RELAY_URL is omitted, PWA builds use /sync on the current
 /// origin so the PWA assets and the relay can live in one Cloudflare Worker.
-class PublicRelayClient {
-  PublicRelayClient({required this.clientId});
+class PublicRelayClient extends PublicRelayClientBase {
+  PublicRelayClient({required super.clientId});
 
   static const String _configuredRelayUrl = String.fromEnvironment(
     'PUBLIC_SYNC_RELAY_URL',
