@@ -20,6 +20,7 @@ import '../core/portability/backup_asset_rules.dart';
 import '../core/portability/web_backup_reader.dart';
 import '../core/sync/public_peer_sync_service.dart';
 import '../core/settings/workspace_settings_codec.dart';
+import '../core/settings/workspace_navigation_model.dart';
 import '../core/sync/sync_coordinator_web.dart';
 import '../core/theme/app_theme_store.dart';
 import '../core/theme/app_ui_style.dart';
@@ -852,36 +853,13 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   List<GuildWorkspaceTab> _tabs() {
     return <GuildWorkspaceTab>[
-      GuildWorkspaceTab(
-        id: 'orders',
-        label: '排单',
-        icon: Icons.format_list_bulleted_rounded,
-        selectedIcon: Icons.view_list_rounded,
-        page: _tabBody('orders'),
-      ),
-      if (widget.featureStore.products)
+      for (final spec in workspaceTabSpecs(widget.featureStore))
         GuildWorkspaceTab(
-          id: 'products',
-          label: '成品',
-          icon: Icons.image_outlined,
-          selectedIcon: Icons.image_rounded,
-          page: _tabBody('products'),
-        ),
-      if (widget.featureStore.schedule)
-        GuildWorkspaceTab(
-          id: 'schedule',
-          label: '日程',
-          icon: Icons.calendar_month_outlined,
-          selectedIcon: Icons.calendar_month_rounded,
-          page: _tabBody('schedule'),
-        ),
-      if (widget.featureStore.statistics)
-        GuildWorkspaceTab(
-          id: 'statistics',
-          label: '统计',
-          icon: Icons.bar_chart_outlined,
-          selectedIcon: Icons.bar_chart_rounded,
-          page: _tabBody('statistics'),
+          id: spec.id,
+          label: spec.label,
+          icon: spec.icon,
+          selectedIcon: spec.selectedIcon,
+          page: _tabBody(spec.id),
         ),
     ];
   }
@@ -1083,42 +1061,21 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         finish: _finishGuideNavigation,
       );
 
-  bool _isGuideDestinationAvailable(QuickStartGuideDestination destination) {
-    return switch (destination) {
-      QuickStartGuideDestination.products => widget.featureStore.products,
-      QuickStartGuideDestination.schedule => widget.featureStore.schedule,
-      QuickStartGuideDestination.statistics => widget.featureStore.statistics,
-      _ => true,
-    };
-  }
+  bool _isGuideDestinationAvailable(
+    QuickStartGuideDestination destination,
+  ) =>
+      quickStartDestinationAvailable(destination, widget.featureStore);
 
   int? _guideTabIndex(QuickStartGuideDestination destination) {
-    final id = switch (destination) {
-      QuickStartGuideDestination.orders => 'orders',
-      QuickStartGuideDestination.products => 'products',
-      QuickStartGuideDestination.schedule => 'schedule',
-      QuickStartGuideDestination.statistics => 'statistics',
-      _ => null,
-    };
+    final id = quickStartTabId(destination);
     if (id == null) return null;
     final tabs = _tabs();
     final index = tabs.indexWhere((tab) => tab.id == id);
     return index < 0 ? null : index;
   }
 
-  String? _guideTool(QuickStartGuideDestination destination) {
-    return switch (destination) {
-      QuickStartGuideDestination.presetCenter => AppToolMenu.presetTool,
-      QuickStartGuideDestination.receiptCenter => AppToolMenu.receiptTool,
-      QuickStartGuideDestination.archive => AppToolMenu.archiveTool,
-      QuickStartGuideDestination.sync => AppToolMenu.syncTool,
-      QuickStartGuideDestination.account => AppToolMenu.accountTool,
-      QuickStartGuideDestination.settings => AppToolMenu.settingsTool,
-      QuickStartGuideDestination.pwaInstall => AppToolMenu.settingsTool,
-      QuickStartGuideDestination.featureToggle => AppToolMenu.featureToggleTool,
-      _ => null,
-    };
-  }
+  String? _guideTool(QuickStartGuideDestination destination) =>
+      quickStartTool(destination);
 
   Future<void> _closeGuidePreviewRoute() async {
     if (!_guidePreviewRouteOpen || !mounted) return;
@@ -1637,17 +1594,12 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     final current = tabs[selectedIndex];
     final showFocus = widget.featureStore.enabled(AppFeature.focus);
 
-    final title = switch (_desktopToolSelection) {
-      AppToolMenu.presetTool => '节点＆加价预设',
-      AppToolMenu.receiptTool => '生成小票',
-      AppToolMenu.featureToggleTool => '附加功能开关',
-      AppToolMenu.desktopPetTool => '专注',
-      AppToolMenu.archiveTool => '归档',
-      AppToolMenu.syncTool => '设备同步',
-      AppToolMenu.accountTool => '账号与设备',
-      AppToolMenu.settingsTool => '设置',
-      _ => current.label,
-    };
+    final title = _desktopToolSelection == null
+        ? current.label
+        : workspaceToolTitle(
+            _desktopToolSelection!,
+            fallback: current.label,
+          );
 
     final tabBody = IndexedStack(
       index: selectedIndex,
