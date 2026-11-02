@@ -301,11 +301,25 @@ class WebAccountStore extends ChangeNotifier {
     if (record == null || incoming.accountId != record.syncState.accountId) {
       throw const FormatException('备份账号与当前登录账号不一致。');
     }
-    final merged = _touchDevice(
-      record.syncState.merge(incoming),
-      record.currentDeviceId,
-      createIfMissing: true,
-    );
+
+    var merged = record.syncState.merge(incoming);
+    // Receiving a peer snapshot is not local user activity. Updating this
+    // browser's lastSeenAt on every remote retry made otherwise identical
+    // snapshots look different and forced the whole app to rebuild forever.
+    // Only create the current browser record when it is genuinely missing.
+    if (!merged.devices.containsKey(record.currentDeviceId)) {
+      merged = _touchDevice(
+        merged,
+        record.currentDeviceId,
+        createIfMissing: true,
+      );
+    }
+
+    if (jsonEncode(merged.toJson()) ==
+        jsonEncode(record.syncState.toJson())) {
+      return;
+    }
+
     _accounts[record.syncState.accountId] = record.copyWith(syncState: merged);
     await _persist();
     notifyListeners();
