@@ -1,22 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:cryptography/cryptography.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/account/account_models.dart';
 import '../../../core/storage/atomic_file.dart';
 import '../../../core/sync/embedded_syncthing_bridge.dart';
 import '../../../core/sync/sync_record_store.dart';
-
-/// A fingerprint is attached to ONE recognized card, not an entire
-/// screenshot. Importing only some rows must not hide the other rows later.
-String screenshotCardFingerprint({
-  required String imageSha256,
-  required int cardIndex,
-  required bool products,
-}) =>
-    '${products ? 'products' : 'orders'}|$imageSha256|$cardIndex';
+import 'screenshot_import_history_common.dart';
 
 class ScreenshotImportHistory {
   const ScreenshotImportHistory({
@@ -110,11 +101,7 @@ class ScreenshotImportHistory {
   }
 
   Future<String> hashImage(String path) async {
-    final bytes = await File(path).readAsBytes();
-    final hash = await Sha256().hash(bytes);
-    return hash.bytes
-        .map((value) => value.toRadixString(16).padLeft(2, '0'))
-        .join();
+    return hashScreenshotBytes(await File(path).readAsBytes());
   }
 
   Future<Set<String>> read({required String accountId}) async {
