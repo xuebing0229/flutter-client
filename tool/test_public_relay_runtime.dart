@@ -18,7 +18,6 @@ Future<void> main() async {
   final suffix = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
   final inboxA = base64Url.encode(utf8.encode('smoke-a-$suffix')).replaceAll('=', '');
   final inboxB = base64Url.encode(utf8.encode('smoke-b-$suffix')).replaceAll('=', '');
-  final topicA = 'adventurers-guild-peer/v1/$room/inbox/$inboxA';
   final topicB = 'adventurers-guild-peer/v1/$room/inbox/$inboxB';
   final payload = 'relay-smoke-$suffix';
 
