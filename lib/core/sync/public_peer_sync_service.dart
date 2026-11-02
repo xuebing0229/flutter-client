@@ -75,6 +75,8 @@ class PublicPeerSyncService extends ChangeNotifier {
       <String, String>{};
   final Map<String, _PendingSnapshot> _pendingSnapshotByTarget =
       <String, _PendingSnapshot>{};
+  Map<String, String> _lastLocalRecordFingerprints = <String, String>{};
+  String? _lastLocalAccountFingerprint;
 
   PublicRelayClient? _relay;
   StreamSubscription<PublicRelayMessage>? _relaySubscription;
@@ -108,7 +110,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) {
         unawaited(_heartbeatTick());
       });
-      requestSync(immediate: true);
+      await _publishManifest();
     } catch (error) {
       _lastError = '在线同步启动失败：$error';
       _connected = false;
@@ -189,7 +191,7 @@ class PublicPeerSyncService extends ChangeNotifier {
     _connected = false;
     await _connectRelay();
     if (_relay?.connected == true) {
-      requestSync(immediate: true);
+      await _publishManifest();
     }
   }
 
@@ -197,13 +199,159 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (_disposed) return;
     _syncDebounce?.cancel();
     if (immediate) {
-      unawaited(_publishSnapshot());
+      unawaited(_publishDelta());
       return;
     }
     _syncDebounce = Timer(
       const Duration(milliseconds: 700),
-      () => unawaited(_publishSnapshot()),
+      () => unawaited(_publishDelta()),
     );
+  }
+
+  List<String> _targetIds({
+    String? onlyTarget,
+  }) {
+    final state = captureAccountState();
+    if (state.accountId != accountId || state.isRevoked(deviceId)) {
+      return const <String>[];
+    }
+    return <String>[
+      for (final device in state.activeDevices)
+        if (device.id != deviceId &&
+            (onlyTarget == null || device.id == onlyTarget) &&
+            (shouldTargetDevice?.call(device) ?? true))
+          device.id,
+    ];
+  }
+
+  Future<_RecordIndex> _recordIndex() async {
+    final records = await exportRecords();
+    final byKey = <String, Map<String, dynamic>>{};
+    final fingerprints = <String, String>{};
+    for (final raw in records) {
+      final key = _recordKey(raw);
+      if (key == null) continue;
+      final normalized = Map<String, dynamic>.from(raw);
+      byKey[key] = normalized;
+      fingerprints[key] = await _fingerprint(normalized);
+    }
+    return _RecordIndex(records: byKey, fingerprints: fingerprints);
+  }
+
+  String? _recordKey(Map<String, dynamic> raw) {
+    final kind = raw['kind'];
+    final id = raw['id'];
+    if (kind is! String || kind.isEmpty || id is! String || id.isEmpty) {
+      return null;
+    }
+    return '$kind\u0000$id';
+  }
+
+  Future<String> _fingerprint(Object? value) async {
+    return _hex((await Sha256().hash(utf8.encode(jsonEncode(value)))).bytes);
+  }
+
+  Future<void> _publishManifest({
+    String? onlyTarget,
+    bool requestReply = true,
+  }) async {
+    if (_disposed || _syncing) return;
+    if (_relay?.connected != true) {
+      await _connectRelay();
+      if (_relay?.connected != true) return;
+    }
+
+    final targets = _targetIds(onlyTarget: onlyTarget);
+    if (targets.isEmpty) return;
+
+    _syncing = true;
+    notifyListeners();
+    try {
+      final state = captureAccountState();
+      final index = await _recordIndex();
+      final accountFingerprint = await _fingerprint(state.toJson());
+      final payload = <String, dynamic>{
+        'type': 'manifest',
+        'accountId': accountId,
+        'sender': deviceId,
+        'requestReply': requestReply,
+        'account': state.toJson(),
+        'records': index.fingerprints,
+      };
+      for (final target in targets) {
+        await _sendEncrypted(target, payload);
+      }
+      _lastLocalRecordFingerprints =
+          Map<String, String>.from(index.fingerprints);
+      _lastLocalAccountFingerprint = accountFingerprint;
+      _lastError = null;
+    } catch (error) {
+      _lastError = '发送同步摘要失败：$error';
+    } finally {
+      _syncing = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> _publishDelta({
+    String? onlyTarget,
+  }) async {
+    if (_disposed || _syncing) return;
+    if (_relay?.connected != true) {
+      await _connectRelay();
+      if (_relay?.connected != true) return;
+    }
+
+    final targets = _targetIds(onlyTarget: onlyTarget);
+    if (targets.isEmpty) return;
+
+    _syncing = true;
+    notifyListeners();
+    try {
+      final state = captureAccountState();
+      final index = await _recordIndex();
+      final accountFingerprint = await _fingerprint(state.toJson());
+
+      final changedKeys = <String>{
+        for (final entry in index.fingerprints.entries)
+          if (_lastLocalRecordFingerprints[entry.key] != entry.value)
+            entry.key,
+      };
+      final accountChanged =
+          _lastLocalAccountFingerprint != accountFingerprint;
+      if (changedKeys.isEmpty && !accountChanged) {
+        _lastError = null;
+        return;
+      }
+
+      final changeId =
+          '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+          '${_random.nextInt(0x7fffffff).toRadixString(36)}';
+      final payload = <String, dynamic>{
+        'type': 'delta',
+        'changeId': changeId,
+        'accountId': accountId,
+        'sender': deviceId,
+        if (accountChanged) 'account': state.toJson(),
+        'records': <Map<String, dynamic>>[
+          for (final key in changedKeys)
+            if (index.records[key] != null) index.records[key]!,
+        ],
+      };
+      for (final target in targets) {
+        await _sendEncrypted(target, payload);
+      }
+
+      _lastLocalRecordFingerprints =
+          Map<String, String>.from(index.fingerprints);
+      _lastLocalAccountFingerprint = accountFingerprint;
+      _lastError = null;
+    } catch (error) {
+      _lastError = '发送同步增量失败：$error';
+    } finally {
+      _syncing = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   Future<void> _publishSnapshot({
