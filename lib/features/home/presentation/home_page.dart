@@ -16,6 +16,7 @@ import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
 import '../../../core/settings/workspace_settings_codec.dart';
+import '../../../core/settings/workspace_navigation_model.dart';
 import '../../../core/sync/public_peer_sync_service.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
@@ -417,51 +418,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         finish: _finishGuideNavigation,
       );
 
-  bool _isGuideDestinationAvailable(QuickStartGuideDestination destination) {
-    return switch (destination) {
-      QuickStartGuideDestination.products => widget.featureStore.products,
-      QuickStartGuideDestination.schedule => widget.featureStore.schedule,
-      QuickStartGuideDestination.statistics => widget.featureStore.statistics,
-      QuickStartGuideDestination.pwaInstall => false,
-      QuickStartGuideDestination.featureToggle =>
-        !widget.featureStore.abstractMode ||
-            !widget.featureStore.abstractEffects ||
-            !_abstractFeatureToggleHidden,
-      _ => true,
-    };
+  bool _isGuideDestinationAvailable(
+    QuickStartGuideDestination destination,
+  ) {
+    if (destination == QuickStartGuideDestination.pwaInstall) return false;
+    if (destination == QuickStartGuideDestination.featureToggle) {
+      return !widget.featureStore.abstractMode ||
+          !widget.featureStore.abstractEffects ||
+          !_abstractFeatureToggleHidden;
+    }
+    return quickStartDestinationAvailable(destination, widget.featureStore);
   }
 
   int? _guideTabIndex(QuickStartGuideDestination destination) {
-    final ids = <String>[
-      'orders',
-      if (widget.featureStore.products) 'products',
-      if (widget.featureStore.schedule) 'schedule',
-      if (widget.featureStore.statistics) 'statistics',
-    ];
-    final id = switch (destination) {
-      QuickStartGuideDestination.orders => 'orders',
-      QuickStartGuideDestination.products => 'products',
-      QuickStartGuideDestination.schedule => 'schedule',
-      QuickStartGuideDestination.statistics => 'statistics',
-      _ => null,
-    };
+    final id = quickStartTabId(destination);
     if (id == null) return null;
+    final ids = workspaceTabSpecs(widget.featureStore)
+        .map((item) => item.id)
+        .toList(growable: false);
     final index = ids.indexOf(id);
     return index < 0 ? null : index;
   }
 
-  String? _guideTool(QuickStartGuideDestination destination) {
-    return switch (destination) {
-      QuickStartGuideDestination.presetCenter => AppToolMenu.presetTool,
-      QuickStartGuideDestination.receiptCenter => AppToolMenu.receiptTool,
-      QuickStartGuideDestination.archive => AppToolMenu.archiveTool,
-      QuickStartGuideDestination.sync => AppToolMenu.syncTool,
-      QuickStartGuideDestination.account => AppToolMenu.accountTool,
-      QuickStartGuideDestination.settings => AppToolMenu.settingsTool,
-      QuickStartGuideDestination.featureToggle => AppToolMenu.featureToggleTool,
-      _ => null,
-    };
-  }
+  String? _guideTool(QuickStartGuideDestination destination) =>
+      quickStartTool(destination);
 
   Future<void> _closeGuidePreviewRoute() async {
     if (!_guidePreviewRouteOpen || !mounted) return;
@@ -1946,17 +1926,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         !widget.featureStore.abstractEffects ||
         !_abstractFeatureToggleHidden;
     final title = switch (_desktopToolSelection) {
-      AppToolMenu.presetTool => '节点＆加价预设',
-      AppToolMenu.receiptTool => '生成小票',
-      AppToolMenu.featureToggleTool => '附加功能开关',
       AppToolMenu.desktopPetTool => showDesktopPet ? '桌宠' : '专注',
-      AppToolMenu.archiveTool => '归档',
-      AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
-      AppToolMenu.accountTool => '账号与设备',
-      AppToolMenu.settingsTool => '设置',
-      AppToolMenu.themeColorTool => 'UI主题色',
-      _ => current.label,
+      null => current.label,
+      final tool => workspaceToolTitle(tool, fallback: current.label),
     };
     final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
 
