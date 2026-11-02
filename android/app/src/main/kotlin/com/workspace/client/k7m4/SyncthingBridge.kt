@@ -721,6 +721,17 @@ class SyncthingBridge(
             .put("crashReportingEnabled", false)
             .put("autoUpgradeIntervalH", 0)
         request("PATCH", "/rest/config/options", payload.toString())
+
+        // Syncthing v2.x removed --no-default-folder. This embedded profile is
+        // private to the app, so remove the generated unmanaged default folder
+        // through the supported REST config endpoint instead.
+        val folders = JSONArray(request("GET", "/rest/config/folders"))
+        val hasDefault = (0 until folders.length()).any { index ->
+            folders.optJSONObject(index)?.optString("id") == "default"
+        }
+        if (hasDefault) {
+            request("DELETE", "/rest/config/folders/default")
+        }
         integrationPolicyApplied = true
     }
 
