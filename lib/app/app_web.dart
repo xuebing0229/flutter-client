@@ -16,6 +16,7 @@ import '../features/account/presentation/web_existing_account_join_page.dart';
 import '../core/features/app_feature_store.dart';
 import '../core/finance/pricing_preset_store.dart';
 import '../core/portability/app_backup_data.dart';
+import '../core/portability/backup_asset_rules.dart';
 import '../core/portability/web_backup_reader.dart';
 import '../core/sync/public_peer_sync_service.dart';
 import '../core/sync/sync_coordinator_web.dart';
@@ -52,37 +53,6 @@ import '../features/shared/presentation/layout_spacing.dart';
 import '../features/shared/presentation/preset_center_page.dart';
 import '../features/shared/presentation/receipt_center_page.dart';
 import '../features/shared/presentation/spotlight_guide.dart';
-
-Set<String> _desktopPetAssetPaths(Object? rawManifest) {
-  if (rawManifest == null) return const <String>{};
-  if (rawManifest is! Map || rawManifest['schema'] != 1) {
-    return const <String>{};
-  }
-  final presets = rawManifest['presets'];
-  if (presets is! List) return const <String>{};
-
-  final result = <String>{};
-  for (final preset in presets) {
-    if (preset is! Map) continue;
-    for (final key in const <String>['imageA', 'imageB', 'bubbleImage']) {
-      final value = preset[key];
-      if (value is! String) continue;
-      final segments = value.split('/');
-      final valid = segments.length == 4 &&
-          segments[0] == 'desktop-pet' &&
-          segments[1] == 'presets' &&
-          segments.skip(2).every(
-                (segment) =>
-                    segment.isNotEmpty &&
-                    segment != '.' &&
-                    segment != '..' &&
-                    RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
-              );
-      if (valid) result.add(value);
-    }
-  }
-  return result;
-}
 
 class App extends StatefulWidget {
   const App({super.key});
@@ -219,7 +189,7 @@ class _WebAccountGateState extends State<_WebAccountGate> {
           importedPaths.add(image.relativePath);
         }
 
-        final importedDesktopPaths = _desktopPetAssetPaths(
+        final importedDesktopPaths = BackupAssetRules.desktopPetAssetPaths(
           imported.backup.settings['desktopPetBackup'],
         );
         for (final path in importedDesktopPaths) {
@@ -246,7 +216,7 @@ class _WebAccountGateState extends State<_WebAccountGate> {
                   if (!importedPaths.contains(image.relativePath)) image,
             ],
           );
-          final previousDesktopPaths = _desktopPetAssetPaths(
+          final previousDesktopPaths = BackupAssetRules.desktopPetAssetPaths(
             previousBackup.settings['desktopPetBackup'],
           );
           await _referenceImageStore.deleteAssetPaths(
@@ -256,7 +226,7 @@ class _WebAccountGateState extends State<_WebAccountGate> {
             ),
           );
         }
-      } else if (_desktopPetAssetPaths(
+      } else if (BackupAssetRules.desktopPetAssetPaths(
         imported.backup.settings['desktopPetBackup'],
       ).isNotEmpty) {
         throw const FormatException('这份备份包含桌宠素材记录，但没有随包素材文件。');
@@ -1470,7 +1440,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       }
 
       for (final path
-          in _desktopPetAssetPaths(backup.settings['desktopPetBackup'])) {
+          in BackupAssetRules.desktopPetAssetPaths(backup.settings['desktopPetBackup'])) {
         final bytes = await _referenceImageStore.readAssetBytes(
           accountId: _accountId,
           relativePath: path,
@@ -1557,7 +1527,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       );
       if (confirmed != true) return;
 
-      final previousDesktopPaths = _desktopPetAssetPaths(
+      final previousDesktopPaths = BackupAssetRules.desktopPetAssetPaths(
         _retainedSettings['desktopPetBackup'],
       );
       if (imported.includesAssets) {
@@ -1591,7 +1561,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         );
 
         final importedDesktopPaths =
-            _desktopPetAssetPaths(backup.settings['desktopPetBackup']);
+            BackupAssetRules.desktopPetAssetPaths(backup.settings['desktopPetBackup']);
         for (final path in importedDesktopPaths) {
           final bytes = imported.assets[path];
           if (bytes == null) {
@@ -1608,7 +1578,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           relativePaths:
               previousDesktopPaths.difference(importedDesktopPaths),
         );
-      } else if (_desktopPetAssetPaths(
+      } else if (BackupAssetRules.desktopPetAssetPaths(
         backup.settings['desktopPetBackup'],
       ).isNotEmpty) {
         throw const FormatException('这份备份包含桌宠素材记录，但没有随包素材文件。');
