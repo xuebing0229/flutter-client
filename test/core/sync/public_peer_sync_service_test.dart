@@ -227,6 +227,84 @@ void main() {
     expect(receivedBatches.last.single['id'], 'order-1');
     expect(receivedBatches.last.single['value'], 99);
   });
+
+  test('relay reuses grow-only screenshot import history across platforms',
+      () async {
+    final hub = _RelayHub();
+    final aDevice = AccountDevice(
+      id: 'history-native',
+      name: '电脑',
+      platform: 'windows',
+      firstSeenAt: DateTime.utc(2026, 1, 1),
+      lastSeenAt: DateTime.utc(2026, 1, 1),
+    );
+    final bDevice = AccountDevice(
+      id: 'history-web',
+      name: '网页设备',
+      platform: 'web',
+      firstSeenAt: DateTime.utc(2026, 1, 2),
+      lastSeenAt: DateTime.utc(2026, 1, 2),
+    );
+    final devices = <String, AccountDevice>{
+      aDevice.id: aDevice,
+      bDevice.id: bDevice,
+    };
+    AccountSyncState aState = _state(devices: devices);
+    AccountSyncState bState = _state(devices: devices);
+    final aHistory = <String>{'orders|image-a|0'};
+    final bHistory = <String>{'orders|image-b|1'};
+
+    PublicPeerSyncService service({
+      required AccountDevice device,
+      required AccountSyncState Function() state,
+      required Future<void> Function(AccountSyncState) mergeState,
+      required Set<String> history,
+    }) {
+      return PublicPeerSyncService(
+        accountId: state().accountId,
+        deviceId: device.id,
+        captureAccountState: state,
+        mergeAccountState: mergeState,
+        exportRecords: () async => const <Map<String, dynamic>>[],
+        mergeRecords: (_) async {},
+        captureImportHistory: () async => Set<String>.from(history),
+        mergeImportHistory: (incoming) async => history.addAll(incoming),
+        relayFactory: hub.createClient,
+        heartbeatInterval: const Duration(milliseconds: 20),
+      );
+    }
+
+    final b = service(
+      device: bDevice,
+      state: () => bState,
+      mergeState: (incoming) async {
+        bState = bState.merge(incoming);
+      },
+      history: bHistory,
+    );
+    addTearDown(b.dispose);
+    final a = service(
+      device: aDevice,
+      state: () => aState,
+      mergeState: (incoming) async {
+        aState = aState.merge(incoming);
+      },
+      history: aHistory,
+    );
+    addTearDown(a.dispose);
+
+    await b.start();
+    await a.start();
+
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while ((aHistory.length < 2 || bHistory.length < 2) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(aHistory, containsAll(<String>['orders|image-a|0', 'orders|image-b|1']));
+    expect(bHistory, containsAll(<String>['orders|image-a|0', 'orders|image-b|1']));
+  });
 }
 
 AccountSyncState _state({
