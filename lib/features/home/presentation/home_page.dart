@@ -15,6 +15,7 @@ import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
+import '../../../core/settings/workspace_settings_codec.dart';
 import '../../../core/sync/public_peer_sync_service.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/theme/app_theme_palette.dart';
@@ -1183,129 +1184,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Map<String, dynamic> _captureSyncSettings() {
-    final features = widget.featureStore.toJson();
-    return <String, dynamic>{
-      'id': SyncCoordinator.settingsRecordId,
-      'themeMode': widget.themeStore.mode.name,
-      'themePaletteId': widget.themeStore.paletteId,
-      'customThemePalettes': widget.themeStore.exportCustomPalettes(),
-      'uiStyle': widget.themeStore.style.id,
-      for (final entry in features.entries)
-        '$_featureSettingPrefix${entry.key}': entry.value,
-      ..._collectionViews.toSettings(),
-      _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
-      _receiptStyleSettingKey: _receiptStyleStore.toJson(),
-      _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
-    };
+    return WorkspaceSettingsCodec.capture(
+      themeStore: widget.themeStore,
+      featureStore: widget.featureStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      collectionViews: _collectionViews,
+      desktopNavigationOpen: _desktopNavigationOpen,
+    );
   }
 
   Future<void> _applySyncSettings(Map<String, dynamic> settings) async {
-    final modeName = settings['themeMode'];
-    if (modeName is String) {
-      final mode = switch (modeName) {
-        'light' => ThemeMode.light,
-        'dark' => ThemeMode.dark,
-        'system' => ThemeMode.system,
-        _ => throw const FormatException('同步主题模式无效。'),
-      };
-      await widget.themeStore.setMode(mode);
-    }
+    final previousViews = _collectionViews;
+    final previousNavigationOpen = _desktopNavigationOpen;
+    final applied = await WorkspaceSettingsCodec.apply(
+      settings: settings,
+      themeStore: widget.themeStore,
+      featureStore: widget.featureStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      collectionViews: _collectionViews,
+      desktopNavigationOpen: _desktopNavigationOpen,
+    );
+    _collectionViews = applied.collectionViews;
+    _desktopNavigationOpen = applied.desktopNavigationOpen;
 
-    if (settings.containsKey('customThemePalettes')) {
-      await widget.themeStore.replaceCustomPalettesFromJson(
-        settings['customThemePalettes'],
-      );
-    }
-
-    final paletteId = settings['themePaletteId'];
-    if (paletteId is String) {
-      if (widget.themeStore.containsPaletteId(paletteId)) {
-        await widget.themeStore.setPaletteId(paletteId);
-      } else if (paletteId.startsWith('custom:')) {
-        // A UI preference must never make otherwise valid work data
-        // unreadable. Build 154 could persist a selected custom palette ID
-        // into workspace settings without embedding the custom palette itself.
-        // If that old preset is unavailable, keep/fall back to a valid local
-        // palette and continue restoring orders/products normally.
-        await widget.themeStore.setPaletteId(
-          AppThemePalettes.guildOriginal.id,
-        );
-      } else {
-        await widget.themeStore.setPaletteId(
-          AppThemePalettes.guildOriginal.id,
-        );
-      }
-    } else if (paletteId != null) {
-      await widget.themeStore.setPaletteId(
-        AppThemePalettes.guildOriginal.id,
-      );
-    }
-
-    final styleId = settings['uiStyle'];
-    if (styleId is String && AppUiStyle.containsId(styleId)) {
-      await widget.themeStore.setStyle(AppUiStyle.byId(styleId));
-    } else if (styleId == null) {
-      final legacyTextureId = settings['uiTexture'];
-      if (legacyTextureId == null) {
-        await widget.themeStore.setStyle(AppUiStyle.classic);
-      } else if (legacyTextureId is String) {
-        await widget.themeStore.setStyle(
-          AppUiStyle.fromLegacyTextureId(legacyTextureId),
-        );
-      } else {
-        throw const FormatException('同步 UI 风格设置无效。');
-      }
-    } else {
-      throw const FormatException('同步 UI 风格设置无效。');
-    }
-
-    // New settings records keep each feature as its own CRDT field so two
-    // devices can toggle different switches without manufacturing a conflict.
-    // Accept the old aggregate map when importing an earlier local backup.
-    final legacyFeatures = settings['features'];
-    if (legacyFeatures is Map) {
-      await widget.featureStore.applyJson(legacyFeatures);
-    } else if (legacyFeatures != null) {
-      throw const FormatException('同步功能开关设置无效。');
-    }
-
-    final nextFeatures = widget.featureStore.toJson();
-    var hasFeatureFields = false;
-    for (final feature in AppFeature.values) {
-      final key = '$_featureSettingPrefix${feature.name}';
-      if (!settings.containsKey(key)) continue;
-      final value = settings[key];
-      if (value is! bool) {
-        throw FormatException('同步功能开关 ${feature.name} 格式无效。');
-      }
-      nextFeatures[feature.name] = value;
-      hasFeatureFields = true;
-    }
-    if (hasFeatureFields) {
-      await widget.featureStore.applyJson(nextFeatures);
-    }
-
-    if (settings.containsKey(_pricingPresetsSettingKey)) {
-      _pricingPresetStore.applyJson(settings[_pricingPresetsSettingKey]);
-    }
-    if (settings.containsKey(_receiptStyleSettingKey)) {
-      _receiptStyleStore.applyJson(settings[_receiptStyleSettingKey]);
-    }
-
-    var layoutChanged = false;
-    final nextCollectionViews = _collectionViews.applySettings(settings);
-    if (nextCollectionViews != _collectionViews) {
-      _collectionViews = nextCollectionViews;
-      layoutChanged = true;
-    }
-    final nextNavigationOpen = settings[_desktopNavigationOpenSettingKey];
-    if (nextNavigationOpen is bool &&
-        nextNavigationOpen != _desktopNavigationOpen) {
-      _desktopNavigationOpen = nextNavigationOpen;
-      layoutChanged = true;
-    }
-
-    if (layoutChanged && mounted) {
+    if ((previousViews != _collectionViews ||
+            previousNavigationOpen != _desktopNavigationOpen) &&
+        mounted) {
       setState(() {
         _refreshDesktopCollectionRootIfNeeded();
       });
