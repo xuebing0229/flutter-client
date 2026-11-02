@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-import '../domain/screenshot_layout_parser.dart';
 import 'screenshot_ocr_result.dart';
+import 'screenshot_ocr_result_parser.dart';
 import 'windows_official_paddleocr.dart';
 
 /// The native recognizer only sends recognized line text and boxes.
@@ -46,39 +46,6 @@ class ScreenshotOcrService {
     );
     if (result == null) throw const FormatException('截图识别未返回结果');
 
-    double number(Object? value, String field) {
-      if (value is num) return value.toDouble();
-      throw FormatException('识别坐标缺少 $field');
-    }
+    return parseScreenshotOcrPayload(result);
 
-    final raw = result['lines'];
-    if (raw is! List) throw const FormatException('截图识别结果格式错误');
-    final lines = <ScreenshotTextLine>[];
-    for (final value in raw) {
-      if (value is! Map || value['text'] is! String) continue;
-      lines.add(ScreenshotTextLine(
-        text: value['text'] as String,
-        recoveredFromCrop: value['recoveredFromCrop'] == true,
-        left: number(value['left'], 'left'),
-        top: number(value['top'], 'top'),
-        right: number(value['right'], 'right'),
-        bottom: number(value['bottom'], 'bottom'),
-      ));
-    }
-    final width = number(result['imageWidth'], 'imageWidth');
-    final height = number(result['imageHeight'], 'imageHeight');
-    if (width <= 0 || height <= 0) {
-      throw const FormatException('截图尺寸无效');
-    }
-    return ScreenshotOcrResult(
-      width: width,
-      height: height,
-      lines: List.unmodifiable(lines),
-      nativeTrace: List<String>.unmodifiable(
-        (result['nativeTrace'] is List)
-            ? (result['nativeTrace'] as List).whereType<String>()
-            : const <String>[],
-      ),
-    );
-  }
 }
