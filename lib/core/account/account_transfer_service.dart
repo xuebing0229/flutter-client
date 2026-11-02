@@ -1388,18 +1388,34 @@ class SyncthingAccountTransferClientSession {
 
         await _doneFile.writeAsString('done', flush: true);
         _diagnostics.event('client.doneFile.write.ok');
-        await _runBridgeOperation(
-          'done.scan',
-          () => _bridge.requestScanFolder(descriptor.folderId),
-        );
-        _diagnostics.event('client.doneFile.scan.ok');
+        try {
+          await _runBridgeOperation(
+            'done.scan',
+            () => _bridge.requestScanFolder(descriptor.folderId),
+          );
+          _diagnostics.event('client.doneFile.scan.ok');
+        } catch (error) {
+          _diagnostics.event('client.doneFile.scan.error', <String, Object?>{
+            'error': '$error',
+            'relayAvailable': relayAvailable,
+          });
+          if (!relayAvailable) rethrow;
+        }
 
         final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
         while (!_closed && DateTime.now().isBefore(ackDeadline)) {
-          await _runBridgeOperation(
-            'ack.scan',
-            () => _bridge.requestScanFolder(descriptor.folderId),
-          );
+          try {
+            await _runBridgeOperation(
+              'ack.scan',
+              () => _bridge.requestScanFolder(descriptor.folderId),
+            );
+          } catch (error) {
+            _diagnostics.event('client.ack.scan.error', <String, Object?>{
+              'error': '$error',
+              'relayAvailable': relayAvailable,
+            });
+            if (!relayAvailable) rethrow;
+          }
           if (await _ackFile.exists()) {
             _diagnostics.event('client.ack.detected');
             return clear;
