@@ -36,5 +36,12 @@ void main() {
 
   write('app-icon-192.png', 192);
   write('app-icon-512.png', 512);
-  write('app-icon-maskable-512.png', 512);
+
+  // The Android launcher PNG already contains the final framed composition.
+  // Marking that same bitmap as a maskable full-bleed icon makes Chromium
+  // enlarge/crop it again, so the installed PWA no longer matches the app.
+  final staleMaskable = File('${outputDir.path}/app-icon-maskable-512.png');
+  if (staleMaskable.existsSync()) {
+    staleMaskable.deleteSync();
+  }
 }
