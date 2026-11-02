@@ -20,6 +20,7 @@ import '../core/portability/backup_asset_rules.dart';
 import '../core/portability/web_backup_reader.dart';
 import '../core/portability/full_backup_logic.dart';
 import '../core/sync/public_peer_sync_service.dart';
+import '../core/cloud_sync/public_peer_sync_factory.dart';
 import '../core/settings/workspace_settings_codec.dart';
 import '../core/settings/workspace_navigation_model.dart';
 import '../core/sync/sync_coordinator_web.dart';
@@ -586,34 +587,16 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   void _startPublicPeerSync() {
     if (_peerSync != null) return;
-    final service = PublicPeerSyncService(
+    final service = createWorkspacePublicPeerSyncService(
       accountId: _accountId,
       deviceId: _webDeviceId,
       captureAccountState: () => _accountState,
       mergeAccountState: widget.accountStore.mergeCurrentAccountState,
       exportRecords: _syncUi.exportPeerRecords,
       mergeRecords: _syncUi.mergePeerRecords,
-      captureAssetPaths: () => <String>{
-        for (final order in _orderStore.orders)
-          for (final image in order.referenceImages) image.relativePath,
-        for (final product in _productStore.products)
-          for (final image in product.referenceImages) image.relativePath,
-      },
-      assetExists: (path) async =>
-          (await _referenceImageStore.readAssetBytes(
-            accountId: _accountId,
-            relativePath: path,
-          )) !=
-          null,
-      readAsset: (path) => _referenceImageStore.readAssetBytes(
-        accountId: _accountId,
-        relativePath: path,
-      ),
-      writeAsset: (path, bytes) => _referenceImageStore.writeAssetBytes(
-        accountId: _accountId,
-        relativePath: path,
-        bytes: bytes,
-      ),
+      orderStore: _orderStore,
+      productStore: _productStore,
+      referenceImageStore: _referenceImageStore,
     );
     _peerSync = service;
     unawaited(service.start());
