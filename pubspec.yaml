@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+226
-# beta-226: direct browser account join over shared encrypted relay protocol
+# beta-226: direct browser account join over shared encrypted relay protocol; analyzer fix
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
