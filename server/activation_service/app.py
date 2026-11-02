@@ -19,6 +19,14 @@ DB_PATH = os.environ.get("LICENSE_DB_PATH", "/var/lib/adventure-license/license.
 BIND_HOST = os.environ.get("LICENSE_BIND_HOST", "127.0.0.1")
 BIND_PORT = int(os.environ.get("LICENSE_BIND_PORT", "8765"))
 SETUP_KEY = os.environ.get("LICENSE_ADMIN_SETUP_KEY", "").strip()
+CORS_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get(
+        "LICENSE_CORS_ORIGINS",
+        "https://beta.guild.apixb.top,https://guild.apixb.top",
+    ).split(",")
+    if origin.strip()
+}
 API_VERSION = 1
 
 _db_lock = threading.Lock()
@@ -239,6 +247,19 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(HTTPStatus.BAD_REQUEST, "请求内容必须是对象。")
         return value
 
+    def _cors_origin(self):
+        origin = (self.headers.get("Origin") or "").strip().rstrip("/")
+        if origin and origin in CORS_ORIGINS:
+            return origin
+        return None
+
+    def _send_cors_headers(self):
+        origin = self._cors_origin()
+        if not origin:
+            return
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
+
     def _send(self, status, data):
         body = json.dumps(
             data, ensure_ascii=False, separators=(",", ":")
@@ -247,9 +268,33 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self._send_cors_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/v1/activate":
+            self.send_response(HTTPStatus.NOT_FOUND)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        origin = self._cors_origin()
+        if origin is None:
+            self.send_response(HTTPStatus.FORBIDDEN)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self._send_cors_headers()
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _ok(self, data=None, status=HTTPStatus.OK):
         self._send(status, {"ok": True, **(data or {})})
