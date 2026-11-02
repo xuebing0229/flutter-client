@@ -4,6 +4,70 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/features/shared/presentation/spotlight_guide.dart';
 
 void main() {
+  testWidgets(
+      'guide waits for target that mounts on the next frame instead of dropping it',
+      (tester) async {
+    final targetKey = GlobalKey();
+    var showTarget = false;
+    late StateSetter setHostState;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: StatefulBuilder(
+                builder: (context, setState) {
+                  setHostState = setState;
+                  return Column(
+                    children: [
+                      if (showTarget)
+                        SpotlightTarget(
+                          targetKey: targetKey,
+                          child: const SizedBox(
+                            width: 220,
+                            height: 56,
+                            child: ColoredBox(color: Colors.white),
+                          ),
+                        ),
+                      FilledButton(
+                        onPressed: () {
+                          setHostState(() => showTarget = true);
+                          showSpotlightGuide(
+                            context,
+                            steps: [
+                              SpotlightGuideStep(
+                                targetKey: targetKey,
+                                icon: Icons.web_rounded,
+                                title: '晚一帧出现的目标',
+                                body: 'Web 路由或懒布局晚挂载时也不能丢掉这一步。',
+                              ),
+                            ],
+                          );
+                        },
+                        child: const Text('打开延迟目标引导'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开延迟目标引导'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('晚一帧出现的目标'), findsOneWidget);
+    expect(find.byKey(targetKey), findsOneWidget);
+
+    await tester.tap(find.text('开始使用'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('highlighted text field remains interactive through guide hole',
       (tester) async {
     final targetKey = GlobalKey();
