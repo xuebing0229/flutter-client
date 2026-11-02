@@ -16,10 +16,12 @@ import '../../../core/web/web_platform_bridge.dart';
 class WebExistingAccountJoinPage extends StatefulWidget {
   const WebExistingAccountJoinPage({
     required this.store,
+    this.onImportBackup,
     super.key,
   });
 
   final WebAccountStore store;
+  final Future<void> Function()? onImportBackup;
 
   @override
   State<WebExistingAccountJoinPage> createState() =>
@@ -295,6 +297,16 @@ class _WebExistingAccountJoinPageState
                       ],
                     ),
                   ),
+                ),
+              ],
+              if (widget.onImportBackup != null) ...[
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: _starting || _receiving
+                      ? null
+                      : () => widget.onImportBackup!.call(),
+                  icon: const Icon(Icons.upload_file_rounded),
+                  label: const Text('导入完整备份加入'),
                 ),
               ],
               if (_error != null) ...[
