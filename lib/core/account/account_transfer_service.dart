@@ -770,7 +770,29 @@ class SyncthingAccountTransferServer {
     }
 
     if (_acceptedReceiverDeviceId != null) {
-      await _bridge.requestScanFolder(descriptor.folderId);
+      try {
+        await _bridge.requestScanFolder(descriptor.folderId);
+      } catch (error) {
+        _diagnostics.event('server.poll.scan.error', <String, Object?>{
+          'error': '$error',
+          'relayFallbackActive': _relayFallbackActive,
+        });
+        if (!_relayFallbackActive) rethrow;
+      }
+    }
+
+    if (_relayFallbackActive && !_receiverFinished) {
+      final last = _lastRelayPayloadPublishAt;
+      if (last == null ||
+          DateTime.now().difference(last) >= const Duration(seconds: 2)) {
+        try {
+          _publishRelayPayload();
+        } catch (error) {
+          _diagnostics.event('server.relay.payload.error', <String, Object?>{
+            'error': '$error',
+          });
+        }
+      }
     }
 
     if (!_receiverFinished && await _doneFile.exists()) {
@@ -784,15 +806,54 @@ class SyncthingAccountTransferServer {
     if (!_receiverFinished) {
       throw StateError('新设备尚未确认收到账号数据。');
     }
-    if (_acceptedReceiverDeviceId == null) {
+    final receiverDeviceId = _acceptedReceiverDeviceId;
+    if (receiverDeviceId == null) {
       throw StateError('新设备身份尚未确认。');
     }
 
     _diagnostics.event('server.completeTransfer.begin');
-    await _ackFile.writeAsString('ack', flush: true);
-    _diagnostics.event('server.ackFile.write.ok');
-    await _bridge.requestScanFolder(descriptor.folderId);
-    _diagnostics.event('server.completeTransfer.scan.ok');
+    try {
+      await _ackFile.writeAsString('ack', flush: true);
+      _diagnostics.event('server.ackFile.write.ok');
+      await _bridge.requestScanFolder(descriptor.folderId);
+      _diagnostics.event('server.completeTransfer.scan.ok');
+    } catch (error) {
+      _diagnostics.event('server.completeTransfer.nativeAck.error', <String, Object?>{
+        'error': '$error',
+        'relayFallbackActive': _relayFallbackActive,
+      });
+      if (!_relayFallbackActive) rethrow;
+    }
+
+    if (_relayFallbackActive) {
+      final relay = _relaySession;
+      if (relay == null || !relay.connected) {
+        throw StateError('备用设备连接已经断开，请保持两台设备在线后重试。');
+      }
+      final keyBytes = _decodeTransferKey(descriptor.encryptionKey);
+      if (keyBytes == null) {
+        throw const FormatException('设备加入二维码的加密密钥无效。');
+      }
+      final body = await _encryptTransferPayload(
+        _relayControlMessage(
+          type: 'ack',
+          folderId: descriptor.folderId,
+          receiverDeviceId: receiverDeviceId,
+        ),
+        keyBytes,
+      );
+      relay.publish(
+        targetDeviceId: receiverDeviceId,
+        frame: _AccountTransferRelayFrame(
+          type: 'ack',
+          folderId: descriptor.folderId,
+          receiverDeviceId: receiverDeviceId,
+          body: body,
+        ),
+      );
+      _diagnostics.event('server.relay.ack.publish');
+    }
+
     _transferred = true;
     _diagnostics.event('server.completeTransfer.done');
     _onTransferred?.call();
@@ -802,6 +863,11 @@ class SyncthingAccountTransferServer {
     if (_closed) return;
     _closed = true;
     _diagnostics.event('server.close.begin');
+    final relay = _relaySession;
+    _relaySession = null;
+    try {
+      await relay?.close();
+    } catch (_) {}
     try {
       await _bridge.removeFolderById(descriptor.folderId);
       _diagnostics.event('server.close.removeFolder.ok');
