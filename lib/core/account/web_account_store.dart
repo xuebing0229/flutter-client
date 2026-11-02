@@ -10,6 +10,7 @@ export 'account_local_state.dart' show AccountStatus, LocalAccountSummary;
 import 'account_activation_flow.dart';
 import 'activation_api.dart';
 import 'account_state_mutations.dart';
+import 'account_session_logic.dart';
 import 'offline_license.dart';
 import '../web/web_platform_bridge.dart';
 
@@ -44,28 +45,11 @@ class WebAccountStore extends ChangeNotifier {
   AccountSyncState? get syncSnapshot => _selectedRecord?.syncState;
   bool get isUnlocked => status == AccountStatus.unlocked;
 
-  List<AccountDevice> get activeDevices {
-    final state = syncSnapshot;
-    if (state == null) return const <AccountDevice>[];
-    final devices = state.activeDevices.toList()
-      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
-    return devices;
-  }
+  List<AccountDevice> get activeDevices =>
+      sortedActiveAccountDevices(syncSnapshot);
 
-  List<LocalAccountSummary> get localAccounts {
-    final result = <LocalAccountSummary>[
-      for (final entry in _accounts.entries)
-        LocalAccountSummary(
-          accountId: entry.key,
-          accountName: entry.value.syncState.accountName,
-        ),
-    ];
-    result.sort(
-      (a, b) =>
-          a.accountName.toLowerCase().compareTo(b.accountName.toLowerCase()),
-    );
-    return result;
-  }
+  List<LocalAccountSummary> get localAccounts =>
+      sortedLocalAccountSummaries(_accounts);
 
   Future<void> load() async {
     try {
@@ -119,18 +103,7 @@ class WebAccountStore extends ChangeNotifier {
   }
 
   void _restoreStatus() {
-    final record = _selectedRecord;
-    if (record == null) {
-      status = AccountStatus.unactivated;
-      return;
-    }
-    if (record.syncState.isRevoked(record.currentDeviceId)) {
-      status = AccountStatus.revoked;
-      return;
-    }
-    status = record.stayLoggedIn
-        ? AccountStatus.unlocked
-        : AccountStatus.locked;
+    status = accountStatusForRecord(_selectedRecord);
   }
 
   Future<void> activate({
@@ -150,25 +123,15 @@ class WebAccountStore extends ChangeNotifier {
       clearClaim: _clearActivationClaim,
     );
 
-    final now = DateTime.now().toUtc();
     final deviceId = _randomDeviceId();
     _rememberDeviceId(license.accountId, deviceId);
-    final state = AccountSyncState(
+    final state = createActivatedAccountState(
       accountId: license.accountId,
       accountName: trimmedName,
       password: password,
-      accountNameUpdatedAt: now,
-      passwordUpdatedAt: now,
-      devices: <String, AccountDevice>{
-        deviceId: AccountDevice(
-          id: deviceId,
-          name: '网页设备',
-          platform: 'web',
-          firstSeenAt: now,
-          lastSeenAt: now,
-        ),
-      },
-      revocations: const <String, DeviceRevocation>{},
+      deviceId: deviceId,
+      deviceName: '网页设备',
+      platform: 'web',
     );
 
     _accounts[license.accountId] = LocalAccountRecord(
@@ -194,10 +157,12 @@ class WebAccountStore extends ChangeNotifier {
     if (existing != null) {
       final merged = existing.syncState.merge(incoming);
       _accounts[incoming.accountId] = existing.copyWith(
-        syncState: _touchDevice(
+        syncState: touchAccountDeviceState(
           merged,
-          existing.currentDeviceId,
+          deviceId: existing.currentDeviceId,
           createIfMissing: true,
+          defaultName: '网页设备',
+          platform: 'web',
         ),
         stayLoggedIn: stayLoggedIn,
       );
@@ -214,7 +179,13 @@ class WebAccountStore extends ChangeNotifier {
       }
       _rememberDeviceId(incoming.accountId, deviceId);
       _accounts[incoming.accountId] = LocalAccountRecord(
-        syncState: _touchDevice(incoming, deviceId, createIfMissing: true),
+        syncState: touchAccountDeviceState(
+          incoming,
+          deviceId: deviceId,
+          createIfMissing: true,
+          defaultName: '网页设备',
+          platform: 'web',
+        ),
         currentDeviceId: deviceId,
         stayLoggedIn: stayLoggedIn,
       );
@@ -240,10 +211,12 @@ class WebAccountStore extends ChangeNotifier {
     // snapshots look different and forced the whole app to rebuild forever.
     // Only create the current browser record when it is genuinely missing.
     if (!merged.devices.containsKey(record.currentDeviceId)) {
-      merged = _touchDevice(
+      merged = touchAccountDeviceState(
         merged,
-        record.currentDeviceId,
+        deviceId: record.currentDeviceId,
         createIfMissing: true,
+        defaultName: '网页设备',
+        platform: 'web',
       );
     }
 
@@ -281,14 +254,18 @@ class WebAccountStore extends ChangeNotifier {
       return false;
     }
 
-    final ok = accountName.trim() == record.syncState.accountName &&
-        _constantTimeEquals(password, record.syncState.password);
+    final ok = accountCredentialsMatch(
+      record: record,
+      accountName: accountName,
+      password: password,
+    );
     if (!ok) return false;
 
-    final touched = _touchDevice(
+    final touched = touchAccountDeviceState(
       record.syncState,
-      record.currentDeviceId,
+      deviceId: record.currentDeviceId,
       createIfMissing: false,
+      platform: 'web',
     );
     _accounts[record.syncState.accountId] = record.copyWith(
       syncState: touched,
@@ -404,40 +381,6 @@ class WebAccountStore extends ChangeNotifier {
     status = AccountStatus.unactivated;
     await _persist();
     notifyListeners();
-  }
-
-  AccountSyncState _touchDevice(
-    AccountSyncState state,
-    String deviceId, {
-    required bool createIfMissing,
-  }) {
-    final now = DateTime.now().toUtc();
-    final current = state.devices[deviceId];
-    if (current == null && !createIfMissing) return state;
-
-    final devices = <String, AccountDevice>{...state.devices};
-    devices[deviceId] = current == null
-        ? AccountDevice(
-            id: deviceId,
-            name: '网页设备',
-            platform: 'web',
-            firstSeenAt: now,
-            lastSeenAt: now,
-          )
-        : current.copyWith(
-            platform: 'web',
-            lastSeenAt: now,
-          );
-    return state.copyWith(devices: devices);
-  }
-
-  bool _constantTimeEquals(String a, String b) {
-    if (a.length != b.length) return false;
-    var result = 0;
-    for (var index = 0; index < a.length; index++) {
-      result |= a.codeUnitAt(index) ^ b.codeUnitAt(index);
-    }
-    return result == 0;
   }
 
   Future<String> _activationClaimFor(ActivationLicense license) async {
