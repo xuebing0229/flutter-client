@@ -180,6 +180,10 @@ jobs:
         shell: pwsh
         run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.7
 
+      - name: Smoke test embedded Syncthing runtime
+        shell: pwsh
+        run: ./tool/test_syncthing_windows_runtime.ps1
+
       - name: Cache official PaddleOCR Windows runtime
         uses: actions/cache@v4
         with:
