@@ -1,7 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
-
-import '../../../core/portability/data_portability_file_bridge.dart';
+import '../../../core/portability/data_portability_file_bridge.dart';\nimport 'receipt_style_image_types.dart';
 
 class PickedReceiptStyleImage {
   const PickedReceiptStyleImage({
