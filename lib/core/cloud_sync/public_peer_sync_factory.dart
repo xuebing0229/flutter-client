@@ -1,4 +1,5 @@
 import '../../features/orders/data/order_reference_image_store.dart';
+import '../../features/imports/data/screenshot_import_history.dart';
 import '../../features/orders/state/order_store.dart';
 import '../../features/products/state/product_store.dart';
 import '../account/account_models.dart';
@@ -17,6 +18,7 @@ PublicPeerSyncService createWorkspacePublicPeerSyncService({
   required OrderReferenceImageStore referenceImageStore,
   bool Function(AccountDevice device)? shouldTargetDevice,
 }) {
+  const importHistory = ScreenshotImportHistory();
   return PublicPeerSyncService(
     accountId: accountId,
     deviceId: deviceId,
@@ -45,6 +47,11 @@ PublicPeerSyncService createWorkspacePublicPeerSyncService({
       accountId: accountId,
       relativePath: path,
       bytes: bytes,
+    ),
+    captureImportHistory: () => importHistory.read(accountId: accountId),
+    mergeImportHistory: (fingerprints) => importHistory.markImported(
+      accountId: accountId,
+      fingerprints: fingerprints,
     ),
   );
 }
