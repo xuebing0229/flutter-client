@@ -54,9 +54,15 @@ void main() {
       ]) {
         final text = source(path);
         expect(text, contains('verifyAndRedeemAccountActivation'));
-        expect(text, contains('accountCredentialsMatch'));
+        expect(text, contains('AccountSessionController'));
         expect(text, contains('accountStatusForRecord'));
       }
+
+      final sharedSession =
+          source('lib/core/account/account_session_controller.dart');
+      expect(sharedSession, contains('accountCredentialsMatch'));
+      expect(sharedSession, contains('accountStatusForRecord'));
+
       expect(
         source('lib/core/account/web_account_store.dart'),
         isNot(contains('_constantTimeEquals')),
