@@ -14,6 +14,7 @@ import '../../../core/update/update_manifest.dart';
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/portability/full_backup_bundle_service.dart';
+import '../../../core/portability/full_backup_logic.dart';
 import '../../focus/state/focus_store.dart';
 import '../../imports/data/screenshot_import_history.dart';
 import '../../shared/presentation/layout_spacing.dart';
@@ -419,20 +420,19 @@ class _SettingsPageState extends State<SettingsPage>
           await _screenshotImportHistory.read(accountId: accountId);
       final desktopPetBackup =
           await _desktopPetAccountSync.exportForFullBackup(accountId);
-      final backup = AppBackupData(
-        exportedAt: snapshot.exportedAt,
-        orders: snapshot.orders,
-        products: snapshot.products,
-        nodePresets: snapshot.nodePresets,
-        focusSessions: snapshot.focusSessions,
-        accountSyncState: snapshot.accountSyncState,
-        syncRecords: snapshot.syncRecords,
-        settings: <String, dynamic>{
-          ...snapshot.settings,
-          'screenshotImportHistory':
-              screenshotHistory.toList(growable: false)..sort(),
-          'desktopPetBackup': desktopPetBackup.manifest,
-        },
+      final backup = withFullBackupMetadata(
+        AppBackupData(
+          exportedAt: snapshot.exportedAt,
+          orders: snapshot.orders,
+          products: snapshot.products,
+          nodePresets: snapshot.nodePresets,
+          focusSessions: snapshot.focusSessions,
+          accountSyncState: snapshot.accountSyncState,
+          syncRecords: snapshot.syncRecords,
+          settings: snapshot.settings,
+        ),
+        screenshotImportHistory: screenshotHistory,
+        desktopPetBackup: desktopPetBackup.manifest,
       );
 
       final saved = await FullBackupBundleService(
@@ -468,33 +468,15 @@ class _SettingsPageState extends State<SettingsPage>
       if (importedBundle == null) return;
 
       final backup = importedBundle.backup;
-      if (backup.syncRecords == null) {
-        throw const FormatException(
-          '这份备份不包含双端同步历史，不能作为完整备份恢复。'
-          '请重新导出完整备份后再恢复。',
-        );
-      }
-
-      final incomingAccount = backup.accountSyncState;
       final localAccountId = widget.accountStore.accountId;
-      if (localAccountId != null && incomingAccount == null) {
-        throw const FormatException('这份备份没有账号归属信息，不能覆盖当前账号。');
-      }
-      if (incomingAccount != null &&
-          localAccountId != null &&
-          incomingAccount.accountId != localAccountId) {
-        throw const FormatException('这份备份属于另一个激活账号，不能导入到当前账号。');
-      }
+      validateBackupForCurrentAccount(
+        backup: backup,
+        currentAccountId: localAccountId,
+      );
+      final incomingAccount = backup.accountSyncState;
       if (!mounted) return;
 
-      final referenceImageCount = backup.orders.fold<int>(
-            0,
-            (count, order) => count + order.referenceImages.length,
-          ) +
-          backup.products.fold<int>(
-            0,
-            (count, product) => count + product.referenceImages.length,
-          );
+      final referenceImageCount = backupReferenceImageCount(backup);
       final legacyAssetWarning =
           !importedBundle.includesBundledAssets && referenceImageCount > 0
           ? '\n\n注意：这是旧版 JSON 备份，里面只有参考图记录，没有图片原文件。'
@@ -554,15 +536,11 @@ class _SettingsPageState extends State<SettingsPage>
         await widget.accountStore.mergeSyncedState(backup.accountSyncState!);
       }
 
-      final screenshotHistory = backup.settings['screenshotImportHistory'];
+      final screenshotHistory = parseScreenshotImportHistory(backup);
       if (screenshotHistory != null) {
-        if (screenshotHistory is! List ||
-            screenshotHistory.any((item) => item is! String)) {
-          throw const FormatException('截图导入历史格式无效。');
-        }
         await _screenshotImportHistory.replaceAll(
           accountId: localAccountId ?? incomingAccount!.accountId,
-          fingerprints: screenshotHistory.cast<String>(),
+          fingerprints: screenshotHistory,
         );
       }
 
