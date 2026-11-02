@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/portability/data_portability_file_bridge.dart';
+import '../../../core/portability/data_portability_file_bridge.dart';\nimport 'screenshot_import_platform_types.dart';
 
 class ScreenshotImportPickedImage {
   const ScreenshotImportPickedImage({
