@@ -1839,15 +1839,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final tabs = <GuildWorkspaceTab>[
-      GuildWorkspaceTab(
-        id: 'orders',
-        label: '排单',
-        icon: Icons.format_list_bulleted_rounded,
-        selectedIcon: Icons.view_list_rounded,
-        page: OrderQueuePage(
+  Widget _mainTabPage(String id) {
+    return switch (id) {
+      'products' => ProductPage(
+          accountId: widget.accountId,
+          store: _productStore,
+          pricingPresetStore: _pricingPresetStore,
+          receiptStyleStore: _receiptStyleStore,
+          featureStore: widget.featureStore,
+          syncCoordinator: _syncCoordinatorView,
+          cardView: _productCardView,
+          onCardViewChanged: _setProductCardView,
+          overviewView: _productOverviewView,
+          onOverviewViewChanged: _setProductOverviewView,
+          overviewColumns: _productOverviewColumns,
+          onOverviewColumnsChanged: _setProductOverviewColumns,
+          sortModeName: _productSortMode,
+          onSortModeChanged: _setProductSortMode,
+        ),
+      'schedule' => SchedulePage(
+          accountId: widget.accountId,
+          store: _orderStore,
+          productStore: _productStore,
+          nodePresetStore: _nodePresetStore,
+          featureStore: widget.featureStore,
+        ),
+      'statistics' => StatisticsPage(
+          store: _orderStore,
+          productStore: _productStore,
+        ),
+      _ => OrderQueuePage(
           accountId: widget.accountId,
           store: _orderStore,
           nodePresetStore: _nodePresetStore,
@@ -1866,51 +1887,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           guideTargets: _quickStartGuideTargets,
           guideOrderId: _guidedOrderId,
         ),
-      ),
-      if (widget.featureStore.products)
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = <GuildWorkspaceTab>[
+      for (final spec in workspaceTabSpecs(widget.featureStore))
         GuildWorkspaceTab(
-          id: 'products',
-          label: '成品',
-          icon: Icons.image_outlined,
-          selectedIcon: Icons.image_rounded,
-          page: ProductPage(
-            accountId: widget.accountId,
-            store: _productStore,
-            pricingPresetStore: _pricingPresetStore,
-            receiptStyleStore: _receiptStyleStore,
-            featureStore: widget.featureStore,
-            syncCoordinator: _syncCoordinatorView,
-            cardView: _productCardView,
-            onCardViewChanged: _setProductCardView,
-            overviewView: _productOverviewView,
-            onOverviewViewChanged: _setProductOverviewView,
-            overviewColumns: _productOverviewColumns,
-            onOverviewColumnsChanged: _setProductOverviewColumns,
-            sortModeName: _productSortMode,
-            onSortModeChanged: _setProductSortMode,
-          ),
-        ),
-      if (widget.featureStore.schedule)
-        GuildWorkspaceTab(
-          id: 'schedule',
-          label: '日程',
-          icon: Icons.calendar_month_outlined,
-          selectedIcon: Icons.calendar_month_rounded,
-          page: SchedulePage(
-            accountId: widget.accountId,
-            store: _orderStore,
-            productStore: _productStore,
-            nodePresetStore: _nodePresetStore,
-            featureStore: widget.featureStore,
-          ),
-        ),
-      if (widget.featureStore.statistics)
-        GuildWorkspaceTab(
-          id: 'statistics',
-          label: '统计',
-          icon: Icons.bar_chart_outlined,
-          selectedIcon: Icons.bar_chart_rounded,
-          page: StatisticsPage(store: _orderStore, productStore: _productStore),
+          id: spec.id,
+          label: spec.label,
+          icon: spec.icon,
+          selectedIcon: spec.selectedIcon,
+          page: _mainTabPage(spec.id),
         ),
     ];
 
