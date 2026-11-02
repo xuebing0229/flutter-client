@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'app_theme.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
+import 'app_shell.dart';
 
 import '../core/account/account_models.dart';
 import '../core/account/web_account_store.dart';
@@ -94,19 +94,8 @@ class _AppState extends State<App> {
         _accountStore,
       ]),
       builder: (context, _) {
-        return MaterialApp(
-          title: '冒险者公会',
-          debugShowCheckedModeBanner: false,
-          locale: const Locale('zh', 'CN'),
-          supportedLocales: const [Locale('zh', 'CN')],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          themeMode: _themeStore.mode,
-          theme: GuildAppTheme.light(_themeStore),
-          darkTheme: GuildAppTheme.dark(_themeStore),
+        return GuildMaterialApp(
+          themeStore: _themeStore,
           home: _WebAccountGate(
             accountStore: _accountStore,
             themeStore: _themeStore,
