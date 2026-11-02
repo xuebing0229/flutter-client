@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../../core/account/account_transfer_service.dart';
+import '../../../core/account/account_transfer_protocol.dart';
+import '../../../core/account/web_account_transfer_client.dart';
 import '../../../core/account/web_account_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/web/web_platform_bridge.dart';
@@ -27,13 +28,13 @@ class WebExistingAccountJoinPage extends StatefulWidget {
 
 class _WebExistingAccountJoinPageState
     extends State<WebExistingAccountJoinPage> {
-  static const RelayAccountTransferClient _client =
-      RelayAccountTransferClient();
+  static const WebAccountTransferClient _client =
+      WebAccountTransferClient();
 
   final TextEditingController _deviceCodeController =
       TextEditingController();
 
-  SyncthingAccountTransferClientSession? _session;
+  WebAccountTransferClientSession? _session;
   bool _starting = false;
   bool _receiving = false;
   bool _finished = false;
@@ -52,7 +53,7 @@ class _WebExistingAccountJoinPageState
       _error = null;
     });
 
-    SyncthingAccountTransferClientSession? session;
+    WebAccountTransferClientSession? session;
     try {
       final descriptor = AccountTransferDescriptor.decode(
         AddDeviceCode.accountTransferFrom(raw),
@@ -82,7 +83,7 @@ class _WebExistingAccountJoinPageState
   }
 
   Future<void> _receive(
-    SyncthingAccountTransferClientSession session,
+    WebAccountTransferClientSession session,
   ) async {
     try {
       final source = await session.receive();
