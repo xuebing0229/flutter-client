@@ -11,6 +11,7 @@ import 'account_local_state.dart';
 export 'account_local_state.dart' show AccountStatus, LocalAccountSummary;
 import 'account_activation_flow.dart';
 import 'account_state_mutations.dart';
+import 'account_session_logic.dart';
 import 'activation_api.dart';
 import 'device_descriptor.dart';
 import 'offline_license.dart';
@@ -73,20 +74,8 @@ class AccountStore extends ChangeNotifier {
   bool get isActivated => _syncState?.hasCredentials == true;
   bool get isUnlocked => status == AccountStatus.unlocked;
 
-  List<LocalAccountSummary> get localAccounts {
-    final items = <LocalAccountSummary>[
-      for (final entry in _accounts.entries)
-        LocalAccountSummary(
-          accountId: entry.key,
-          accountName: entry.value.syncState.accountName,
-        ),
-    ];
-    items.sort(
-      (a, b) =>
-          a.accountName.toLowerCase().compareTo(b.accountName.toLowerCase()),
-    );
-    return items;
-  }
+  List<LocalAccountSummary> get localAccounts =>
+      sortedLocalAccountSummaries(_accounts);
 
   bool hasActiveLocalAccount(String accountId) {
     final record = _accounts[accountId];
@@ -112,13 +101,8 @@ class AccountStore extends ChangeNotifier {
         entry.key,
   ];
 
-  List<AccountDevice> get activeDevices {
-    final state = _syncState;
-    if (state == null) return const <AccountDevice>[];
-    final devices = state.activeDevices.toList()
-      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
-    return devices;
-  }
+  List<AccountDevice> get activeDevices =>
+      sortedActiveAccountDevices(_syncState);
 
   int get revokedDeviceCount => _syncState?.revocations.length ?? 0;
 
@@ -403,21 +387,10 @@ class AccountStore extends ChangeNotifier {
   }
 
   Future<void> _restoreSelectedStatus() async {
-    final record = _selectedRecord;
-    if (record == null || !record.syncState.hasCredentials) {
-      status = AccountStatus.unactivated;
-      return;
+    status = accountStatusForRecord(_selectedRecord);
+    if (status == AccountStatus.unlocked) {
+      await touchCurrentDevice(notify: false);
     }
-
-    if (record.syncState.isRevoked(record.currentDeviceId)) {
-      status = AccountStatus.revoked;
-      return;
-    }
-
-    status = record.stayLoggedIn
-        ? AccountStatus.unlocked
-        : AccountStatus.locked;
-    await touchCurrentDevice(notify: false);
   }
 
   Future<void> activate({
@@ -437,31 +410,18 @@ class AccountStore extends ChangeNotifier {
       clearClaim: _clearActivationClaim,
     );
 
-    final now = DateTime.now().toUtc();
     final descriptor = await DeviceDescriptor.current();
     final installationId = await _installationIdentity();
     final newDeviceId = _randomId();
-
-    var state = AccountSyncState(
+    final state = createActivatedAccountState(
       accountId: license.accountId,
       accountName: trimmedName,
       password: password,
-      accountNameUpdatedAt: now,
-      passwordUpdatedAt: now,
-      devices: const <String, AccountDevice>{},
-      revocations: const <String, DeviceRevocation>{},
-    );
-
-    final devices = <String, AccountDevice>{...state.devices};
-    devices[newDeviceId] = AccountDevice(
-      id: newDeviceId,
-      name: descriptor.name,
+      deviceId: newDeviceId,
+      deviceName: descriptor.name,
       platform: descriptor.platform,
-      firstSeenAt: now,
-      lastSeenAt: now,
       installationId: installationId,
     );
-    state = state.copyWith(devices: devices);
 
     _accounts[license.accountId] = LocalAccountRecord(
       syncState: state,
@@ -511,19 +471,11 @@ class AccountStore extends ChangeNotifier {
       return false;
     }
 
-    // Constant-time string comparison to prevent timing attacks
-    bool constantTimeEquals(String a, String b) {
-      if (a.length != b.length) return false;
-      var result = 0;
-      for (var i = 0; i < a.length; i++) {
-        result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
-      }
-      return result == 0;
-    }
-
-    final ok =
-        accountName.trim() == record.syncState.accountName &&
-        constantTimeEquals(password, record.syncState.password);
+    final ok = accountCredentialsMatch(
+      record: record,
+      accountName: accountName,
+      password: password,
+    );
 
     if (ok) {
       _accounts[record.syncState.accountId] = record.copyWith(
@@ -577,18 +529,17 @@ class AccountStore extends ChangeNotifier {
       return;
     }
 
-    final current = record.syncState.devices[record.currentDeviceId];
-    if (current == null) return;
-
     final installationId = await _installationIdentity();
-    final devices = <String, AccountDevice>{...record.syncState.devices};
-    devices[record.currentDeviceId] = current.copyWith(
-      lastSeenAt: DateTime.now().toUtc(),
+    final touched = touchAccountDeviceState(
+      record.syncState,
+      deviceId: record.currentDeviceId,
+      createIfMissing: false,
       installationId: installationId,
     );
+    if (identical(touched, record.syncState)) return;
 
     _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: record.syncState.copyWith(devices: devices),
+      syncState: touched,
     );
 
     await _save();
