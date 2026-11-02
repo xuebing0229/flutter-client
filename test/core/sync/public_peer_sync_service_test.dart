@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'unacknowledged web change is retried when the other device comes online',
+    'offline peer does not cause repeated relay traffic and still syncs on later startup',
     () async {
       final hub = _RelayHub();
       final nativeDevice = AccountDevice(
@@ -64,6 +64,12 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(web.lastSuccessfulSyncAt, isNull);
 
+      // Multiple local heartbeat intervals must stay completely idle while
+      // the known peer is offline. This protects the public relay quota.
+      final publishCountWhileOffline = hub.publishCount;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(hub.publishCount, publishCountWhileOffline);
+
       final native = PublicPeerSyncService(
         accountId: nativeState.accountId,
         deviceId: nativeDevice.id,
@@ -85,6 +91,8 @@ void main() {
 
       await native.start();
 
+      // Native startup itself announces presence. Web receives that snapshot
+      // and answers once with its latest records; no polling/retry loop is needed.
       await received.future.timeout(const Duration(seconds: 1));
 
       expect(nativeReceived, webRecords);
