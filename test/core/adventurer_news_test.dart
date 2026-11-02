@@ -300,4 +300,12 @@ void main() {
       ['电脑端首次添加设备流程修复'],
     );
   });
+
+  test('224 包含手机端首次添加设备启动流程修复见闻', () {
+    final picked = newsBetweenBuilds(223, 224);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['手机端首次添加设备启动流程修复'],
+    );
+  });
 }
