@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+228
-# beta-228: shared Web/native UI, guide target fixes, native PWA icon, and web-safe shared news storage
+version: 0.0.1+229
+# beta-229: stabilize Web sync/PWA worker lifecycle and preserve native launcher icon proportions
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
