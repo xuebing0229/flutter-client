@@ -49,6 +49,7 @@ import 'adventurer_news_dialog.dart';
 import 'app_drawer.dart';
 import 'workspace_shell.dart';
 import 'workspace_main_pages.dart';
+import 'workspace_common_tool_pages.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
@@ -1716,81 +1717,65 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildDesktopToolPage(String tool) {
+    final common = buildWorkspaceCommonToolPage(
+      tool: tool,
+      accountId: widget.accountId,
+      accountName: widget.accountStore.accountName ?? '',
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      featureStore: widget.featureStore,
+      syncCoordinator: _syncCoordinatorView,
+      guideTargets: _quickStartGuideTargets,
+      guideOrderId: _guidedOrderId,
+      onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
+    );
+    if (common != null) return common;
+
     return switch (tool) {
-      AppToolMenu.presetTool => PresetCenterPage(
-        nodePresetStore: _nodePresetStore,
-        pricingPresetStore: _pricingPresetStore,
-        guideTargets: _quickStartGuideTargets,
-      ),
-      AppToolMenu.receiptTool => ReceiptCenterPage(
-        orderStore: _orderStore,
-        productStore: _productStore,
-        receiptStyleStore: _receiptStyleStore,
-        accountName: widget.accountStore.accountName ?? '',
-        guideTargets: _quickStartGuideTargets,
-      ),
-      AppToolMenu.featureToggleTool => FeatureTogglePage(
-        store: widget.featureStore,
-        onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
-        guideTargets: _quickStartGuideTargets,
-      ),
       AppToolMenu.desktopPetTool => DesktopPetPage(
-        orderStore: _orderStore,
-        focusStore: _focusStore,
-        settings: _desktopPetService.settings,
-        onOpenOrder: _openOrderFromFocus,
-        showDesktopPet:
-            Platform.isWindows &&
-            widget.featureStore.enabled(AppFeature.desktopPet),
-        showFocus: widget.featureStore.enabled(AppFeature.focus),
-      ),
-      AppToolMenu.archiveTool => ArchivePage(
-        accountId: widget.accountId,
-        orderStore: _orderStore,
-        productStore: _productStore,
-        nodePresetStore: _nodePresetStore,
-        pricingPresetStore: _pricingPresetStore,
-        receiptStyleStore: _receiptStyleStore,
-        featureStore: widget.featureStore,
-        syncCoordinator: _syncCoordinatorView,
-        guideTargets: _quickStartGuideTargets,
-        guideOrderId: _guidedOrderId,
-      ),
+          orderStore: _orderStore,
+          focusStore: _focusStore,
+          settings: _desktopPetService.settings,
+          onOpenOrder: _openOrderFromFocus,
+          showDesktopPet:
+              Platform.isWindows &&
+              widget.featureStore.enabled(AppFeature.desktopPet),
+          showFocus: widget.featureStore.enabled(AppFeature.focus),
+        ),
       AppToolMenu.syncTool => DeviceSyncPage(
-        coordinator: _syncCoordinator,
-        guideTargets: _quickStartGuideTargets,
-      ),
+          coordinator: _syncCoordinator,
+          guideTargets: _quickStartGuideTargets,
+        ),
       AppToolMenu.feedbackTool => const FeedbackPage(),
       AppToolMenu.accountTool => AccountPage(
-        store: widget.accountStore,
-        buildTransferPackage: () =>
-            _buildAccountTransferPackage(widget.accountStore),
-        syncCoordinator: _syncCoordinator,
-        onBeforeSignOut: _prepareForSignOut,
-        onRevokeDevice: _syncCoordinator.revokeDevice,
-        guideTargets: _quickStartGuideTargets,
-      ),
+          store: widget.accountStore,
+          buildTransferPackage: () =>
+              _buildAccountTransferPackage(widget.accountStore),
+          syncCoordinator: _syncCoordinator,
+          onBeforeSignOut: _prepareForSignOut,
+          onRevokeDevice: _syncCoordinator.revokeDevice,
+          guideTargets: _quickStartGuideTargets,
+        ),
       AppToolMenu.settingsTool => SettingsPage(
-        orderStore: _orderStore,
-        productStore: _productStore,
-        nodePresetStore: _nodePresetStore,
-        focusStore: _focusStore,
-        themeStore: widget.themeStore,
-        featureStore: widget.featureStore,
-        desktopPetSettings: _desktopPetService.settings,
-        accountStore: widget.accountStore,
-        syncCoordinator: _syncCoordinator,
-        onApplyWorkspaceSettings: _applySyncSettings,
-        guideTargets: _quickStartGuideTargets,
-        // Keep SettingsPage alive while opening the palette picker. The update
-        // download state lives in SettingsPage, so replacing the whole desktop
-        // tool page here would make an in-progress Windows update appear to
-        // restart after changing the UI theme color.
-      ),
+          orderStore: _orderStore,
+          productStore: _productStore,
+          nodePresetStore: _nodePresetStore,
+          focusStore: _focusStore,
+          themeStore: widget.themeStore,
+          featureStore: widget.featureStore,
+          desktopPetSettings: _desktopPetService.settings,
+          accountStore: widget.accountStore,
+          syncCoordinator: _syncCoordinator,
+          onApplyWorkspaceSettings: _applySyncSettings,
+          guideTargets: _quickStartGuideTargets,
+        ),
       AppToolMenu.themeColorTool => ThemeColorPage(
-        store: widget.themeStore,
-        onBack: () => _selectDesktopTool(AppToolMenu.settingsTool),
-      ),
+          store: widget.themeStore,
+          onBack: () => _selectDesktopTool(AppToolMenu.settingsTool),
+        ),
       _ => const SizedBox.shrink(),
     };
   }
