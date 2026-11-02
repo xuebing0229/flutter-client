@@ -48,4 +48,5 @@ class ScreenshotOcrService {
 
     return parseScreenshotOcrPayload(result);
 
+  }
 }
