@@ -597,8 +597,11 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   void _onSyncUiChanged() {
     if (!_ready) return;
-    _scheduleSave();
-    _peerSync?.requestSync();
+    // SyncCoordinator also notifies while applying a remote snapshot and while
+    // its busy state changes. Treating those notifications as local edits
+    // echoes the same snapshot back to the peer forever and continuously
+    // rebuilds the web UI. Real local workspace changes already reach
+    // _scheduleSave through the individual stores/theme/feature listeners.
     if (mounted) setState(() {});
   }
 
