@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/theme_palette_transfer.dart';
+import 'theme_share_image_exporter.dart';
 
 class ThemeShareImagePage extends StatefulWidget {
   const ThemeShareImagePage({
@@ -22,7 +22,7 @@ class ThemeShareImagePage extends StatefulWidget {
 
 class _ThemeShareImagePageState extends State<ThemeShareImagePage> {
   static const _transfer = ThemePaletteTransferService();
-  static const _fileBridge = DataPortabilityFileBridge();
+  static const _imageExporter = ThemeShareImageExporter();
 
   final GlobalKey _cardKey = GlobalKey();
   bool _saving = false;
@@ -91,8 +91,8 @@ class _ThemeShareImagePageState extends State<ThemeShareImagePage> {
         throw StateError('分享图片生成失败。');
       }
 
-      final saved = await _fileBridge.exportImage(
-        fileName: '${_safeFileName(widget.palette.name)}-主题分享.png',
+      final saved = await _imageExporter.export(
+        fileName: '${safeThemePresetFileName(widget.palette.name)}-主题分享.png',
         bytes: bytes,
       );
       if (!mounted || !saved) return;
@@ -109,14 +109,7 @@ class _ThemeShareImagePageState extends State<ThemeShareImagePage> {
     }
   }
 
-  String _safeFileName(String value) {
-    final cleaned = value
-        .trim()
-        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-        .replaceAll(RegExp(r'\s+'), ' ');
-    return cleaned.isEmpty ? '冒险者公会配色' : cleaned;
-  }
-}
+
 
 class ThemeShareCard extends StatelessWidget {
   const ThemeShareCard({
