@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../sync/embedded_syncthing_bridge.dart';
+import '../sync/public_relay_client.dart';
 import 'device_descriptor.dart';
 
 class AccountTransferDescriptor {
@@ -402,6 +403,7 @@ class SyncthingAccountTransferServer {
     required File payloadFile,
     required File doneFile,
     required File ackFile,
+    required String encryptedPayload,
     required _AccountTransferDiagnostics diagnostics,
     void Function()? onTransferred,
   }) : _bridge = bridge,
@@ -409,6 +411,7 @@ class SyncthingAccountTransferServer {
        _payloadFile = payloadFile,
        _doneFile = doneFile,
        _ackFile = ackFile,
+       _encryptedPayload = encryptedPayload,
        _diagnostics = diagnostics,
        _onTransferred = onTransferred;
 
@@ -417,10 +420,16 @@ class SyncthingAccountTransferServer {
   final File _payloadFile;
   final File _doneFile;
   final File _ackFile;
+  final String _encryptedPayload;
   final _AccountTransferDiagnostics _diagnostics;
   final void Function()? _onTransferred;
 
   final AccountTransferDescriptor descriptor;
+
+  _AccountTransferRelaySession? _relaySession;
+  String? _relayReceiverDeviceId;
+  DateTime? _lastRelayPayloadPublishAt;
+  bool _relayFallbackActive = false;
 
   bool _closed = false;
   bool _receiverFinished = false;
@@ -432,6 +441,7 @@ class SyncthingAccountTransferServer {
 
   bool get receiverFinished => _receiverFinished;
   bool get transferred => _transferred;
+  bool get relayFallbackActive => _relayFallbackActive;
   String? get acceptedReceiverDeviceId => _acceptedReceiverDeviceId;
   String? get acceptedReceiverName => _acceptedReceiverName;
   String? get acceptedReceiverAppDeviceId => _acceptedReceiverAppDeviceId;
@@ -502,8 +512,12 @@ class SyncthingAccountTransferServer {
         force: true,
       );
       diagnostics.event('server.prepareFolder.ok');
+      final encryptedPayload = await _encryptTransferPayload(
+        payload,
+        keyBytes,
+      );
       await payloadFile.writeAsString(
-        await _encryptTransferPayload(payload, keyBytes),
+        encryptedPayload,
         flush: true,
       );
       await bridge.requestScanFolder(folderId);
@@ -532,6 +546,7 @@ class SyncthingAccountTransferServer {
         payloadFile: payloadFile,
         doneFile: doneFile,
         ackFile: ackFile,
+        encryptedPayload: encryptedPayload,
         diagnostics: diagnostics,
         onTransferred: onTransferred,
       );
