@@ -841,7 +841,6 @@ class WindowsSyncthingTransport {
         apiKey,
         '--no-browser',
         '--no-console',
-        '--no-default-folder',
         '--no-restart',
         '--no-upgrade',
         '--log-file=${logFile.path}',
@@ -999,6 +998,20 @@ class WindowsSyncthingTransport {
         'autoUpgradeIntervalH': 0,
       }),
     );
+
+    // Syncthing v2.x no longer has the old --no-default-folder flag.
+    // This is an app-private profile, so remove Syncthing's generated
+    // unmanaged "default" folder through the supported REST config API.
+    final folders = _jsonList(
+      await _request('GET', '/rest/config/folders', apiKey: apiKey),
+    );
+    if (folders.any((item) => _asMap(item)['id']?.toString() == 'default')) {
+      await _request(
+        'DELETE',
+        '/rest/config/folders/default',
+        apiKey: apiKey,
+      );
+    }
     _runtimePolicyApplied = true;
   }
 
