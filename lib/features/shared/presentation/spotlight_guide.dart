@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -111,6 +112,29 @@ Future<void> _revealSpotlightTarget(GlobalKey targetKey) async {
   await WidgetsBinding.instance.endOfFrame;
 }
 
+Future<List<SpotlightGuideStep>> _resolveSpotlightSteps(
+  List<SpotlightGuideStep> steps,
+) async {
+  if (steps.isEmpty) return const <SpotlightGuideStep>[];
+
+  List<SpotlightGuideStep> ready() => steps
+      .where((step) => step.targetKey.currentContext != null)
+      .toList(growable: false);
+
+  var resolved = ready();
+  if (resolved.length == steps.length) return resolved;
+
+  // Web/PWA route transitions and lazy layout can attach guide targets a frame
+  // later than the page itself. Do not permanently discard a tutorial step
+  // just because its GlobalKey was queried during that short gap.
+  for (var attempt = 0; attempt < 3; attempt++) {
+    await WidgetsBinding.instance.endOfFrame;
+    resolved = ready();
+    if (resolved.length == steps.length) break;
+  }
+  return resolved;
+}
+
 Future<bool> showSpotlightGuide(
   BuildContext context, {
   required List<SpotlightGuideStep> steps,
@@ -118,9 +142,10 @@ Future<bool> showSpotlightGuide(
   int progressStart = 0,
   int? progressTotal,
 }) async {
-  if (steps.isEmpty) return false;
+  final resolvedSteps = await _resolveSpotlightSteps(steps);
+  if (resolvedSteps.isEmpty) return false;
 
-  await _revealSpotlightTarget(steps.first.targetKey);
+  await _revealSpotlightTarget(resolvedSteps.first.targetKey);
   if (!context.mounted) return false;
 
   final overlay = Overlay.of(context);
@@ -135,7 +160,7 @@ Future<bool> showSpotlightGuide(
   entry = OverlayEntry(
     builder: (_) => Positioned.fill(
       child: _SpotlightGuideOverlay(
-        steps: steps,
+        steps: resolvedSteps,
         finalLabel: finalLabel,
         progressStart: progressStart,
         progressTotal: progressTotal,
@@ -334,6 +359,8 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                   targetRect: rect,
                   targetShape: _step.targetShape,
                   borderRadius: _step.borderRadius,
+                  emphasizeTarget: kIsWeb,
+                  highlightColor: colors.primary,
                 ),
               ),
             ),
@@ -685,11 +712,15 @@ class _SpotlightMaskPainter extends CustomPainter {
     required this.targetRect,
     required this.targetShape,
     required this.borderRadius,
+    required this.emphasizeTarget,
+    required this.highlightColor,
   });
 
   final Rect? targetRect;
   final ShapeBorder? targetShape;
   final double borderRadius;
+  final bool emphasizeTarget;
+  final Color highlightColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -718,12 +749,33 @@ class _SpotlightMaskPainter extends CustomPainter {
 
     final dimmed = Path.combine(PathOperation.difference, screen, hole);
     canvas.drawPath(dimmed, Paint()..color = const Color(0xB8000000));
+
+    // Transparent TextFields/ListTiles can look almost identical to the dimmed
+    // background in a browser. On Web only, reinforce the *actual measured
+    // target path* instead of drawing a guessed decorative rectangle.
+    if (emphasizeTarget) {
+      canvas.drawPath(
+        hole,
+        Paint()
+          ..color = highlightColor.withValues(alpha: .08)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawPath(
+        hole,
+        Paint()
+          ..color = highlightColor.withValues(alpha: .58)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(covariant _SpotlightMaskPainter oldDelegate) {
     return oldDelegate.targetRect != targetRect ||
         oldDelegate.targetShape != targetShape ||
-        oldDelegate.borderRadius != borderRadius;
+        oldDelegate.borderRadius != borderRadius ||
+        oldDelegate.emphasizeTarget != emphasizeTarget ||
+        oldDelegate.highlightColor != highlightColor;
   }
 }
