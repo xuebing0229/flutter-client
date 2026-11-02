@@ -25,6 +25,7 @@ import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
+import 'sync_record_local_change.dart';
 import 'sync_reference_image_gc.dart';
 import 'sync_workspace_engine.dart';
 
@@ -1428,64 +1429,23 @@ class SyncCoordinator extends ChangeNotifier {
     final ids = <String>{...previous.keys, ...current.keys};
 
     for (final id in ids) {
-      final before = previous[id];
-      final after = current[id];
-      if (syncJsonEquals(before, after)) continue;
-
       final currentRecord = await _recordStore.readMergedRecord(
         accountId: accountId,
         kind: kind,
         recordId: id,
       );
-      final baselineRecord = _lastFlushedRecords[kind]![id];
-      SyncRecord localRecord;
-
-      if (after == null) {
-        final baseRecord = baselineRecord ?? currentRecord;
-        if (baseRecord == null) {
-          if (before == null) continue;
-          localRecord = SyncRecord.bootstrap(
-            kind: kind,
-            id: id,
-            values: before,
-            deviceId: deviceId,
-          );
-        } else {
-          localRecord = baseRecord;
-        }
-        localRecord = _mergeEngine.markDeleted(
-          localRecord,
-          deviceId: deviceId,
-        );
-      } else if (baselineRecord != null) {
-        // Edit the last record this device actually observed, not the remote
-        // version that may have arrived since. Otherwise concurrent edits are
-        // incorrectly stamped as happening after that remote version.
-        localRecord = _mergeEngine.applyLocalSnapshot(
-          record: baselineRecord,
-          previousValues: before ?? after,
-          nextValues: after,
-          deviceId: deviceId,
-        );
-      } else if (currentRecord == null) {
-        localRecord = SyncRecord.bootstrap(
-          kind: kind,
-          id: id,
-          values: after,
-          deviceId: deviceId,
-        );
-      } else {
-        localRecord = _mergeEngine.applyLocalSnapshot(
-          record: currentRecord,
-          previousValues: before ?? after,
-          nextValues: after,
-          deviceId: deviceId,
-        );
-      }
-
-      final record = currentRecord == null
-          ? localRecord
-          : _mergeEngine.merge(currentRecord, localRecord);
+      final record = buildLocalSyncRecordChange(
+        accountId: accountId,
+        deviceId: deviceId,
+        kind: kind,
+        id: id,
+        before: previous[id],
+        after: current[id],
+        baselineRecord: _lastFlushedRecords[kind]![id],
+        currentRecord: currentRecord,
+        mergeEngine: _mergeEngine,
+      );
+      if (record == null) continue;
 
       await _recordStore.write(accountId: accountId, record: record);
       _lastFlushedRecords[kind]![id] = record;
