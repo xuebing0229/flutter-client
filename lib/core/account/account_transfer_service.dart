@@ -1253,7 +1253,7 @@ class SyncthingAccountTransferClientSession {
     Duration timeout = const Duration(minutes: 5),
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
-    final connectionDeadline = DateTime.now().add(timeout);
+    final overallDeadline = DateTime.now().add(timeout);
     DateTime? folderHandshakeDeadline;
     DateTime? payloadDeadline;
     var sourceConnected = false;
@@ -1262,79 +1262,105 @@ class SyncthingAccountTransferClientSession {
 
     _diagnostics.event('client.receive.begin');
     while (!_closed) {
-      await _runBridgeOperation(
-        'receive.scan',
-        () => _bridge.requestScanFolder(descriptor.folderId),
-      );
+      final relayPayloadAtLoopStart = _relayClearPayload;
+      if (relayPayloadAtLoopStart != null) {
+        _diagnostics.event('client.relay.takeover');
+        return _finishRelayReceive(relayPayloadAtLoopStart);
+      }
 
-      var status = await transferStatus();
-      onStatus?.call(status);
-
-      if (status.sourceConnected && !sourceConnected) {
-        sourceConnected = true;
-        folderHandshakeDeadline = DateTime.now().add(
-          const Duration(seconds: 45),
+      AccountTransferStatus? status;
+      try {
+        await _runBridgeOperation(
+          'receive.scan',
+          () => _bridge.requestScanFolder(descriptor.folderId),
         );
-        _diagnostics.event('client.sourceConnected', <String, Object?>{
-          'sourceDeviceId': descriptor.sourceDeviceId,
-          'remoteFolderState': status.remoteFolderState,
-        });
-      }
-
-      if (status.folderReady && !folderReady) {
-        folderReady = true;
-        payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
-        _diagnostics.event('client.folderReady');
-      }
-
-      if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
-        _diagnostics.event('client.repair.begin', <String, Object?>{
-          'remoteFolderState': status.remoteFolderState,
-        });
-        try {
-          await _runBridgeOperation(
-            'repair.pairFolder',
-            () => _bridge.pairFolder(
-              folderId: descriptor.folderId,
-              deviceId: descriptor.sourceDeviceId,
-              name: '原设备',
-            ),
-          );
-          _diagnostics.event('client.repair.pairFolder.ok');
-          await _runBridgeOperation(
-            'repair.unpause',
-            () => _bridge.setFolderPaused(
-              folderId: descriptor.folderId,
-              paused: false,
-            ),
-          );
-          _diagnostics.event('client.repair.unpause.ok');
-          await _runBridgeOperation(
-            'repair.scan',
-            () => _bridge.requestScanFolder(descriptor.folderId),
-          );
-          _diagnostics.event('client.repair.scan.ok');
-        } catch (error) {
-          _diagnostics.event('client.repair.error', <String, Object?>{
-            'error': '$error',
-          });
-          rethrow;
-        }
         status = await transferStatus();
         onStatus?.call(status);
-        if (status.folderReady) {
+      } catch (error) {
+        _diagnostics.event('client.nativeBootstrap.error', <String, Object?>{
+          'error': '$error',
+          'relayAvailable': relayAvailable,
+        });
+        if (!relayAvailable) rethrow;
+      }
+
+      if (status != null) {
+        if (status.sourceConnected && !sourceConnected) {
+          sourceConnected = true;
+          folderHandshakeDeadline = DateTime.now().add(
+            const Duration(seconds: 45),
+          );
+          _diagnostics.event('client.sourceConnected', <String, Object?>{
+            'sourceDeviceId': descriptor.sourceDeviceId,
+            'remoteFolderState': status.remoteFolderState,
+          });
+        }
+
+        if (status.folderReady && !folderReady) {
           folderReady = true;
           payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+          _diagnostics.event('client.folderReady');
+        }
+
+        if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
+          _diagnostics.event('client.repair.begin', <String, Object?>{
+            'remoteFolderState': status.remoteFolderState,
+          });
+          try {
+            await _runBridgeOperation(
+              'repair.pairFolder',
+              () => _bridge.pairFolder(
+                folderId: descriptor.folderId,
+                deviceId: descriptor.sourceDeviceId,
+                name: '原设备',
+              ),
+            );
+            _diagnostics.event('client.repair.pairFolder.ok');
+            await _runBridgeOperation(
+              'repair.unpause',
+              () => _bridge.setFolderPaused(
+                folderId: descriptor.folderId,
+                paused: false,
+              ),
+            );
+            _diagnostics.event('client.repair.unpause.ok');
+            await _runBridgeOperation(
+              'repair.scan',
+              () => _bridge.requestScanFolder(descriptor.folderId),
+            );
+            _diagnostics.event('client.repair.scan.ok');
+            status = await transferStatus();
+            onStatus?.call(status);
+            if (status.folderReady) {
+              folderReady = true;
+              payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+            }
+          } catch (error) {
+            _diagnostics.event('client.repair.error', <String, Object?>{
+              'error': '$error',
+              'relayAvailable': relayAvailable,
+            });
+            if (!relayAvailable) rethrow;
+          }
+        }
+
+        if (status.folderErrors.isNotEmpty) {
+          _diagnostics.event('client.folderError', <String, Object?>{
+            'errors': status.folderErrors,
+            'relayAvailable': relayAvailable,
+          });
+          if (!relayAvailable) {
+            throw FormatException(
+              '临时账号目录同步失败：${status.folderErrors.first}',
+            );
+          }
         }
       }
 
-      if (status.folderErrors.isNotEmpty) {
-        _diagnostics.event('client.folderError', <String, Object?>{
-          'errors': status.folderErrors,
-        });
-        throw FormatException(
-          '临时账号目录同步失败：${status.folderErrors.first}',
-        );
+      final relayPayload = _relayClearPayload;
+      if (relayPayload != null) {
+        _diagnostics.event('client.relay.takeover');
+        return _finishRelayReceive(relayPayload);
       }
 
       if (await _payloadFile.exists()) {
@@ -1363,6 +1389,11 @@ class SyncthingAccountTransferClientSession {
             _diagnostics.event('client.ack.detected');
             return clear;
           }
+          final fallbackPayload = _relayClearPayload;
+          if (fallbackPayload != null) {
+            _diagnostics.event('client.relay.takeover.afterNativePayload');
+            return _finishRelayReceive(fallbackPayload);
+          }
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
         if (_closed) {
@@ -1375,12 +1406,15 @@ class SyncthingAccountTransferClientSession {
         );
       }
 
-      if (!sourceConnected &&
-          !DateTime.now().isBefore(connectionDeadline)) {
-        _diagnostics.event('client.connection.timeout');
+      if (!DateTime.now().isBefore(overallDeadline)) {
+        _diagnostics.event('client.bootstrap.timeout', <String, Object?>{
+          'sourceConnected': sourceConnected,
+          'folderReady': folderReady,
+          'relayAvailable': relayAvailable,
+          'relayPayloadObserved': _relayPayloadObserved,
+        });
         throw const FormatException(
-          '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
-          '并已经扫描或粘贴了这台设备的回应码。',
+          '等待原设备确认超时。请确认两台设备都保持在设备加入页面并保持联网。',
         );
       }
 
@@ -1388,36 +1422,44 @@ class SyncthingAccountTransferClientSession {
           !folderReady &&
           folderHandshakeDeadline != null &&
           !DateTime.now().isBefore(folderHandshakeDeadline)) {
-        final state = status.remoteFolderState;
+        final state = status?.remoteFolderState;
         _diagnostics.event('client.folderHandshake.timeout', <String, Object?>{
           'remoteFolderState': state,
+          'relayAvailable': relayAvailable,
         });
-        if (state == 'paused') {
-          throw const FormatException(
-            '已经连接原设备，但临时账号同步目录在原设备上处于暂停状态。'
-            '请让原设备重新打开“添加设备”后再试。',
+        if (!relayAvailable) {
+          if (state == 'paused') {
+            throw const FormatException(
+              '已经连接原设备，但临时账号同步目录在原设备上处于暂停状态。',
+            );
+          }
+          if (state == 'notSharing') {
+            throw const FormatException(
+              '已经连接原设备，但原设备没有真正共享临时账号目录。',
+            );
+          }
+          throw FormatException(
+            '已经连接原设备，但临时账号目录没有完成同步握手'
+            '${state == null || state.isEmpty ? '' : '（状态：$state）'}。',
           );
         }
-        if (state == 'notSharing') {
-          throw const FormatException(
-            '已经连接原设备，但原设备没有真正共享临时账号目录。'
-            '请让原设备保持在“添加设备”页面并重新确认回应码。',
-          );
-        }
-        throw FormatException(
-          '已经连接原设备，但临时账号目录没有完成同步握手'
-          '${state == null || state.isEmpty ? '' : '（状态：$state）'}。',
-        );
+        // Do not keep firing the same native timeout while the encrypted relay
+        // is still available as the bootstrap fallback.
+        folderHandshakeDeadline = null;
       }
 
       if (folderReady &&
           payloadDeadline != null &&
           !DateTime.now().isBefore(payloadDeadline)) {
-        _diagnostics.event('client.payload.timeout');
-        throw const FormatException(
-          '临时账号同步目录已经对接成功，但账号数据仍没有传过来。'
-          '请让原设备继续停留在“添加设备”页面后重试。',
-        );
+        _diagnostics.event('client.payload.timeout', <String, Object?>{
+          'relayAvailable': relayAvailable,
+        });
+        if (!relayAvailable) {
+          throw const FormatException(
+            '临时账号同步目录已经对接成功，但账号数据仍没有传过来。',
+          );
+        }
+        payloadDeadline = null;
       }
 
       await Future<void>.delayed(const Duration(seconds: 1));
