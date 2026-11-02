@@ -1838,7 +1838,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 }
 
-class _WebAccountPage extends StatefulWidget {
+class _WebAccountPage extends StatelessWidget {
   const _WebAccountPage({
     required this.store,
     required this.peerSync,
@@ -1849,147 +1849,48 @@ class _WebAccountPage extends StatefulWidget {
   final PublicPeerSyncService? peerSync;
   final QuickStartGuideTargets? guideTargets;
 
-  @override
-  State<_WebAccountPage> createState() => _WebAccountPageState();
-}
-
-class _WebAccountPageState extends State<_WebAccountPage> {
-  Future<void> _renameAccount() async {
-    final controller = TextEditingController(text: widget.store.accountName ?? '');
-    final value = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('修改账号名'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: '新账号名'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (value == null || !mounted) return;
+  Uint8List? _avatarBytes() {
+    final raw = store.syncSnapshot?.avatarBase64;
+    if (raw == null || raw.isEmpty) return null;
     try {
-      await widget.store.renameAccount(value);
-      widget.peerSync?.requestSync(immediate: true);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('修改账号名失败：$error')),
-      );
+      return base64Decode(raw);
+    } catch (_) {
+      return null;
     }
   }
 
-  Future<void> _changePassword() async {
-    final current = TextEditingController();
-    final next = TextEditingController();
-    final value = await showDialog<List<String>>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('修改密码'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: current,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: '当前密码'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: next,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: '新密码'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(
-              <String>[current.text, next.text],
-            ),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    current.dispose();
-    next.dispose();
-    if (value == null || !mounted) return;
-    try {
-      await widget.store.changePassword(
-        currentPassword: value[0],
-        newPassword: value[1],
-      );
-      widget.peerSync?.requestSync(immediate: true);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('密码已修改')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('修改密码失败：$error')),
-      );
-    }
+  Future<void> _renameAccount(String name) async {
+    await store.renameAccount(name);
+    peerSync?.requestSync(immediate: true);
   }
 
-  Future<void> _renameDevice(AccountDevice device) async {
-    final controller = TextEditingController(text: device.name);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('修改设备名称'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: '设备名称'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+  Future<void> _changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    await store.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
     );
-    controller.dispose();
-    if (value == null || !mounted) return;
-    try {
-      await widget.store.renameDevice(device.id, value);
-      widget.peerSync?.requestSync(immediate: true);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('修改设备名称失败：$error')),
-      );
-    }
+    peerSync?.requestSync(immediate: true);
   }
 
-  Future<void> _revokeDevice(AccountDevice device) async {
+  Future<void> _renameDevice(AccountDevice device, String name) async {
+    await store.renameDevice(device.id, name);
+    peerSync?.requestSync(immediate: true);
+  }
+
+  Future<void> _revokeDevice(
+    BuildContext context,
+    AccountDevice device,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('解绑设备？'),
-        content: Text('“${device.name}”会从使用中设备移除，并通过设备同步发送解绑状态。'),
+        title: const Text('解绑这台设备？'),
+        content: Text(
+          '“${device.name}”会从使用中设备移除，并通过设备同步发送解绑状态。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -2002,128 +1903,34 @@ class _WebAccountPageState extends State<_WebAccountPage> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-    try {
-      await widget.store.revokeDevice(device.id);
-      widget.peerSync?.requestSync(immediate: true);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('解绑设备失败：$error')),
-      );
-    }
+    if (confirmed != true) return;
+    await store.revokeDevice(device.id);
+    peerSync?.requestSync(immediate: true);
   }
 
-  String _formatTime(DateTime value) {
-    final local = value.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
+  Future<void> _signOut(BuildContext context) async {
+    await store.lock();
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.store,
-      builder: (context, _) {
-        final currentId = widget.store.currentDeviceId;
-        final devices = widget.store.activeDevices;
-        final password = widget.store.accountPassword ?? '';
-
-        return Scaffold(
-          appBar: AppBar(
-            title: SpotlightTarget(
-              targetKey: widget.guideTargets?.accountTitleKey,
-              child: const Text(
-                '账号与设备',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
-            children: [
-              Card(
-                child: Column(
-                  children: [
-                    ListTile(
-                      title: const Text('账号名'),
-                      subtitle: Text(widget.store.accountName ?? ''),
-                      trailing: IconButton(
-                        tooltip: '修改账号名',
-                        onPressed: _renameAccount,
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      title: const Text('密码'),
-                      subtitle: Text(password),
-                      trailing: TextButton(
-                        onPressed: _changePassword,
-                        child: const Text('修改'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                '使用中设备 · ${devices.length} 台',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              for (final device in devices)
-                Card(
-                  child: ListTile(
-                    leading: Icon(
-                      device.id == currentId
-                          ? Icons.devices_rounded
-                          : Icons.devices_other_rounded,
-                    ),
-                    title: Text(device.name),
-                    subtitle: Text(
-                      '${device.platform} · 最后使用 ${_formatTime(device.lastSeenAt)}'
-                      '${device.id == currentId ? ' · 当前设备' : ''}',
-                    ),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'rename') {
-                          _renameDevice(device);
-                        } else if (value == 'revoke') {
-                          _revokeDevice(device);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'rename',
-                          child: Text('修改设备名称'),
-                        ),
-                        if (device.id != currentId)
-                          const PopupMenuItem(
-                            value: 'revoke',
-                            child: Text('解绑设备'),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await widget.store.lock();
-                  if (!context.mounted) return;
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                },
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text('退出登录'),
-              ),
-            ],
-          ),
-        );
-      },
+      animation: store,
+      builder: (context, _) => AccountManagementView(
+        accountName: store.accountName ?? '',
+        password: store.accountPassword,
+        avatarBytes: _avatarBytes(),
+        devices: store.activeDevices,
+        currentDeviceId: store.currentDeviceId,
+        onRenameAccount: _renameAccount,
+        onChangePassword: _changePassword,
+        onRenameDevice: _renameDevice,
+        onRevokeDevice: (device) => _revokeDevice(context, device),
+        onSignOut: () => _signOut(context),
+        guideTargets: guideTargets,
+      ),
     );
   }
 }
