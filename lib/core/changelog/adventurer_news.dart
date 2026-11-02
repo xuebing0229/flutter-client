@@ -450,6 +450,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版界面与客户端进一步统一',
     description: '网页版的账号、设置、主题色、设备同步和参考图进一步与手机、电脑共用同一套界面组件，只保留平台能力不同的部分单独适配；新手引导会按完整导航项高亮成品、日程和统计。添加到桌面时也会使用冒险者公会当前 App 图标。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 229,
+    title: '网页版操作稳定性与桌面图标修复',
+    description: '修复网页版在线同步时页面可能反复重建、打断正在进行的操作；同时修正添加到桌面后的图标缩放比例，使它保持与客户端图标一致的构图。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
