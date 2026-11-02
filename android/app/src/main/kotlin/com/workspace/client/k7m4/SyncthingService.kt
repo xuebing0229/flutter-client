@@ -93,7 +93,6 @@ class SyncthingService : Service() {
                     "--gui-apikey",
                     apiKey,
                     "--no-browser",
-                    "--no-default-folder",
                     "--no-restart",
                     "--no-upgrade",
                 ).apply {
