@@ -430,6 +430,8 @@ class SyncthingAccountTransferServer {
   _AccountTransferRelaySession? _relaySession;
   String? _relayReceiverDeviceId;
   DateTime? _lastRelayPayloadPublishAt;
+  AccountTransferResponseCode? _acceptedResponse;
+  DateTime? _responseAcceptedAt;
   bool _relayFallbackActive = false;
 
   bool _closed = false;
@@ -695,6 +697,8 @@ class SyncthingAccountTransferServer {
     _acceptedReceiverName = response.receiverName;
     _acceptedReceiverAppDeviceId = response.receiverAppDeviceId;
     _acceptedReceiverPlatform = response.receiverPlatform;
+    _acceptedResponse = response;
+    _responseAcceptedAt = DateTime.now();
 
     // Give the native Syncthing bootstrap path a short first chance. It remains
     // the preferred path, but account adoption must not fail just because the
@@ -890,6 +894,17 @@ class SyncthingAccountTransferServer {
         });
         if (!_relayFallbackActive) rethrow;
       }
+    }
+
+    final acceptedResponse = _acceptedResponse;
+    final acceptedAt = _responseAcceptedAt;
+    if (!_relayFallbackActive &&
+        !_receiverFinished &&
+        acceptedResponse != null &&
+        acceptedAt != null &&
+        DateTime.now().difference(acceptedAt) >= const Duration(seconds: 15)) {
+      _diagnostics.event('server.relay.fallback.afterDeliveryDelay');
+      await _activateRelayFallback(acceptedResponse);
     }
 
     if (_relayFallbackActive && !_receiverFinished) {
