@@ -6,7 +6,7 @@ import '../../../core/theme/app_theme_store.dart';
 typedef ThemePaletteEditCallback = Future<void> Function(
   BuildContext context, {
   AppThemePalette? palette,
-  bool forceCopy,
+  required bool forceCopy,
 });
 
 class ThemeColorPageBody extends StatelessWidget {
