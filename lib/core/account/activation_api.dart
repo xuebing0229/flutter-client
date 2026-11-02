@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import '../network/resilient_license_http.dart';
 
@@ -79,8 +78,8 @@ class ActivationApiClient {
         method: 'POST',
         uri: uri,
         headers: const <String, String>{
-          HttpHeaders.acceptHeader: 'application/json',
-          HttpHeaders.contentTypeHeader: 'application/json',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
         body: jsonEncode(<String, dynamic>{
           'activationCode': activationCode.trim(),
@@ -141,30 +140,15 @@ class ActivationApiClient {
       );
     } on ActivationApiException {
       rethrow;
-    } on SocketException {
-      throw const ActivationApiException(
-        '暂时无法连接激活服务器，请检查网络后重试。',
-        code: 'network_unavailable',
-      );
-    } on HandshakeException {
-      throw const ActivationApiException(
-        '激活服务器的安全连接失败，请稍后重试。',
-        code: 'tls_error',
-      );
-    } on HttpException {
-      throw const ActivationApiException(
-        '激活服务器连接异常，请稍后重试。',
-        code: 'network_error',
+    } on LicenseHttpTransportException catch (error) {
+      throw ActivationApiException(
+        error.message,
+        code: error.code,
       );
     } on FormatException {
       throw const ActivationApiException(
         '激活服务器返回了无法识别的数据。',
         code: 'invalid_response',
-      );
-    } on TimeoutException {
-      throw const ActivationApiException(
-        '连接激活服务器超时，请检查网络后重试。',
-        code: 'timeout',
       );
     }
   }
