@@ -18,6 +18,7 @@ import '../core/finance/pricing_preset_store.dart';
 import '../core/portability/app_backup_data.dart';
 import '../core/portability/backup_asset_rules.dart';
 import '../core/portability/web_backup_reader.dart';
+import '../core/portability/full_backup_logic.dart';
 import '../core/sync/public_peer_sync_service.dart';
 import '../core/settings/workspace_settings_codec.dart';
 import '../core/settings/workspace_navigation_model.dart';
@@ -35,6 +36,7 @@ import '../features/home/presentation/workspace_shell.dart';
 import '../features/home/presentation/workspace_main_pages.dart';
 import '../features/home/presentation/workspace_common_tool_pages.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
+import '../features/imports/data/screenshot_import_history.dart';
 import '../features/focus/state/focus_store.dart';
 import '../features/focus/presentation/focus_panel.dart';
 import '../features/orders/data/node_presets.dart';
@@ -514,6 +516,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   final OrderReferenceImageStore _referenceImageStore =
       OrderReferenceImageStore();
   final WebBackupReader _backupReader = const WebBackupReader();
+  final ScreenshotImportHistory _screenshotImportHistory =
+      const ScreenshotImportHistory();
 
   Timer? _saveDebounce;
 
@@ -1291,7 +1295,12 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final backup = _captureLocalBackup(portable: true);
+      var backup = _captureLocalBackup(portable: true);
+      backup = withFullBackupMetadata(
+        backup,
+        screenshotImportHistory:
+            await _screenshotImportHistory.read(accountId: _accountId),
+      );
       final archive = Archive();
       final manifest = utf8.encode(backup.encode());
       archive.addFile(
@@ -1369,13 +1378,11 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     setState(() => _busy = true);
     try {
       final backup = imported.backup;
+      validateBackupForCurrentAccount(
+        backup: backup,
+        currentAccountId: _accountId,
+      );
       final backupAccount = backup.accountSyncState;
-      if (backupAccount != null && backupAccount.accountId != _accountId) {
-        throw FormatException(
-          '这份备份属于账号“${backupAccount.accountName}”，'
-          '不能覆盖当前账号“${widget.accountStore.accountName}”。',
-        );
-      }
       final accountName =
           backupAccount?.accountName ?? widget.accountStore.accountName;
 
@@ -1477,6 +1484,13 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       await _syncUi.replacePortableRecordsForCurrentWorkspace(
         backup.syncRecords,
       );
+      final screenshotHistory = parseScreenshotImportHistory(backup);
+      if (screenshotHistory != null) {
+        await _screenshotImportHistory.replaceAll(
+          accountId: _accountId,
+          fingerprints: screenshotHistory,
+        );
+      }
       _peerSync?.requestSync(immediate: true);
       await _persistWorkspace();
 
