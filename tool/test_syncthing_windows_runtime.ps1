@@ -47,7 +47,6 @@ try {
         "--gui-apikey", $apiKey,
         "--no-browser",
         "--no-console",
-        "--no-default-folder",
         "--no-restart",
         "--no-upgrade"
     )
@@ -79,8 +78,16 @@ try {
     }
 
     $foldersBefore = @(Invoke-SyncthingJson -Method "GET" -Path "/rest/config/folders")
-    if ($foldersBefore.Count -ne 0) {
-        throw "Fresh embedded profile unexpectedly contains unmanaged folders."
+    $defaultFolders = @($foldersBefore | Where-Object { $_.id -eq "default" })
+    if ($defaultFolders.Count -gt 1) {
+        throw "Fresh profile contains more than one default folder."
+    }
+    if ($defaultFolders.Count -eq 1) {
+        Invoke-SyncthingJson -Method "DELETE" -Path "/rest/config/folders/default" | Out-Null
+    }
+    $foldersAfterPolicy = @(Invoke-SyncthingJson -Method "GET" -Path "/rest/config/folders")
+    if ($foldersAfterPolicy | Where-Object { $_.id -eq "default" }) {
+        throw "Default folder cleanup through REST did not apply."
     }
 
     $folder = Invoke-SyncthingJson -Method "GET" -Path "/rest/config/defaults/folder"
