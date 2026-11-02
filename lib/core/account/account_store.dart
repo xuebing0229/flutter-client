@@ -882,6 +882,47 @@ class AccountStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> registerRelayOnlyDevice({
+    required String appDeviceId,
+    required String name,
+    required String platform,
+  }) async {
+    final normalizedAppDeviceId = appDeviceId.trim();
+    final normalizedName = name.trim();
+    final normalizedPlatform = platform.trim();
+    if (normalizedAppDeviceId.length < 16 ||
+        normalizedName.isEmpty ||
+        normalizedPlatform.isEmpty) {
+      throw const FormatException('网页设备信息不完整。');
+    }
+
+    final record = _selectedRecord;
+    if (record == null) return;
+
+    final now = DateTime.now().toUtc();
+    final devices = <String, AccountDevice>{...record.syncState.devices};
+    final current = devices[normalizedAppDeviceId];
+    devices[normalizedAppDeviceId] = current == null
+        ? AccountDevice(
+            id: normalizedAppDeviceId,
+            name: normalizedName,
+            platform: normalizedPlatform,
+            firstSeenAt: now,
+            lastSeenAt: now,
+          )
+        : current.copyWith(
+            name: normalizedName,
+            platform: normalizedPlatform,
+            lastSeenAt: now,
+          );
+
+    _accounts[record.syncState.accountId] = record.copyWith(
+      syncState: record.syncState.copyWith(devices: devices),
+    );
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> renameDevice(String deviceId, String name) async {
     final record = _selectedRecord;
     if (record == null) return;
