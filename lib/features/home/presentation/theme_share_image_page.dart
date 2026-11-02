@@ -108,8 +108,7 @@ class _ThemeShareImagePageState extends State<ThemeShareImagePage> {
       if (mounted) setState(() => _saving = false);
     }
   }
-
-
+}
 
 class ThemeShareCard extends StatelessWidget {
   const ThemeShareCard({
