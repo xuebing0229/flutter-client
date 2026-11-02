@@ -28,6 +28,7 @@ void main() {
       AccountSyncState nativeState = _state(
         devices: <String, AccountDevice>{
           nativeDevice.id: nativeDevice,
+          webDevice.id: webDevice,
         },
       );
       AccountSyncState webState = _state(
@@ -38,7 +39,11 @@ void main() {
       );
 
       final webRecords = <Map<String, dynamic>>[
-        <String, dynamic>{'marker': 'edited-on-web'},
+        <String, dynamic>{
+          'kind': 'order',
+          'id': 'order-1',
+          'marker': 'edited-on-web',
+        },
       ];
       List<Map<String, dynamic>> nativeReceived = const [];
       final received = Completer<void>();
@@ -122,6 +127,106 @@ void main() {
       expect(hub.publishCount, settledPublishCount);
     },
   );
+
+  test('daily relay sends only changed SyncRecords', () async {
+    final hub = _RelayHub();
+    final aDevice = AccountDevice(
+      id: 'device-a',
+      name: '电脑',
+      platform: 'windows',
+      firstSeenAt: DateTime.utc(2026, 1, 1),
+      lastSeenAt: DateTime.utc(2026, 1, 1),
+    );
+    final bDevice = AccountDevice(
+      id: 'device-b',
+      name: '网页设备',
+      platform: 'web',
+      firstSeenAt: DateTime.utc(2026, 1, 2),
+      lastSeenAt: DateTime.utc(2026, 1, 2),
+    );
+    final devices = <String, AccountDevice>{
+      aDevice.id: aDevice,
+      bDevice.id: bDevice,
+    };
+
+    AccountSyncState aState = _state(devices: devices);
+    AccountSyncState bState = _state(devices: devices);
+    final aRecords = <Map<String, dynamic>>[
+      <String, dynamic>{'kind': 'order', 'id': 'order-1', 'value': 1},
+      <String, dynamic>{'kind': 'order', 'id': 'order-2', 'value': 2},
+    ];
+    final bRecords = <Map<String, dynamic>>[
+      for (final item in aRecords) Map<String, dynamic>.from(item),
+    ];
+    final receivedBatches = <List<Map<String, dynamic>>>[];
+
+    final a = PublicPeerSyncService(
+      accountId: aState.accountId,
+      deviceId: aDevice.id,
+      captureAccountState: () => aState,
+      mergeAccountState: (incoming) async {
+        aState = aState.merge(incoming);
+      },
+      exportRecords: () async => [
+        for (final item in aRecords) Map<String, dynamic>.from(item),
+      ],
+      mergeRecords: (_) async {},
+      relayFactory: hub.createClient,
+      heartbeatInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(a.dispose);
+
+    final b = PublicPeerSyncService(
+      accountId: bState.accountId,
+      deviceId: bDevice.id,
+      captureAccountState: () => bState,
+      mergeAccountState: (incoming) async {
+        bState = bState.merge(incoming);
+      },
+      exportRecords: () async => [
+        for (final item in bRecords) Map<String, dynamic>.from(item),
+      ],
+      mergeRecords: (incoming) async {
+        receivedBatches.add([
+          for (final item in incoming) Map<String, dynamic>.from(item),
+        ]);
+        for (final incomingRecord in incoming) {
+          final id = incomingRecord['id'];
+          final index = bRecords.indexWhere((item) => item['id'] == id);
+          if (index >= 0) {
+            bRecords[index] = Map<String, dynamic>.from(incomingRecord);
+          } else {
+            bRecords.add(Map<String, dynamic>.from(incomingRecord));
+          }
+        }
+      },
+      relayFactory: hub.createClient,
+      heartbeatInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(b.dispose);
+
+    await b.start();
+    await a.start();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    receivedBatches.clear();
+
+    aRecords[0] = <String, dynamic>{
+      'kind': 'order',
+      'id': 'order-1',
+      'value': 99,
+    };
+    a.requestSync(immediate: true);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while (receivedBatches.isEmpty && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(receivedBatches, isNotEmpty);
+    expect(receivedBatches.last, hasLength(1));
+    expect(receivedBatches.last.single['id'], 'order-1');
+    expect(receivedBatches.last.single['value'], 99);
+  });
 }
 
 AccountSyncState _state({
