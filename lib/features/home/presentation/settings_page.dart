@@ -21,7 +21,6 @@ import '../../shared/presentation/spotlight_guide.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/state/order_store.dart';
 import '../../products/state/product_store.dart';
-import 'about_page.dart';
 import 'adventurer_news_dialog.dart';
 import 'reminder_background_guide.dart';
 import 'settings_common.dart';
