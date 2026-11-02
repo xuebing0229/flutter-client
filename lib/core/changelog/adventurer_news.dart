@@ -453,7 +453,7 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
   AdventurerNewsEntry(
     introducedBuild: 229,
     title: '网页版操作稳定性与桌面图标修复',
-    description: '修复网页版在线同步时页面可能反复重建、打断正在进行的操作；同时修正添加到桌面后的图标缩放比例，使它保持与客户端图标一致的构图。',
+    description: '修复网页版在线同步时页面可能反复重建、打断正在进行的操作；设备间日常同步只补充发生变化的数据，离线设备也不会反复触发传输；同时修正添加到桌面后的图标缩放比例，使它保持与客户端图标一致的构图。',
   ),
 ];
 
