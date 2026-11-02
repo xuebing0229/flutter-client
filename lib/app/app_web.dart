@@ -32,6 +32,7 @@ import '../features/home/presentation/feature_toggle_page.dart';
 import '../features/home/presentation/first_run_guide.dart';
 import '../features/home/presentation/settings_common.dart';
 import '../features/home/presentation/workspace_shell.dart';
+import '../features/home/presentation/workspace_main_pages.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
 import '../features/focus/presentation/focus_panel.dart';
@@ -864,102 +865,78 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   Widget _tabBody(String id) {
-    return switch (id) {
-      'products' => ProductPage(
-          accountId: _accountId,
-          store: _productStore,
-          featureStore: widget.featureStore,
-          pricingPresetStore: _pricingPresetStore,
-          receiptStyleStore: _receiptStyleStore,
-          syncCoordinator: _syncUi,
-          cardView: _productCardView,
-          onCardViewChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(productCardView: value);
-            });
-            _scheduleSave();
-          },
-          overviewView: _productOverviewView,
-          onOverviewViewChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(productOverviewView: value);
-            });
-            _scheduleSave();
-          },
-          overviewColumns: _productOverviewColumns,
-          onOverviewColumnsChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(productOverviewColumns: value);
-            });
-            _scheduleSave();
-          },
-          sortModeName: _productSortMode,
-          onSortModeChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(productSortMode: value);
-            });
-            _scheduleSave();
-          },
-        ),
-      'schedule' => SchedulePage(
-          accountId: _accountId,
-          store: _orderStore,
-          productStore: _productStore,
-          nodePresetStore: _nodePresetStore,
-          featureStore: widget.featureStore,
-        ),
-      'statistics' => StatisticsPage(
-          store: _orderStore,
-          productStore: _productStore,
-        ),
-      _ => OrderQueuePage(
-          accountId: _accountId,
-          store: _orderStore,
-          nodePresetStore: _nodePresetStore,
-          pricingPresetStore: _pricingPresetStore,
-          receiptStyleStore: _receiptStyleStore,
-          featureStore: widget.featureStore,
-          syncCoordinator: _syncUi,
-          cardView: _orderCardView,
-          onCardViewChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(orderCardView: value);
-            });
-            _scheduleSave();
-          },
-          overviewView: _orderOverviewView,
-          onOverviewViewChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(orderOverviewView: value);
-            });
-            _scheduleSave();
-          },
-          overviewColumns: _orderOverviewColumns,
-          onOverviewColumnsChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(orderOverviewColumns: value);
-            });
-            _scheduleSave();
-          },
-          sortModeName: _orderSortMode,
-          guideTargets: _quickStartGuideTargets,
-          guideOrderId: _guidedOrderId,
-          onSortModeChanged: (value) {
-            setState(() {
-              _collectionViews =
-                  _collectionViews.copyWith(orderSortMode: value);
-            });
-            _scheduleSave();
-          },
-        ),
-    };
+    return buildWorkspaceMainPage(
+      id: id,
+      accountId: _accountId,
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      featureStore: widget.featureStore,
+      syncCoordinator: _syncUi,
+      orderCardView: _orderCardView,
+      onOrderCardViewChanged: (value) {
+        setState(() {
+          _collectionViews = _collectionViews.copyWith(orderCardView: value);
+        });
+        _scheduleSave();
+      },
+      orderOverviewView: _orderOverviewView,
+      onOrderOverviewViewChanged: (value) {
+        setState(() {
+          _collectionViews = _collectionViews.copyWith(orderOverviewView: value);
+        });
+        _scheduleSave();
+      },
+      orderOverviewColumns: _orderOverviewColumns,
+      onOrderOverviewColumnsChanged: (value) {
+        setState(() {
+          _collectionViews =
+              _collectionViews.copyWith(orderOverviewColumns: value);
+        });
+        _scheduleSave();
+      },
+      orderSortMode: _orderSortMode,
+      onOrderSortModeChanged: (value) {
+        setState(() {
+          _collectionViews = _collectionViews.copyWith(orderSortMode: value);
+        });
+        _scheduleSave();
+      },
+      productCardView: _productCardView,
+      onProductCardViewChanged: (value) {
+        setState(() {
+          _collectionViews = _collectionViews.copyWith(productCardView: value);
+        });
+        _scheduleSave();
+      },
+      productOverviewView: _productOverviewView,
+      onProductOverviewViewChanged: (value) {
+        setState(() {
+          _collectionViews =
+              _collectionViews.copyWith(productOverviewView: value);
+        });
+        _scheduleSave();
+      },
+      productOverviewColumns: _productOverviewColumns,
+      onProductOverviewColumnsChanged: (value) {
+        setState(() {
+          _collectionViews =
+              _collectionViews.copyWith(productOverviewColumns: value);
+        });
+        _scheduleSave();
+      },
+      productSortMode: _productSortMode,
+      onProductSortModeChanged: (value) {
+        setState(() {
+          _collectionViews = _collectionViews.copyWith(productSortMode: value);
+        });
+        _scheduleSave();
+      },
+      guideTargets: _quickStartGuideTargets,
+      guideOrderId: _guidedOrderId,
+    );
   }
 
   Future<void> _openFocusOrder(String orderId) async {
