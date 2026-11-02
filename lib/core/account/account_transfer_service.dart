@@ -451,117 +451,6 @@ class SyncthingAccountTransferServer {
   String? get acceptedReceiverPlatform => _acceptedReceiverPlatform;
   String get diagnosticReport => _diagnostics.report();
 
-  Future<bool> _startRelayListener() async {
-    try {
-      final relay = await _AccountTransferRelaySession.connect(
-        descriptor: descriptor,
-        localDeviceId: response.receiverDeviceId,
-        onFrame: _handleRelayFrame,
-      );
-      if (_closed) {
-        await relay.close();
-        return false;
-      }
-      _relaySession = relay;
-      _diagnostics.event('client.relay.connected');
-      return true;
-    } catch (error) {
-      _diagnostics.event('client.relay.connect.error', <String, Object?>{
-        'error': '$error',
-      });
-      return false;
-    }
-  }
-
-  Future<void> _handleRelayFrame(_AccountTransferRelayFrame frame) async {
-    if (_closed || frame.receiverDeviceId != response.receiverDeviceId) return;
-    try {
-      if (frame.type == 'payload') {
-        final clear = await _decryptTransferPayload(
-          frame.body,
-          descriptor.encryptionKey,
-        );
-        _relayClearPayload = clear;
-        _relayPayloadObserved = true;
-        _diagnostics.event('client.relay.payload.received');
-        return;
-      }
-      if (frame.type == 'ack') {
-        final clear = await _decryptTransferPayload(
-          frame.body,
-          descriptor.encryptionKey,
-        );
-        final expected = _relayControlMessage(
-          type: 'ack',
-          folderId: descriptor.folderId,
-          receiverDeviceId: response.receiverDeviceId,
-        );
-        if (clear == expected) {
-          _relayAckReceived = true;
-          _diagnostics.event('client.relay.ack.received');
-        }
-      }
-    } catch (error) {
-      _diagnostics.event('client.relay.frame.invalid', <String, Object?>{
-        'type': frame.type,
-        'error': '$error',
-      });
-    }
-  }
-
-  Future<String> _finishRelayReceive(String clear) async {
-    final relay = _relaySession;
-    if (relay == null || !relay.connected) {
-      throw const FormatException('备用设备连接已经断开，请保持两台设备在线后重试。');
-    }
-    final keyBytes = _decodeTransferKey(descriptor.encryptionKey);
-    if (keyBytes == null) {
-      throw const FormatException('设备加入二维码的加密密钥无效。');
-    }
-    final doneBody = await _encryptTransferPayload(
-      _relayControlMessage(
-        type: 'done',
-        folderId: descriptor.folderId,
-        receiverDeviceId: response.receiverDeviceId,
-      ),
-      keyBytes,
-    );
-    final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
-    var lastDonePublishAt = DateTime.fromMillisecondsSinceEpoch(0);
-    while (!_closed && DateTime.now().isBefore(ackDeadline)) {
-      if (_relayAckReceived) return clear;
-      if (DateTime.now().difference(lastDonePublishAt) >=
-          const Duration(seconds: 1)) {
-        relay.publish(
-          targetDeviceId: descriptor.sourceDeviceId,
-          frame: _AccountTransferRelayFrame(
-            type: 'done',
-            folderId: descriptor.folderId,
-            receiverDeviceId: response.receiverDeviceId,
-            body: doneBody,
-          ),
-        );
-        lastDonePublishAt = DateTime.now();
-        _diagnostics.event('client.relay.done.publish');
-      }
-      if (await _ackFile.exists()) {
-        _diagnostics.event('client.nativeAck.detected.afterRelay');
-        return clear;
-      }
-      try {
-        await _bridge.requestScanFolder(descriptor.folderId);
-      } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-    if (_closed) {
-      throw const FormatException('设备加入已取消。');
-    }
-    throw const FormatException(
-      '账号数据已经通过备用连接收到，但原设备没有完成最终确认。'
-      '请让原设备继续停留在“添加设备”页面后重试。',
-    );
-  }
-
   Future<String> captureDiagnosticReport() async {
     try {
       final status = await _bridge.statusFolder(descriptor.folderId);
@@ -1198,6 +1087,117 @@ class SyncthingAccountTransferClientSession {
   bool get relayFallbackObserved => _relayPayloadObserved;
   String get diagnosticReport => _diagnostics.report();
 
+  Future<bool> _startRelayListener() async {
+    try {
+      final relay = await _AccountTransferRelaySession.connect(
+        descriptor: descriptor,
+        localDeviceId: response.receiverDeviceId,
+        onFrame: _handleRelayFrame,
+      );
+      if (_closed) {
+        await relay.close();
+        return false;
+      }
+      _relaySession = relay;
+      _diagnostics.event('client.relay.connected');
+      return true;
+    } catch (error) {
+      _diagnostics.event('client.relay.connect.error', <String, Object?>{
+        'error': '$error',
+      });
+      return false;
+    }
+  }
+
+  Future<void> _handleRelayFrame(_AccountTransferRelayFrame frame) async {
+    if (_closed || frame.receiverDeviceId != response.receiverDeviceId) return;
+    try {
+      if (frame.type == 'payload') {
+        final clear = await _decryptTransferPayload(
+          frame.body,
+          descriptor.encryptionKey,
+        );
+        _relayClearPayload = clear;
+        _relayPayloadObserved = true;
+        _diagnostics.event('client.relay.payload.received');
+        return;
+      }
+      if (frame.type == 'ack') {
+        final clear = await _decryptTransferPayload(
+          frame.body,
+          descriptor.encryptionKey,
+        );
+        final expected = _relayControlMessage(
+          type: 'ack',
+          folderId: descriptor.folderId,
+          receiverDeviceId: response.receiverDeviceId,
+        );
+        if (clear == expected) {
+          _relayAckReceived = true;
+          _diagnostics.event('client.relay.ack.received');
+        }
+      }
+    } catch (error) {
+      _diagnostics.event('client.relay.frame.invalid', <String, Object?>{
+        'type': frame.type,
+        'error': '$error',
+      });
+    }
+  }
+
+  Future<String> _finishRelayReceive(String clear) async {
+    final relay = _relaySession;
+    if (relay == null || !relay.connected) {
+      throw const FormatException('备用设备连接已经断开，请保持两台设备在线后重试。');
+    }
+    final keyBytes = _decodeTransferKey(descriptor.encryptionKey);
+    if (keyBytes == null) {
+      throw const FormatException('设备加入二维码的加密密钥无效。');
+    }
+    final doneBody = await _encryptTransferPayload(
+      _relayControlMessage(
+        type: 'done',
+        folderId: descriptor.folderId,
+        receiverDeviceId: response.receiverDeviceId,
+      ),
+      keyBytes,
+    );
+    final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
+    var lastDonePublishAt = DateTime.fromMillisecondsSinceEpoch(0);
+    while (!_closed && DateTime.now().isBefore(ackDeadline)) {
+      if (_relayAckReceived) return clear;
+      if (DateTime.now().difference(lastDonePublishAt) >=
+          const Duration(seconds: 1)) {
+        relay.publish(
+          targetDeviceId: descriptor.sourceDeviceId,
+          frame: _AccountTransferRelayFrame(
+            type: 'done',
+            folderId: descriptor.folderId,
+            receiverDeviceId: response.receiverDeviceId,
+            body: doneBody,
+          ),
+        );
+        lastDonePublishAt = DateTime.now();
+        _diagnostics.event('client.relay.done.publish');
+      }
+      if (await _ackFile.exists()) {
+        _diagnostics.event('client.nativeAck.detected.afterRelay');
+        return clear;
+      }
+      try {
+        await _bridge.requestScanFolder(descriptor.folderId);
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (_closed) {
+      throw const FormatException('设备加入已取消。');
+    }
+    throw const FormatException(
+      '账号数据已经通过备用连接收到，但原设备没有完成最终确认。'
+      '请让原设备继续停留在“添加设备”页面后重试。',
+    );
+  }
+
   Future<String> captureDiagnosticReport() async {
     try {
       final status = await _bridge.statusFolder(descriptor.folderId);
@@ -1359,14 +1359,15 @@ class SyncthingAccountTransferClientSession {
           }
         }
 
-        if (status.folderErrors.isNotEmpty) {
+        final folderErrors = status?.folderErrors ?? const <String>[];
+        if (folderErrors.isNotEmpty) {
           _diagnostics.event('client.folderError', <String, Object?>{
-            'errors': status.folderErrors,
+            'errors': folderErrors,
             'relayAvailable': relayAvailable,
           });
           if (!relayAvailable) {
             throw FormatException(
-              '临时账号目录同步失败：${status.folderErrors.first}',
+              '临时账号目录同步失败：${folderErrors.first}',
             );
           }
         }
