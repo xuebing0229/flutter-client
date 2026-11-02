@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+225
-# beta-225: add encrypted Cloudflare fallback for first-device bootstrap and audit native transport runtime; retry smoke test
+# beta-225: encrypted Cloudflare first-join fallback + Syncthing v2 runtime adaptation audit
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
