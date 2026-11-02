@@ -45,6 +45,7 @@ import '../features/products/presentation/product_page.dart';
 import '../features/products/state/product_store.dart';
 import '../features/schedule/presentation/schedule_page.dart';
 import '../features/statistics/presentation/statistics_page.dart';
+import '../features/sync/presentation/sync_page_common.dart';
 import '../features/shared/domain/collection_view_preferences.dart';
 import '../features/shared/domain/receipt_style_store.dart';
 import '../features/shared/presentation/layout_spacing.dart';
@@ -2096,119 +2097,93 @@ class _WebDataPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final linked = linkedAccountName != null;
+    final connected = peerSync?.connected == true;
+    final error = peerSync?.lastError;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          '设备同步 / 备份',
-          style: TextStyle(fontWeight: FontWeight.w800),
+          '设备同步',
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+        padding: AppLayoutSpacing.pageScrollPadding(
+          context,
+          left: 16,
+          top: 8,
+          right: 16,
+        ),
         children: [
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    linked
-                        ? Icons.verified_user_outlined
-                        : Icons.info_outline_rounded,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      linked
-                          ? '当前网页版已关联账号“$linkedAccountName”。完整备份可在其他设备上导入恢复。'
-                          : '当前网页版尚未关联其他设备。若要导入已有数据，可以使用之前导出的完整备份。',
-                      style: const TextStyle(height: 1.45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
           SpotlightTarget(
             targetKey: guideTargets?.syncKey,
-            child: Card(
-            margin: EdgeInsets.zero,
-            child: ListTile(
-              leading: Icon(
-                peerSync?.connected == true
-                    ? Icons.sync_rounded
-                    : Icons.sync_problem_rounded,
-              ),
-              title: Text(
-                peerSync?.connected == true
-                    ? '在线设备同步已连接'
-                    : '正在连接在线同步',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(
-                peerSync?.lastError ??
-                    '两端同时打开时会自动同步排单、成品、节点、设置和参考图。',
-              ),
-              trailing: TextButton(
-                onPressed: peerSync == null
-                    ? null
-                    : () => peerSync!.requestSync(immediate: true),
-                child: const Text('立即同步'),
-              ),
-            ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          SpotlightTarget(
-            targetKey: guideTargets?.settingsBackupKey,
-            child: Card(
-              margin: EdgeInsets.zero,
+            child: SyncSectionCard(
+              title: '同步控制',
+              icon: connected
+                  ? Icons.sync_rounded
+                  : Icons.sync_problem_rounded,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ListTile(
-                    leading: const Icon(Icons.file_download_outlined),
-                    title: const Text(
-                      '导出完整备份',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                  Text(
+                    '网页版在已绑定设备同时打开时自动交换排单、成品、节点、设置和参考图。',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                    subtitle: const Text('排单、成品、节点、设置和参考图会一起保存'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: busy() ? null : () => onExport(context),
                   ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(Icons.file_upload_outlined),
-                  title: const Text(
-                    '导入完整备份',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: const Text('支持导入完整备份，也兼容旧版备份'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: busy() ? null : () => onImport(context),
+                  const SizedBox(height: 14),
+                  SyncPrimaryAction(
+                    label: connected ? '立即同步' : '重新连接并同步',
+                    onPressed: peerSync == null
+                        ? null
+                        : () => peerSync!.requestSync(immediate: true),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 14),
-          Card(
-            margin: EdgeInsets.zero,
-            child: const ListTile(
-              leading: Icon(Icons.ios_share_rounded),
-              title: Text(
-                'iPhone / iPad 可以添加到主屏幕',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text('用 Safari 打开网页 → 点“分享” → “添加到主屏幕”，之后就能像普通 App 一样从桌面进入。'),
+          SyncSectionCard(
+            title: '同步状态',
+            icon: Icons.sync_alt_rounded,
+            child: Column(
+              children: [
+                SyncStatusRow(
+                  label: '账号关联',
+                  value: linked ? linkedAccountName! : '尚未关联',
+                  good: linked,
+                ),
+                const SizedBox(height: 8),
+                SyncStatusRow(
+                  label: '在线连接',
+                  value: connected ? '已连接' : '等待其他设备',
+                  good: connected,
+                ),
+                if (error != null && error.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      error,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
+          ),
+          const SizedBox(height: 14),
+          GuildSettingsDataCard(
+            exportBusy: busy(),
+            onExport: () => unawaited(onExport(context)),
+            onImport: () => unawaited(onImport(context)),
+            guideTargets: guideTargets,
           ),
           const SizedBox(height: 14),
           Text(
-            '在线同步只在设备打开时进行。'
-            '若要更换浏览器、清理数据或迁移设备，建议先保留一份完整备份。',
+            '在线同步只在设备打开时进行。若要更换浏览器、清理数据或迁移设备，建议先保留一份完整备份。',
             style: TextStyle(
               height: 1.5,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
