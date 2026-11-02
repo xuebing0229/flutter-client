@@ -197,11 +197,17 @@ class SyncthingBridge(
         // Service only launches the process; it does not mean the REST API is
         // already accepting requests. Wait for /rest/system/ping to answer
         // before any config/folder/scan operation is allowed to continue.
-        val deadlineNanos = System.nanoTime() + 15_000_000_000L
+        val deadlineNanos = System.nanoTime() + 30_000_000_000L
+        var seenRunningProcess = SyncthingService.isRunning
         while (System.nanoTime() < deadlineNanos) {
             if (pingReady()) {
                 applyIntegrationPolicy()
                 return
+            }
+            if (SyncthingService.isRunning) {
+                seenRunningProcess = true
+            } else if (seenRunningProcess) {
+                throw IllegalStateException("同步核心进程启动后意外退出")
             }
             Thread.sleep(100L)
         }
