@@ -448,6 +448,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版新手引导高亮全面修正',
     description: '系统检查并修正网页版快速上手引导：表单字段会完整高亮标签与输入区域，页面切换后稍晚出现的目标不再被教程提前跳过；账号与设备重新纳入网页版教程，完整备份会直接指向实际导出/导入区域，透明控件在网页端也会沿真实控件轮廓明确显示高亮。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 228,
+    title: '网页版界面与客户端进一步统一',
+    description: '网页版的账号、设置、主题色、设备同步和参考图进一步与手机、电脑共用同一套界面组件，只保留平台能力不同的部分单独适配；新手引导会按完整导航项高亮成品、日程和统计。添加到桌面时也会使用冒险者公会当前 App 图标。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
