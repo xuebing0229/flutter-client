@@ -23,7 +23,6 @@ import '../core/settings/workspace_settings_codec.dart';
 import '../core/settings/workspace_navigation_model.dart';
 import '../core/sync/sync_coordinator_web.dart';
 import '../core/theme/app_theme_store.dart';
-import '../core/theme/app_ui_style.dart';
 import '../core/web/web_platform_bridge.dart';
 import '../features/home/presentation/about_page.dart';
 import '../features/home/presentation/adventurer_news_dialog.dart';
