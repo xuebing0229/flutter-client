@@ -26,7 +26,7 @@ class ThemePaletteTransferService {
     );
     try {
       await file.writeAsString(_codec.encodeFile(palette), flush: true);
-      return _fileBridge.exportLocalFile(
+      return await _fileBridge.exportLocalFile(
         sourcePath: file.path,
         fileName: '$safeName.agtheme',
         mimeType: 'application/json',
