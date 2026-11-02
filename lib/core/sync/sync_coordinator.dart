@@ -1926,22 +1926,6 @@ class SyncCoordinator extends ChangeNotifier {
     }
   }
 
-  Map<String, dynamic> _normalizeMaterializedSettings(
-    Map<String, dynamic> settings,
-  ) {
-    final normalized = <String, dynamic>{...settings};
-    final hasFieldLevelFeatures = normalized.keys.any(
-      (key) => key.startsWith('feature.'),
-    );
-    if (hasFieldLevelFeatures) {
-      normalized.remove('features');
-    }
-    if (normalized.containsKey('uiStyle')) {
-      normalized.remove('uiTexture');
-    }
-    return normalized;
-  }
-
   Future<void> _backfillMissingRecordFields({
     required SyncEntityKind kind,
     required Map<String, Map<String, dynamic>> local,
@@ -2043,201 +2027,8 @@ class SyncCoordinator extends ChangeNotifier {
     SyncEntityKind kind,
     Map<String, SyncRecord> records,
   ) async {
-    switch (kind) {
-      case SyncEntityKind.order:
-        _applyOrderRecords(records);
-      case SyncEntityKind.product:
-        _applyProductRecords(records);
-      case SyncEntityKind.nodePreset:
-        _applyPresetRecords(records);
-      case SyncEntityKind.focusSession:
-        _applyFocusRecords(records);
-      case SyncEntityKind.settings:
-        await _applySettingsRecords(records);
-    }
-  }
-
-  Future<void> _applySettingsRecords(
-    Map<String, SyncRecord> records,
-  ) async {
-    final record = records[settingsRecordId];
-    if (record == null) return;
-
-    final local = captureSettings();
-    final settings = _mergeEngine.materializeKeepingLocalConflicts(
-      record,
-      local,
-    );
-    if (settings == null) return;
-
-    final normalized = _normalizeMaterializedSettings(settings);
-    if (syncJsonEquals(normalized, local)) return;
-
-    try {
-      await applySettings(normalized);
-    } catch (error) {
-      _lastError = '应用远端界面设置失败：$error';
-    }
-  }
-
-  void _applyOrderRecords(Map<String, SyncRecord> records) {
-    final result = <QueueOrder>[];
-
-    for (final existing in orderStore.orders) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.orderToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.orderFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-    }
-
-    for (final record in records.values) {
-      if (orderStore.contains(record.id)) continue;
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.orderFromFields(fields));
-      } catch (_) {
-        // Invalid remote record stays on disk for later repair.
-      }
-    }
-
-    if (!_sameOrderList(orderStore.orders, result)) {
-      orderStore.replaceAll(result);
-    }
-  }
-
-  void _applyProductRecords(Map<String, SyncRecord> records) {
-    final result = <FinishedProduct>[];
-
-    for (final existing in productStore.products) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.productToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.productFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-    }
-
-    for (final record in records.values) {
-      if (productStore.contains(record.id)) continue;
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.productFromFields(fields));
-      } catch (_) {
-        // Invalid remote record stays on disk for later repair.
-      }
-    }
-
-    if (!_sameProductList(productStore.products, result)) {
-      productStore.replaceAll(result);
-    }
-  }
-
-  void _applyPresetRecords(Map<String, SyncRecord> records) {
-    final current = <String, NodePreset>{
-      for (final preset in nodePresetStore.presets) preset.id: preset,
-    };
-    final result = <NodePreset>[];
-
-    for (final existing in nodePresetStore.presets) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.nodePresetToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.nodePresetFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-      current.remove(existing.id);
-    }
-
-    for (final record in records.values) {
-      if (current.containsKey(record.id) ||
-          nodePresetStore.presets.any((preset) => preset.id == record.id)) {
-        continue;
-      }
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.nodePresetFromFields(fields));
-      } catch (_) {
-        // Keep processing other presets.
-      }
-    }
-
-    final currentFields = _capturePresets();
-    final resultFields = <String, Map<String, dynamic>>{
-      for (final preset in result)
-        preset.id: SyncEntityCodec.nodePresetToFields(preset),
-    };
-    if (!syncJsonEquals(currentFields, resultFields)) {
-      nodePresetStore.replaceAll(result);
-    }
-  }
-
-  void _applyFocusRecords(Map<String, SyncRecord> records) {
-    final result = <FocusSession>[];
-
-    for (final existing in focusStore.sessions) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.focusSessionToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.focusSessionFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-    }
-
-    for (final record in records.values) {
-      if (focusStore.contains(record.id)) continue;
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.focusSessionFromFields(fields));
-      } catch (_) {
-        // Invalid remote focus record stays on disk for later repair.
-      }
-    }
-
-    if (!_sameFocusList(focusStore.sessions, result)) {
-      focusStore.replaceAll(result);
-    }
+    final error = await _workspaceEngine.applyEntityRecords(kind, records);
+    if (error != null) _lastError = error;
   }
 
   Future<void> _persistFocusNormalization(
@@ -2264,29 +2055,8 @@ class SyncCoordinator extends ChangeNotifier {
 
   List<SyncConflictView> _collectConflicts(
     Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
-  ) {
-    final result = <SyncConflictView>[];
-    for (final kind in SyncEntityKind.values) {
-      result.addAll(_viewsFor(kind, recordsByKind[kind]!));
-    }
-    result.sort((a, b) => b.conflict.createdAt.compareTo(a.conflict.createdAt));
-    return result;
-  }
-
-  Iterable<SyncConflictView> _viewsFor(
-    SyncEntityKind kind,
-    Map<String, SyncRecord> records,
-  ) sync* {
-    for (final record in records.values) {
-      for (final conflict in record.conflicts.values) {
-        yield SyncConflictView(
-          kind: kind,
-          recordId: record.id,
-          conflict: conflict,
-        );
-      }
-    }
-  }
+  ) =>
+      _workspaceEngine.collectConflicts(recordsByKind);
 
   Future<void> _rebuildConflicts() async {
     final recordsByKind = <SyncEntityKind, Map<String, SyncRecord>>{};
@@ -2308,83 +2078,20 @@ class SyncCoordinator extends ChangeNotifier {
     return values;
   }
 
-  Map<String, Map<String, dynamic>> _captureOrders() {
-    return <String, Map<String, dynamic>>{
-      for (final order in orderStore.orders)
-        order.id: SyncEntityCodec.orderToFields(order),
-    };
-  }
+  Map<String, Map<String, dynamic>> _captureOrders() =>
+      _workspaceEngine.captureOrders();
 
-  Map<String, Map<String, dynamic>> _captureProducts() {
-    return <String, Map<String, dynamic>>{
-      for (final product in productStore.products)
-        product.id: SyncEntityCodec.productToFields(product),
-    };
-  }
+  Map<String, Map<String, dynamic>> _captureProducts() =>
+      _workspaceEngine.captureProducts();
 
-  Map<String, Map<String, dynamic>> _capturePresets() {
-    return <String, Map<String, dynamic>>{
-      for (final preset in nodePresetStore.presets)
-        preset.id: SyncEntityCodec.nodePresetToFields(preset),
-    };
-  }
+  Map<String, Map<String, dynamic>> _capturePresets() =>
+      _workspaceEngine.capturePresets();
 
-  Map<String, Map<String, dynamic>> _captureFocusSessions() {
-    return <String, Map<String, dynamic>>{
-      for (final session in focusStore.sessions)
-        session.id: SyncEntityCodec.focusSessionToFields(session),
-    };
-  }
+  Map<String, Map<String, dynamic>> _captureFocusSessions() =>
+      _workspaceEngine.captureFocusSessions();
 
-  Map<SyncEntityKind, Map<String, Map<String, dynamic>>> _captureEntities() {
-    return <SyncEntityKind, Map<String, Map<String, dynamic>>>{
-      SyncEntityKind.order: _captureOrders(),
-      SyncEntityKind.product: _captureProducts(),
-      SyncEntityKind.nodePreset: _capturePresets(),
-      SyncEntityKind.focusSession: _captureFocusSessions(),
-      SyncEntityKind.settings: <String, Map<String, dynamic>>{
-        settingsRecordId: captureSettings(),
-      },
-    };
-  }
-
-  bool _sameOrderList(Iterable<QueueOrder> left, Iterable<QueueOrder> right) {
-    final a = <Map<String, dynamic>>[
-      for (final order in left) SyncEntityCodec.orderToFields(order),
-    ];
-    final b = <Map<String, dynamic>>[
-      for (final order in right) SyncEntityCodec.orderToFields(order),
-    ];
-    return syncJsonEquals(a, b);
-  }
-
-  bool _sameProductList(
-    Iterable<FinishedProduct> left,
-    Iterable<FinishedProduct> right,
-  ) {
-    final a = <Map<String, dynamic>>[
-      for (final product in left) SyncEntityCodec.productToFields(product),
-    ];
-    final b = <Map<String, dynamic>>[
-      for (final product in right) SyncEntityCodec.productToFields(product),
-    ];
-    return syncJsonEquals(a, b);
-  }
-
-  bool _sameFocusList(
-    Iterable<FocusSession> left,
-    Iterable<FocusSession> right,
-  ) {
-    final a = <Map<String, dynamic>>[
-      for (final session in left)
-        SyncEntityCodec.focusSessionToFields(session),
-    ];
-    final b = <Map<String, dynamic>>[
-      for (final session in right)
-        SyncEntityCodec.focusSessionToFields(session),
-    ];
-    return syncJsonEquals(a, b);
-  }
+  Map<SyncEntityKind, Map<String, Map<String, dynamic>>> _captureEntities() =>
+      _workspaceEngine.captureEntities();
 
   void _enqueueBackground(Future<void> Function() action) {
     if (_disposed || _removingLocalAccount) return;
