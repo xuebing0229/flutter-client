@@ -64,7 +64,7 @@ void main() {
 
       await web.start();
 
-      // Let the first snapshot be sent while the native peer is offline. The
+      // Let the first record manifest be sent while the native peer is offline. The
       // relay deliberately has no offline queue, so this attempt is dropped.
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(web.lastSuccessfulSyncAt, isNull);
@@ -96,7 +96,7 @@ void main() {
 
       await native.start();
 
-      // Native startup itself announces presence. Web receives that snapshot
+      // Native startup itself announces presence. Web receives that manifest
       // and answers once with its latest records; no polling/retry loop is needed.
       await received.future.timeout(const Duration(seconds: 1));
 
@@ -120,7 +120,7 @@ void main() {
       expect(native.lastSuccessfulSyncAt, isNotNull);
 
       // Once both directions are acknowledged, the protocol must become idle
-      // instead of bouncing snapshots forever.
+      // instead of bouncing manifests or deltas forever.
       await Future<void>.delayed(const Duration(milliseconds: 80));
       final settledPublishCount = hub.publishCount;
       await Future<void>.delayed(const Duration(milliseconds: 100));
