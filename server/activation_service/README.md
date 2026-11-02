@@ -33,6 +33,8 @@ Ed25519 私钥仍只保留在发码器设备安全存储中，不上传服务器
 
 ## 买家首次注册
 
+网页版首次注册也走同一条核销接口。浏览器来源必须列在 `LICENSE_CORS_ORIGINS` 中（逗号分隔）；默认包含测试版与正式版公会 PWA 域名。CORS 只开放 `POST /v1/activate`，管理员接口不会因此开放给网页脚本。
+
 买家 App 本地先验签，然后只向 POST /v1/activate 提交 activationCode 和 claimId。
 
 未核销时服务器记录 redeemed_at 和 claimId；同一 claimId 重试视为同一次注册；其他 claimId 再使用同一码则返回 already_redeemed。
