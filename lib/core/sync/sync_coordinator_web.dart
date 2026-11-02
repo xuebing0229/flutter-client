@@ -9,6 +9,7 @@ import '../../features/orders/state/order_store.dart';
 import '../../features/products/state/product_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
+import 'sync_record_local_change.dart';
 import 'sync_coordinator_view.dart';
 import 'sync_workspace_engine.dart';
 import '../web/web_platform_bridge.dart';
@@ -304,41 +305,20 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
       final ids = <String>{...previousValues.keys, ...currentValues.keys};
 
       for (final id in ids) {
-        final before = previousValues[id];
-        final after = currentValues[id];
-        if (syncJsonEquals(before, after)) continue;
-
         final existing = _records[kind]![id];
-        SyncRecord next;
-        if (after == null) {
-          if (existing == null) {
-            if (before == null) continue;
-            next = SyncRecord.bootstrap(
-              kind: kind,
-              id: id,
-              values: before,
-              deviceId: deviceId,
-            ).copyWith(accountId: accountId);
-          } else {
-            next = existing;
-          }
-          next = _mergeEngine.markDeleted(next, deviceId: deviceId);
-        } else if (existing == null) {
-          next = SyncRecord.bootstrap(
-            kind: kind,
-            id: id,
-            values: after,
-            deviceId: deviceId,
-          ).copyWith(accountId: accountId);
-        } else {
-          next = _mergeEngine.applyLocalSnapshot(
-            record: existing,
-            previousValues: before ?? after,
-            nextValues: after,
-            deviceId: deviceId,
-          );
-        }
-        _records[kind]![id] = next.copyWith(accountId: accountId);
+        final next = buildLocalSyncRecordChange(
+          accountId: accountId,
+          deviceId: deviceId,
+          kind: kind,
+          id: id,
+          before: previousValues[id],
+          after: currentValues[id],
+          baselineRecord: existing,
+          currentRecord: existing,
+          mergeEngine: _mergeEngine,
+        );
+        if (next == null) continue;
+        _records[kind]![id] = next;
         changed = true;
       }
     }
