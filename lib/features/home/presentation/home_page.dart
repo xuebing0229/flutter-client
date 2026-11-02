@@ -51,6 +51,7 @@ import 'workspace_shell.dart';
 import 'workspace_main_pages.dart';
 import 'workspace_common_tool_pages.dart';
 import 'quick_start_guide_helpers.dart';
+import 'workspace_add_pages.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
@@ -1431,14 +1432,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
     if (useDesktopLayout && _desktopAddEditorOpen) return;
     final route = MaterialPageRoute<void>(
-      builder: (_) => ScreenshotImportPage(
+      builder: (_) => buildWorkspaceScreenshotImportPage(
+        products: products,
         accountId: widget.accountId,
-        kind: products
-            ? ScreenshotImportKind.products
-            : ScreenshotImportKind.orders,
         orderStore: _orderStore,
         productStore: _productStore,
-        presetStore: _nodePresetStore,
+        nodePresetStore: _nodePresetStore,
       ),
     );
     final desktopNavigator = useDesktopLayout
@@ -1460,9 +1459,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (useDesktopLayout && _desktopAddEditorOpen) return;
 
     final route = MaterialPageRoute<void>(
-      builder: (_) => AddOrderPage(
+      builder: (_) => buildWorkspaceManualAddPage(
+        products: false,
         accountId: widget.accountId,
-        store: _orderStore,
+        orderStore: _orderStore,
+        productStore: _productStore,
         nodePresetStore: _nodePresetStore,
         pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
@@ -1488,9 +1489,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (useDesktopLayout && _desktopAddEditorOpen) return;
 
     final route = MaterialPageRoute<void>(
-      builder: (_) => AddProductPage(
+      builder: (_) => buildWorkspaceManualAddPage(
+        products: true,
         accountId: widget.accountId,
-        store: _productStore,
+        orderStore: _orderStore,
+        productStore: _productStore,
+        nodePresetStore: _nodePresetStore,
         pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
       ),
