@@ -605,10 +605,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     if (mounted) setState(() {});
   }
 
-  void _onPeerSyncChanged() {
-    if (mounted && _ready) setState(() {});
-  }
-
   void _startPublicPeerSync() {
     if (_peerSync != null) return;
     final service = PublicPeerSyncService(
@@ -641,7 +637,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       ),
     );
     _peerSync = service;
-    service.addListener(_onPeerSyncChanged);
     unawaited(service.start());
   }
 
@@ -1696,7 +1691,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     widget.featureStore.removeListener(_onFeatureStoreChanged);
     widget.themeStore.removeListener(_scheduleSave);
     _syncUi.removeListener(_onSyncUiChanged);
-    _peerSync?.removeListener(_onPeerSyncChanged);
     _peerSync?.dispose();
     _peerSync = null;
     _syncUi.dispose();
@@ -2099,6 +2093,17 @@ class _WebDataPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sync = peerSync;
+    if (sync == null) {
+      return _buildPage(context);
+    }
+    return AnimatedBuilder(
+      animation: sync,
+      builder: (context, _) => _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final linked = linkedAccountName != null;
     final connected = peerSync?.connected == true;
     final error = peerSync?.lastError;
