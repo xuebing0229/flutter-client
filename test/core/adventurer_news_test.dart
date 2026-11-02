@@ -316,4 +316,12 @@ void main() {
       ['首次添加设备增加备用连接'],
     );
   });
+  test('230 包含三端一致性继续完善见闻', () {
+    final picked = newsBetweenBuilds(229, 230);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['手机、电脑与网页版一致性继续完善'],
+    );
+  });
+
 }
