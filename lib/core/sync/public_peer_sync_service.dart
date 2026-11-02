@@ -23,8 +23,10 @@ typedef PeerRelayFactory = PublicRelayClient Function(String clientId);
 
 /// Browser-compatible online sync that keeps the native Syncthing path intact.
 ///
-/// Cloudflare only acts as an online transient relay. Every application payload
-/// is AES-GCM encrypted before it leaves the device and the relay stores no
+/// Cloudflare only transports the app's existing SyncRecord graph. Normal edits
+/// are sent as record-level deltas; startup/reconnect exchanges compact record
+/// fingerprints and requests only mismatches. Every application payload is
+/// AES-GCM encrypted before it leaves the device and the relay stores no
 /// workspace messages, so both devices still need to be online at the same time.
 class PublicPeerSyncService extends ChangeNotifier {
   PublicPeerSyncService({
@@ -817,6 +819,15 @@ class PublicPeerSyncService extends ChangeNotifier {
     await mergeAccountState(incomingAccount);
     if (captureAccountState().isRevoked(deviceId)) return;
     await mergeRecords(records);
+
+    // A legacy full snapshot may still arrive from Beta 228. Treat the merged
+    // records as the new relay baseline so normal store notifications do not
+    // echo the same data back through the new incremental protocol.
+    final localIndex = await _recordIndex();
+    _lastLocalRecordFingerprints =
+        Map<String, String>.from(localIndex.fingerprints);
+    _lastLocalAccountFingerprint =
+        await _fingerprint(captureAccountState().toJson());
 
     final missing = <String>[];
     final exists = assetExists;
