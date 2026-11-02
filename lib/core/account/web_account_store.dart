@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'account_models.dart';
+import 'account_activation_flow.dart';
+import 'activation_api.dart';
 import 'account_state_mutations.dart';
 import 'offline_license.dart';
 import '../web/web_platform_bridge.dart';
@@ -87,11 +89,14 @@ class _WebAccountRecord {
 class WebAccountStore extends ChangeNotifier {
   WebAccountStore({
     OfflineLicenseVerifier verifier = const OfflineLicenseVerifier(),
-  }) : _verifier = verifier;
+    ActivationApiClient activationApi = const ActivationApiClient(),
+  })  : _verifier = verifier,
+        _activationApi = activationApi;
 
   static const String _storageKey = 'adventurers-guild.web.accounts.v1';
 
   final OfflineLicenseVerifier _verifier;
+  final ActivationApiClient _activationApi;
   final Map<String, _WebAccountRecord> _accounts =
       <String, _WebAccountRecord>{};
   final Random _random = Random.secure();
@@ -205,19 +210,18 @@ class WebAccountStore extends ChangeNotifier {
     required String activationCode,
     required String accountName,
     required String password,
-  }) async {
+  }) async 
     final trimmedName = accountName.trim();
-    if (trimmedName.length < 2 || trimmedName.length > 32) {
-      throw const FormatException('账号名长度需要在 2–32 个字符之间。');
-    }
-    if (password.length < 6) {
-      throw const FormatException('密码至少需要 6 个字符。');
-    }
-
-    final license = await _verifier.verify(activationCode);
-    if (_accounts.containsKey(license.accountId)) {
-      throw const FormatException('这个账号已经保存在当前浏览器，请直接登录。');
-    }
+    final license = await verifyAndRedeemAccountActivation(
+      activationCode: activationCode,
+      accountName: accountName,
+      password: password,
+      verifier: _verifier,
+      activationApi: _activationApi,
+      hasLocalAccount: _accounts.containsKey,
+      claimFor: _activationClaimFor,
+      clearClaim: _clearActivationClaim,
+    );
 
     final now = DateTime.now().toUtc();
     final deviceId = _randomDeviceId();
@@ -249,6 +253,7 @@ class WebAccountStore extends ChangeNotifier {
     _selectedAccountId = license.accountId;
     status = WebAccountStatus.unlocked;
     await _persist();
+    await _clearActivationClaim(license.accountId);
     notifyListeners();
   }
 
@@ -506,6 +511,44 @@ class WebAccountStore extends ChangeNotifier {
       result |= a.codeUnitAt(index) ^ b.codeUnitAt(index);
     }
     return result == 0;
+  }
+
+  Future<String> _activationClaimFor(ActivationLicense license) async {
+    final key =
+        'adventurers-guild.web.activation-claim.v1.${license.accountId}';
+    try {
+      final source = webStorageGet(key);
+      if (source != null && source.trim().isNotEmpty) {
+        final decoded = jsonDecode(source);
+        if (decoded is Map &&
+            decoded['serial'] == license.serial &&
+            decoded['claimId'] is String &&
+            (decoded['claimId'] as String).length >= 16) {
+          return decoded['claimId'] as String;
+        }
+      }
+    } catch (_) {}
+
+    final claimId =
+        'claim-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+        '${_random.nextInt(0x7fffffff).toRadixString(36)}';
+    webStorageSet(
+      key,
+      jsonEncode(<String, dynamic>{
+        'accountId': license.accountId,
+        'serial': license.serial,
+        'claimId': claimId,
+      }),
+    );
+    return claimId;
+  }
+
+  Future<void> _clearActivationClaim(String accountId) async {
+    try {
+      webStorageRemove(
+        'adventurers-guild.web.activation-claim.v1.$accountId',
+      );
+    } catch (_) {}
   }
 
   String _deviceIdForAccount(String accountId) {
