@@ -443,6 +443,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版可以直接加入已有账号',
     description: '网页版新增从已登录手机或电脑直接加入账号：复制设备码后生成网页回应码，确认后通过加密在线连接接收账号身份，不再必须先导出再导入完整备份。不同浏览器会作为独立网页设备加入同一账号，并继续使用现有在线同步保持工作数据更新。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 227,
+    title: '网页版新手引导高亮全面修正',
+    description: '系统检查并修正网页版快速上手引导：表单字段会完整高亮标签与输入区域，页面切换后稍晚出现的目标不再被教程提前跳过；账号与设备重新纳入网页版教程，完整备份会直接指向实际导出/导入区域，透明控件在网页端也会沿真实控件轮廓明确显示高亮。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
