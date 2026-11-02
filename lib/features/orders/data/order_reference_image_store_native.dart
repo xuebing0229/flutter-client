@@ -207,6 +207,25 @@ class OrderReferenceImageStore {
     }
   }
 
+  Future<void> deleteAssetPaths({
+    required String accountId,
+    required Iterable<String> relativePaths,
+  }) async {
+    for (final relativePath in relativePaths.toSet()) {
+      try {
+        final segments = ReferenceImageRules.validateAssetPath(relativePath);
+        final root = await _syncRecordStore.rootDirectory(accountId);
+        final file = File(
+          <String>[root.path, ...segments].join(Platform.pathSeparator),
+        );
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // A stale optional bundle asset must not block the rest of restore.
+      }
+    }
+    await _requestScan(accountId);
+  }
+
   Future<bool> exportImage({
     required String accountId,
     required OrderReferenceImage image,
