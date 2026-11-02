@@ -913,9 +913,9 @@ class SyncthingAccountTransferServer {
       _diagnostics.event('server.close.removeFolder.ok');
     } finally {
       try {
-        if (await payloadFile.exists()) await _payloadFile.delete();
+        if (await _payloadFile.exists()) await _payloadFile.delete();
         if (await _doneFile.exists()) await _doneFile.delete();
-        if (await ackFile.exists()) await _ackFile.delete();
+        if (await _ackFile.exists()) await _ackFile.delete();
         if (await _folder.exists()) await _folder.delete(recursive: true);
       } catch (_) {}
     }
