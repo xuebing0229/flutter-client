@@ -1,6 +1,4 @@
-import 'dart:typed_data';
-
-import '../../../core/web/web_platform_bridge.dart';
+import '../../../core/web/web_platform_bridge.dart';\nimport 'receipt_style_image_types.dart';
 
 class PickedReceiptStyleImage {
   const PickedReceiptStyleImage({
