@@ -25,6 +25,8 @@ jobs:
           cache: true
       - name: Install dependencies
         run: flutter pub get
+      - name: Sync PWA icons from native app icon
+        run: dart run tool/sync_pwa_icons_from_android.dart
       - name: Build PWA
         run: flutter build web --release --no-web-resources-cdn
       - name: Finalize offline PWA cache
@@ -34,6 +36,9 @@ jobs:
         run: |
           test -s build/web/index.html
           test -s build/web/manifest.json
+          test -s build/web/icons/app-icon-192.png
+          test -s build/web/icons/app-icon-512.png
+          test -s build/web/icons/app-icon-maskable-512.png
           test -s build/web/pwa_service_worker.js
           test -s build/web/main.dart.js
           test -s build/web/canvaskit/canvaskit.js
