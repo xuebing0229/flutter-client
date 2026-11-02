@@ -177,28 +177,19 @@ class PublicPeerSyncService extends ChangeNotifier {
   Future<void> _heartbeatTick() async {
     if (_disposed) return;
     _dropExpiredTransfers();
-    if (_relay?.connected != true) {
-      await _connectRelay();
-      if (_relay?.connected == true) {
-        requestSync(immediate: true);
-      }
-      return;
-    }
 
-    // The relay intentionally has no offline queue. A successful WebSocket
-    // write therefore does not prove that the target device was online.
-    // Retry only snapshots that have not been acknowledged by the peer.
-    if (_pendingSnapshotByTarget.isNotEmpty) {
-      final targets = _pendingSnapshotByTarget.keys.toList(growable: false);
-      for (final target in targets) {
-        if (_disposed || _relay?.connected != true) return;
-        final pending = _pendingSnapshotByTarget[target];
-        if (pending == null) continue;
-        await _publishSnapshot(
-          onlyTarget: target,
-          requestReply: pending.requestReply,
-        );
-      }
+    // An open relay socket is already a live listener. Do not resend workspace
+    // snapshots just because a peer has not acknowledged an earlier attempt:
+    // the peer may simply be offline, and repeating the full snapshot forever
+    // wastes relay traffic. When that peer later comes online it sends its own
+    // startup snapshot with requestReply=true, which makes this device answer
+    // once with its latest state.
+    if (_relay?.connected == true) return;
+
+    _connected = false;
+    await _connectRelay();
+    if (_relay?.connected == true) {
+      requestSync(immediate: true);
     }
   }
 
