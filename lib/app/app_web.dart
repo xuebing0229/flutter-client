@@ -33,6 +33,7 @@ import '../features/home/presentation/first_run_guide.dart';
 import '../features/home/presentation/settings_common.dart';
 import '../features/home/presentation/workspace_shell.dart';
 import '../features/home/presentation/workspace_main_pages.dart';
+import '../features/home/presentation/workspace_common_tool_pages.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
 import '../features/focus/presentation/focus_panel.dart';
@@ -1230,23 +1231,23 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   Widget _buildWebToolPage(String tool) {
+    final common = buildWorkspaceCommonToolPage(
+      tool: tool,
+      accountId: _accountId,
+      accountName: widget.accountStore.accountName ?? '',
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      featureStore: widget.featureStore,
+      syncCoordinator: _syncUi,
+      guideTargets: _quickStartGuideTargets,
+      guideOrderId: _guidedOrderId,
+    );
+    if (common != null) return common;
+
     return switch (tool) {
-      AppToolMenu.presetTool => PresetCenterPage(
-          nodePresetStore: _nodePresetStore,
-          pricingPresetStore: _pricingPresetStore,
-          guideTargets: _quickStartGuideTargets,
-        ),
-      AppToolMenu.receiptTool => ReceiptCenterPage(
-          orderStore: _orderStore,
-          productStore: _productStore,
-          receiptStyleStore: _receiptStyleStore,
-          accountName: widget.accountStore.accountName ?? '',
-          guideTargets: _quickStartGuideTargets,
-        ),
-      AppToolMenu.featureToggleTool => FeatureTogglePage(
-          store: widget.featureStore,
-          guideTargets: _quickStartGuideTargets,
-        ),
       AppToolMenu.desktopPetTool => Scaffold(
           appBar: AppBar(
             title: const Text(
@@ -1259,18 +1260,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
             focusStore: _focusStore,
             onOpenOrder: _openFocusOrder,
           ),
-        ),
-      AppToolMenu.archiveTool => ArchivePage(
-          accountId: _accountId,
-          orderStore: _orderStore,
-          productStore: _productStore,
-          nodePresetStore: _nodePresetStore,
-          pricingPresetStore: _pricingPresetStore,
-          receiptStyleStore: _receiptStyleStore,
-          featureStore: widget.featureStore,
-          syncCoordinator: _syncUi,
-          guideTargets: _quickStartGuideTargets,
-          guideOrderId: _guidedOrderId,
         ),
       AppToolMenu.syncTool => _WebDataPage(
           linkedAccountName: _accountState.accountName,
