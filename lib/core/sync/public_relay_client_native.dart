@@ -18,8 +18,10 @@ class PublicRelayClient extends PublicRelayClientBase {
 
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
+  @override
   bool get connected => _socket?.readyState == WebSocket.open;
 
+  @override
   Future<void> connect(Iterable<String> topics) async {
     final topic = requireSingleTopic(topics);
     if (connected && connectedTopic == topic) return;
@@ -53,6 +55,7 @@ class PublicRelayClient extends PublicRelayClientBase {
     );
   }
 
+  @override
   void publish(String topic, String payload) {
     final socket = _socket;
     requireConnected(socket != null && socket.readyState == WebSocket.open);
@@ -61,6 +64,7 @@ class PublicRelayClient extends PublicRelayClientBase {
 
   void _handleIncoming(dynamic event) => emitIncoming(event);
 
+  @override
   Future<void> disconnect() async {
     final subscription = _subscription;
     _subscription = null;
