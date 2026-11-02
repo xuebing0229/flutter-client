@@ -35,6 +35,7 @@ import '../features/home/presentation/settings_common.dart';
 import '../features/home/presentation/workspace_shell.dart';
 import '../features/home/presentation/workspace_main_pages.dart';
 import '../features/home/presentation/workspace_common_tool_pages.dart';
+import '../features/home/presentation/quick_start_guide_helpers.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/imports/data/screenshot_import_history.dart';
 import '../features/focus/state/focus_store.dart';
@@ -1100,14 +1101,12 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         setState(() => _desktopToolSelection = null);
       }
       await _pushGuidePreviewPage(
-        ScreenshotImportPage(
-          kind: ScreenshotImportKind.orders,
+        buildQuickStartScreenshotImportPage(
           accountId: _accountId,
           orderStore: _orderStore,
           productStore: _productStore,
-          presetStore: _nodePresetStore,
+          nodePresetStore: _nodePresetStore,
           guideTargets: _quickStartGuideTargets,
-          autoPick: false,
         ),
       );
       return;
@@ -1129,12 +1128,13 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   Future<String?> _createFirstOrderForGuide() async {
     await _goToGuideDestination(QuickStartGuideDestination.orders);
     if (!mounted) return null;
+
     final beforeIds = _orderStore.orders.map((order) => order.id).toSet();
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AddOrderPage(
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => buildQuickStartAddOrderPage(
           accountId: _accountId,
-          store: _orderStore,
+          orderStore: _orderStore,
           nodePresetStore: _nodePresetStore,
           pricingPresetStore: _pricingPresetStore,
           featureStore: widget.featureStore,
@@ -1144,54 +1144,19 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     );
     if (!mounted) return null;
 
-    String? createdId;
-    for (final order in _orderStore.orders.reversed) {
-      if (!beforeIds.contains(order.id)) {
-        createdId = order.id;
-        break;
-      }
-    }
+    final createdId = findNewGuideOrderId(beforeIds, _orderStore);
     setState(() => _guidedOrderId = createdId);
     await WidgetsBinding.instance.endOfFrame;
     return createdId;
   }
 
-  Future<bool> _waitForFirstOrderArchive(String orderId) async {
-    if (!mounted || !_orderStore.contains(orderId)) return false;
-    if (_orderStore.byId(orderId).isArchived) return true;
-
-    final completer = Completer<bool>();
-    void checkArchive() {
-      if (completer.isCompleted) return;
-      if (!_orderStore.contains(orderId)) {
-        completer.complete(false);
-      } else if (_orderStore.byId(orderId).isArchived) {
-        completer.complete(true);
-      }
-    }
-
-    _orderStore.addListener(checkArchive);
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    final controller = messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(minutes: 30),
-        content: const Text('现在试着长按刚创建的排单 → 归档。完成归档后，新手引导会自动继续。'),
-        action: SnackBarAction(
-          label: '跳过',
-          onPressed: () {
-            if (!completer.isCompleted) completer.complete(false);
-          },
-        ),
-      ),
+  Future<bool> _waitForFirstOrderArchive(String orderId) {
+    if (!mounted) return Future<bool>.value(false);
+    return waitForGuideOrderArchive(
+      context: context,
+      orderStore: _orderStore,
+      orderId: orderId,
     );
-    try {
-      final archived = await completer.future;
-      controller.close();
-      return archived;
-    } finally {
-      _orderStore.removeListener(checkArchive);
-    }
   }
 
   Future<void> _finishGuideNavigation() async {
