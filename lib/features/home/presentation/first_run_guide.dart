@@ -399,13 +399,9 @@ Future<bool> _showVisibleSpotlights(
   int? progressTotal,
 }) async {
   if (!context.mounted) return false;
-  final steps = candidates
-      .where((step) => step.targetKey.currentContext != null)
-      .toList(growable: false);
-  if (steps.isEmpty) return true;
   return showSpotlightGuide(
     context,
-    steps: steps,
+    steps: candidates,
     finalLabel: finalLabel,
     progressStart: progressStart,
     progressTotal: progressTotal,
@@ -452,7 +448,7 @@ Future<void> _showInteractiveQuickStart(
           title: '更多功能都在这里',
           body: '同步、备份、截图导入、小票、节点＆加价预设和设置都可以从菜单进入。',
         ),
-      ].where((step) => step.targetKey.currentContext != null).toList(),
+      ],
     );
     return;
   }
