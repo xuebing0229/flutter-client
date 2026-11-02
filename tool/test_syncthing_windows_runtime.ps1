@@ -2,9 +2,9 @@ $ErrorActionPreference = "Stop"
 
 $binary = Resolve-Path "build/windows/x64/runner/Release/syncthing/syncthing.exe"
 $tempRoot = Join-Path $env:RUNNER_TEMP ("ag-syncthing-smoke-" + [Guid]::NewGuid().ToString("N"))
-$home = Join-Path $tempRoot "home"
+$profileHome = Join-Path $tempRoot "home"
 $folderPath = Join-Path $tempRoot "folder"
-New-Item -ItemType Directory -Force -Path $home, $folderPath | Out-Null
+New-Item -ItemType Directory -Force -Path $profileHome, $folderPath | Out-Null
 
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
 $listener.Start()
@@ -42,7 +42,7 @@ function Invoke-SyncthingJson {
 
 try {
     $arguments = @(
-        "--home", $home,
+        "--home", $profileHome,
         "--gui-address", "127.0.0.1:$port",
         "--gui-apikey", $apiKey,
         "--no-browser",
