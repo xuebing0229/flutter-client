@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/account/account_models.dart';
 import '../core/account/web_account_store.dart';
+import '../features/account/presentation/web_existing_account_join_page.dart';
 import '../core/features/app_feature_store.dart';
 import '../core/finance/pricing_preset_store.dart';
 import '../core/portability/app_backup_data.dart';
@@ -344,7 +345,7 @@ class _WebAccountEntryPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '网页账号只保存在当前浏览器。可以使用激活码创建新账号，也可以登录当前浏览器已保存的账号，或从 Android / Windows 完整备份加入已有账号。',
+                '网页账号只保存在当前浏览器。可以使用激活码创建新账号，也可以登录当前浏览器已保存的账号，或从已经登录的手机 / 电脑直接加入已有账号。',
                 style: TextStyle(
                   height: 1.5,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -389,14 +390,24 @@ class _WebAccountEntryPage extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               FilledButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => WebExistingAccountJoinPage(store: store),
+                  ),
+                ),
+                icon: const Icon(Icons.devices_other_rounded),
+                label: const Text('已有账号 / 从设备加入'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
                 onPressed: importing ? null : onImportBackup,
                 icon: importing
                     ? const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.devices_other_rounded),
-                label: Text(importing ? '正在导入…' : '已有账号 / 导入完整备份'),
+                    : const Icon(Icons.upload_file_rounded),
+                label: Text(importing ? '正在导入…' : '导入完整备份'),
               ),
             ],
           ),
