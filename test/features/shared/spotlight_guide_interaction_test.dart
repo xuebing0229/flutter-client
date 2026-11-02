@@ -58,8 +58,11 @@ void main() {
     );
 
     await tester.tap(find.text('打开延迟目标引导'));
-    await tester.pump();
-    await tester.pump();
+    // The resolver may wait a few frames for a Web route/lazy child to attach,
+    // then the overlay itself needs one more frame to build.
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump();
+    }
 
     expect(find.text('晚一帧出现的目标'), findsOneWidget);
     expect(find.byKey(targetKey), findsOneWidget);
