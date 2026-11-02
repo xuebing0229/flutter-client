@@ -182,20 +182,25 @@ class GuildWorkspaceShell extends StatelessWidget {
                                                   index < tabs.length;
                                                   index++
                                                 )
-                                                  AppMenuTile(
-                                                    key: guideTargets?.tabKey(
+                                                  SpotlightTarget(
+                                                    targetKey:
+                                                        guideTargets?.tabKey(
                                                       tabs[index].id,
                                                     ),
-                                                    icon: tabs[index].icon,
-                                                    selectedIcon:
-                                                        tabs[index]
-                                                            .selectedIcon,
-                                                    title:
-                                                        tabs[index].label,
-                                                    selected: !toolSelected &&
-                                                        selectedIndex == index,
-                                                    onTap: () =>
-                                                        onTabSelected(index),
+                                                    child: AppMenuTile(
+                                                      icon: tabs[index].icon,
+                                                      selectedIcon:
+                                                          tabs[index]
+                                                              .selectedIcon,
+                                                      title:
+                                                          tabs[index].label,
+                                                      selected:
+                                                          !toolSelected &&
+                                                              selectedIndex ==
+                                                                  index,
+                                                      onTap: () =>
+                                                          onTabSelected(index),
+                                                    ),
                                                   ),
                                               ],
                                             ),
@@ -245,11 +250,13 @@ class GuildWorkspaceShell extends StatelessWidget {
                     onDestinationSelected: onTabSelected,
                     destinations: [
                       for (final tab in tabs)
-                        NavigationDestination(
-                          key: guideTargets?.tabKey(tab.id),
-                          icon: Icon(tab.icon),
-                          selectedIcon: Icon(tab.selectedIcon),
-                          label: tab.label,
+                        SpotlightTarget(
+                          targetKey: guideTargets?.tabKey(tab.id),
+                          child: NavigationDestination(
+                            icon: Icon(tab.icon),
+                            selectedIcon: Icon(tab.selectedIcon),
+                            label: tab.label,
+                          ),
                         ),
                     ],
                   ),
