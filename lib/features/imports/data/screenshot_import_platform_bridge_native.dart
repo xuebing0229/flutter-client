@@ -2,19 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/portability/data_portability_file_bridge.dart';\nimport 'screenshot_import_platform_types.dart';
-
-class ScreenshotImportPickedImage {
-  const ScreenshotImportPickedImage({
-    required this.path,
-    required this.name,
-    required this.temporary,
-  });
-
-  final String path;
-  final String name;
-  final bool temporary;
-}
+import '../../../core/portability/data_portability_file_bridge.dart';
+import 'screenshot_import_platform_types.dart';
 
 class ScreenshotImportPlatformBridge {
   const ScreenshotImportPlatformBridge();
