@@ -308,4 +308,12 @@ void main() {
       ['手机端首次添加设备启动流程修复'],
     );
   });
+
+  test('225 包含首次添加设备备用连接见闻', () {
+    final picked = newsBetweenBuilds(224, 225);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['首次添加设备增加备用连接'],
+    );
+  });
 }
