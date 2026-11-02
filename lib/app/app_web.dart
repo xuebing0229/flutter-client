@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/account/account_models.dart';
 import '../core/account/web_account_store.dart';
+import '../core/changelog/adventurer_news.dart';
 import '../features/account/presentation/web_existing_account_join_page.dart';
 import '../core/features/app_feature_store.dart';
 import '../core/finance/pricing_preset_store.dart';
@@ -21,11 +22,12 @@ import '../core/theme/app_theme_store.dart';
 import '../core/theme/app_ui_style.dart';
 import '../core/web/web_platform_bridge.dart';
 import '../features/home/presentation/about_page.dart';
+import '../features/home/presentation/adventurer_news_dialog.dart';
 import '../features/home/presentation/app_drawer.dart';
 import '../features/home/presentation/archive_page.dart';
 import '../features/home/presentation/feature_toggle_page.dart';
 import '../features/home/presentation/first_run_guide.dart';
-import '../features/home/presentation/theme_color_page.dart';
+import '../features/home/presentation/settings_common.dart';
 import '../features/home/presentation/workspace_shell.dart';
 import '../features/imports/presentation/screenshot_import_page.dart';
 import '../features/focus/state/focus_store.dart';
@@ -44,6 +46,7 @@ import '../features/schedule/presentation/schedule_page.dart';
 import '../features/statistics/presentation/statistics_page.dart';
 import '../features/shared/domain/collection_view_preferences.dart';
 import '../features/shared/domain/receipt_style_store.dart';
+import '../features/shared/presentation/layout_spacing.dart';
 import '../features/shared/presentation/preset_center_page.dart';
 import '../features/shared/presentation/receipt_center_page.dart';
 import '../features/shared/presentation/spotlight_guide.dart';
@@ -1409,9 +1412,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       QuickStartGuideDestination.archive => AppToolMenu.archiveTool,
       QuickStartGuideDestination.sync => AppToolMenu.syncTool,
       QuickStartGuideDestination.account => AppToolMenu.accountTool,
-      // On Web the backup tutorial should point at the actual export/import
-      // controls, not merely the Settings navigation row.
-      QuickStartGuideDestination.settings => AppToolMenu.syncTool,
+      QuickStartGuideDestination.settings => AppToolMenu.settingsTool,
       QuickStartGuideDestination.pwaInstall => AppToolMenu.settingsTool,
       QuickStartGuideDestination.featureToggle => AppToolMenu.featureToggleTool,
       _ => null,
@@ -1568,6 +1569,20 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     await WidgetsBinding.instance.endOfFrame;
   }
 
+  Future<void> _showNewsHistory() async {
+    final build = await const AdventurerNewsStore().installedBuild();
+    if (!mounted) return;
+    await showAdventurerNewsDialog(
+      context,
+      history: true,
+      notice: AdventurerNewsNotice(
+        previousBuild: 0,
+        currentBuild: build,
+        entries: newsBetweenBuilds(0, build),
+      ),
+    );
+  }
+
   void _showTutorial() {
     unawaited(
       showFirstRunGuide(
@@ -1638,15 +1653,12 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         ),
       AppToolMenu.settingsTool => _WebSettingsPage(
           themeStore: widget.themeStore,
+          featureStore: widget.featureStore,
+          busy: () => _busy,
+          onExport: _exportBackup,
+          onImport: _importBackup,
+          onShowNews: _showNewsHistory,
           guideTargets: _quickStartGuideTargets,
-          dataPage: _WebDataPage(
-            linkedAccountName: _accountState.accountName,
-            busy: () => _busy,
-            onExport: _exportBackup,
-            onImport: _importBackup,
-            peerSync: _peerSync,
-            guideTargets: _quickStartGuideTargets,
-          ),
         ),
       _ => const SizedBox.shrink(),
     };
@@ -2344,12 +2356,20 @@ class _WebAccountPageState extends State<_WebAccountPage> {
 class _WebSettingsPage extends StatelessWidget {
   const _WebSettingsPage({
     required this.themeStore,
-    required this.dataPage,
+    required this.featureStore,
+    required this.busy,
+    required this.onExport,
+    required this.onImport,
+    required this.onShowNews,
     this.guideTargets,
   });
 
   final AppThemeStore themeStore;
-  final Widget dataPage;
+  final AppFeatureStore featureStore;
+  final bool Function() busy;
+  final Future<void> Function(BuildContext context) onExport;
+  final Future<void> Function(BuildContext context) onImport;
+  final VoidCallback onShowNews;
   final QuickStartGuideTargets? guideTargets;
 
   Future<void> _installPwa(BuildContext context) async {
@@ -2400,6 +2420,20 @@ class _WebSettingsPage extends StatelessWidget {
     );
   }
 
+  Future<void> _openAbout(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final info = await PackageInfo.fromPlatform();
+    if (!context.mounted) return;
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => AppAboutPage(
+          version: info.version,
+          buildNumber: int.tryParse(info.buildNumber) ?? 0,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2410,55 +2444,49 @@ class _WebSettingsPage extends StatelessWidget {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        padding: AppLayoutSpacing.pageScrollPadding(
+          context,
+          left: 16,
+          top: 8,
+          right: 16,
+        ),
         children: [
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('UI主题色'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => ThemeColorPage(store: themeStore),
-              ),
-            ),
+          GuildSettingsAppearanceCard(
+            themeStore: themeStore,
+            featureStore: featureStore,
           ),
-          ListTile(
-            leading: const Icon(Icons.sync_alt_rounded),
-            title: const Text('设备同步与完整备份'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => dataPage),
-            ),
+          const SizedBox(height: 14),
+          GuildSettingsDataCard(
+            exportBusy: busy(),
+            onExport: () => unawaited(onExport(context)),
+            onImport: () => unawaited(onImport(context)),
+            guideTargets: guideTargets,
           ),
-          SpotlightTarget(
-            targetKey: guideTargets?.pwaInstallKey,
-            child: ListTile(
-              leading: const Icon(Icons.install_desktop_rounded),
-              title: Text(
-                webPwaInstallState() == 'installed' ? '已添加到桌面' : '添加到桌面',
-              ),
-              subtitle: const Text('作为独立应用打开，使用时不需要先进入浏览器标签页'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => _installPwa(context),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.info_outline_rounded),
-            title: const Text('关于冒险者公会'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () async {
-              final navigator = Navigator.of(context);
-              final info = await PackageInfo.fromPlatform();
-              if (!context.mounted) return;
-              await navigator.push(
-                MaterialPageRoute<void>(
-                  builder: (_) => AppAboutPage(
-                    version: info.version,
-                    buildNumber: int.tryParse(info.buildNumber) ?? 0,
-                  ),
+          const SizedBox(height: 14),
+          GuildSettingsSectionCard(
+            title: '网页版',
+            icon: Icons.install_desktop_rounded,
+            child: SpotlightTarget(
+              targetKey: guideTargets?.pwaInstallKey,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.install_desktop_rounded),
+                title: Text(
+                  webPwaInstallState() == 'installed'
+                      ? '已添加到桌面'
+                      : '添加到桌面',
                 ),
-              );
-            },
+                subtitle: const Text('作为独立应用打开，使用时不需要先进入浏览器标签页'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _installPwa(context),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          GuildSettingsNewsCard(onOpen: onShowNews),
+          const SizedBox(height: 14),
+          GuildSettingsAboutCard(
+            onOpen: () => unawaited(_openAbout(context)),
           ),
         ],
       ),
