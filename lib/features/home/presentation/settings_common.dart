@@ -196,13 +196,18 @@ class GuildSettingsNewsCard extends StatelessWidget {
 
 class GuildSettingsAboutCard extends StatelessWidget {
   const GuildSettingsAboutCard({
-    required this.version,
-    required this.buildNumber,
+    this.version,
+    this.buildNumber,
+    this.onOpen,
     super.key,
-  });
+  }) : assert(
+          onOpen != null || (version != null && buildNumber != null),
+          'Provide either onOpen or version/buildNumber.',
+        );
 
-  final String version;
-  final int buildNumber;
+  final String? version;
+  final int? buildNumber;
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -215,16 +220,17 @@ class GuildSettingsAboutCard extends StatelessWidget {
         title: const Text('关于冒险者公会'),
         subtitle: const Text('版本信息、开源软件与致谢'),
         trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => AppAboutPage(
-                version: version,
-                buildNumber: buildNumber,
-              ),
-            ),
-          );
-        },
+        onTap: onOpen ??
+            () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => AppAboutPage(
+                    version: version!,
+                    buildNumber: buildNumber!,
+                  ),
+                ),
+              );
+            },
       ),
     );
   }
