@@ -113,6 +113,36 @@ void main() {
       );
     });
 
+    test('platform adapters keep reusable helpers shared', () {
+      for (final path in <String>[
+        'lib/features/imports/data/screenshot_ocr_service_native.dart',
+        'lib/features/imports/data/screenshot_ocr_service_web.dart',
+      ]) {
+        expect(source(path), contains('parseScreenshotOcrPayload'));
+      }
+
+      for (final path in <String>[
+        'lib/core/theme/theme_palette_transfer_service_native.dart',
+        'lib/core/theme/theme_palette_transfer_service_web.dart',
+      ]) {
+        expect(source(path), contains('ThemePaletteTransferCodec'));
+      }
+
+      for (final path in <String>[
+        'lib/features/imports/data/screenshot_import_history_native.dart',
+        'lib/features/imports/data/screenshot_import_history_web.dart',
+      ]) {
+        expect(source(path), contains('hashScreenshotBytes'));
+      }
+
+      for (final path in <String>[
+        'lib/features/shared/data/receipt_style_image_bridge_native.dart',
+        'lib/features/shared/data/receipt_style_image_bridge_web.dart',
+      ]) {
+        expect(source(path), contains('PickedReceiptStyleImage'));
+      }
+    });
+
     test('relay protocol and backup rules stay shared', () {
       for (final path in <String>[
         'lib/core/sync/public_relay_client_native.dart',
