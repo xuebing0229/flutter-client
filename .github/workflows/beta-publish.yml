@@ -301,8 +301,13 @@ jobs:
           test -s build/web/manifest.json
           test -s build/web/icons/app-icon-192.png
           test -s build/web/icons/app-icon-512.png
-          test -s build/web/icons/app-icon-maskable-512.png
+          test ! -e build/web/icons/app-icon-maskable-512.png
           test -s build/web/pwa_service_worker.js
+          test -s build/web/flutter_bootstrap.js
+          if grep -q "flutter_service_worker" build/web/flutter_bootstrap.js; then
+            echo "Legacy Flutter service worker registration is still present." >&2
+            exit 1
+          fi
           test -s build/web/main.dart.js
           test -s build/web/canvaskit/canvaskit.js
           test -s build/web/canvaskit/canvaskit.wasm
