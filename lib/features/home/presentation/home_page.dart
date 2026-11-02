@@ -50,6 +50,7 @@ import 'app_drawer.dart';
 import 'workspace_shell.dart';
 import 'workspace_main_pages.dart';
 import 'workspace_common_tool_pages.dart';
+import 'quick_start_guide_helpers.dart';
 import 'archive_page.dart';
 import 'desktop_pet_page.dart';
 import 'feature_toggle_page.dart';
@@ -540,9 +541,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final beforeIds = _orderStore.orders.map((order) => order.id).toSet();
     final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
     final route = MaterialPageRoute<void>(
-      builder: (_) => AddOrderPage(
+      builder: (_) => buildQuickStartAddOrderPage(
         accountId: widget.accountId,
-        store: _orderStore,
+        orderStore: _orderStore,
         nodePresetStore: _nodePresetStore,
         pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
@@ -560,57 +561,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (!mounted) return null;
 
-    String? createdId;
-    for (final order in _orderStore.orders.reversed) {
-      if (!beforeIds.contains(order.id)) {
-        createdId = order.id;
-        break;
-      }
-    }
+    final createdId = findNewGuideOrderId(beforeIds, _orderStore);
     setState(() => _guidedOrderId = createdId);
     await WidgetsBinding.instance.endOfFrame;
     return createdId;
   }
 
-  Future<bool> _waitForFirstOrderArchive(String orderId) async {
-    if (!mounted || !_orderStore.contains(orderId)) return false;
-    if (_orderStore.byId(orderId).isArchived) return true;
-
-    final completer = Completer<bool>();
-    void checkArchive() {
-      if (completer.isCompleted) return;
-      if (!_orderStore.contains(orderId)) {
-        completer.complete(false);
-        return;
-      }
-      if (_orderStore.byId(orderId).isArchived) {
-        completer.complete(true);
-      }
-    }
-
-    _orderStore.addListener(checkArchive);
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    final controller = messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(minutes: 30),
-        content: const Text('现在试着长按刚创建的排单 → 归档。完成归档后，新手引导会自动继续。'),
-        action: SnackBarAction(
-          label: '跳过练习',
-          onPressed: () {
-            if (!completer.isCompleted) completer.complete(false);
-          },
-        ),
-      ),
+  Future<bool> _waitForFirstOrderArchive(String orderId) {
+    if (!mounted) return Future<bool>.value(false);
+    return waitForGuideOrderArchive(
+      context: context,
+      orderStore: _orderStore,
+      orderId: orderId,
     );
-
-    try {
-      final archived = await completer.future;
-      controller.close();
-      return archived;
-    } finally {
-      _orderStore.removeListener(checkArchive);
-    }
   }
 
   Future<void> _finishGuideNavigation() async {
