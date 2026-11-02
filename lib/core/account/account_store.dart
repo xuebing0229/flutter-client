@@ -12,6 +12,7 @@ export 'account_local_state.dart' show AccountStatus, LocalAccountSummary;
 import 'account_activation_flow.dart';
 import 'account_state_mutations.dart';
 import 'account_session_logic.dart';
+import 'account_session_controller.dart';
 import 'activation_api.dart';
 import 'device_descriptor.dart';
 import 'offline_license.dart';
@@ -439,89 +440,43 @@ class AccountStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> selectLocalAccount(String accountId) async {
-    final record = _accounts[accountId];
-    if (record == null) {
-      throw const FormatException('这个本机账号已经不存在。');
-    }
-
-    _selectedAccountId = accountId;
-    _accounts[accountId] = record.copyWith(stayLoggedIn: false);
-
-    if (record.syncState.isRevoked(record.currentDeviceId)) {
-      status = AccountStatus.revoked;
-    } else {
-      status = AccountStatus.locked;
-    }
-
-    await _save();
-    notifyListeners();
+  AccountSessionController _sessionController() {
+    return AccountSessionController(
+      accounts: _accounts,
+      getSelectedAccountId: () => _selectedAccountId,
+      setSelectedAccountId: (value) => _selectedAccountId = value,
+      getStatus: () => status,
+      setStatus: (value) => status = value,
+      persist: _save,
+      notify: notifyListeners,
+      touchForLogin: (record) async {
+        final installationId = await _installationIdentity();
+        return touchAccountDeviceState(
+          record.syncState,
+          deviceId: record.currentDeviceId,
+          createIfMissing: false,
+          installationId: installationId,
+        );
+      },
+    );
   }
+
+  Future<void> selectLocalAccount(String accountId) =>
+      _sessionController().selectLocalAccount(accountId);
 
   Future<bool> unlock({
     required String accountName,
     required String password,
-  }) async {
-    final record = _selectedRecord;
-    if (record == null || record.syncState.isRevoked(record.currentDeviceId)) {
-      status = record?.syncState.isRevoked(record.currentDeviceId) == true
-          ? AccountStatus.revoked
-          : AccountStatus.unactivated;
-      notifyListeners();
-      return false;
-    }
-
-    final ok = accountCredentialsMatch(
-      record: record,
-      accountName: accountName,
-      password: password,
-    );
-
-    if (ok) {
-      _accounts[record.syncState.accountId] = record.copyWith(
-        stayLoggedIn: true,
+  }) =>
+      _sessionController().unlock(
+        accountName: accountName,
+        password: password,
       );
-      status = AccountStatus.unlocked;
-      await touchCurrentDevice(notify: false);
-      notifyListeners();
-    }
-    return ok;
-  }
 
-  Future<void> lock() async {
-    final record = _selectedRecord;
-    if (record == null) {
-      status = AccountStatus.unactivated;
-      notifyListeners();
-      return;
-    }
+  Future<void> lock() => _sessionController().lock();
 
-    _accounts[record.syncState.accountId] = record.copyWith(
-      stayLoggedIn: false,
-    );
-
-    if (record.syncState.isRevoked(record.currentDeviceId)) {
-      status = AccountStatus.revoked;
-    } else {
-      status = AccountStatus.locked;
-    }
-
-    await _save();
-    notifyListeners();
-  }
-
-  Future<void> returnToAccountChooser() async {
-    final record = _selectedRecord;
-    if (record != null) {
-      _accounts[record.syncState.accountId] = record.copyWith(
-        stayLoggedIn: false,
-      );
-    }
-    _selectedAccountId = null;
-    status = AccountStatus.unactivated;
-    await _save();
-    notifyListeners();
-  }
+  Future<void> returnToAccountChooser() =>
+      _sessionController().returnToAccountChooser();
 
   Future<void> touchCurrentDevice({bool notify = true}) async {
     final record = _selectedRecord;
@@ -769,35 +724,14 @@ class AccountStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> renameDevice(String deviceId, String name) async {
-    final record = _selectedRecord;
-    if (record == null) return;
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: renameAccountDeviceState(
-        record.syncState,
-        deviceId: deviceId,
-        name: name,
-      ),
-    );
-    await _save();
-    notifyListeners();
-  }
+  Future<void> renameDevice(String deviceId, String name) =>
+      _sessionController().renameDevice(deviceId, name);
 
-  Future<void> renameCurrentDevice(String name) {
-    final id = currentDeviceId;
-    if (id == null) return Future<void>.value();
-    return renameDevice(id, name);
-  }
+  Future<void> renameCurrentDevice(String name) =>
+      _sessionController().renameCurrentDevice(name);
 
-  Future<void> renameAccount(String name) async {
-    final record = _selectedRecord;
-    if (record == null) return;
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: renameAccountState(record.syncState, name),
-    );
-    await _save();
-    notifyListeners();
-  }
+  Future<void> renameAccount(String name) =>
+      _sessionController().renameAccount(name);
 
   Future<void> setAccountAvatarBytes(List<int> bytes) async {
     if (bytes.isEmpty) {
@@ -827,37 +761,14 @@ class AccountStore extends ChangeNotifier {
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
-  }) async {
-    final record = _selectedRecord;
-    if (record == null || !isUnlocked) {
-      throw const FormatException('当前账号未登录，不能修改密码。');
-    }
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: changeAccountPasswordState(
-        record.syncState,
+  }) =>
+      _sessionController().changePassword(
         currentPassword: currentPassword,
         newPassword: newPassword,
-      ),
-    );
-    await _save();
-    notifyListeners();
-  }
+      );
 
-  Future<void> revokeDevice(String deviceId) async {
-    final record = _selectedRecord;
-    if (record == null || !record.syncState.devices.containsKey(deviceId)) {
-      return;
-    }
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: revokeAccountDeviceState(
-        record.syncState,
-        currentDeviceId: record.currentDeviceId,
-        deviceId: deviceId,
-      ),
-    );
-    await _save();
-    notifyListeners();
-  }
+  Future<void> revokeDevice(String deviceId) =>
+      _sessionController().revokeDevice(deviceId);
 
   Future<void> adoptSyncedAccount(
     AccountSyncState incoming, {
