@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'public_relay_protocol.dart';
+import 'public_relay_client_base.dart';
 
 /// Lightweight Cloudflare WebSocket relay used by native clients.
 ///
@@ -15,25 +16,13 @@ class PublicRelayClient {
     defaultValue: 'https://guild.apixb.top/sync',
   );
 
-  final String clientId;
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
-  String? _connectedTopic;
-
-  final StreamController<PublicRelayMessage> _messages =
-      StreamController<PublicRelayMessage>.broadcast();
-
-  Stream<PublicRelayMessage> get messages => _messages.stream;
-
   bool get connected => _socket?.readyState == WebSocket.open;
 
   Future<void> connect(Iterable<String> topics) async {
-    final topicList = topics.toList(growable: false);
-    if (topicList.length != 1) {
-      throw StateError('在线同步连接参数异常');
-    }
-    final topic = topicList.single;
-    if (connected && _connectedTopic == topic) return;
+    final topic = requireSingleTopic(topics);
+    if (connected && connectedTopic == topic) return;
 
     await disconnect();
     final endpoint = buildPublicRelayUri(
@@ -45,19 +34,19 @@ class PublicRelayClient {
     final socket = await WebSocket.connect(endpoint.toString());
     socket.pingInterval = const Duration(seconds: 30);
     _socket = socket;
-    _connectedTopic = topic;
+    connectedTopic = topic;
     _subscription = socket.listen(
       _handleIncoming,
       onDone: () {
         if (identical(_socket, socket)) {
           _socket = null;
-          _connectedTopic = null;
+          connectedTopic = null;
         }
       },
       onError: (_) {
         if (identical(_socket, socket)) {
           _socket = null;
-          _connectedTopic = null;
+          connectedTopic = null;
         }
       },
       cancelOnError: false,
@@ -66,17 +55,11 @@ class PublicRelayClient {
 
   void publish(String topic, String payload) {
     final socket = _socket;
-    if (socket == null || socket.readyState != WebSocket.open) {
-      throw StateError('在线同步尚未连接');
-    }
-    socket.add(encodePublicRelayPublish(topic, payload));
+    requireConnected(socket != null && socket.readyState == WebSocket.open);
+    socket!.add(encodePublicRelayPublish(topic, payload));
   }
 
-  void _handleIncoming(dynamic event) {
-    if (event is! String || _messages.isClosed) return;
-    final message = decodePublicRelayMessage(event);
-    if (message != null) _messages.add(message);
-  }
+  void _handleIncoming(dynamic event) => emitIncoming(event);
 
   Future<void> disconnect() async {
     final subscription = _subscription;
@@ -85,15 +68,11 @@ class PublicRelayClient {
 
     final socket = _socket;
     _socket = null;
-    _connectedTopic = null;
+    connectedTopic = null;
     try {
       await socket?.close(WebSocketStatus.normalClosure, 'disconnect');
     } catch (_) {}
   }
 
-  Future<void> dispose() async {
-    await disconnect();
-    await _messages.close();
-  }
 }
 
