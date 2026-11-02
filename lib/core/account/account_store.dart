@@ -6,24 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'account_models.dart';
+import 'account_local_state.dart';
 import 'account_activation_flow.dart';
 import 'account_state_mutations.dart';
 import 'activation_api.dart';
 import 'device_descriptor.dart';
 import 'offline_license.dart';
 import '../storage/atomic_file.dart';
-
-enum AccountStatus { loading, unactivated, locked, unlocked, revoked }
-
-class LocalAccountSummary {
-  const LocalAccountSummary({
-    required this.accountId,
-    required this.accountName,
-  });
-
-  final String accountId;
-  final String accountName;
-}
 
 class LocalDeviceRemovalSnapshot {
   const LocalDeviceRemovalSnapshot({
@@ -33,77 +22,6 @@ class LocalDeviceRemovalSnapshot {
 
   final AccountSyncState state;
   final String deviceId;
-}
-
-class _LocalAccountRecord {
-  const _LocalAccountRecord({
-    required this.syncState,
-    required this.currentDeviceId,
-    required this.stayLoggedIn,
-    this.activationSerial,
-  });
-
-  final AccountSyncState syncState;
-  final String currentDeviceId;
-  final String? activationSerial;
-  final bool stayLoggedIn;
-
-  _LocalAccountRecord copyWith({
-    AccountSyncState? syncState,
-    String? currentDeviceId,
-    String? activationSerial,
-    bool? stayLoggedIn,
-  }) {
-    return _LocalAccountRecord(
-      syncState: syncState ?? this.syncState,
-      currentDeviceId: currentDeviceId ?? this.currentDeviceId,
-      activationSerial: activationSerial ?? this.activationSerial,
-      stayLoggedIn: stayLoggedIn ?? this.stayLoggedIn,
-    );
-  }
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-    'currentDeviceId': currentDeviceId,
-    'activationSerial': activationSerial,
-    'stayLoggedIn': stayLoggedIn,
-    'syncState': syncState.toJson(),
-  };
-
-  factory _LocalAccountRecord.fromJson(
-    Map<String, dynamic> json, {
-    bool allowMissingPassword = false,
-  }) {
-    final rawSync = json['syncState'];
-    if (rawSync is! Map) {
-      throw const FormatException('本机账号记录缺少账号数据。');
-    }
-    final syncState = AccountSyncState.fromCompatibleJson(
-      rawSync.map((key, value) => MapEntry(key.toString(), value)),
-      allowMissingPassword: allowMissingPassword,
-    );
-    final currentDeviceId = json['currentDeviceId'];
-    final activationSerial = json['activationSerial'];
-    final stayLoggedIn = json['stayLoggedIn'];
-    if (currentDeviceId is! String || currentDeviceId.isEmpty) {
-      throw const FormatException('本机账号记录缺少当前设备 ID。');
-    }
-    if (activationSerial != null && activationSerial is! String) {
-      throw const FormatException('本机账号激活编号格式无效。');
-    }
-    if (stayLoggedIn is! bool) {
-      throw const FormatException('本机账号登录状态格式无效。');
-    }
-    if (!syncState.devices.containsKey(currentDeviceId)) {
-      throw const FormatException('本机账号记录缺少当前设备。');
-    }
-
-    return _LocalAccountRecord(
-      syncState: syncState,
-      currentDeviceId: currentDeviceId,
-      activationSerial: activationSerial as String?,
-      stayLoggedIn: stayLoggedIn,
-    );
-  }
 }
 
 class AccountStore extends ChangeNotifier {
@@ -121,14 +39,14 @@ class AccountStore extends ChangeNotifier {
 
   final OfflineLicenseVerifier _verifier;
   final ActivationApiClient _activationApi;
-  final Map<String, _LocalAccountRecord> _accounts =
-      <String, _LocalAccountRecord>{};
+  final Map<String, LocalAccountRecord> _accounts =
+      <String, LocalAccountRecord>{};
   Future<void> _saveTail = Future<void>.value();
 
   AccountStatus status = AccountStatus.loading;
   String? _selectedAccountId;
 
-  _LocalAccountRecord? get _selectedRecord {
+  LocalAccountRecord? get _selectedRecord {
     final id = _selectedAccountId;
     return id == null ? null : _accounts[id];
   }
@@ -340,7 +258,7 @@ class AccountStore extends ChangeNotifier {
             final map = item.map(
               (key, value) => MapEntry(key.toString(), value),
             );
-            final record = _LocalAccountRecord.fromJson(
+            final record = LocalAccountRecord.fromJson(
               map,
               allowMissingPassword: schemaVersion < 4,
             );
@@ -377,7 +295,7 @@ class AccountStore extends ChangeNotifier {
               },
             );
           }
-          _accounts[syncState.accountId] = _LocalAccountRecord(
+          _accounts[syncState.accountId] = LocalAccountRecord(
             syncState: syncState,
             currentDeviceId: legacyDeviceId,
             activationSerial: json['activationSerial'] as String?,
@@ -458,7 +376,7 @@ class AccountStore extends ChangeNotifier {
         continue;
       }
 
-      _accounts[state.accountId] = _LocalAccountRecord(
+      _accounts[state.accountId] = LocalAccountRecord(
         syncState: state,
         currentDeviceId: currentDeviceId,
         activationSerial: null,
@@ -543,7 +461,7 @@ class AccountStore extends ChangeNotifier {
     );
     state = state.copyWith(devices: devices);
 
-    _accounts[license.accountId] = _LocalAccountRecord(
+    _accounts[license.accountId] = LocalAccountRecord(
       syncState: state,
       currentDeviceId: newDeviceId,
       activationSerial: license.serial,
@@ -1061,7 +979,7 @@ class AccountStore extends ChangeNotifier {
     );
 
     final state = baseState.copyWith(devices: devices);
-    _accounts[incoming.accountId] = _LocalAccountRecord(
+    _accounts[incoming.accountId] = LocalAccountRecord(
       syncState: state,
       currentDeviceId: newDeviceId,
       activationSerial: null,
