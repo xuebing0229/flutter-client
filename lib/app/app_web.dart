@@ -1384,9 +1384,6 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       QuickStartGuideDestination.products => widget.featureStore.products,
       QuickStartGuideDestination.schedule => widget.featureStore.schedule,
       QuickStartGuideDestination.statistics => widget.featureStore.statistics,
-      // PWA is already an account-linked device; adding a new native device
-      // is taught on Android/Windows instead of showing a misleading action.
-      QuickStartGuideDestination.account => false,
       _ => true,
     };
   }
@@ -1411,7 +1408,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       QuickStartGuideDestination.receiptCenter => AppToolMenu.receiptTool,
       QuickStartGuideDestination.archive => AppToolMenu.archiveTool,
       QuickStartGuideDestination.sync => AppToolMenu.syncTool,
-      QuickStartGuideDestination.settings => AppToolMenu.settingsTool,
+      QuickStartGuideDestination.account => AppToolMenu.accountTool,
+      // On Web the backup tutorial should point at the actual export/import
+      // controls, not merely the Settings navigation row.
+      QuickStartGuideDestination.settings => AppToolMenu.syncTool,
       QuickStartGuideDestination.pwaInstall => AppToolMenu.settingsTool,
       QuickStartGuideDestination.featureToggle => AppToolMenu.featureToggleTool,
       _ => null,
@@ -2245,9 +2245,12 @@ class _WebAccountPageState extends State<_WebAccountPage> {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text(
-              '账号与设备',
-              style: TextStyle(fontWeight: FontWeight.w800),
+            title: SpotlightTarget(
+              targetKey: widget.guideTargets?.accountTitleKey,
+              child: const Text(
+                '账号与设备',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
           ),
           body: ListView(
@@ -2419,15 +2422,12 @@ class _WebSettingsPage extends StatelessWidget {
               ),
             ),
           ),
-          SpotlightTarget(
-            targetKey: guideTargets?.settingsBackupKey,
-            child: ListTile(
-              leading: const Icon(Icons.sync_alt_rounded),
-              title: const Text('设备同步与完整备份'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => dataPage),
-              ),
+          ListTile(
+            leading: const Icon(Icons.sync_alt_rounded),
+            title: const Text('设备同步与完整备份'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => dataPage),
             ),
           ),
           SpotlightTarget(
@@ -2552,32 +2552,35 @@ class _WebDataPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.file_download_outlined),
-                  title: const Text(
-                    '导出完整备份',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+          SpotlightTarget(
+            targetKey: guideTargets?.settingsBackupKey,
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.file_download_outlined),
+                    title: const Text(
+                      '导出完整备份',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: const Text('排单、成品、节点、设置和参考图会一起保存'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: busy() ? null : () => onExport(context),
                   ),
-                  subtitle: const Text('排单、成品、节点、设置和参考图会一起保存'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: busy() ? null : () => onExport(context),
-                ),
-                const Divider(height: 1, indent: 56),
-                ListTile(
-                  leading: const Icon(Icons.file_upload_outlined),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.file_upload_outlined),
                   title: const Text(
                     '导入完整备份',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: const Text('支持导入完整备份，也兼容旧版备份'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: busy() ? null : () => onImport(context),
-                ),
-              ],
+                    onTap: busy() ? null : () => onImport(context),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 14),
