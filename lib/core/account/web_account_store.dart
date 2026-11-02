@@ -256,6 +256,7 @@ class WebAccountStore extends ChangeNotifier {
     AccountSyncState incoming, {
     bool select = true,
     bool stayLoggedIn = false,
+    String? preferredDeviceId,
   }) async {
     final existing = _accounts[incoming.accountId];
     if (existing != null) {
@@ -269,11 +270,17 @@ class WebAccountStore extends ChangeNotifier {
         stayLoggedIn: stayLoggedIn,
       );
     } else {
-      var deviceId = _deviceIdForAccount(incoming.accountId);
+      final preferred = preferredDeviceId?.trim();
+      var deviceId =
+          preferred != null &&
+              preferred.length >= 16 &&
+              !incoming.isRevoked(preferred)
+          ? preferred
+          : _deviceIdForAccount(incoming.accountId);
       if (incoming.isRevoked(deviceId)) {
         deviceId = _randomDeviceId();
-        _rememberDeviceId(incoming.accountId, deviceId);
       }
+      _rememberDeviceId(incoming.accountId, deviceId);
       _accounts[incoming.accountId] = _WebAccountRecord(
         syncState: _touchDevice(incoming, deviceId, createIfMissing: true),
         currentDeviceId: deviceId,
