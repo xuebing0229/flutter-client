@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+235
-# beta-235: migrate legacy PWA workers before Flutter startup
+# beta-235-r2: migrate legacy PWA workers before Flutter startup
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
