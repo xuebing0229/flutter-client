@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+232
-# beta-232: distinguish PWA install from launcher home-screen pinning
+# beta-232-r2: distinguish PWA install acceptance, browser installation, and launcher pinning
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
