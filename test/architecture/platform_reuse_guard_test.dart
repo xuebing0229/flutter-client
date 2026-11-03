@@ -196,6 +196,28 @@ void main() {
       expect(finalizer, contains('source.replace(BOOT_TOKEN, build_number)'));
     });
 
+    test('PWA startup exposes the exact failing boot stage', () {
+      final index = source('web/index.html');
+      final bootstrap = source('web/flutter_bootstrap.js');
+
+      expect(index, contains('pwa-startup-status'));
+      expect(index, contains('adventurersGuildBootStage'));
+      expect(index, contains('adventurersGuildBootFailure'));
+      expect(index, contains("window.addEventListener('error'"));
+      expect(index, contains("window.addEventListener('unhandledrejection'"));
+      expect(index, contains("window.addEventListener('flutter-first-frame'"));
+      expect(index, contains('超过 20 秒仍未出现 Flutter 首帧'));
+
+      expect(bootstrap, contains('onEntrypointLoaded'));
+      expect(bootstrap, contains('initializeEngine(engineConfig)'));
+      expect(bootstrap, contains('await appRunner.runApp()'));
+      expect(bootstrap, contains('verboseBuildSelection: true'));
+      expect(
+        bootstrap,
+        contains("adventurersGuildBootFailure?.('Flutter 引擎或应用启动失败'"),
+      );
+    });
+
     test('Android PWA avoids WebGL context-loss rendering', () {
       final bootstrap = source('web/flutter_bootstrap.js');
       final referenceImages = source(
