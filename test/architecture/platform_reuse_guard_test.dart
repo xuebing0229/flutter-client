@@ -163,6 +163,19 @@ void main() {
       expect(webApp, contains('网页不能直接申请系统的“创建桌面快捷方式”权限'));
     });
 
+    test('PWA cache never mixes assets from older workers', () {
+      final worker = source('web/pwa_service_worker.js');
+
+      expect(worker, contains('LEGACY_FLUTTER_CACHES'));
+      expect(worker, contains("'flutter-app-cache'"));
+      expect(worker, contains("'flutter-temp-cache'"));
+      expect(worker, contains("'flutter-app-manifest'"));
+      expect(worker, contains('await cache.match(request)'));
+      expect(worker, contains("await cache.match('./index.html')"));
+      expect(worker, isNot(contains('caches.match(request)')));
+      expect(worker, isNot(contains("caches.match('./index.html')")));
+    });
+
     test('relay protocol and backup rules stay shared', () {
       for (final path in <String>[
         'lib/core/sync/public_relay_client_native.dart',
