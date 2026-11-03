@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'adventurers-guild-pwa-229-v1';
+const CACHE_VERSION = '__PWA_CACHE_VERSION__';
 const PRECACHE = __PWA_PRECACHE_FILES__;
 
 self.addEventListener('install', (event) => {
