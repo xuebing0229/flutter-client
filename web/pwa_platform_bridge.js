@@ -128,7 +128,8 @@
     await prompt.prompt();
     const choice = await prompt.userChoice;
     if (choice && choice.outcome === 'accepted') {
-      pwaInstallConfirmed = true;
+      // userChoice only confirms the user's choice. appinstalled is the signal
+      // that the browser actually finished installing the PWA.
       return 'accepted';
     }
     return 'dismissed';
