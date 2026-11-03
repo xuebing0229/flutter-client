@@ -480,6 +480,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '安卓网页版白屏稳定性修复',
     description: '安卓浏览器上的网页版改用更稳妥的绘制方式，减少后台切换或系统回收图形资源后出现整页白屏；参考图显示也降低了额外图形内存占用。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 235,
+    title: '网页版更新启动链修复',
+    description: '修复旧版网页缓存仍控制启动过程、导致新版已经发布却继续加载旧脚本的问题。更新时会先清理旧网页运行缓存，再按当前版本加载启动文件，避免新旧资源混用造成白屏。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
