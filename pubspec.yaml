@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+233
-# beta-233: isolate PWA assets from legacy Flutter caches
+version: 0.0.1+234
+# beta-234: stabilize Android PWA rendering after background GPU loss
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
