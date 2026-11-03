@@ -465,6 +465,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版更新缓存修复',
     description: '修复网页版发布新版后仍可能继续使用旧页面资源，导致更新没有生效、白屏或一直停在加载状态的问题。后续网页资源更新会自动刷新对应缓存。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 232,
+    title: '网页版安装提示状态修复',
+    description: '修复网页版把“浏览器已安装应用”误显示成“已经添加到桌面”的问题；可直接安装时仍会调用浏览器安装提示，安装完成后也会明确说明桌面图标由手机系统桌面决定。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
