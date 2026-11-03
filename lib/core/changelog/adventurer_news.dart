@@ -485,6 +485,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版更新启动链修复',
     description: '修复旧版网页缓存仍控制启动过程、导致新版已经发布却继续加载旧脚本的问题。更新时会先清理旧网页运行缓存，再按当前版本加载启动文件，避免新旧资源混用造成白屏。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 236,
+    title: '网页版启动诊断完善',
+    description: '网页版启动时会显示实际启动阶段，若网页资源、Flutter 引擎或应用首帧出现异常会直接显示错误，不再只剩空白页面，便于准确定位启动失败原因。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
