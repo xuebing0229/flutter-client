@@ -444,6 +444,7 @@ class _ReferenceImageTileState extends State<_ReferenceImageTile> {
         ? Image.memory(
             _bytes!,
             fit: BoxFit.cover,
+            filterQuality: FilterQuality.low,
             cacheWidth: 600,
             errorBuilder: (_, __, ___) =>
                 const ReferenceImageUnavailablePreview(
@@ -566,6 +567,7 @@ class _OrderReferenceImageViewerPageState
         : Image.memory(
             _bytes!,
             fit: BoxFit.contain,
+            filterQuality: FilterQuality.low,
             cacheWidth: 4096,
             errorBuilder: (_, __, ___) =>
                 const ReferenceImageUnavailablePreview(
