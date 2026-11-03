@@ -323,5 +323,13 @@ void main() {
       ['手机、电脑与网页版一致性继续完善'],
     );
   });
+  test('231 包含网页版更新缓存修复见闻', () {
+    final picked = newsBetweenBuilds(230, 231);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版更新缓存修复'],
+    );
+  });
+
 
 }
