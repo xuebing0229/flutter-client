@@ -475,6 +475,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版旧缓存白屏修复',
     description: '网页版更新后只会读取当前版本自己的页面资源，并自动清理旧版 Flutter 网页缓存，避免新旧脚本混用导致白屏或加载失败。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 234,
+    title: '安卓网页版白屏稳定性修复',
+    description: '安卓浏览器上的网页版改用更稳妥的绘制方式，减少后台切换或系统回收图形资源后出现整页白屏；参考图显示也降低了额外图形内存占用。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
