@@ -316,7 +316,7 @@ jobs:
           test -s build/web/canvaskit/canvaskit.js
           test -s build/web/canvaskit/canvaskit.wasm
           grep -q '"display": "standalone"' build/web/manifest.json
-          grep -q "serviceWorker.register" build/web/index.html
+          grep -Fq "registerCurrentWorker" build/web/index.html
           grep -q './main.dart.js' build/web/pwa_service_worker.js
           grep -q './canvaskit/canvaskit.wasm' build/web/pwa_service_worker.js
           if grep -q '__PWA_PRECACHE_FILES__' build/web/pwa_service_worker.js; then
