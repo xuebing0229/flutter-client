@@ -1766,7 +1766,8 @@ class _WebSettingsPage extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              '浏览器已完成网页版应用安装。若桌面没有自动出现图标，可从系统应用列表添加到桌面。',
+              '浏览器已接受网页版应用安装请求。安装完成后如果桌面没有自动出现图标，'
+              '可以从系统应用列表找到“冒险者公会”并添加到桌面。',
             ),
             behavior: SnackBarBehavior.floating,
           ),
