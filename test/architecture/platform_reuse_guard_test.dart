@@ -148,6 +148,7 @@ void main() {
       final webApp = source('lib/app/app_web.dart');
 
       expect(bridge, contains('isStandalonePwa()'));
+      expect(bridge, contains('getInstalledRelatedApps'));
       expect(bridge, contains("window.addEventListener('appinstalled'"));
       expect(
         bridge,
@@ -157,6 +158,7 @@ void main() {
         webApp,
         isNot(contains('冒险者公会已经作为应用添加到桌面。')),
       );
+      expect(webApp, contains('webPwaInstalledState'));
       expect(webApp, contains('网页版应用已安装'));
       expect(webApp, contains('网页不能直接申请系统的“创建桌面快捷方式”权限'));
     });
