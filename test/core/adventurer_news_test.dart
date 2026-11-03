@@ -358,4 +358,13 @@ void main() {
     );
   });
 
+
+  test('235 包含网页版更新启动链修复见闻', () {
+    final picked = newsBetweenBuilds(234, 235);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版更新启动链修复'],
+    );
+  });
+
 }
