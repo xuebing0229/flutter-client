@@ -18,6 +18,12 @@
     "productivity",
     "business"
   ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "./manifest.json"
+    }
+  ],
   "icons": [
     {
       "src": "icons/app-icon-192.png",
