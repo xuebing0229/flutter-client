@@ -304,7 +304,8 @@ jobs:
           test ! -e build/web/icons/app-icon-maskable-512.png
           test -s build/web/pwa_service_worker.js
           test -s build/web/flutter_bootstrap.js
-          grep -Fq "_flutter.loader.load();" web/flutter_bootstrap.js
+          grep -Fq "_flutter.loader.load({" web/flutter_bootstrap.js
+          grep -Fq "canvasKitForceCpuOnly: isAndroid" web/flutter_bootstrap.js
           if grep -q "serviceWorkerSettings" web/flutter_bootstrap.js; then
             echo "Flutter bootstrap must not register the legacy worker." >&2
             exit 1
