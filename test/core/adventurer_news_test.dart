@@ -332,4 +332,12 @@ void main() {
   });
 
 
+  test('232 包含网页版安装提示状态修复见闻', () {
+    final picked = newsBetweenBuilds(231, 232);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版安装提示状态修复'],
+    );
+  });
+
 }
