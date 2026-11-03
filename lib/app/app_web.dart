@@ -1724,11 +1724,34 @@ class _WebSettingsPage extends StatelessWidget {
 
   Future<void> _installPwa(BuildContext context) async {
     final state = webPwaInstallState();
-    if (state == 'installed') {
+
+    if (state == 'standalone') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('冒险者公会已经作为应用添加到桌面。'),
+          content: Text('当前已经在网页版应用模式中打开。'),
           behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (state == 'installed') {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('网页版应用已安装'),
+          content: const Text(
+            '浏览器已经确认冒险者公会安装完成。Android 是否自动把图标放到桌面，'
+            '由手机的桌面启动器设置决定；网页不能直接申请系统的“创建桌面快捷方式”权限。\n\n'
+            '如果桌面没有图标，可以到系统应用列表找到“冒险者公会”，'
+            '长按后拖到桌面或选择“添加到桌面”。',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
         ),
       );
       return;
@@ -1737,10 +1760,14 @@ class _WebSettingsPage extends StatelessWidget {
     if (state == 'prompt') {
       final result = await webPromptPwaInstall();
       if (!context.mounted) return;
-      if (result == 'accepted' || result == 'installed') {
+      if (result == 'accepted' ||
+          result == 'installed' ||
+          result == 'standalone') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('已添加到桌面，可以像普通应用一样打开。'),
+            content: Text(
+              '浏览器已完成网页版应用安装。若桌面没有自动出现图标，可从系统应用列表添加到桌面。',
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1754,11 +1781,11 @@ class _WebSettingsPage extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('添加到桌面'),
+        title: const Text('安装网页版应用'),
         content: Text(
           ios
               ? '在浏览器底部或顶部点“分享”，再选择“添加到主屏幕”。之后就可以从桌面直接打开冒险者公会。'
-              : '打开浏览器菜单，选择“安装应用”“添加到主屏幕”或“创建快捷方式”（名称会因浏览器不同略有差异）。',
+              : '当前浏览器还没有提供可直接调用的一键安装提示。请打开浏览器菜单，选择“安装应用”或“添加到主屏幕”（名称会因浏览器不同略有差异）。',
         ),
         actions: [
           FilledButton(
@@ -1822,11 +1849,19 @@ class _WebSettingsPage extends StatelessWidget {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.install_desktop_rounded),
                 title: Text(
-                  webPwaInstallState() == 'installed'
-                      ? '已添加到桌面'
-                      : '添加到桌面',
+                  switch (webPwaInstallState()) {
+                    'standalone' => '已作为网页版应用打开',
+                    'installed' => '网页版应用已安装',
+                    _ => '安装网页版应用',
+                  },
                 ),
-                subtitle: const Text('作为独立应用打开，使用时不需要先进入浏览器标签页'),
+                subtitle: Text(
+                  switch (webPwaInstallState()) {
+                    'standalone' => '当前正在独立应用模式中运行',
+                    'installed' => '浏览器已安装；是否自动显示桌面图标由系统桌面决定',
+                    _ => '调用浏览器安装提示，以独立应用方式打开',
+                  },
+                ),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => _installPwa(context),
               ),
