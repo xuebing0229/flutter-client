@@ -18,17 +18,109 @@
   <title>冒险者公会</title>
 </head>
 <body>
-  <script src="pwa_platform_bridge.js"></script>
-  <script type="module" src="pwa_ocr_bridge.js"></script>
-  <script src="flutter_bootstrap.js" async></script>
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('pwa_service_worker.js').catch(function (error) {
-          console.warn('PWA service worker registration failed:', error);
+    (() => {
+      const pwaBuildId = '__PWA_BOOT_VERSION__';
+      const bootVersionKey = 'adventurers-guild.pwa.boot-version';
+
+      const ownsCache = (key) =>
+        key.startsWith('adventurers-guild-pwa-') ||
+        key === 'flutter-app-cache' ||
+        key === 'flutter-temp-cache' ||
+        key === 'flutter-app-manifest';
+
+      const loadScript = (src, module = false) =>
+        new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = src;
+          if (module) script.type = 'module';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('网页版启动资源加载失败'));
+          document.head.appendChild(script);
         });
+
+      const registerCurrentWorker = () => {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker
+          .register(
+            'pwa_service_worker.js?v=' + encodeURIComponent(pwaBuildId),
+          )
+          .catch((error) => {
+            console.warn('PWA service worker registration failed:', error);
+          });
+      };
+
+      const showStartupFailure = () => {
+        document.body.innerHTML =
+          '<main style="min-height:100vh;display:grid;place-items:center;' +
+          'font-family:system-ui,sans-serif;padding:24px;box-sizing:border-box">' +
+          '<div style="text-align:center">' +
+          '<div style="font-size:18px;font-weight:700;margin-bottom:8px">' +
+          '网页版启动失败</div>' +
+          '<div style="opacity:.72">请刷新页面后重试。</div>' +
+          '</div></main>';
+      };
+
+      const start = async () => {
+        let previousBuild = null;
+        try {
+          previousBuild = localStorage.getItem(bootVersionKey);
+        } catch (_) {}
+
+        if (previousBuild !== pwaBuildId && 'serviceWorker' in navigator) {
+          try {
+            const registrations =
+              await navigator.serviceWorker.getRegistrations();
+            const cacheKeys =
+              'caches' in window ? await window.caches.keys() : [];
+            const ownedCaches = cacheKeys.filter(ownsCache);
+            const hasLegacyRuntime =
+              registrations.length > 0 || ownedCaches.length > 0;
+
+            if (hasLegacyRuntime) {
+              await Promise.all(
+                registrations.map((registration) =>
+                  registration.unregister(),
+                ),
+              );
+              await Promise.all(
+                ownedCaches.map((key) => window.caches.delete(key)),
+              );
+              try {
+                localStorage.setItem(bootVersionKey, pwaBuildId);
+              } catch (_) {}
+
+              const reloadUrl = new URL(window.location.href);
+              reloadUrl.searchParams.set('_pwa_build', pwaBuildId);
+              window.location.replace(reloadUrl.toString());
+              return;
+            }
+          } catch (error) {
+            console.warn('PWA legacy runtime migration failed:', error);
+          }
+        }
+
+        try {
+          localStorage.setItem(bootVersionKey, pwaBuildId);
+        } catch (_) {}
+
+        const versionQuery = '?v=' + encodeURIComponent(pwaBuildId);
+        await loadScript('pwa_platform_bridge.js' + versionQuery);
+        await loadScript('pwa_ocr_bridge.js' + versionQuery, true);
+        await loadScript('flutter_bootstrap.js' + versionQuery);
+
+        if (document.readyState === 'complete') {
+          registerCurrentWorker();
+        } else {
+          window.addEventListener('load', registerCurrentWorker, {once: true});
+        }
+      };
+
+      start().catch((error) => {
+        console.error('PWA startup failed:', error);
+        showStartupFailure();
       });
-    }
+    })();
   </script>
 </body>
 </html>
