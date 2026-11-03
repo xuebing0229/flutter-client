@@ -176,6 +176,24 @@ void main() {
       expect(worker, isNot(contains("caches.match('./index.html')")));
     });
 
+    test('Android PWA avoids WebGL context-loss rendering', () {
+      final bootstrap = source('web/flutter_bootstrap.js');
+      final referenceImages = source(
+        'lib/features/orders/presentation/'
+        'order_reference_image_widgets_common.dart',
+      );
+
+      expect(bootstrap, contains('/Android/i'));
+      expect(bootstrap, contains('canvasKitForceCpuOnly: isAndroid'));
+      expect(bootstrap, contains('_flutter.loader.load({'));
+      expect(
+        RegExp(r'filterQuality: FilterQuality\.low')
+            .allMatches(referenceImages)
+            .length,
+        greaterThanOrEqualTo(2),
+      );
+    });
+
     test('relay protocol and backup rules stay shared', () {
       for (final path in <String>[
         'lib/core/sync/public_relay_client_native.dart',
