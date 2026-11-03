@@ -460,6 +460,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '手机、电脑与网页版一致性继续完善',
     description: '继续统一手机、电脑与网页版的账号、设置、同步、备份、主题、截图导入、参考图和小票等使用体验，减少同一功能在不同平台出现细节不一致或修复不同步的情况。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 231,
+    title: '网页版更新缓存修复',
+    description: '修复网页版发布新版后仍可能继续使用旧页面资源，导致更新没有生效、白屏或一直停在加载状态的问题。后续网页资源更新会自动刷新对应缓存。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
