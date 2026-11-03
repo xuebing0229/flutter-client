@@ -320,6 +320,11 @@ jobs:
             echo "PWA precache manifest was not finalized." >&2
             exit 1
           fi
+          if grep -q '__PWA_CACHE_VERSION__' build/web/pwa_service_worker.js; then
+            echo "PWA cache version was not finalized." >&2
+            exit 1
+          fi
+          grep -q "const CACHE_VERSION = 'adventurers-guild-pwa-" build/web/pwa_service_worker.js
 
       - name: Package PWA Beta
         run: |
