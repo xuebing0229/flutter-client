@@ -36,6 +36,9 @@ external JSString _pwaInstallState();
 @JS('adventurersGuildPromptPwaInstall')
 external JSPromise<JSString> _promptPwaInstall();
 
+@JS('adventurersGuildPwaInstalledState')
+external JSPromise<JSString> _pwaInstalledState();
+
 String? webStorageGet(String key) => _storageGet(key.toJS)?.toDart;
 
 void webStorageSet(String key, String value) {
@@ -50,6 +53,9 @@ String webPwaInstallState() => _pwaInstallState().toDart;
 
 Future<String> webPromptPwaInstall() async =>
     (await _promptPwaInstall().toDart).toDart;
+
+Future<String> webPwaInstalledState() async =>
+    (await _pwaInstalledState().toDart).toDart;
 
 void webDownloadBytes({
   required String fileName,
