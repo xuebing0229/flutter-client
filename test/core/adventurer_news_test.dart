@@ -340,4 +340,13 @@ void main() {
     );
   });
 
+
+  test('233 包含网页版旧缓存白屏修复见闻', () {
+    final picked = newsBetweenBuilds(232, 233);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版旧缓存白屏修复'],
+    );
+  });
+
 }
