@@ -119,6 +119,24 @@
     return isIos ? 'ios' : 'manual';
   };
 
+  window.adventurersGuildPwaInstalledState = async () => {
+    if (isStandalonePwa()) return 'standalone';
+    if (typeof navigator.getInstalledRelatedApps === 'function') {
+      try {
+        const related = await navigator.getInstalledRelatedApps();
+        if (Array.isArray(related) &&
+            related.some((app) => app && app.platform === 'webapp')) {
+          return 'installed';
+        }
+      } catch (_) {
+        // Fall back to the install event state below.
+      }
+    }
+    if (pwaInstallConfirmed) return 'installed';
+    if (deferredPwaInstallPrompt) return 'prompt';
+    return window.adventurersGuildPwaInstallState();
+  };
+
   window.adventurersGuildPromptPwaInstall = async () => {
     const state = window.adventurersGuildPwaInstallState();
     if (state === 'standalone' || state === 'installed') return state;
