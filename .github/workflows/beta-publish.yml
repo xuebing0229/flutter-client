@@ -306,6 +306,8 @@ jobs:
           test -s build/web/flutter_bootstrap.js
           grep -Fq "_flutter.loader.load({" web/flutter_bootstrap.js
           grep -Fq "canvasKitForceCpuOnly: isAndroid" web/flutter_bootstrap.js
+          grep -Fq "__PWA_BOOT_VERSION__" web/index.html
+          grep -Fq "__PWA_BOOT_VERSION__" web/flutter_bootstrap.js
           if grep -q "serviceWorkerSettings" web/flutter_bootstrap.js; then
             echo "Flutter bootstrap must not register the legacy worker." >&2
             exit 1
@@ -326,6 +328,14 @@ jobs:
             exit 1
           fi
           grep -q "const CACHE_VERSION = 'adventurers-guild-pwa-" build/web/pwa_service_worker.js
+          if grep -q "__PWA_BOOT_VERSION__" build/web/index.html build/web/flutter_bootstrap.js; then
+            echo "PWA boot build id was not finalized." >&2
+            exit 1
+          fi
+          grep -Fq "adventurers-guild.pwa.boot-version" build/web/index.html
+          grep -Fq "navigator.serviceWorker.getRegistrations()" build/web/index.html
+          grep -Fq "build.mainJsPath" build/web/flutter_bootstrap.js
+          grep -Fq "NETWORK_FIRST_PATHS" build/web/pwa_service_worker.js
 
       - name: Package PWA Beta
         run: |
