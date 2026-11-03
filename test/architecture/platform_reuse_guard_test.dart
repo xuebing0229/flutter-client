@@ -163,17 +163,37 @@ void main() {
       expect(webApp, contains('网页不能直接申请系统的“创建桌面快捷方式”权限'));
     });
 
-    test('PWA cache never mixes assets from older workers', () {
+    test('PWA startup migrates old workers before Flutter loads', () {
+      final index = source('web/index.html');
+      final bootstrap = source('web/flutter_bootstrap.js');
       final worker = source('web/pwa_service_worker.js');
+      final finalizer = source('tool/finalize_pwa.py');
+
+      expect(index, contains('__PWA_BOOT_VERSION__'));
+      expect(index, contains('navigator.serviceWorker.getRegistrations()'));
+      expect(index, contains('registration.unregister()'));
+      expect(index, contains("window.caches.delete(key)"));
+      expect(index, contains("flutter_bootstrap.js' + versionQuery"));
+      expect(
+        index,
+        isNot(contains('<script src="flutter_bootstrap.js"')),
+      );
+
+      expect(bootstrap, contains('__PWA_BOOT_VERSION__'));
+      expect(bootstrap, contains('build.mainJsPath'));
+      expect(bootstrap, contains("build.mainJsPath.includes('?')"));
+      expect(bootstrap, contains("versionQuery = 'v='"));
 
       expect(worker, contains('LEGACY_FLUTTER_CACHES'));
-      expect(worker, contains("'flutter-app-cache'"));
-      expect(worker, contains("'flutter-temp-cache'"));
-      expect(worker, contains("'flutter-app-manifest'"));
-      expect(worker, contains('await cache.match(request)'));
-      expect(worker, contains("await cache.match('./index.html')"));
+      expect(worker, contains('NETWORK_FIRST_PATHS'));
+      expect(worker, contains("'/flutter_bootstrap.js'"));
+      expect(worker, contains("'/main.dart.js'"));
+      expect(worker, contains("cache: 'no-cache'"));
       expect(worker, isNot(contains('caches.match(request)')));
-      expect(worker, isNot(contains("caches.match('./index.html')")));
+
+      expect(finalizer, contains('BOOT_TOKEN'));
+      expect(finalizer, contains('BOOT_FILES'));
+      expect(finalizer, contains('source.replace(BOOT_TOKEN, build_number)'));
     });
 
     test('Android PWA avoids WebGL context-loss rendering', () {
