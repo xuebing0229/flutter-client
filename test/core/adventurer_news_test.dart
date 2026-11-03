@@ -349,4 +349,13 @@ void main() {
     );
   });
 
+
+  test('234 包含安卓网页版白屏稳定性修复见闻', () {
+    final picked = newsBetweenBuilds(233, 234);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['安卓网页版白屏稳定性修复'],
+    );
+  });
+
 }
