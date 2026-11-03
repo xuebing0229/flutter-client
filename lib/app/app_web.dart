@@ -1723,7 +1723,8 @@ class _WebSettingsPage extends StatelessWidget {
   final QuickStartGuideTargets? guideTargets;
 
   Future<void> _installPwa(BuildContext context) async {
-    final state = webPwaInstallState();
+    final state = await webPwaInstalledState();
+    if (!context.mounted) return;
 
     if (state == 'standalone') {
       ScaffoldMessenger.of(context).showSnackBar(
