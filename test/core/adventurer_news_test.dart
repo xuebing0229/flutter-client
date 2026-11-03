@@ -367,4 +367,13 @@ void main() {
     );
   });
 
+
+  test('236 包含网页版启动诊断完善见闻', () {
+    final picked = newsBetweenBuilds(235, 236);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版启动诊断完善'],
+    );
+  });
+
 }
