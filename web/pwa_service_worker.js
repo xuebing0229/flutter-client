@@ -7,6 +7,17 @@ const LEGACY_FLUTTER_CACHES = new Set([
   'flutter-app-manifest',
 ]);
 
+const NETWORK_FIRST_PATHS = new Set([
+  '/',
+  '/index.html',
+  '/flutter_bootstrap.js',
+  '/main.dart.js',
+  '/pwa_platform_bridge.js',
+  '/pwa_ocr_bridge.js',
+  '/version.json',
+  '/manifest.json',
+]);
+
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_VERSION);
@@ -36,6 +47,19 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
+async function networkFirst(request, cache) {
+  try {
+    const response = await fetch(request, {cache: 'no-cache'});
+    if (response.ok) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (_) {
+    return (await cache.match(request, {ignoreSearch: true})) ||
+        Response.error();
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
@@ -43,26 +67,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      const cache = await caches.open(CACHE_VERSION);
-      try {
-        const response = await fetch(request);
-        if (response.ok) {
-          await cache.put('./index.html', response.clone());
-        }
-        return response;
-      } catch (_) {
-        return (await cache.match('./index.html')) ||
-            (await cache.match('./')) ||
-            Response.error();
-      }
-    })());
-    return;
-  }
-
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_VERSION);
+
+    if (request.mode === 'navigate' ||
+        NETWORK_FIRST_PATHS.has(url.pathname)) {
+      return networkFirst(request, cache);
+    }
+
     const cached = await cache.match(request);
     if (cached) return cached;
 
