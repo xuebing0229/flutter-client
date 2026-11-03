@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+230
-# beta-230: complete cross-platform reuse alignment and keep Web/native behavior consistent
+version: 0.0.1+231
+# beta-231: refresh PWA caches from packaged asset content
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
