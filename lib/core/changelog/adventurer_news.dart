@@ -470,6 +470,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版安装提示状态修复',
     description: '修复网页版把“浏览器已安装应用”误显示成“已经添加到桌面”的问题；可直接安装时仍会调用浏览器安装提示，安装完成后也会明确说明桌面图标由手机系统桌面决定。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 233,
+    title: '网页版旧缓存白屏修复',
+    description: '网页版更新后只会读取当前版本自己的页面资源，并自动清理旧版 Flutter 网页缓存，避免新旧脚本混用导致白屏或加载失败。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
