@@ -3,9 +3,15 @@
   const STORE_NAME = 'referenceImages';
   let assetDbPromise = null;
   let deferredPwaInstallPrompt = null;
-  let pwaInstalled =
-    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-    window.navigator.standalone === true;
+  let pwaInstallConfirmed = false;
+
+  function isStandalonePwa() {
+    return (
+      (window.matchMedia &&
+        window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true
+    );
+  }
 
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
@@ -13,7 +19,9 @@
   });
 
   window.addEventListener('appinstalled', () => {
-    pwaInstalled = true;
+    // This confirms that the browser installed the PWA. It does NOT prove that
+    // the Android launcher pinned an icon to the user's home screen.
+    pwaInstallConfirmed = true;
     deferredPwaInstallPrompt = null;
   });
 
@@ -100,8 +108,9 @@
   };
 
   window.adventurersGuildPwaInstallState = () => {
-    if (pwaInstalled) return 'installed';
+    if (isStandalonePwa()) return 'standalone';
     if (deferredPwaInstallPrompt) return 'prompt';
+    if (pwaInstallConfirmed) return 'installed';
     const userAgent = window.navigator.userAgent || '';
     const isIos =
       /iPad|iPhone|iPod/.test(userAgent) ||
@@ -111,13 +120,15 @@
   };
 
   window.adventurersGuildPromptPwaInstall = async () => {
-    if (pwaInstalled) return 'installed';
+    const state = window.adventurersGuildPwaInstallState();
+    if (state === 'standalone' || state === 'installed') return state;
     const prompt = deferredPwaInstallPrompt;
-    if (!prompt) return window.adventurersGuildPwaInstallState();
+    if (!prompt) return state;
     deferredPwaInstallPrompt = null;
     await prompt.prompt();
     const choice = await prompt.userChoice;
     if (choice && choice.outcome === 'accepted') {
+      pwaInstallConfirmed = true;
       return 'accepted';
     }
     return 'dismissed';
