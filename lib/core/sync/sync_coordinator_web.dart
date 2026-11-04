@@ -72,6 +72,7 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   bool _initialized = false;
   bool _disposed = false;
   bool _applyingRemote = false;
+  bool _awaitingInitialRemoteWorkspace = false;
   bool _syncBusy = false;
   final bool _syncPaused = false;
   String? _lastError;
@@ -83,6 +84,7 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   bool get initialized => _initialized;
   bool get syncBusy => _syncBusy;
   bool get syncPaused => _syncPaused;
+  bool get awaitingInitialRemoteWorkspace => _awaitingInitialRemoteWorkspace;
   int get conflictCount => _conflicts.length;
   String? get lastError => _lastError;
   DateTime? get lastSuccessfulSyncAt => _lastSuccessfulSyncAt;
@@ -120,35 +122,66 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
     ];
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize({
+    bool seedLocalWorkspace = true,
+    bool seedLocalSettings = true,
+  }) async {
     if (_initialized || _disposed) return;
 
     try {
-      _loadStoredRecords();
+      // Match the native bootstrap-only handoff: a newly joined device must
+      // first adopt the existing workspace instead of publishing its defaults
+      // as a concurrent edit. Any browser history written while the workspace
+      // was still only a bootstrap placeholder is therefore disposable.
+      _awaitingInitialRemoteWorkspace = !seedLocalWorkspace;
+      if (_awaitingInitialRemoteWorkspace) {
+        for (final kind in SyncEntityKind.values) {
+          _records[kind]!.clear();
+        }
+        webStorageRemove(_storageKey);
+      } else {
+        _loadStoredRecords();
+      }
+
       final pending = _pendingRestore;
       if (pending != null) {
         _mergeDecodedRecords(pending);
+        if (_records.values.any((records) => records.isNotEmpty)) {
+          _awaitingInitialRemoteWorkspace = false;
+        }
       }
 
       final current = _workspaceEngine.captureEntities();
-      for (final kind in SyncEntityKind.values) {
-        final records = _records[kind]!;
-        for (final entry in current[kind]!.entries) {
-          records.putIfAbsent(
-            entry.key,
-            () => SyncRecord.bootstrap(
-              kind: kind,
-              id: entry.key,
-              values: entry.value,
-              deviceId: deviceId,
-            ).copyWith(accountId: accountId),
-          );
+      if (!_awaitingInitialRemoteWorkspace) {
+        for (final kind in SyncEntityKind.values) {
+          if (kind == SyncEntityKind.settings && !seedLocalSettings) continue;
+          final records = _records[kind]!;
+          for (final entry in current[kind]!.entries) {
+            records.putIfAbsent(
+              entry.key,
+              () => SyncRecord.bootstrap(
+                kind: kind,
+                id: entry.key,
+                values: entry.value,
+                deviceId: deviceId,
+              ).copyWith(accountId: accountId),
+            );
+          }
         }
       }
 
       _initialized = true;
       await _applyAllRecords();
       _lastEntityValues = _workspaceEngine.captureEntities();
+      if (_awaitingInitialRemoteWorkspace) {
+        final hasRemoteSettings =
+            _records[SyncEntityKind.settings]!.containsKey(settingsRecordId);
+        final hasRemotePresets =
+            _records[SyncEntityKind.nodePreset]!.isNotEmpty;
+        if (hasRemoteSettings && hasRemotePresets) {
+          _awaitingInitialRemoteWorkspace = false;
+        }
+      }
       _rebuildConflicts();
       _persistRecords();
 
@@ -207,7 +240,12 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   }
 
   void _onLocalChanged() {
-    if (!_initialized || _disposed || _applyingRemote) return;
+    if (!_initialized ||
+        _disposed ||
+        _applyingRemote ||
+        _awaitingInitialRemoteWorkspace) {
+      return;
+    }
     _changeDebounce?.cancel();
     _changeDebounce = Timer(
       const Duration(milliseconds: 180),
@@ -219,7 +257,12 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
 
   @override
   Future<void> flushNow() async {
-    if (!_initialized || _disposed || _syncPaused) return;
+    if (!_initialized ||
+        _disposed ||
+        _syncPaused ||
+        _awaitingInitialRemoteWorkspace) {
+      return;
+    }
     _changeDebounce?.cancel();
     await _enqueue(_flushLocalChanges);
   }
@@ -239,6 +282,7 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   ) async {
     if (!_initialized || _disposed) return;
     await _enqueue(() async {
+      _awaitingInitialRemoteWorkspace = false;
       for (final kind in SyncEntityKind.values) {
         _records[kind]!.clear();
       }
@@ -277,7 +321,9 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   ) async {
     if (!_initialized || _disposed) return;
     await _enqueue(() async {
-      await _flushLocalChanges();
+      if (!_awaitingInitialRemoteWorkspace) {
+        await _flushLocalChanges();
+      }
       _mergeDecodedRecords(incoming);
       _applyingRemote = true;
       try {
@@ -295,7 +341,9 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
   }
 
   Future<void> _flushLocalChanges() async {
-    if (_disposed || _applyingRemote) return;
+    if (_disposed || _applyingRemote || _awaitingInitialRemoteWorkspace) {
+      return;
+    }
     final current = _workspaceEngine.captureEntities();
     var changed = false;
 
