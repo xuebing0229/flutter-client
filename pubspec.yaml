@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.2.0+11
-# Internal 0.2.0 release build 11; user-visible channel lineage cleaned.
+version: 0.2.0+12
+# Internal 0.2.0 hidden release build 12; visible version remains 0.2.0.
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
