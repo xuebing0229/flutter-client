@@ -305,7 +305,10 @@ jobs:
           test -s build/web/pwa_service_worker.js
           test -s build/web/flutter_bootstrap.js
           grep -Fq "_flutter.loader.load({" web/flutter_bootstrap.js
-          grep -Fq "canvasKitForceCpuOnly: isAndroid" web/flutter_bootstrap.js
+          if grep -Fq "canvasKitForceCpuOnly" web/flutter_bootstrap.js; then
+            echo "Android Web must keep GPU-backed CanvasKit; CPU-only rendering is too slow." >&2
+            exit 1
+          fi
           grep -Fq "__PWA_BOOT_VERSION__" web/index.html
           grep -Fq "__PWA_BOOT_VERSION__" web/flutter_bootstrap.js
           if grep -q "serviceWorkerSettings" web/flutter_bootstrap.js; then
