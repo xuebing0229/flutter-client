@@ -1555,13 +1555,12 @@ class SyncCoordinator extends ChangeNotifier {
     for (final kind in SyncEntityKind.values) {
       _lastFlushedRecords[kind] = recordsByKind[kind]!;
     }
-    if (_awaitingInitialRemoteWorkspace) {
-      final hasRemoteSettings =
-          recordsByKind[SyncEntityKind.settings]!.containsKey(settingsRecordId);
-      final hasRemotePresets = recordsByKind[SyncEntityKind.nodePreset]!.isNotEmpty;
-      if (hasRemoteSettings && hasRemotePresets) {
-        _awaitingInitialRemoteWorkspace = false;
-      }
+    if (_awaitingInitialRemoteWorkspace &&
+        hasInitialRemoteWorkspaceBaseline(
+          recordsByKind,
+          settingsRecordId: settingsRecordId,
+        )) {
+      _awaitingInitialRemoteWorkspace = false;
     }
     _hasRestoredSyncBaseline = false;
     _conflicts = _collectConflicts(recordsByKind);
