@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      LICENSE_ADMIN_SETUP_KEY: ${{ secrets.LICENSE_ADMIN_SETUP_KEY }}
       DB_NAME: adventure-license-staging
 
     steps:
@@ -28,36 +26,56 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Require deployment secrets
+      - name: Require Cloudflare token
         shell: bash
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
-          test -n "$LICENSE_ADMIN_SETUP_KEY" || { echo "Missing LICENSE_ADMIN_SETUP_KEY"; exit 1; }
 
       - name: Install Wrangler
         working-directory: server/activation_worker
         run: npm install
 
-      - name: Find or create APAC staging D1 database
-        id: d1
+      - name: Discover Cloudflare account
+        id: cf
+        working-directory: server/activation_worker
         shell: bash
         run: |
           set -euo pipefail
-          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database"
-          list_json="$(curl --fail-with-body --silent --show-error             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "$api")"
-          db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME"             '.result[]? | select(.name == $name) | .uuid' | head -n1)"
-          if [[ -z "$db_id" ]]; then
-            created="$(curl --fail-with-body --silent --show-error               -X POST               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"               -H "Content-Type: application/json"               --data '{"name":"adventure-license-staging","primary_location_hint":"apac"}'               "$api")"
-            db_id="$(printf '%s' "$created" | jq -r '.result.uuid')"
+          whoami_json="$(npx wrangler whoami --json)"
+          account_id="$(printf '%s' "$whoami_json" | jq -r '.accounts[0].id // empty')"
+          account_count="$(printf '%s' "$whoami_json" | jq -r '.accounts | length')"
+          test -n "$account_id" || { echo "Could not discover Cloudflare account ID"; exit 1; }
+          if [[ "$account_count" -ne 1 ]]; then
+            echo "Expected token to expose exactly one Cloudflare account, found $account_count." >&2
+            exit 1
           fi
-          test -n "$db_id" && test "$db_id" != "null"
+          echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
+
+      - name: Find or create APAC staging D1 database
+        id: d1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          list_json="$(npx wrangler d1 list --json)"
+          db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME"             '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
+
+          if [[ -z "$db_id" ]]; then
+            create_json="$(npx wrangler d1 create "$DB_NAME" --location=apac --json)"
+            db_id="$(printf '%s' "$create_json" | jq -r '.uuid // .id // .result.uuid // empty')"
+          fi
+
+          test -n "$db_id" || { echo "Could not create or locate staging D1 database"; exit 1; }
           echo "database_id=$db_id" >> "$GITHUB_OUTPUT"
 
       - name: Render staging Wrangler config
         working-directory: server/activation_worker
         env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
           D1_DATABASE_ID: ${{ steps.d1.outputs.database_id }}
         run: |
           python3 - <<'PY'
@@ -67,6 +85,7 @@ jobs:
 
           data = json.loads(Path("wrangler.jsonc").read_text(encoding="utf-8"))
           data["name"] = "adventure-license-staging"
+          data["account_id"] = os.environ["CLOUDFLARE_ACCOUNT_ID"]
           binding = data["d1_databases"][0]
           binding["database_name"] = "adventure-license-staging"
           binding["database_id"] = os.environ["D1_DATABASE_ID"]
@@ -78,21 +97,43 @@ jobs:
 
       - name: Initialize staging schema
         working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
         run: |
           npx wrangler d1 execute "$DB_NAME"             --remote             --config wrangler.staging.json             --file migrations/0001_schema.sql
 
-      - name: Deploy staging Worker with secret
+      - name: Deploy staging Worker with an ephemeral admin setup key
+        id: deploy
         working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        shell: bash
         run: |
-          python3 - <<'PY'
+          set -euo pipefail
+          setup_key="$(openssl rand -hex 32)"
+          python3 - "$setup_key" <<'PY'
           import json
-          import os
+          import sys
           from pathlib import Path
-
           Path(".secrets.json").write_text(
-              json.dumps({"LICENSE_ADMIN_SETUP_KEY": os.environ["LICENSE_ADMIN_SETUP_KEY"]}),
+              json.dumps({"LICENSE_ADMIN_SETUP_KEY": sys.argv[1]}),
               encoding="utf-8",
           )
           PY
-          npx wrangler deploy             --config wrangler.staging.json             --secrets-file .secrets.json
+
+          deploy_output="$(npx wrangler deploy             --config wrangler.staging.json             --secrets-file .secrets.json)"
           rm -f .secrets.json
+
+          printf '%s\n' "$deploy_output"
+          worker_url="$(printf '%s\n' "$deploy_output" | grep -Eo 'https://[^[:space:]]+workers\.dev' | tail -n1 || true)"
+          if [[ -n "$worker_url" ]]; then
+            echo "worker_url=$worker_url" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Staging health smoke test
+        if: steps.deploy.outputs.worker_url != ''
+        env:
+          WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent "$WORKER_URL/health" | jq -e             '.ok == true and .service == "adventure-license" and .version == 1'
