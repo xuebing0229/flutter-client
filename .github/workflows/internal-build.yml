@@ -21,7 +21,7 @@ env:
   ACTIVATION_API_BASE_URL: https://license.apixb.top
   PUBLIC_SYNC_RELAY_URL: https://beta.guild.apixb.top/sync
   INTERNAL_SOURCE_BUILD: '241'
-  INTERNAL_RELEASE_BUILD: '11'
+  INTERNAL_RELEASE_BUILD: '12'
   RELEASE_SITE_BASE_URL: https://license.apixb.top/releases
   RELEASE_DEPLOY_HOST: 149.88.84.90
   RELEASE_DEPLOY_USER: adventure-release
@@ -323,9 +323,8 @@ jobs:
           from datetime import datetime, timezone
           from pathlib import Path
 
-          version, build, source_build, base_url = sys.argv[1:]
+          version, build, _source_build, base_url = sys.argv[1:]
           build = int(build)
-          source_build = int(source_build)
           root = Path("site")
           release_dir = root / "internal" / version
           android = release_dir / "app-internal.apk"
@@ -374,7 +373,6 @@ jobs:
               "channel": "internal",
               "version": version,
               "build": build,
-              "source_test_build": source_build,
               "published": True,
               "published_at": published_at,
               "notes": notes,
