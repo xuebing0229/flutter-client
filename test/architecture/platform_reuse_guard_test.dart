@@ -330,6 +330,19 @@ void main() {
           '              child: ListTile(',
         ),
       );
+      expect(web, contains('Scrollable.ensureVisible('));
+      expect(
+        web,
+        contains(
+          'destination == QuickStartGuideDestination.pwaInstall',
+        ),
+      );
+      expect(
+        web,
+        contains(
+          '_ensureGuideTargetVisible(_quickStartGuideTargets.pwaInstallKey)',
+        ),
+      );
     });
 
     test('relay protocol and backup rules stay shared', () {
