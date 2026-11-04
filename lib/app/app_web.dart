@@ -1845,60 +1845,63 @@ class _WebSettingsPage extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
-      body: ListView(
+      body: SingleChildScrollView(
         padding: AppLayoutSpacing.pageScrollPadding(
           context,
           left: 16,
           top: 8,
           right: 16,
         ),
-        children: [
-          GuildSettingsAppearanceCard(
-            themeStore: themeStore,
-            featureStore: featureStore,
-          ),
-          const SizedBox(height: 14),
-          GuildSettingsDataCard(
-            exportBusy: busy(),
-            onExport: () => unawaited(onExport(context)),
-            onImport: () => unawaited(onImport(context)),
-            guideTargets: guideTargets,
-          ),
-          const SizedBox(height: 14),
-          GuildSettingsSectionCard(
-            title: '网页版',
-            icon: Icons.install_desktop_rounded,
-            child: SpotlightTarget(
-              targetKey: guideTargets?.pwaInstallKey,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.install_desktop_rounded),
-                title: Text(
-                  switch (webPwaInstallState()) {
-                    'standalone' => '已作为网页版应用打开',
-                    'installed' => '网页版应用已安装',
-                    _ => '安装网页版应用',
-                  },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GuildSettingsAppearanceCard(
+              themeStore: themeStore,
+              featureStore: featureStore,
+            ),
+            const SizedBox(height: 14),
+            GuildSettingsDataCard(
+              exportBusy: busy(),
+              onExport: () => unawaited(onExport(context)),
+              onImport: () => unawaited(onImport(context)),
+              guideTargets: guideTargets,
+            ),
+            const SizedBox(height: 14),
+            GuildSettingsSectionCard(
+              title: '网页版',
+              icon: Icons.install_desktop_rounded,
+              child: SpotlightTarget(
+                targetKey: guideTargets?.pwaInstallKey,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.install_desktop_rounded),
+                  title: Text(
+                    switch (webPwaInstallState()) {
+                      'standalone' => '已作为网页版应用打开',
+                      'installed' => '网页版应用已安装',
+                      _ => '安装网页版应用',
+                    },
+                  ),
+                  subtitle: Text(
+                    switch (webPwaInstallState()) {
+                      'standalone' => '当前正在独立应用模式中运行',
+                      'installed' => '浏览器已安装；是否自动显示桌面图标由系统桌面决定',
+                      _ => '调用浏览器安装提示，以独立应用方式打开',
+                    },
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _installPwa(context),
                 ),
-                subtitle: Text(
-                  switch (webPwaInstallState()) {
-                    'standalone' => '当前正在独立应用模式中运行',
-                    'installed' => '浏览器已安装；是否自动显示桌面图标由系统桌面决定',
-                    _ => '调用浏览器安装提示，以独立应用方式打开',
-                  },
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _installPwa(context),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          GuildSettingsNewsCard(onOpen: onShowNews),
-          const SizedBox(height: 14),
-          GuildSettingsAboutCard(
-            onOpen: () => unawaited(_openAbout(context)),
-          ),
-        ],
+            const SizedBox(height: 14),
+            GuildSettingsNewsCard(onOpen: onShowNews),
+            const SizedBox(height: 14),
+            GuildSettingsAboutCard(
+              onOpen: () => unawaited(_openAbout(context)),
+            ),
+          ],
+        ),
       ),
     );
   }
