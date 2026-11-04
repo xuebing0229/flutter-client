@@ -112,25 +112,52 @@ Future<void> _revealSpotlightTarget(GlobalKey targetKey) async {
   await WidgetsBinding.instance.endOfFrame;
 }
 
+bool _spotlightTargetHasLayout(GlobalKey targetKey) {
+  final context = targetKey.currentContext;
+  final box = context?.findRenderObject();
+  return box is RenderBox &&
+      box.attached &&
+      box.hasSize &&
+      box.size.width > 0 &&
+      box.size.height > 0;
+}
+
+Future<bool> _waitForSpotlightTarget(
+  GlobalKey targetKey, {
+  Duration timeout = const Duration(milliseconds: 900),
+}) async {
+  if (_spotlightTargetHasLayout(targetKey)) return true;
+
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    await WidgetsBinding.instance.endOfFrame;
+    if (_spotlightTargetHasLayout(targetKey)) return true;
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+  }
+  return _spotlightTargetHasLayout(targetKey);
+}
+
 Future<List<SpotlightGuideStep>> _resolveSpotlightSteps(
   List<SpotlightGuideStep> steps,
 ) async {
   if (steps.isEmpty) return const <SpotlightGuideStep>[];
 
   List<SpotlightGuideStep> ready() => steps
-      .where((step) => step.targetKey.currentContext != null)
+      .where((step) => _spotlightTargetHasLayout(step.targetKey))
       .toList(growable: false);
 
   var resolved = ready();
   if (resolved.length == steps.length) return resolved;
 
-  // Web/PWA route transitions and lazy layout can attach guide targets a frame
-  // later than the page itself. Do not permanently discard a tutorial step
-  // just because its GlobalKey was queried during that short gap.
-  for (var attempt = 0; attempt < 3; attempt++) {
+  // A pushed route takes more than a few frames to settle on Web, and a
+  // lazy scrollable may attach its guide target only after the next layout.
+  // Wait for the actual RenderBox instead of silently dropping the step.
+  final deadline = DateTime.now().add(const Duration(milliseconds: 900));
+  while (DateTime.now().isBefore(deadline)) {
     await WidgetsBinding.instance.endOfFrame;
     resolved = ready();
     if (resolved.length == steps.length) break;
+    await Future<void>.delayed(const Duration(milliseconds: 16));
   }
   return resolved;
 }
@@ -144,6 +171,10 @@ Future<bool> showSpotlightGuide(
 }) async {
   final resolvedSteps = await _resolveSpotlightSteps(steps);
   if (resolvedSteps.isEmpty) return false;
+
+  final firstReady =
+      await _waitForSpotlightTarget(resolvedSteps.first.targetKey);
+  if (!context.mounted || !firstReady) return false;
 
   await _revealSpotlightTarget(resolvedSteps.first.targetKey);
   if (!context.mounted) return false;
@@ -282,6 +313,10 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     final next =
         (_index + delta).clamp(0, widget.steps.length - 1).toInt();
     if (next == _index) return;
+
+    final targetReady =
+        await _waitForSpotlightTarget(widget.steps[next].targetKey);
+    if (!mounted || !targetReady) return;
 
     await _revealSpotlightTarget(widget.steps[next].targetKey);
     if (!mounted) return;
