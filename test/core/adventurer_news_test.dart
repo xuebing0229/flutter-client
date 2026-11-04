@@ -385,4 +385,13 @@ void main() {
     );
   });
 
+
+  test('238 包含网页版教程高亮挖洞修复见闻', () {
+    final picked = newsBetweenBuilds(237, 238);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版教程高亮挖洞修复'],
+    );
+  });
+
 }
