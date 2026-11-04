@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           test -n "$GH_TOKEN"
-          gh release upload "internal-v0.2.0+11"             dist/app-pwa-internal.zip#app-pwa-internal.zip             --repo xuebing0229/release-files             --clobber
+          gh release upload "internal-v0.2.0+12"             dist/app-pwa-internal.zip#app-pwa-internal.zip             --repo xuebing0229/release-files             --clobber
 
       - name: Update Internal PWA deployment branch
         env:
@@ -56,11 +56,11 @@ jobs:
               "schema": 1,
               "channel": "internal",
               "version": "0.2.0",
-              "build": 11,
+              "build": 12,
               "published": True,
               "pwa_download_url":
                   "https://github.com/xuebing0229/release-files/releases/download/"
-                  "internal-v0.2.0%2B11/app-pwa-internal.zip",
+                  "internal-v0.2.0%2B12/app-pwa-internal.zip",
               "pwa_size_bytes": archive.stat().st_size,
               "pwa_sha256": digest,
               "notes": "Internal 0.2.0",
