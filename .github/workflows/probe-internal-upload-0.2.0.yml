@@ -1,4 +1,4 @@
-name: Probe Internal 0.2.0 Upload
+name: Finalize Internal 0.2.0 Build 12
 
 on:
   push:
@@ -13,21 +13,109 @@ permissions:
 env:
   RELEASE_DEPLOY_HOST: 149.88.84.90
   RELEASE_DEPLOY_USER: adventure-release
+  RELEASE_DEPLOY_PATH: /srv/adventure-releases
   RELEASE_SSH_KEY: ${{ secrets.INTERNAL_RELEASE_SSH_KEY }}
 
 jobs:
-  probe:
+  finalize:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe upload progress
+      - name: Configure SSH
         shell: bash
         run: |
           install -d -m 0700 "$HOME/.ssh"
           printf '%s\n' "$RELEASE_SSH_KEY" > "$HOME/.ssh/internal-release"
           chmod 0600 "$HOME/.ssh/internal-release"
           ssh-keyscan -T 15 -p 22 -H "$RELEASE_DEPLOY_HOST" > "$HOME/.ssh/known_hosts"
-          ssh -i "$HOME/.ssh/internal-release" -o BatchMode=yes -o IdentitiesOnly=yes             "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST"             "df -h /srv/adventure-releases; echo '---'; ls -lh /srv/adventure-releases/internal/0.2.0 2>/dev/null || true"
 
-# probe 2
+      - name: Stop stale release upload sessions
+        shell: bash
+        run: |
+          SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes"
+          $SSH "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST" 'pkill -x scp 2>/dev/null || true; pkill -x sftp-server 2>/dev/null || true; pkill -x sshd 2>/dev/null || true' || true
+          sleep 3
 
-# probe 3
+      - name: Fetch and atomically install Build 12 packages
+        shell: bash
+        run: |
+          SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes"
+          $SSH "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          DIR=/srv/adventure-releases/internal/0.2.0
+          mkdir -p "$DIR"
+          cd "$DIR"
+          curl --fail --location --retry 8 --retry-delay 2 --connect-timeout 20 -o .app-internal.apk.build12 "https://github.com/xuebing0229/release-files/releases/download/internal-v0.2.0%2B12/app-internal.apk"
+          curl --fail --location --retry 8 --retry-delay 2 --connect-timeout 20 -o .app-windows-internal-setup.exe.build12 "https://github.com/xuebing0229/release-files/releases/download/internal-v0.2.0%2B12/app-windows-internal-setup.exe"
+          curl --fail --location --retry 8 --retry-delay 2 --connect-timeout 20 -o .app-windows-internal.zip.build12 "https://github.com/xuebing0229/release-files/releases/download/internal-v0.2.0%2B12/app-windows-internal.zip"
+          echo 'c9297c04490eea99294cba768088b929d63b662100f282d3029b91b19f4090e6  .app-internal.apk.build12' | sha256sum -c -
+          echo '5f1e028f63acf5d4b28a3891af8e742208684ab6a3689676ceecef225d1c2a65  .app-windows-internal-setup.exe.build12' | sha256sum -c -
+          echo '5b607c1a806fb4159f3680ffc51e832fc26180901ade38d2fa5815ec4bb7c0e6  .app-windows-internal.zip.build12' | sha256sum -c -
+          mv -f .app-internal.apk.build12 app-internal.apk
+          mv -f .app-windows-internal-setup.exe.build12 app-windows-internal-setup.exe
+          mv -f .app-windows-internal.zip.build12 app-windows-internal.zip
+          REMOTE
+
+      - name: Build clean Build 12 manifests
+        shell: bash
+        run: |
+          mkdir -p manifests
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          notes = (
+              '本次内测版整合近期完成的功能与修复，Android、Windows 与网页版保持同一功能基线。\n'
+              '完善排单、成品、统计、小票、新手引导、截图导入、设备同步、桌宠与专注等使用体验。\n'
+              '网页版继续与客户端共用已验证的界面与业务代码，并完善添加到桌面、缓存刷新与同步体验。'
+          )
+          base='https://license.apixb.top/releases/internal/0.2.0'
+          android={
+              'schema':1,'channel':'internal','version':'0.2.0','build':12,'published':True,
+              'download_url':base+'/app-internal.apk','size_bytes':164253495,
+              'sha256':'c9297c04490eea99294cba768088b929d63b662100f282d3029b91b19f4090e6','notes':notes,
+          }
+          windows={
+              'schema':1,'channel':'internal','version':'0.2.0','build':12,'published':True,
+              'download_url':base+'/app-windows-internal.zip','size_bytes':236652260,
+              'sha256':'5b607c1a806fb4159f3680ffc51e832fc26180901ade38d2fa5815ec4bb7c0e6','notes':notes,
+          }
+          latest={
+              'schema':1,'channel':'internal','version':'0.2.0','build':12,'published':True,
+              'published_at':datetime.now(timezone.utc).isoformat(),'notes':notes,
+              'android':{'download_url':android['download_url'],'size_bytes':android['size_bytes'],'sha256':android['sha256']},
+              'windows':{'download_url':windows['download_url'],'size_bytes':windows['size_bytes'],'sha256':windows['sha256'],
+                         'installer_url':base+'/app-windows-internal-setup.exe','installer_size_bytes':160408036,
+                         'installer_sha256':'5f1e028f63acf5d4b28a3891af8e742208684ab6a3689676ceecef225d1c2a65'},
+          }
+          p=Path('manifests')
+          (p/'android-latest.json').write_text(json.dumps(android,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          (p/'windows-latest.json').write_text(json.dumps(windows,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          (p/'latest.json').write_text(json.dumps(latest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+      - name: Publish manifests after packages
+        shell: bash
+        run: |
+          SCP="scp -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes"
+          $SCP manifests/android-latest.json manifests/windows-latest.json manifests/latest.json "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/internal/"
+          $SCP manifests/latest.json "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST:$RELEASE_DEPLOY_PATH/internal/0.2.0/release.json"
+
+      - name: Verify Build 12 files and public manifest
+        shell: bash
+        run: |
+          SSH="ssh -i $HOME/.ssh/internal-release -o BatchMode=yes -o IdentitiesOnly=yes"
+          $SSH "$RELEASE_DEPLOY_USER@$RELEASE_DEPLOY_HOST" 'cd /srv/adventure-releases/internal/0.2.0 && sha256sum app-internal.apk app-windows-internal-setup.exe app-windows-internal.zip' > remote-sha.txt
+          grep -Fq 'c9297c04490eea99294cba768088b929d63b662100f282d3029b91b19f4090e6  app-internal.apk' remote-sha.txt
+          grep -Fq '5f1e028f63acf5d4b28a3891af8e742208684ab6a3689676ceecef225d1c2a65  app-windows-internal-setup.exe' remote-sha.txt
+          grep -Fq '5b607c1a806fb4159f3680ffc51e832fc26180901ade38d2fa5815ec4bb7c0e6  app-windows-internal.zip' remote-sha.txt
+          curl --fail --show-error --silent --retry 8 --retry-delay 2 https://license.apixb.top/releases/internal/latest.json > latest.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('latest.json',encoding='utf-8'))
+          assert data['version']=='0.2.0', data
+          assert data['build']==12, data
+          assert 'source_test_build' not in data, data
+          assert 'Beta' not in data.get('notes',''), data
+          assert '测试版 241' not in data.get('notes',''), data
+          print('Internal 0.2.0 Build 12 finalized and verified.')
+          PY
