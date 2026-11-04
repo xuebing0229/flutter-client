@@ -510,6 +510,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '新手教程章节与跳过逻辑修复',
     description: '修复“添加到桌面”被插进上一小节、屏幕外安装入口仍无法定位，以及“跳过本节”在跨页面章节里只相当于下一步的问题；现在章节边界、整节跳过和网页版安装入口自动定位会按实际教程结构工作。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 241,
+    title: '排单标签筛选显示优化',
+    description: '“加急”继续作为新增和编辑排单时的内置快捷标签；标签筛选只显示当前未归档排单实际使用过的标签，没有加急单时不再固定显示“加急”。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
