@@ -782,8 +782,22 @@ class _SpotlightMaskPainter extends CustomPainter {
             ),
           ));
 
-    final dimmed = Path.combine(PathOperation.difference, screen, hole);
-    canvas.drawPath(dimmed, Paint()..color = const Color(0xB8000000));
+    // Draw the dim layer and physically clear the measured target out of
+    // that layer. This is more reliable on Web/CanvasKit than relying on a
+    // PathOperation.difference when the target itself is transparent (for
+    // example a ListTile inside a styled settings card).
+    canvas.saveLayer(Offset.zero & size, Paint());
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xB8000000),
+    );
+    canvas.drawPath(
+      hole,
+      Paint()
+        ..blendMode = BlendMode.clear
+        ..style = PaintingStyle.fill,
+    );
+    canvas.restore();
 
     // Transparent TextFields/ListTiles can look almost identical to the dimmed
     // background in a browser. On Web only, reinforce the *actual measured
