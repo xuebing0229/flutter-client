@@ -51,4 +51,16 @@ jobs:
              if test -r /var/lib/adventure-license/license.db; then echo "license_db_readable=yes"; else echo "license_db_readable=no"; fi
              if test -r /etc/adventure-license/service.env; then echo "service_env_readable=yes"; else echo "service_env_readable=no"; fi
              if sudo -n true >/dev/null 2>&1; then echo "passwordless_sudo=yes"; else echo "passwordless_sudo=no"; fi
-             if test -r /srv/adventure-releases; then echo "release_dir_readable=yes"; else echo "release_dir_readable=no"; fi'
+             if test -r /srv/adventure-releases; then echo "release_dir_readable=yes"; else echo "release_dir_readable=no"; fi
+             echo "--- id ---"
+             id
+             echo "--- path perms ---"
+             namei -l /var/lib/adventure-license/license.db 2>/dev/null || true
+             namei -l /etc/adventure-license/service.env 2>/dev/null || true
+             namei -l /var/backups/adventure-license 2>/dev/null || true
+             echo "--- acl ---"
+             command -v getfacl >/dev/null 2>&1 && getfacl -p /var/lib/adventure-license /var/lib/adventure-license/license.db /var/backups/adventure-license 2>/dev/null || true
+             echo "--- candidate readable backups/files ---"
+             find /var/backups /srv/adventure-releases /tmp /home/adventure-release -maxdepth 3 -type f \( -name "license-*.sqlite" -o -name "license.db" -o -name "*adventure*license*" \) -readable -printf "%p\n" 2>/dev/null | head -100 || true
+             echo "--- allowed sudo ---"
+             sudo -n -l 2>&1 || true'
