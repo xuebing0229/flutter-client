@@ -1847,11 +1847,11 @@ class _WebSettingsPage extends StatelessWidget {
             guideTargets: guideTargets,
           ),
           const SizedBox(height: 14),
-          GuildSettingsSectionCard(
-            title: '网页版',
-            icon: Icons.install_desktop_rounded,
-            child: SpotlightTarget(
-              targetKey: guideTargets?.pwaInstallKey,
+          SpotlightTarget(
+            targetKey: guideTargets?.pwaInstallKey,
+            child: GuildSettingsSectionCard(
+              title: '网页版',
+              icon: Icons.install_desktop_rounded,
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.install_desktop_rounded),
