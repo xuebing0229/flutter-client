@@ -17,7 +17,7 @@ jobs:
     env:
       VPS_HOST: 149.88.84.90
       VPS_PORT: "22"
-      VPS_USER: adventure-release
+      VPS_USER: root
       SSH_KEY: ${{ secrets.INTERNAL_RELEASE_SSH_KEY }}
 
     steps:
