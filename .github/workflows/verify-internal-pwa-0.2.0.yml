@@ -31,5 +31,5 @@ jobs:
           assert "Beta " not in page
           assert "beta11" not in page.lower()
           assert "测试版 241" not in page
-          print("Internal PWA 0.2.0+11 is live without user-visible test-lineage labels.")
+          print("Internal PWA 0.2.0 is live without user-visible test-lineage labels.")
           PY
