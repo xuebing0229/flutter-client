@@ -506,6 +506,7 @@ Future<void> _showInteractiveQuickStart(
   await WidgetsBinding.instance.endOfFrame;
   if (!context.mounted) return;
 
+  var skipFirstOrderSection = false;
   final startFirstOrder = await _showVisibleSpotlights(
     context,
     [
@@ -519,12 +520,14 @@ Future<void> _showInteractiveQuickStart(
       ),
     ],
     finalLabel: '去创建',
+    onSkipSection: () => skipFirstOrderSection = true,
   );
   if (!startFirstOrder || !context.mounted) {
     await stop();
     return;
   }
 
+  if (!skipFirstOrderSection) {
   final firstOrderId = await actions.createFirstOrder();
   if (!context.mounted) return;
 
@@ -558,15 +561,17 @@ Future<void> _showInteractiveQuickStart(
         ),
       ],
       finalLabel: '练习归档',
+      onSkipSection: () => skipFirstOrderSection = true,
     );
     if (!continueFirstFlow || !context.mounted) {
       await stop();
       return;
     }
 
-    final archived = await actions.waitForFirstOrderArchive(firstOrderId);
-    if (!context.mounted) return;
-    if (archived) {
+    if (!skipFirstOrderSection) {
+      final archived = await actions.waitForFirstOrderArchive(firstOrderId);
+      if (!context.mounted) return;
+      if (archived) {
       final archiveShown = await showSection(
         QuickStartGuideDestination.archive,
         [
@@ -583,6 +588,9 @@ Future<void> _showInteractiveQuickStart(
         return;
       }
     }
+    }
+  }
+
   }
 
   final orderToolsShown = await showSection(
