@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+239
-# beta-239: auto-reveal the real PWA install target before spotlight
+# beta-239-r1: auto-reveal the real PWA install target before spotlight
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
