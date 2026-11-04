@@ -505,6 +505,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版安装教程自动定位修复',
     description: '快速上手介绍“网页版也可以添加到桌面”时，会先进入设置并自动滚动到真实的网页版安装入口，再开始高亮，不需要手动向下寻找对应位置。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 240,
+    title: '新手教程章节与跳过逻辑修复',
+    description: '修复“添加到桌面”被插进上一小节、屏幕外安装入口仍无法定位，以及“跳过本节”在跨页面章节里只相当于下一步的问题；现在章节边界、整节跳过和网页版安装入口自动定位会按实际教程结构工作。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
