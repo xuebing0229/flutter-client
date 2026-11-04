@@ -7,6 +7,11 @@ on:
       - 'build/internal-*'
     paths:
       - pubspec.yaml
+      - lib/app/app_web.dart
+      - lib/core/sync/sync_coordinator_web.dart
+      - lib/core/sync/sync_workspace_engine.dart
+      - test/core/sync/sync_workspace_bootstrap_test.dart
+      - .github/workflows/internal-pwa.yml
 
 permissions:
   contents: read
@@ -20,7 +25,7 @@ env:
   ACTIVATION_API_BASE_URL: https://license.apixb.top
   PUBLIC_SYNC_RELAY_URL: https://beta.guild.apixb.top/sync
   INTERNAL_SOURCE_BUILD: '241'
-  INTERNAL_RELEASE_BUILD: '12'
+  INTERNAL_RELEASE_BUILD: '13'
 
 jobs:
   web:
@@ -37,6 +42,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run sync regression tests
+        run: |
+          flutter test             test/core/sync/sync_workspace_bootstrap_test.dart             test/core/sync/sync_merge_engine_test.dart             test/core/sync/public_peer_sync_service_test.dart
+
       - name: Sync PWA icons from native app icon
         run: dart run tool/sync_pwa_icons_from_android.dart
 
@@ -44,6 +56,7 @@ jobs:
         run: |
           flutter build web \
             --release \
+            --build-number="$INTERNAL_RELEASE_BUILD" \
             --no-web-resources-cdn \
             --dart-define=APP_CHANNEL=internal \
             --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
