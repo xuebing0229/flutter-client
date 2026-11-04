@@ -1,0 +1,78 @@
+name: Publish Clean Internal PWA 0.2.0
+
+on:
+  push:
+    branches:
+      - 'build/internal-0.2.0-from-beta-241'
+    paths:
+      - '.github/workflows/publish-clean-internal-pwa-0.2.0.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_RUN_ID: '41818891383'
+  RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download rebuilt Internal PWA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p dist
+          gh run download "$SOURCE_RUN_ID"             --repo "${GITHUB_REPOSITORY}"             -n internal-pwa-package             -D dist
+          test -s dist/app-pwa-internal.zip
+
+      - name: Replace PWA asset on existing Internal release
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        shell: bash
+        run: |
+          test -n "$GH_TOKEN"
+          gh release upload "internal-v0.2.0+11"             dist/app-pwa-internal.zip#app-pwa-internal.zip             --repo xuebing0229/release-files             --clobber
+
+      - name: Update Internal PWA deployment branch
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        shell: bash
+        run: |
+          gh auth setup-git
+          gh repo clone xuebing0229/release-files "$RUNNER_TEMP/release-files"
+          cd "$RUNNER_TEMP/release-files"
+          git fetch origin deploy/internal-pwa
+          git checkout deploy/internal-pwa
+
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          archive = Path("${GITHUB_WORKSPACE}/dist/app-pwa-internal.zip")
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          data = {
+              "schema": 1,
+              "channel": "internal",
+              "version": "0.2.0",
+              "build": 11,
+              "published": True,
+              "pwa_download_url":
+                  "https://github.com/xuebing0229/release-files/releases/download/"
+                  "internal-v0.2.0%2B11/app-pwa-internal.zip",
+              "pwa_size_bytes": archive.stat().st_size,
+              "pwa_sha256": digest,
+              "notes": "Internal 0.2.0",
+          }
+          Path("version.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "internal-pwa: republish 0.2.0 without channel label"
+          git push origin deploy/internal-pwa
