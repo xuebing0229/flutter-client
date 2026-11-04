@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+236
-# beta-236: expose Flutter web startup stage and failures
+version: 0.0.1+237
+# beta-237: restore Web GPU rendering and stabilize tutorial targets
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
