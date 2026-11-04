@@ -376,4 +376,13 @@ void main() {
     );
   });
 
+
+  test('237 包含网页版流畅度与教程高亮修复见闻', () {
+    final picked = newsBetweenBuilds(236, 237);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版流畅度与教程高亮修复'],
+    );
+  });
+
 }
