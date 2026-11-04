@@ -12,6 +12,15 @@ import 'sync_models.dart';
 typedef SyncSettingsCapture = Map<String, dynamic> Function();
 typedef SyncSettingsApply = Future<void> Function(Map<String, dynamic> settings);
 
+bool hasInitialRemoteWorkspaceBaseline(
+  Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind, {
+  String settingsRecordId = 'app',
+}) {
+  return recordsByKind[SyncEntityKind.settings]?.containsKey(settingsRecordId) ==
+          true &&
+      (recordsByKind[SyncEntityKind.nodePreset]?.isNotEmpty ?? false);
+}
+
 class SyncConflictView {
   const SyncConflictView({
     required this.kind,
