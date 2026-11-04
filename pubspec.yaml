@@ -1,7 +1,7 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.2.0
+version: 0.2.0+11
 # Internal 0.2.0 promoted from Beta 241; release build 11.
 
 environment:
