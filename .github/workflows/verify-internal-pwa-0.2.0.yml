@@ -1,0 +1,32 @@
+name: Verify Internal PWA 0.2.0
+
+on:
+  push:
+    branches:
+      - 'build/internal-0.2.0-from-beta-241'
+    paths:
+      - '.github/workflows/verify-internal-pwa-0.2.0.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify internal PWA deployment
+        shell: bash
+        run: |
+          curl --fail --show-error --silent --retry 8 --retry-delay 5             https://guild.apixb.top/build-meta.json > build-meta.json
+          curl --fail --show-error --silent --retry 8 --retry-delay 5             https://guild.apixb.top/ > index.html
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          meta=json.loads(Path("build-meta.json").read_text())
+          assert meta.get("version") == "0.2.0", meta
+          assert int(meta.get("build")) == 11, meta
+          assert meta.get("channel") == "internal", meta
+          page=Path("index.html").read_text(errors="ignore")
+          assert "flutter" in page.lower() or "main.dart.js" in page
+          print("Internal PWA 0.2.0+11 is live.")
+          PY
