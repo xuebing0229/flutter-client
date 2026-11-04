@@ -90,6 +90,9 @@ jobs:
           binding = data["d1_databases"][0]
           binding["database_name"] = "adventure-license-staging"
           binding["database_id"] = os.environ["D1_DATABASE_ID"]
+          data["routes"] = [
+              {"pattern": "license-staging.apixb.top", "custom_domain": True}
+          ]
           Path("wrangler.staging.json").write_text(
               json.dumps(data, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
@@ -112,6 +115,9 @@ jobs:
         run: |
           set -euo pipefail
           setup_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$setup_key"
+          printf '%s' "$setup_key" > .staging-setup-key
+          chmod 600 .staging-setup-key
           python3 - "$setup_key" <<'PY'
           import json
           import sys
