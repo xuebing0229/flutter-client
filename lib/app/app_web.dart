@@ -1823,6 +1823,11 @@ class _WebSettingsPage extends StatelessWidget {
         ),
       ),
       body: ListView(
+        // Tutorial targets such as “安装网页版应用” sit below the first
+        // viewport. Keep a few screens laid out so the shared spotlight guide
+        // can resolve the real ListTile and scroll to it instead of showing an
+        // unbound dimmed overlay.
+        cacheExtent: MediaQuery.sizeOf(context).height * 3,
         padding: AppLayoutSpacing.pageScrollPadding(
           context,
           left: 16,
