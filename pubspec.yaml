@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.0.1+241
-# beta-241: only show labels actually used by active orders in filters
+# beta-241-r1: only show labels actually used by active orders in filters
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
