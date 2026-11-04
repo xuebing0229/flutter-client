@@ -28,5 +28,8 @@ jobs:
           assert meta.get("channel") == "internal", meta
           page=Path("index.html").read_text(errors="ignore")
           assert "flutter" in page.lower() or "main.dart.js" in page
-          print("Internal PWA 0.2.0+11 is live.")
+          assert "Beta " not in page
+          assert "beta11" not in page.lower()
+          assert "测试版 241" not in page
+          print("Internal PWA 0.2.0+11 is live without user-visible test-lineage labels.")
           PY
