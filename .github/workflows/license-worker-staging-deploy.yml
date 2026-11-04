@@ -132,15 +132,67 @@ jobs:
           rm -f .secrets.json
 
           printf '%s\n' "$deploy_output"
-          worker_url="$(printf '%s\n' "$deploy_output" | grep -Eo 'https://[^[:space:]]+workers\.dev' | tail -n1 || true)"
-          if [[ -n "$worker_url" ]]; then
-            echo "worker_url=$worker_url" >> "$GITHUB_OUTPUT"
-          fi
+          echo "worker_url=https://license-staging.apixb.top" >> "$GITHUB_OUTPUT"
 
       - name: Staging health smoke test
-        if: steps.deploy.outputs.worker_url != ''
         env:
-          WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
+          WORKER_URL: https://license-staging.apixb.top
         run: |
           set -euo pipefail
-          curl --fail --show-error --silent "$WORKER_URL/health" | jq -e             '.ok == true and .service == "adventure-license" and .version == 1'
+          for attempt in {1..18}; do
+            if body="$(curl --fail --show-error --silent "$WORKER_URL/health" 2>/dev/null)" \
+              && printf '%s' "$body" | jq -e \
+                '.ok == true and .service == "adventure-license" and .version == 1' >/dev/null; then
+              echo "Staging health check passed."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Staging health check failed." >&2
+          exit 1
+
+      - name: Staging admin and reserve smoke test
+        env:
+          WORKER_URL: https://license-staging.apixb.top
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          setup_key="$(cat .staging-setup-key)"
+          register_json="$(jq -cn --arg k "$setup_key" --arg n "staging-smoke" '{setupKey:$k,name:$n}')"
+          admin_json="$(curl --fail --show-error --silent \
+            -H 'Content-Type: application/json' \
+            --data "$register_json" \
+            "$WORKER_URL/v1/admin/register")"
+          token="$(printf '%s' "$admin_json" | jq -r '.token')"
+          test -n "$token" && test "$token" != "null"
+          echo "::add-mask::$token"
+
+          me_json="$(curl --fail --show-error --silent \
+            -H "Authorization: Bearer $token" \
+            "$WORKER_URL/v1/admin/me")"
+          printf '%s' "$me_json" | jq -e '.ok == true and .admin.name == "staging-smoke"' >/dev/null
+
+          reserve_json="$(curl --fail --show-error --silent \
+            -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' \
+            --data '{"note":"staging smoke"}' \
+            "$WORKER_URL/v1/licenses/reserve")"
+          account_id="$(printf '%s' "$reserve_json" | jq -r '.license.accountId')"
+          test -n "$account_id" && test "$account_id" != "null"
+
+          note_json="$(curl --fail --show-error --silent \
+            -X PATCH \
+            -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' \
+            --data '{"note":"staging smoke updated"}' \
+            "$WORKER_URL/v1/licenses/$account_id/note")"
+          printf '%s' "$note_json" | jq -e '.ok == true and .license.note == "staging smoke updated"' >/dev/null
+
+          delete_json="$(curl --fail --show-error --silent \
+            -X DELETE \
+            -H "Authorization: Bearer $token" \
+            "$WORKER_URL/v1/licenses/$account_id")"
+          printf '%s' "$delete_json" | jq -e '.ok == true' >/dev/null
+
+          rm -f .staging-setup-key
