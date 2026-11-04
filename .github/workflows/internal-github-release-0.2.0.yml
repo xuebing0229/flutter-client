@@ -12,7 +12,7 @@ permissions:
   actions: read
 
 env:
-  SOURCE_RUN_ID: '41806313170'
+  SOURCE_RUN_ID: '41819934646'
   RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
 
 jobs:
@@ -37,9 +37,9 @@ jobs:
         shell: bash
         run: |
           test -n "$GH_TOKEN"
-          TAG="internal-v0.2.0+11"
+          TAG="internal-v0.2.0+12"
           if gh release view "$TAG" --repo xuebing0229/release-files >/dev/null 2>&1; then
             gh release upload "$TAG"               dist/app-internal.apk#app-internal.apk               dist/app-windows-internal.zip#app-windows-internal.zip               dist/app-windows-internal-setup.exe#app-windows-internal-setup.exe               --repo xuebing0229/release-files --clobber
           else
-            gh release create "$TAG"               dist/app-internal.apk#app-internal.apk               dist/app-windows-internal.zip#app-windows-internal.zip               dist/app-windows-internal-setup.exe#app-windows-internal-setup.exe               --repo xuebing0229/release-files               --title "Internal 0.2.0 (11)"               --notes "Internal 0.2.0 promoted from Beta 241."
+            gh release create "$TAG"               dist/app-internal.apk#app-internal.apk               dist/app-windows-internal.zip#app-windows-internal.zip               dist/app-windows-internal-setup.exe#app-windows-internal-setup.exe               --repo xuebing0229/release-files               --title "Internal 0.2.0"               --notes "Internal 0.2.0."
           fi
