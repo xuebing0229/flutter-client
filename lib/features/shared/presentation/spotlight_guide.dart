@@ -168,6 +168,7 @@ Future<bool> showSpotlightGuide(
   String finalLabel = '开始使用',
   int progressStart = 0,
   int? progressTotal,
+  VoidCallback? onSkipSection,
 }) async {
   final resolvedSteps = await _resolveSpotlightSteps(steps);
   if (resolvedSteps.isEmpty) return false;
@@ -195,6 +196,7 @@ Future<bool> showSpotlightGuide(
         finalLabel: finalLabel,
         progressStart: progressStart,
         progressTotal: progressTotal,
+        onSkipSection: onSkipSection,
         onComplete: complete,
       ),
     ),
@@ -210,6 +212,7 @@ class _SpotlightGuideOverlay extends StatefulWidget {
     required this.finalLabel,
     required this.progressStart,
     required this.progressTotal,
+    required this.onSkipSection,
     required this.onComplete,
   });
 
@@ -217,6 +220,7 @@ class _SpotlightGuideOverlay extends StatefulWidget {
   final String finalLabel;
   final int progressStart;
   final int? progressTotal;
+  final VoidCallback? onSkipSection;
   final ValueChanged<bool> onComplete;
 
   @override
@@ -301,9 +305,13 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
     await WidgetsBinding.instance.endOfFrame;
   }
 
-  Future<void> _finish(bool value) async {
+  Future<void> _finish(
+    bool value, {
+    bool skipSection = false,
+  }) async {
     await _dismissTransientRouteAboveTarget();
     if (!mounted) return;
+    if (skipSection) widget.onSkipSection?.call();
     widget.onComplete(value);
   }
 
@@ -462,7 +470,9 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                       Row(
                         children: [
                           TextButton(
-                            onPressed: () => unawaited(_finish(true)),
+                            onPressed: () => unawaited(
+                              _finish(true, skipSection: true),
+                            ),
                             child: const Text('跳过本节'),
                           ),
                           const Spacer(),
