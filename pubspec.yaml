@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+238
-# beta-238-r2: clear spotlight holes visually and keep exact target binding
+version: 0.0.1+239
+# beta-239: auto-reveal the real PWA install target before spotlight
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
