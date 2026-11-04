@@ -1025,6 +1025,25 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
     await WidgetsBinding.instance.endOfFrame;
   }
 
+  Future<void> _ensureGuideTargetVisible(GlobalKey targetKey) async {
+    BuildContext? targetContext = targetKey.currentContext;
+    for (var attempt = 0;
+        attempt < 6 && targetContext == null;
+        attempt += 1) {
+      await WidgetsBinding.instance.endOfFrame;
+      targetContext = targetKey.currentContext;
+    }
+    if (!mounted || targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.5,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   Future<void> _goToGuideDestination(
     QuickStartGuideDestination destination,
   ) async {
@@ -1069,6 +1088,10 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       await WidgetsBinding.instance.endOfFrame;
     } else {
       await _pushGuidePreviewPage(_buildWebToolPage(tool));
+    }
+
+    if (destination == QuickStartGuideDestination.pwaInstall) {
+      await _ensureGuideTargetVisible(_quickStartGuideTargets.pwaInstallKey);
     }
   }
 
