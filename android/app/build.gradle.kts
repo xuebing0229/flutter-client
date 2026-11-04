@@ -86,6 +86,12 @@ android {
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
             }
+            create("internalRelease") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -100,6 +106,11 @@ android {
             dimension = "channel"
             signingConfig = signingConfigs.findByName("stableRelease")
         }
+        create("internal") {
+            dimension = "channel"
+            applicationIdSuffix = ".internal"
+            signingConfig = signingConfigs.findByName("internalRelease")
+        }
         create("issuer") {
             dimension = "channel"
             applicationIdSuffix = ".issuer"
@@ -111,6 +122,7 @@ android {
     sourceSets {
         getByName("beta").jniLibs.srcDirs("src/sync/jniLibs")
         getByName("stable").jniLibs.srcDirs("src/sync/jniLibs")
+        getByName("internal").jniLibs.srcDirs("src/sync/jniLibs")
     }
 
     packaging {
