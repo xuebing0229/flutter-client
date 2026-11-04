@@ -528,69 +528,69 @@ Future<void> _showInteractiveQuickStart(
   }
 
   if (!skipFirstOrderSection) {
-  final firstOrderId = await actions.createFirstOrder();
-  if (!context.mounted) return;
-
-  if (firstOrderId != null) {
-    await actions.goTo(QuickStartGuideDestination.orders);
-    await WidgetsBinding.instance.endOfFrame;
+    final firstOrderId = await actions.createFirstOrder();
     if (!context.mounted) return;
 
-    final continueFirstFlow = await _showVisibleSpotlights(
-      context,
-      [
-        SpotlightGuideStep(
-          targetKey: targets.firstOrderCardKey,
-          icon: Icons.view_agenda_outlined,
-          title: '这就是刚刚创建的排单',
-          body: '之后大部分日常操作都可以直接从排单卡片完成。点卡片进详情，长按卡片则会打开置顶、归档、删除和批量操作。',
-        ),
-        SpotlightGuideStep(
-          targetKey: targets.firstOrderProgressKey,
-          icon: Icons.stacked_line_chart_rounded,
-          title: '先推进节点里的小进度',
-          body: '－/＋每次调整 10%，适合记录当前节点做到哪了。这个功能也可以在附加功能里关闭。',
-        ),
-        SpotlightGuideStep(
-          targetKey: targets.firstOrderConfirmNodeKey,
-          icon: Icons.check_circle_outline_rounded,
-          title: '一个阶段完成后确认节点',
-          body: '点“确认节点”会进入下一工作阶段；最后一个节点完成时，也可以直接进入顺利归档。',
-          targetPadding: 0,
-          borderRadius: 0,
-        ),
-      ],
-      finalLabel: '练习归档',
-      onSkipSection: () => skipFirstOrderSection = true,
-    );
-    if (!continueFirstFlow || !context.mounted) {
-      await stop();
-      return;
-    }
-
-    if (!skipFirstOrderSection) {
-      final archived = await actions.waitForFirstOrderArchive(firstOrderId);
+    if (firstOrderId != null) {
+      await actions.goTo(QuickStartGuideDestination.orders);
+      await WidgetsBinding.instance.endOfFrame;
       if (!context.mounted) return;
-      if (archived) {
-      final archiveShown = await showSection(
-        QuickStartGuideDestination.archive,
+
+      final continueFirstFlow = await _showVisibleSpotlights(
+        context,
         [
           SpotlightGuideStep(
-            targetKey: targets.archivedOrderKey,
-            icon: Icons.archive_outlined,
-            title: '归档后的记录会留在这里',
-            body: '归档会把它移出当前排单列表，并按顺利完成或中止结算保存最终收入。这里可以查看、恢复，也可以按时间清理旧归档。',
+            targetKey: targets.firstOrderCardKey,
+            icon: Icons.view_agenda_outlined,
+            title: '这就是刚刚创建的排单',
+            body: '之后大部分日常操作都可以直接从排单卡片完成。点卡片进详情，长按卡片则会打开置顶、归档、删除和批量操作。',
+          ),
+          SpotlightGuideStep(
+            targetKey: targets.firstOrderProgressKey,
+            icon: Icons.stacked_line_chart_rounded,
+            title: '先推进节点里的小进度',
+            body: '－/＋每次调整 10%，适合记录当前节点做到哪了。这个功能也可以在附加功能里关闭。',
+          ),
+          SpotlightGuideStep(
+            targetKey: targets.firstOrderConfirmNodeKey,
+            icon: Icons.check_circle_outline_rounded,
+            title: '一个阶段完成后确认节点',
+            body: '点“确认节点”会进入下一工作阶段；最后一个节点完成时，也可以直接进入顺利归档。',
+            targetPadding: 0,
+            borderRadius: 0,
           ),
         ],
+        finalLabel: '练习归档',
+        onSkipSection: () => skipFirstOrderSection = true,
       );
-      if (!archiveShown || !context.mounted) {
+      if (!continueFirstFlow || !context.mounted) {
         await stop();
         return;
       }
-    }
-    }
-  }
 
+      if (!skipFirstOrderSection) {
+        final archived =
+            await actions.waitForFirstOrderArchive(firstOrderId);
+        if (!context.mounted) return;
+        if (archived) {
+          final archiveShown = await showSection(
+            QuickStartGuideDestination.archive,
+            [
+              SpotlightGuideStep(
+                targetKey: targets.archivedOrderKey,
+                icon: Icons.archive_outlined,
+                title: '归档后的记录会留在这里',
+                body: '归档会把它移出当前排单列表，并按顺利完成或中止结算保存最终收入。这里可以查看、恢复，也可以按时间清理旧归档。',
+              ),
+            ],
+          );
+          if (!archiveShown || !context.mounted) {
+            await stop();
+            return;
+          }
+        }
+      }
+    }
   }
 
   final orderToolsShown = await showSection(
