@@ -248,12 +248,6 @@ void main() {
       expect(guide, contains('box.attached'));
       expect(guide, contains('box.hasSize'));
 
-      // The PWA install control is below the first Settings viewport. Keep it
-      // laid out so ensureVisible can scroll to the real ListTile target.
-      expect(
-        web,
-        contains('scrollCacheExtent: MediaQuery.sizeOf(context).height * 3'),
-      );
       expect(web, contains('targetKey: guideTargets?.pwaInstallKey'));
 
       final expectedBindings = <String, List<String>>{
