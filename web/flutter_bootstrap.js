@@ -10,10 +10,10 @@ for (const build of _flutter.buildConfig?.builds ?? []) {
     : '?' + versionQuery;
 }
 
-const userAgent = window.navigator.userAgent || '';
-const isAndroid = /Android/i.test(userAgent);
 const engineConfig = {
-  canvasKitForceCpuOnly: isAndroid,
+  // The CPU-only fallback was useful while isolating the blank-screen issue,
+  // but it makes Android Chrome dramatically slower. The real failure was in
+  // the PWA startup/update chain, so keep the normal GPU renderer now.
   verboseBuildSelection: true,
 };
 
