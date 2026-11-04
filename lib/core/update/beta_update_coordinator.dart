@@ -9,19 +9,24 @@ class BetaUpdateCoordinator {
 
   final BetaUpdateInstaller _installer;
 
+  bool get _enabled => isBetaBuild || isInternalBuild;
+  String get _expectedChannel => isInternalBuild ? 'internal' : 'beta';
+  String get _channelLabel => isInternalBuild ? '内测版' : '测试版';
+  String get _filePrefix => isInternalBuild ? 'app-internal' : 'app-beta';
+
   Future<UpdateManifest> fetchLatest() async {
-    if (!isBetaBuild) {
-      throw StateError('Beta updater is disabled in stable builds.');
+    if (!_enabled) {
+      throw StateError('App updater is disabled in stable builds.');
     }
 
     final json = await _installer.fetchLatestManifest();
     final manifest = UpdateManifest.fromJson(json);
 
-    if (manifest.channel != 'beta') {
-      throw const FormatException('返回的更新信息不是 Beta 渠道。');
+    if (manifest.channel != _expectedChannel) {
+      throw FormatException('返回的更新信息不是$_channelLabel渠道。');
     }
     if (manifest.downloadUri == null) {
-      throw const FormatException('最新测试版没有找到可下载的安装包。');
+      throw FormatException('最新$_channelLabel没有找到可下载的安装包。');
     }
 
     return manifest;
@@ -29,7 +34,7 @@ class BetaUpdateCoordinator {
 
   Future<int?> resumableBytes(UpdateManifest manifest) {
     return _installer.resumableBytes(
-      fileName: 'app-beta-${manifest.build}',
+      fileName: '$_filePrefix-${manifest.build}',
     );
   }
 
@@ -38,23 +43,22 @@ class BetaUpdateCoordinator {
     UpdateDownloadProgressCallback? onProgress,
     UpdateDownloadPauseCallback? shouldPause,
   }) async {
-    if (!isBetaBuild) {
-      throw StateError('Beta updater is disabled in stable builds.');
+    if (!_enabled) {
+      throw StateError('App updater is disabled in stable builds.');
     }
 
     final uri = manifest.downloadUri;
     if (uri == null) {
-      throw StateError('Beta update has no download URL.');
+      throw StateError('App update has no download URL.');
     }
 
     return _installer.downloadAndInstall(
       uri: uri,
-      fileName: 'app-beta-${manifest.build}',
+      fileName: '$_filePrefix-${manifest.build}',
       onProgress: onProgress,
       shouldPause: shouldPause,
       expectedSizeBytes: manifest.sizeBytes,
       expectedSha256: manifest.sha256,
     );
   }
-
 }
