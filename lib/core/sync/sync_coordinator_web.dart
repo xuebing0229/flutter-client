@@ -332,6 +332,19 @@ class SyncCoordinator extends ChangeNotifier implements SyncCoordinatorView {
         _applyingRemote = false;
       }
       _lastEntityValues = _workspaceEngine.captureEntities();
+      if (_awaitingInitialRemoteWorkspace) {
+        // Reuse the native bootstrap-only completion rule: settings plus the
+        // shared node-preset baseline prove that the existing workspace has
+        // arrived. Until then this browser must stay read-only from sync's
+        // point of view and must not publish local defaults.
+        final hasRemoteSettings =
+            _records[SyncEntityKind.settings]!.containsKey(settingsRecordId);
+        final hasRemotePresets =
+            _records[SyncEntityKind.nodePreset]!.isNotEmpty;
+        if (hasRemoteSettings && hasRemotePresets) {
+          _awaitingInitialRemoteWorkspace = false;
+        }
+      }
       _rebuildConflicts();
       _persistRecords();
       _lastSuccessfulSyncAt = DateTime.now();
