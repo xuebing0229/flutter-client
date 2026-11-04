@@ -27,6 +27,15 @@ jobs:
           set -euo pipefail
           test -n "$SSH_KEY" || { echo "INTERNAL_RELEASE_SSH_KEY is not available"; exit 2; }
 
+      - name: Show deployment public key
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/license_vps"
+          chmod 600 "$HOME/.ssh/license_vps"
+          echo "PUBLIC_KEY=$(ssh-keygen -y -f "$HOME/.ssh/license_vps")"
+
       - name: Probe license VPS read access
         shell: bash
         run: |
