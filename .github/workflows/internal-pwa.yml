@@ -1,0 +1,200 @@
+name: Build and Publish Internal PWA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'build/internal-*'
+    paths:
+      - pubspec.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: internal-pwa
+  cancel-in-progress: true
+
+env:
+  RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
+  ACTIVATION_API_BASE_URL: https://license.apixb.top
+  PUBLIC_SYNC_RELAY_URL: https://guild.apixb.top/sync
+  INTERNAL_SOURCE_BUILD: '241'
+  INTERNAL_RELEASE_BUILD: '11'
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Sync PWA icons from native app icon
+        run: dart run tool/sync_pwa_icons_from_android.dart
+
+      - name: Build PWA Internal
+        run: |
+          flutter build web \
+            --release \
+            --no-web-resources-cdn \
+            --dart-define=APP_CHANNEL=internal \
+            --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
+            --dart-define=INTERNAL_RELEASE_BUILD="$INTERNAL_RELEASE_BUILD" \
+            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
+
+      - name: Finalize offline PWA cache
+        run: python3 tool/finalize_pwa.py build/web
+
+      - name: Validate installable PWA shell
+        shell: bash
+        run: |
+          test -s build/web/index.html
+          test -s build/web/manifest.json
+          test -s build/web/icons/app-icon-192.png
+          test -s build/web/icons/app-icon-512.png
+          test ! -e build/web/icons/app-icon-maskable-512.png
+          test -s build/web/pwa_service_worker.js
+          test -s build/web/flutter_bootstrap.js
+          grep -Fq "_flutter.loader.load({" web/flutter_bootstrap.js
+          if grep -Fq "canvasKitForceCpuOnly" web/flutter_bootstrap.js; then
+            echo "Android Web must keep GPU-backed CanvasKit; CPU-only rendering is too slow." >&2
+            exit 1
+          fi
+          grep -Fq "__PWA_BOOT_VERSION__" web/index.html
+          grep -Fq "__PWA_BOOT_VERSION__" web/flutter_bootstrap.js
+          if grep -q "serviceWorkerSettings" web/flutter_bootstrap.js; then
+            echo "Flutter bootstrap must not register the legacy worker." >&2
+            exit 1
+          fi
+          test -s build/web/main.dart.js
+          test -s build/web/canvaskit/canvaskit.js
+          test -s build/web/canvaskit/canvaskit.wasm
+          grep -q '"display": "standalone"' build/web/manifest.json
+          grep -Fq "registerCurrentWorker" build/web/index.html
+          grep -q './main.dart.js' build/web/pwa_service_worker.js
+          grep -q './canvaskit/canvaskit.wasm' build/web/pwa_service_worker.js
+          if grep -q '__PWA_PRECACHE_FILES__' build/web/pwa_service_worker.js; then
+            echo "PWA precache manifest was not finalized." >&2
+            exit 1
+          fi
+          if grep -q '__PWA_CACHE_VERSION__' build/web/pwa_service_worker.js; then
+            echo "PWA cache version was not finalized." >&2
+            exit 1
+          fi
+          grep -q "const CACHE_VERSION = 'adventurers-guild-pwa-" build/web/pwa_service_worker.js
+          if grep -q "__PWA_BOOT_VERSION__" build/web/index.html build/web/flutter_bootstrap.js; then
+            echo "PWA boot build id was not finalized." >&2
+            exit 1
+          fi
+          grep -Fq "adventurers-guild.pwa.boot-version" build/web/index.html
+          grep -Fq "navigator.serviceWorker.getRegistrations()" build/web/index.html
+          grep -Fq "build.mainJsPath" build/web/flutter_bootstrap.js
+          grep -Fq "NETWORK_FIRST_PATHS" build/web/pwa_service_worker.js
+
+      - name: Package PWA Internal
+        run: |
+          cd build/web
+          zip -qr ../../app-pwa-internal.zip .
+
+      - name: Upload PWA Internal package
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-pwa-package
+          path: app-pwa-internal.zip
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download PWA Internal package
+        uses: actions/download-artifact@v4
+        with:
+          name: internal-pwa-package
+          path: dist
+
+      - name: Read version
+        shell: bash
+        run: |
+          VERSION=$(python3 - <<'PY'
+          from pathlib import Path
+          for line in Path("pubspec.yaml").read_text().splitlines():
+              if line.startswith("version:"):
+                  print(line.split(":", 1)[1].strip().split("+", 1)[0])
+                  break
+          PY
+          )
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Publish Internal PWA archive
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        shell: bash
+        run: |
+          test -n "$GH_TOKEN"
+          TAG="internal-pwa-v${VERSION}+${INTERNAL_RELEASE_BUILD}-run${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            "dist/app-pwa-internal.zip#app-pwa-internal.zip" \
+            --repo xuebing0229/release-files \
+            --title "Internal PWA ${VERSION} (${INTERNAL_RELEASE_BUILD})" \
+            --notes "Adventurers Guild Internal PWA promoted from Beta ${INTERNAL_SOURCE_BUILD}."
+
+      - name: Update Internal PWA deployment branch
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        shell: bash
+        run: |
+          gh auth setup-git
+          rm -rf "$RUNNER_TEMP/release-files"
+          gh repo clone xuebing0229/release-files "$RUNNER_TEMP/release-files"
+          cd "$RUNNER_TEMP/release-files"
+          git fetch origin deploy/internal-pwa
+          git checkout deploy/internal-pwa
+
+          python3 - <<PY
+          import hashlib
+          import json
+          from pathlib import Path
+          from urllib.parse import quote
+
+          archive = Path("${GITHUB_WORKSPACE}/dist/app-pwa-internal.zip")
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          tag = "internal-pwa-v${VERSION}+${INTERNAL_RELEASE_BUILD}-run${GITHUB_RUN_NUMBER}"
+          base = (
+              "https://github.com/xuebing0229/release-files/releases/download/"
+              + quote(tag, safe="")
+          )
+          data = {
+              "schema": 1,
+              "channel": "internal",
+              "version": "${VERSION}",
+              "build": int("${INTERNAL_RELEASE_BUILD}"),
+              "published": True,
+              "pwa_download_url": base + "/app-pwa-internal.zip",
+              "pwa_size_bytes": archive.stat().st_size,
+              "pwa_sha256": digest,
+              "notes": "Internal ${VERSION} promoted from Beta ${INTERNAL_SOURCE_BUILD}",
+          }
+          Path("version.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "internal-pwa: publish ${VERSION} (${INTERNAL_RELEASE_BUILD})"
+          git push origin deploy/internal-pwa
