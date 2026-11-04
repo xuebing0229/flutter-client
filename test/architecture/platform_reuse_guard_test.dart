@@ -383,6 +383,29 @@ void main() {
       );
     });
 
+    test('built-in order tags stay in editor but filters only show used tags', () {
+      final queue =
+          source('lib/features/orders/presentation/order_queue_page.dart');
+      final editor =
+          source('lib/features/orders/presentation/order_tags_editor.dart');
+
+      expect(
+        editor,
+        contains('<String>[...builtInOrderTags, ...widget.availableTags]'),
+      );
+      expect(
+        queue,
+        isNot(contains('...builtInOrderTags')),
+      );
+      expect(
+        queue,
+        contains(
+          '.where((order) => !order.isArchived)\n'
+          '              .expand((order) => order.tags)',
+        ),
+      );
+    });
+
     test('relay protocol and backup rules stay shared', () {
       for (final path in <String>[
         'lib/core/sync/public_relay_client_native.dart',
