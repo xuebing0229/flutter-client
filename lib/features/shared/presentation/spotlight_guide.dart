@@ -522,7 +522,9 @@ class _SpotlightGuideOverlayState extends State<_SpotlightGuideOverlay> {
                 showPrevious: _index > 0,
                 finalLabel: isLast ? widget.finalLabel : '下一步',
                 onExit: () => unawaited(_finish(false)),
-                onSkip: () => unawaited(_finish(true)),
+                onSkip: () => unawaited(
+                  _finish(true, skipSection: true),
+                ),
                 onPrevious: () => unawaited(_move(-1)),
                 onNext: () {
                   if (isLast) {
