@@ -510,6 +510,7 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   bool _ready = false;
   bool _busy = false;
+  bool _bootstrapOnlyWorkspace = false;
   String _selectedTab = 'orders';
   String? _desktopToolSelection;
   CollectionViewPreferences _collectionViews =
@@ -554,6 +555,16 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
   }
 
   void _onSyncUiChanged() {
+    if (_bootstrapOnlyWorkspace &&
+        !_syncUi.awaitingInitialRemoteWorkspace) {
+      // The first real peer baseline has arrived. From this point the browser
+      // owns a normal workspace; never persist the temporary join marker into
+      // synced settings.
+      _bootstrapOnlyWorkspace = false;
+      _retainedSettings.remove('bootstrapOnly');
+      _retainedSettings.remove('joinDeviceId');
+      unawaited(_persistWorkspace());
+    }
     if (!_ready) return;
     // SyncCoordinator also notifies while applying a remote snapshot and while
     // its busy state changes. Treating those notifications as local edits
@@ -591,6 +602,8 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
 
   Future<void> _restoreWorkspace() async {
     var foundWorkspace = false;
+    var bootstrapOnly = false;
+    var hasWorkspaceSettings = false;
     try {
       var source = webStorageGet(_workspaceKey);
       var migratedLegacy = false;
@@ -616,15 +629,36 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
         if (backupAccount != null) {
           await widget.accountStore.mergeCurrentAccountState(backupAccount);
         }
-        _retainedSettings = Map<String, dynamic>.from(backup.settings);
+        bootstrapOnly = backup.settings['bootstrapOnly'] == true;
+        _bootstrapOnlyWorkspace = bootstrapOnly;
+        hasWorkspaceSettings =
+            !bootstrapOnly &&
+            (backup.settings.containsKey('themeMode') ||
+                backup.settings.containsKey('uiStyle') ||
+                backup.settings.containsKey('uiTexture') ||
+                backup.settings.containsKey('features') ||
+                backup.settings.keys.any(
+                  (key) => key.startsWith('feature.'),
+                ));
+        _retainedSettings = Map<String, dynamic>.from(backup.settings)
+          ..remove('bootstrapOnly')
+          ..remove('joinDeviceId');
         backup.restoreInto(
           orderStore: _orderStore,
           productStore: _productStore,
           nodePresetStore: _nodePresetStore,
           focusStore: _focusStore,
         );
-        await _applySettings(backup.settings);
-        if (backup.syncRecords != null) {
+        // A bootstrap-only package carries account identity, not an
+        // authoritative local workspace. This is the same rule the native
+        // client already uses for newly joined devices.
+        if (hasWorkspaceSettings) {
+          await _applySettings(backup.settings);
+        } else {
+          await widget.themeStore.resetToDefaults();
+          await widget.featureStore.resetToDefaults();
+        }
+        if (!bootstrapOnly && backup.syncRecords != null) {
           _syncUi.restorePortableRecords(backup.syncRecords!);
         }
         if (migratedLegacy) {
@@ -632,11 +666,15 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
           webStorageRemove(_legacyWorkspaceKey);
         }
       } else {
+        _bootstrapOnlyWorkspace = false;
         _retainedSettings = <String, dynamic>{};
         await widget.themeStore.resetToDefaults();
         await widget.featureStore.resetToDefaults();
       }
-      await _syncUi.initialize();
+      await _syncUi.initialize(
+        seedLocalWorkspace: !bootstrapOnly,
+        seedLocalSettings: !bootstrapOnly,
+      );
       _startPublicPeerSync();
     } catch (error) {
       if (mounted) {
