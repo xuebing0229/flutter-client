@@ -47,10 +47,10 @@ jobs:
           git fetch origin deploy/internal-pwa
           git checkout deploy/internal-pwa
 
-          python3 - <<'PY'
-          import hashlib, json
+          python3 - "${GITHUB_WORKSPACE}/dist/app-pwa-internal.zip" <<'PY'
+          import hashlib, json, sys
           from pathlib import Path
-          archive = Path("${GITHUB_WORKSPACE}/dist/app-pwa-internal.zip")
+          archive = Path(sys.argv[1])
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
           data = {
               "schema": 1,
