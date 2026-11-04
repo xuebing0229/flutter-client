@@ -65,8 +65,7 @@ jobs:
           import os
           from pathlib import Path
 
-          src = Path("wrangler.jsonc")
-          data = json.loads(src.read_text(encoding="utf-8"))
+          data = json.loads(Path("wrangler.jsonc").read_text(encoding="utf-8"))
           data["name"] = "adventure-license-staging"
           binding = data["d1_databases"][0]
           binding["database_name"] = "adventure-license-staging"
@@ -82,11 +81,18 @@ jobs:
         run: |
           npx wrangler d1 execute "$DB_NAME"             --remote             --config wrangler.staging.json             --file migrations/0001_schema.sql
 
-      - name: Set staging administrator enrollment secret
+      - name: Deploy staging Worker with secret
         working-directory: server/activation_worker
         run: |
-          printf '%s' "$LICENSE_ADMIN_SETUP_KEY" |             npx wrangler secret put LICENSE_ADMIN_SETUP_KEY               --config wrangler.staging.json
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-      - name: Deploy staging Worker
-        working-directory: server/activation_worker
-        run: npx wrangler deploy --config wrangler.staging.json
+          Path(".secrets.json").write_text(
+              json.dumps({"LICENSE_ADMIN_SETUP_KEY": os.environ["LICENSE_ADMIN_SETUP_KEY"]}),
+              encoding="utf-8",
+          )
+          PY
+          npx wrangler deploy             --config wrangler.staging.json             --secrets-file .secrets.json
+          rm -f .secrets.json
