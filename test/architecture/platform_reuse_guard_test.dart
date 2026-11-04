@@ -310,6 +310,34 @@ void main() {
       }
     });
 
+    test('spotlight visual hole is physically cleared on Web targets', () {
+      final guide = source(
+        'lib/features/shared/presentation/spotlight_guide.dart',
+      );
+      final web = source('lib/app/app_web.dart');
+
+      expect(guide, contains('BlendMode.clear'));
+      expect(guide, contains('canvas.saveLayer'));
+      expect(
+        guide,
+        isNot(contains('Path.combine(PathOperation.difference, screen, hole)')),
+      );
+
+      // “安装网页版应用” must target the real tappable ListTile, not the
+      // whole settings section around it.
+      expect(
+        web,
+        contains(
+          'GuildSettingsSectionCard(\n'
+          "            title: '网页版',\n"
+          '            icon: Icons.install_desktop_rounded,\n'
+          '            child: SpotlightTarget(\n'
+          '              targetKey: guideTargets?.pwaInstallKey,\n'
+          '              child: ListTile(',
+        ),
+      );
+    });
+
     test('relay protocol and backup rules stay shared', () {
       for (final path in <String>[
         'lib/core/sync/public_relay_client_native.dart',
