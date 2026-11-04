@@ -19,7 +19,7 @@ concurrency:
 env:
   RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
   ACTIVATION_API_BASE_URL: https://license.apixb.top
-  PUBLIC_SYNC_RELAY_URL: https://guild.apixb.top/sync
+  PUBLIC_SYNC_RELAY_URL: https://beta.guild.apixb.top/sync
   INTERNAL_SOURCE_BUILD: '241'
   INTERNAL_RELEASE_BUILD: '11'
   RELEASE_SITE_BASE_URL: https://license.apixb.top/releases
