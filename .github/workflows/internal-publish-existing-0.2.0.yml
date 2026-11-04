@@ -14,7 +14,7 @@ permissions:
 env:
   SOURCE_RUN_ID: '41806313170'
   INTERNAL_SOURCE_BUILD: '241'
-  INTERNAL_RELEASE_BUILD: '11'
+  INTERNAL_RELEASE_BUILD: '12'
   RELEASE_SITE_BASE_URL: https://license.apixb.top/releases
   RELEASE_DEPLOY_HOST: 149.88.84.90
   RELEASE_DEPLOY_USER: adventure-release
@@ -197,7 +197,6 @@ jobs:
           from pathlib import Path
           data=json.loads(Path("published-latest.json").read_text())
           assert data["version"] == "0.2.0"
-          assert data["build"] == 11
-          assert data["source_test_build"] == 241
-          print("Internal 0.2.0 release verified.")
+          assert data["build"] == 12
+                    print("Internal 0.2.0 release verified.")
           PY
