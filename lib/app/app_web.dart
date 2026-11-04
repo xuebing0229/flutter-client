@@ -1827,7 +1827,7 @@ class _WebSettingsPage extends StatelessWidget {
         // viewport. Keep a few screens laid out so the shared spotlight guide
         // can resolve the real ListTile and scroll to it instead of showing an
         // unbound dimmed overlay.
-        cacheExtent: MediaQuery.sizeOf(context).height * 3,
+        scrollCacheExtent: MediaQuery.sizeOf(context).height * 3,
         padding: AppLayoutSpacing.pageScrollPadding(
           context,
           left: 16,
