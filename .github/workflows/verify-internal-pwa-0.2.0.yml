@@ -24,12 +24,13 @@ jobs:
           from pathlib import Path
           meta=json.loads(Path("build-meta.json").read_text())
           assert meta.get("version") == "0.2.0", meta
-          assert int(meta.get("build")) == 11, meta
+          assert int(meta.get("build")) == 12, meta
           assert meta.get("channel") == "internal", meta
           page=Path("index.html").read_text(errors="ignore")
           assert "flutter" in page.lower() or "main.dart.js" in page
           assert "Beta " not in page
           assert "beta11" not in page.lower()
+          assert "beta12" not in page.lower()
           assert "测试版 241" not in page
           print("Internal PWA 0.2.0 is live without user-visible test-lineage labels.")
           PY
