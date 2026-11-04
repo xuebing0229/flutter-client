@@ -20,7 +20,7 @@ env:
   ACTIVATION_API_BASE_URL: https://license.apixb.top
   PUBLIC_SYNC_RELAY_URL: https://beta.guild.apixb.top/sync
   INTERNAL_SOURCE_BUILD: '241'
-  INTERNAL_RELEASE_BUILD: '11'
+  INTERNAL_RELEASE_BUILD: '12'
 
 jobs:
   web:
@@ -148,8 +148,8 @@ jobs:
           gh release create "$TAG" \
             "dist/app-pwa-internal.zip#app-pwa-internal.zip" \
             --repo xuebing0229/release-files \
-            --title "Internal PWA ${VERSION} (${INTERNAL_RELEASE_BUILD})" \
-            --notes "Adventurers Guild Internal PWA promoted from Beta ${INTERNAL_SOURCE_BUILD}."
+            --title "Internal PWA ${VERSION}" \
+            --notes "Adventurers Guild Internal PWA ${VERSION}."
 
       - name: Update Internal PWA deployment branch
         env:
@@ -185,7 +185,7 @@ jobs:
               "pwa_download_url": base + "/app-pwa-internal.zip",
               "pwa_size_bytes": archive.stat().st_size,
               "pwa_sha256": digest,
-              "notes": "Internal ${VERSION} promoted from Beta ${INTERNAL_SOURCE_BUILD}",
+              "notes": "Internal ${VERSION}",
           }
           Path("version.json").write_text(
               json.dumps(data, ensure_ascii=False, indent=2) + "\n",
