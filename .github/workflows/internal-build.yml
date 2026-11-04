@@ -23,7 +23,7 @@ env:
   INTERNAL_SOURCE_BUILD: '241'
   INTERNAL_RELEASE_BUILD: '11'
   RELEASE_SITE_BASE_URL: https://license.apixb.top/releases
-  RELEASE_DEPLOY_HOST: license.apixb.top
+  RELEASE_DEPLOY_HOST: 149.88.84.90
   RELEASE_DEPLOY_USER: adventure-release
   RELEASE_DEPLOY_PATH: /srv/adventure-releases
   RELEASE_SSH_KEY: ${{ secrets.INTERNAL_RELEASE_SSH_KEY }}
