@@ -1033,10 +1033,11 @@ class _WebWorkspaceState extends State<_WebWorkspace> {
       await WidgetsBinding.instance.endOfFrame;
       targetContext = targetKey.currentContext;
     }
-    if (!mounted || targetContext == null) return;
+    final revealContext = targetContext;
+    if (!mounted || revealContext == null || !revealContext.mounted) return;
 
     await Scrollable.ensureVisible(
-      targetContext,
+      revealContext,
       alignment: 0.5,
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
