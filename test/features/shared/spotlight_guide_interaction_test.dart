@@ -701,6 +701,7 @@ void main() {
       (tester) async {
     final targetKey = GlobalKey();
     bool? result;
+    var skipCalled = false;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -717,6 +718,7 @@ void main() {
                     onPressed: () async {
                       result = await showSpotlightGuide(
                         context,
+                        onSkipSection: () => skipCalled = true,
                         steps: [
                           SpotlightGuideStep(
                             targetKey: targetKey,
@@ -748,6 +750,72 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result, isTrue);
+    expect(skipCalled, isTrue);
+  });
+
+  testWidgets('next step does not emit skip-section signal', (tester) async {
+    final firstKey = GlobalKey();
+    final secondKey = GlobalKey();
+    var skipCalled = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Column(
+                children: [
+                  SpotlightTarget(
+                    targetKey: firstKey,
+                    child: const SizedBox(width: 160, height: 48),
+                  ),
+                  SpotlightTarget(
+                    targetKey: secondKey,
+                    child: const SizedBox(width: 160, height: 48),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      showSpotlightGuide(
+                        context,
+                        onSkipSection: () => skipCalled = true,
+                        steps: [
+                          SpotlightGuideStep(
+                            targetKey: firstKey,
+                            icon: Icons.looks_one_outlined,
+                            title: '第一步',
+                            body: '正常下一步不能被当成跳过本节。',
+                          ),
+                          SpotlightGuideStep(
+                            targetKey: secondKey,
+                            icon: Icons.looks_two_outlined,
+                            title: '第二步',
+                            body: '继续正常完成。',
+                          ),
+                        ],
+                      );
+                    },
+                    child: const Text('打开两步引导'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开两步引导'));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('下一步'));
+    await tester.pumpAndSettle();
+    expect(skipCalled, isFalse);
+    expect(find.text('第二步'), findsOneWidget);
+
+    await tester.tap(find.text('开始使用'));
+    await tester.pumpAndSettle();
+    expect(skipCalled, isFalse);
   });
 
 }
