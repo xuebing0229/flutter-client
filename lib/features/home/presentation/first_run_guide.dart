@@ -800,23 +800,6 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
-  final pwaInstallShown = await showSection(
-    QuickStartGuideDestination.pwaInstall,
-    [
-      SpotlightGuideStep(
-        targetKey: targets.pwaInstallKey,
-        icon: Icons.install_desktop_rounded,
-        title: '网页版也可以添加到桌面',
-        body: '添加后可以像普通应用一样从桌面或主屏幕直接打开。支持安装提示的浏览器可以直接点这里安装；其他浏览器会告诉你对应的菜单操作。',
-        borderRadius: 12,
-      ),
-    ],
-  );
-  if (!pwaInstallShown || !context.mounted) {
-    await stop();
-    return;
-  }
-
   final featureShown = await showGroupedSection(
     'data',
     dataGroup,
@@ -833,6 +816,23 @@ Future<void> _showInteractiveQuickStart(
     ],
   );
   if (!featureShown || !context.mounted) {
+    await stop();
+    return;
+  }
+
+  final pwaInstallShown = await showSection(
+    QuickStartGuideDestination.pwaInstall,
+    [
+      SpotlightGuideStep(
+        targetKey: targets.pwaInstallKey,
+        icon: Icons.install_desktop_rounded,
+        title: '网页版也可以添加到桌面',
+        body: '添加后可以像普通应用一样从桌面或主屏幕直接打开。支持安装提示的浏览器可以直接点这里安装；其他浏览器会告诉你对应的菜单操作。',
+        borderRadius: 12,
+      ),
+    ],
+  );
+  if (!pwaInstallShown || !context.mounted) {
     await stop();
     return;
   }
