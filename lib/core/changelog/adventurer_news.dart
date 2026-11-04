@@ -1,4 +1,6 @@
 import 'package:package_info_plus/package_info_plus.dart';
+
+import '../build/build_channel.dart';
 import 'adventurer_news_storage_native.dart'
     if (dart.library.html) 'adventurer_news_storage_web.dart';
 
@@ -10,11 +12,15 @@ class AdventurerNewsEntry {
     required this.introducedBuild,
     required this.title,
     required this.description,
+    this.versionLabel,
   });
 
   final int introducedBuild;
   final String title;
   final String description;
+  final String? versionLabel;
+
+  String get displayVersion => versionLabel ?? introducedBuild.toString();
 }
 
 /// Append a block when its feature ships; don't rewrite older entries.
@@ -517,6 +523,39 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
   ),
 ];
 
+const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
+  AdventurerNewsEntry(
+    introducedBuild: 11,
+    versionLabel: '0.2.0',
+    title: '公会功能与体验更新',
+    description:
+        '同步测试版 182 至 241 已完成的功能与修复，包括排单与成品管理、统计与小票、新手引导、设备同步、截图导入、桌宠与专注，以及网页版体验等更新。',
+  ),
+];
+
+String internalAdventurerNewsVersion(int build) {
+  for (final entry in internalAdventurerNewsCatalog.reversed) {
+    if (entry.introducedBuild == build && entry.versionLabel != null) {
+      return entry.versionLabel!;
+    }
+  }
+  return build <= 0 ? '旧内测版' : '内测版 $build';
+}
+
+String adventurerNewsVersionLabel(int build) =>
+    isInternalBuild ? internalAdventurerNewsVersion(build) : build.toString();
+
+List<AdventurerNewsEntry> newsBetweenCurrentChannelBuilds(
+  int previousBuild,
+  int currentBuild,
+) =>
+    newsBetweenBuilds(
+      previousBuild,
+      currentBuild,
+      catalog:
+          isInternalBuild ? internalAdventurerNewsCatalog : adventurerNewsCatalog,
+    );
+
 List<AdventurerNewsEntry> newsBetweenBuilds(
   int previousBuild,
   int currentBuild, {
@@ -553,6 +592,9 @@ class AdventurerNewsStore {
   static const AdventurerNewsStorage _storage = AdventurerNewsStorage();
 
   Future<int> installedBuild() async {
+    if (isInternalBuild && internalReleaseBuild > 0) {
+      return internalReleaseBuild;
+    }
     final info = await PackageInfo.fromPlatform();
     return int.tryParse(info.buildNumber) ?? 0;
   }
@@ -570,9 +612,12 @@ class AdventurerNewsStore {
   /// build numbers cannot be recovered retroactively.
   Future<void> initialize({required bool hasExistingAccounts}) async {
     if (await _readLastSeen() != null) return;
+    final currentBuild = await installedBuild();
     final initialBuild = hasExistingAccounts
-        ? 105
-        : await installedBuild();
+        ? isInternalBuild
+            ? (currentBuild > 0 ? currentBuild - 1 : 0)
+            : 105
+        : currentBuild;
     await _writeLastSeen(initialBuild);
   }
 
@@ -583,7 +628,7 @@ class AdventurerNewsStore {
     return AdventurerNewsNotice(
       previousBuild: previousBuild,
       currentBuild: currentBuild,
-      entries: newsBetweenBuilds(previousBuild, currentBuild),
+      entries: newsBetweenCurrentChannelBuilds(previousBuild, currentBuild),
     );
   }
 
