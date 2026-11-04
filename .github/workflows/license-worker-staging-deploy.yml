@@ -65,8 +65,9 @@ jobs:
           db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME"             '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
 
           if [[ -z "$db_id" ]]; then
-            create_json="$(npx wrangler d1 create "$DB_NAME" --location=apac --json)"
-            db_id="$(printf '%s' "$create_json" | jq -r '.uuid // .id // .result.uuid // empty')"
+            npx wrangler d1 create "$DB_NAME" --location=apac
+            list_json="$(npx wrangler d1 list --json)"
+            db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME"               '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
           fi
 
           test -n "$db_id" || { echo "Could not create or locate staging D1 database"; exit 1; }
