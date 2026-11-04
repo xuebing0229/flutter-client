@@ -500,6 +500,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版教程高亮挖洞修复',
     description: '修复部分教程目标虽然可以点击、但视觉上仍被黑色遮罩盖住的问题；高亮会从遮罩层真正挖出目标区域，并保持“安装网页版应用”等步骤直接绑定实际可操作控件。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 239,
+    title: '网页版安装教程自动定位修复',
+    description: '快速上手介绍“网页版也可以添加到桌面”时，会先进入设置并自动滚动到真实的网页版安装入口，再开始高亮，不需要手动向下寻找对应位置。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
