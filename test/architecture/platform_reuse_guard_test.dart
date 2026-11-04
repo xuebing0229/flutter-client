@@ -323,11 +323,11 @@ void main() {
         web,
         contains(
           'GuildSettingsSectionCard(\n'
-          "            title: '网页版',\n"
-          '            icon: Icons.install_desktop_rounded,\n'
-          '            child: SpotlightTarget(\n'
-          '              targetKey: guideTargets?.pwaInstallKey,\n'
-          '              child: ListTile(',
+          "              title: '网页版',\n"
+          '              icon: Icons.install_desktop_rounded,\n'
+          '              child: SpotlightTarget(\n'
+          '                targetKey: guideTargets?.pwaInstallKey,\n'
+          '                child: ListTile(',
         ),
       );
       expect(web, contains('Scrollable.ensureVisible('));
@@ -342,6 +342,44 @@ void main() {
         contains(
           '_ensureGuideTargetVisible(_quickStartGuideTargets.pwaInstallKey)',
         ),
+      );
+    });
+
+    test('guide sections keep real skip semantics and PWA is separate', () {
+      final firstRun =
+          source('lib/features/home/presentation/first_run_guide.dart');
+      final spotlight =
+          source('lib/features/shared/presentation/spotlight_guide.dart');
+      final web = source('lib/app/app_web.dart');
+
+      expect(spotlight, contains('VoidCallback? onSkipSection'));
+      expect(spotlight, contains('_finish(true, skipSection: true)'));
+      expect(firstRun, contains("final skippedGroups = <String>{};"));
+      expect(
+        firstRun,
+        contains('onSkipSection: () => skippedGroups.add(groupId)'),
+      );
+      expect(
+        firstRun,
+        contains('onSkipSection: () => skipFirstOrderSection = true'),
+      );
+
+      final featureIndex = firstRun.indexOf(
+        'final featureShown = await showGroupedSection(',
+      );
+      final pwaIndex = firstRun.indexOf(
+        'final pwaInstallShown = await showSection(',
+      );
+      expect(featureIndex, greaterThanOrEqualTo(0));
+      expect(pwaIndex, greaterThan(featureIndex));
+
+      // Settings only has a handful of cards. Keeping them mounted allows the
+      // real PWA ListTile GlobalKey to exist before ensureVisible is called,
+      // instead of trying to scroll to a lazy child that has no context yet.
+      expect(web, contains('body: SingleChildScrollView('));
+      expect(
+        web,
+        contains('crossAxisAlignment: CrossAxisAlignment.stretch'),
       );
     });
 
