@@ -490,6 +490,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版启动诊断完善',
     description: '网页版启动时会显示实际启动阶段，若网页资源、Flutter 引擎或应用首帧出现异常会直接显示错误，不再只剩空白页面，便于准确定位启动失败原因。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 237,
+    title: '网页版流畅度与教程高亮修复',
+    description: '恢复安卓网页版正常图形加速，解决页面操作明显卡顿；快速上手会等待页面真实控件完成布局再高亮，并修复设置页“安装网页版应用”等首屏外目标无法正确定位的问题。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
