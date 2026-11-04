@@ -495,6 +495,11 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '网页版流畅度与教程高亮修复',
     description: '恢复安卓网页版正常图形加速，解决页面操作明显卡顿；快速上手会等待页面真实控件完成布局再高亮，并修复设置页“安装网页版应用”等首屏外目标无法正确定位的问题。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 238,
+    title: '网页版教程高亮挖洞修复',
+    description: '修复部分教程目标虽然可以点击、但视觉上仍被黑色遮罩盖住的问题；高亮会从遮罩层真正挖出目标区域，并保持“安装网页版应用”等步骤直接绑定实际可操作控件。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
