@@ -218,22 +218,96 @@ void main() {
       );
     });
 
-    test('Android PWA avoids WebGL context-loss rendering', () {
+    test('Android PWA keeps GPU rendering after startup-chain repair', () {
       final bootstrap = source('web/flutter_bootstrap.js');
       final referenceImages = source(
         'lib/features/orders/presentation/'
         'order_reference_image_widgets_common.dart',
       );
 
-      expect(bootstrap, contains('/Android/i'));
-      expect(bootstrap, contains('canvasKitForceCpuOnly: isAndroid'));
+      expect(bootstrap, isNot(contains('canvasKitForceCpuOnly')));
       expect(bootstrap, contains('_flutter.loader.load({'));
+      expect(bootstrap, contains('initializeEngine(engineConfig)'));
       expect(
         RegExp(r'filterQuality: FilterQuality\.low')
             .allMatches(referenceImages)
             .length,
         greaterThanOrEqualTo(2),
       );
+    });
+
+    test('quick start waits for laid-out controls and keeps targets bound', () {
+      final guide = source(
+        'lib/features/shared/presentation/spotlight_guide.dart',
+      );
+      final web = source('lib/app/app_web.dart');
+
+      expect(guide, contains('_spotlightTargetHasLayout'));
+      expect(guide, contains('_waitForSpotlightTarget'));
+      expect(guide, contains('Duration(milliseconds: 900)'));
+      expect(guide, contains('box.attached'));
+      expect(guide, contains('box.hasSize'));
+
+      // The PWA install control is below the first Settings viewport. Keep it
+      // laid out so ensureVisible can scroll to the real ListTile target.
+      expect(
+        web,
+        contains('cacheExtent: MediaQuery.sizeOf(context).height * 3'),
+      );
+      expect(web, contains('targetKey: guideTargets?.pwaInstallKey'));
+
+      final expectedBindings = <String, List<String>>{
+        'lib/features/orders/presentation/order_queue_page.dart': [
+          'searchKey',
+          'toolbarKey',
+          'firstOrderCardKey',
+          'firstOrderProgressKey',
+          'firstOrderConfirmNodeKey',
+        ],
+        'lib/features/orders/presentation/add_order_page.dart': [
+          'addOrderTitleKey',
+          'addOrderClientKey',
+          'addOrderPlatformKey',
+          'addOrderPriceKey',
+          'addOrderSaveKey',
+        ],
+        'lib/features/imports/presentation/screenshot_import_page_shared.dart': [
+          'screenshotImportKey',
+        ],
+        'lib/features/shared/presentation/preset_center_page.dart': [
+          'presetCenterKey',
+        ],
+        'lib/features/shared/presentation/receipt_center_page.dart': [
+          'receiptCenterKey',
+        ],
+        'lib/features/home/presentation/archive_page.dart': [
+          'archivedOrderKey',
+        ],
+        'lib/features/account/presentation/account_common_views.dart': [
+          'accountTitleKey',
+        ],
+        'lib/features/home/presentation/settings_common.dart': [
+          'settingsBackupKey',
+        ],
+        'lib/features/home/presentation/feature_toggle_page.dart': [
+          'featureToggleTitleKey',
+        ],
+        'lib/app/app_web.dart': [
+          'syncKey',
+          'pwaInstallKey',
+        ],
+      };
+
+      for (final entry in expectedBindings.entries) {
+        final text = source(entry.key);
+        for (final target in entry.value) {
+          expect(
+            text,
+            contains(target),
+            reason: '${entry.key} must bind $target to its real control',
+          );
+        }
+      }
     });
 
     test('relay protocol and backup rules stay shared', () {
