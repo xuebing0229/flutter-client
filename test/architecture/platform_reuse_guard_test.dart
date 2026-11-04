@@ -252,7 +252,7 @@ void main() {
       // laid out so ensureVisible can scroll to the real ListTile target.
       expect(
         web,
-        contains('cacheExtent: MediaQuery.sizeOf(context).height * 3'),
+        contains('scrollCacheExtent: MediaQuery.sizeOf(context).height * 3'),
       );
       expect(web, contains('targetKey: guideTargets?.pwaInstallKey'));
 
