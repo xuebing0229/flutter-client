@@ -397,6 +397,7 @@ Future<bool> _showVisibleSpotlights(
   String finalLabel = '下一步',
   int progressStart = 0,
   int? progressTotal,
+  VoidCallback? onSkipSection,
 }) async {
   if (!context.mounted) return false;
   return showSpotlightGuide(
@@ -405,6 +406,7 @@ Future<bool> _showVisibleSpotlights(
     finalLabel: finalLabel,
     progressStart: progressStart,
     progressTotal: progressTotal,
+    onSkipSection: onSkipSection,
   );
 }
 
@@ -453,11 +455,14 @@ Future<void> _showInteractiveQuickStart(
     return;
   }
 
+  final skippedGroups = <String>{};
+
   Future<bool> showSection(
     QuickStartGuideDestination destination,
     List<SpotlightGuideStep> steps, {
     int progressStart = 0,
     int? progressTotal,
+    VoidCallback? onSkipSection,
   }) async {
     if (!actions.isAvailable(destination)) return true;
     await actions.goTo(destination);
@@ -468,14 +473,17 @@ Future<void> _showInteractiveQuickStart(
       steps,
       progressStart: progressStart,
       progressTotal: progressTotal,
+      onSkipSection: onSkipSection,
     );
   }
 
   Future<bool> showGroupedSection(
+    String groupId,
     List<QuickStartGuideDestination> group,
     QuickStartGuideDestination destination,
     List<SpotlightGuideStep> steps,
   ) async {
+    if (skippedGroups.contains(groupId)) return true;
     if (!actions.isAvailable(destination)) return true;
     final available = group
         .where(actions.isAvailable)
@@ -486,6 +494,7 @@ Future<void> _showInteractiveQuickStart(
       steps,
       progressStart: index < 0 ? 0 : index,
       progressTotal: available.length,
+      onSkipSection: () => skippedGroups.add(groupId),
     );
   }
 
@@ -605,6 +614,7 @@ Future<void> _showInteractiveQuickStart(
   ];
 
   final screenshotShown = await showGroupedSection(
+    'tools',
     toolGroup,
     QuickStartGuideDestination.screenshotImport,
     [
@@ -624,6 +634,7 @@ Future<void> _showInteractiveQuickStart(
   }
 
   final presetShown = await showGroupedSection(
+    'tools',
     toolGroup,
     QuickStartGuideDestination.presetCenter,
     [
@@ -641,6 +652,7 @@ Future<void> _showInteractiveQuickStart(
   }
 
   final receiptShown = await showGroupedSection(
+    'tools',
     toolGroup,
     QuickStartGuideDestination.receiptCenter,
     [
@@ -664,6 +676,7 @@ Future<void> _showInteractiveQuickStart(
   ];
 
   final productsShown = await showGroupedSection(
+    'workspace',
     workspaceGroup,
     QuickStartGuideDestination.products,
     [
@@ -681,6 +694,7 @@ Future<void> _showInteractiveQuickStart(
   }
 
   final scheduleShown = await showGroupedSection(
+    'workspace',
     workspaceGroup,
     QuickStartGuideDestination.schedule,
     [
@@ -698,6 +712,7 @@ Future<void> _showInteractiveQuickStart(
   }
 
   final statisticsShown = await showGroupedSection(
+    'workspace',
     workspaceGroup,
     QuickStartGuideDestination.statistics,
     [
@@ -722,6 +737,7 @@ Future<void> _showInteractiveQuickStart(
   ];
 
   final syncShown = await showGroupedSection(
+    'data',
     dataGroup,
     QuickStartGuideDestination.sync,
     [
@@ -739,6 +755,7 @@ Future<void> _showInteractiveQuickStart(
   }
 
   final accountShown = await showGroupedSection(
+    'data',
     dataGroup,
     QuickStartGuideDestination.account,
     [
@@ -758,6 +775,7 @@ Future<void> _showInteractiveQuickStart(
   }
 
   final settingsShown = await showGroupedSection(
+    'data',
     dataGroup,
     QuickStartGuideDestination.settings,
     [
@@ -792,6 +810,7 @@ Future<void> _showInteractiveQuickStart(
   }
 
   final featureShown = await showGroupedSection(
+    'data',
     dataGroup,
     QuickStartGuideDestination.featureToggle,
     [
