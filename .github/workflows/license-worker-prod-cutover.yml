@@ -1,0 +1,172 @@
+name: License Worker Production Cutover
+
+on:
+  push:
+    branches:
+      - "deploy/license-worker-staging"
+    paths:
+      - ".github/workflows/license-worker-prod-cutover.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DB_NAME: adventure-license
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Require Cloudflare token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Install Wrangler
+        working-directory: server/activation_worker
+        run: npm install
+
+      - name: Discover account and production D1
+        id: cf
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          whoami_json="$(npx wrangler whoami --json)"
+          account_id="$(printf '%s' "$whoami_json" | jq -r '.accounts[0].id // empty')"
+          account_count="$(printf '%s' "$whoami_json" | jq -r '.accounts | length')"
+          test -n "$account_id"
+          test "$account_count" -eq 1
+
+          list_json="$(npx wrangler d1 list --json)"
+          db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME" '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
+          test -n "$db_id"
+
+          echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
+          echo "database_id=$db_id" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production D1 final counts before routing
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(npx wrangler d1 execute "$DB_NAME" --remote --json --command "
+            SELECT
+              (SELECT COUNT(*) FROM admins) admins_count,
+              (SELECT COALESCE(MAX(id),0) FROM admins) admins_max_id,
+              (SELECT COUNT(*) FROM licenses) licenses_count,
+              (SELECT COALESCE(MAX(id),0) FROM licenses) licenses_max_id,
+              (SELECT COUNT(*) FROM audit_log) audit_count,
+              (SELECT COALESCE(MAX(id),0) FROM audit_log) audit_max_id,
+              (SELECT COALESCE(SUM(CASE WHEN activation_code IS NOT NULL THEN 1 ELSE 0 END),0) FROM licenses) committed,
+              (SELECT COALESCE(SUM(CASE WHEN sold_at IS NOT NULL THEN 1 ELSE 0 END),0) FROM licenses) sold,
+              (SELECT COALESCE(SUM(CASE WHEN redeemed_at IS NOT NULL THEN 1 ELSE 0 END),0) FROM licenses) redeemed,
+              (SELECT COALESCE(SUM(CASE WHEN voided_at IS NOT NULL THEN 1 ELSE 0 END),0) FROM licenses) voided,
+              (SELECT COALESCE(SUM(CASE WHEN activation_code IS NULL AND voided_at IS NULL THEN 1 ELSE 0 END),0) FROM licenses) reserved;
+          ")"
+          row="$(printf '%s' "$result" | jq -c '.[0].results[0]')"
+          printf '%s' "$row" | jq -e '
+            .admins_count == 2 and
+            .admins_max_id == 2 and
+            .licenses_count == 15 and
+            .licenses_max_id == 15 and
+            .audit_count == 56 and
+            .audit_max_id == 56 and
+            .committed == 15 and
+            .sold == 4 and
+            .redeemed == 12 and
+            .voided == 1 and
+            .reserved == 0
+          ' >/dev/null
+          echo "Production D1 final counts verified."
+
+      - name: Render health-only route config
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+          D1_DATABASE_ID: ${{ steps.cf.outputs.database_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path("wrangler.jsonc").read_text(encoding="utf-8"))
+          data["name"] = "adventure-license"
+          data["account_id"] = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+          data["workers_dev"] = False
+          data["d1_databases"][0]["database_name"] = "adventure-license"
+          data["d1_databases"][0]["database_id"] = os.environ["D1_DATABASE_ID"]
+          data["routes"] = [
+              {"pattern": "license.apixb.top/health*", "zone_name": "apixb.top"}
+          ]
+          Path("wrangler.cutover.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Deploy health-only production route
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config wrangler.cutover.json
+
+      - name: Verify health through production hostname
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            if body="$(curl --fail --show-error --silent --max-time 10 https://license.apixb.top/health 2>/dev/null)"               && printf '%s' "$body" | jq -e '.ok == true and .service == "adventure-license" and .version == 1' >/dev/null; then
+              echo "Production hostname health-only route verified."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health-only production route verification failed." >&2
+          exit 1
+
+      - name: Expand route to all activation endpoints
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("wrangler.cutover.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          data["routes"] = [
+              {"pattern": "license.apixb.top/*", "zone_name": "apixb.top"}
+          ]
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+          npx wrangler deploy --config wrangler.cutover.json
+
+      - name: Verify production cutover
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            if body="$(curl --fail --show-error --silent --max-time 10 https://license.apixb.top/health 2>/dev/null)"               && printf '%s' "$body" | jq -e '.ok == true and .service == "adventure-license" and .version == 1' >/dev/null; then
+              echo "Production activation Worker cutover verified."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Production cutover verification failed." >&2
+          exit 1
