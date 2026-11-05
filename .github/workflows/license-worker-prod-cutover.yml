@@ -58,10 +58,24 @@ jobs:
         working-directory: server/activation_worker
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+          D1_DATABASE_ID: ${{ steps.cf.outputs.database_id }}
         shell: bash
         run: |
           set -euo pipefail
-          result="$(npx wrangler d1 execute "$DB_NAME" --remote --json --command "
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path("wrangler.jsonc").read_text(encoding="utf-8"))
+          data["name"] = "adventure-license"
+          data["account_id"] = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+          data["d1_databases"][0]["database_name"] = "adventure-license"
+          data["d1_databases"][0]["database_id"] = os.environ["D1_DATABASE_ID"]
+          Path("wrangler.verify.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          result="$(npx wrangler d1 execute "$DB_NAME" --remote --json --config wrangler.verify.json --command "
             SELECT
               (SELECT COUNT(*) FROM admins) admins_count,
               (SELECT COALESCE(MAX(id),0) FROM admins) admins_max_id,
@@ -75,7 +89,8 @@ jobs:
               (SELECT COALESCE(SUM(CASE WHEN voided_at IS NOT NULL THEN 1 ELSE 0 END),0) FROM licenses) voided,
               (SELECT COALESCE(SUM(CASE WHEN activation_code IS NULL AND voided_at IS NULL THEN 1 ELSE 0 END),0) FROM licenses) reserved;
           ")"
-          row="$(printf '%s' "$result" | jq -c '.[0].results[0]')"
+          row="$(printf '%s' "$result" | jq -c 'if type=="array" then .[0].results[0] else (.result[0].results[0] // .results[0]) end')"
+          echo "Production D1 summary: $row"
           printf '%s' "$row" | jq -e '
             .admins_count == 2 and
             .admins_max_id == 2 and
