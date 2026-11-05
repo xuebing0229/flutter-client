@@ -1,0 +1,132 @@
+name: License Worker Production Prep
+
+on:
+  push:
+    branches:
+      - "deploy/license-worker-staging"
+    paths:
+      - ".github/workflows/license-worker-prod-prep.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-production:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DB_NAME: adventure-license
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Require Cloudflare token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Install Wrangler
+        working-directory: server/activation_worker
+        run: npm install
+
+      - name: Discover Cloudflare account
+        id: cf
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          whoami_json="$(npx wrangler whoami --json)"
+          account_id="$(printf '%s' "$whoami_json" | jq -r '.accounts[0].id // empty')"
+          account_count="$(printf '%s' "$whoami_json" | jq -r '.accounts | length')"
+          test -n "$account_id"
+          test "$account_count" -eq 1
+          echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
+
+      - name: Find or create production D1 database
+        id: d1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          list_json="$(npx wrangler d1 list --json)"
+          db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME" '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
+          if [[ -z "$db_id" ]]; then
+            npx wrangler d1 create "$DB_NAME" --location=apac
+            list_json="$(npx wrangler d1 list --json)"
+            db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME" '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
+          fi
+          test -n "$db_id"
+          echo "database_id=$db_id" >> "$GITHUB_OUTPUT"
+
+      - name: Render production-prep Wrangler config
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+          D1_DATABASE_ID: ${{ steps.d1.outputs.database_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path("wrangler.jsonc").read_text(encoding="utf-8"))
+          data["name"] = "adventure-license"
+          data["account_id"] = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+          binding = data["d1_databases"][0]
+          binding["database_name"] = "adventure-license"
+          binding["database_id"] = os.environ["D1_DATABASE_ID"]
+          data["routes"] = [
+              {"pattern": "license-cutover.apixb.top", "custom_domain": True}
+          ]
+          Path("wrangler.production-prep.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Initialize production schema
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        run: |
+          npx wrangler d1 execute "$DB_NAME"             --remote             --config wrangler.production-prep.json             --file migrations/0001_schema.sql
+
+      - name: Deploy production Worker on temporary cutover hostname
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          setup_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$setup_key"
+          python3 - "$setup_key" <<'PY'
+          import json, sys
+          from pathlib import Path
+          Path(".secrets.json").write_text(
+              json.dumps({"LICENSE_ADMIN_SETUP_KEY": sys.argv[1]}),
+              encoding="utf-8",
+          )
+          PY
+          npx wrangler deploy             --config wrangler.production-prep.json             --secrets-file .secrets.json
+          rm -f .secrets.json
+
+      - name: Production-prep health check
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..18}; do
+            if body="$(curl --fail --show-error --silent https://license-cutover.apixb.top/health 2>/dev/null)"               && printf '%s' "$body" | jq -e '.ok == true and .service == "adventure-license" and .version == 1' >/dev/null; then
+              echo "Production-prep health check passed."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Production-prep health check failed." >&2
+          exit 1
