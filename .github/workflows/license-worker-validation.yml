@@ -1,0 +1,57 @@
+name: License Worker Validation
+
+on:
+  pull_request:
+    paths:
+      - "server/activation_worker/**"
+      - ".github/workflows/license-worker-validation.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check Worker JavaScript syntax
+        run: |
+          node --check server/activation_worker/src/common.js
+          node --check server/activation_worker/src/admin.js
+          node --check server/activation_worker/src/licenses.js
+          node --check server/activation_worker/src/index.js
+
+      - name: Check migration helper
+        run: |
+          python3 -m py_compile server/activation_worker/scripts/prepare_d1_dump.py
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+
+          root = pathlib.Path("server/activation_worker")
+          raw = root / "test-dump.raw.sql"
+          out = root / "test-dump.d1.sql"
+          raw.write_text(
+              "BEGIN TRANSACTION;\n"
+              "CREATE TABLE demo(id INTEGER PRIMARY KEY);\n"
+              "INSERT INTO demo VALUES(1);\n"
+              "COMMIT;\n",
+              encoding="utf-8",
+          )
+          subprocess.run(
+              [
+                  "python3",
+                  str(root / "scripts" / "prepare_d1_dump.py"),
+                  str(raw),
+                  str(out),
+              ],
+              check=True,
+          )
+          transformed = out.read_text(encoding="utf-8")
+          assert "BEGIN TRANSACTION;" not in transformed
+          assert "COMMIT;" not in transformed
+          assert "CREATE TABLE demo" in transformed
+          PY

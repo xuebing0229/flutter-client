@@ -1,0 +1,198 @@
+name: License Worker Staging Deploy
+
+on:
+  push:
+    branches:
+      - "deploy/license-worker-staging"
+    paths:
+      - "server/activation_worker/**"
+      - ".github/workflows/license-worker-staging-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DB_NAME: adventure-license-staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Require Cloudflare token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+
+      - name: Install Wrangler
+        working-directory: server/activation_worker
+        run: npm install
+
+      - name: Discover Cloudflare account
+        id: cf
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          whoami_json="$(npx wrangler whoami --json)"
+          account_id="$(printf '%s' "$whoami_json" | jq -r '.accounts[0].id // empty')"
+          account_count="$(printf '%s' "$whoami_json" | jq -r '.accounts | length')"
+          test -n "$account_id" || { echo "Could not discover Cloudflare account ID"; exit 1; }
+          if [[ "$account_count" -ne 1 ]]; then
+            echo "Expected token to expose exactly one Cloudflare account, found $account_count." >&2
+            exit 1
+          fi
+          echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
+
+      - name: Find or create APAC staging D1 database
+        id: d1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          list_json="$(npx wrangler d1 list --json)"
+          db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME"             '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
+
+          if [[ -z "$db_id" ]]; then
+            npx wrangler d1 create "$DB_NAME" --location=apac
+            list_json="$(npx wrangler d1 list --json)"
+            db_id="$(printf '%s' "$list_json" | jq -r --arg name "$DB_NAME"               '.[]? | select(.name == $name) | (.uuid // .id) | select(. != null)' | head -n1)"
+          fi
+
+          test -n "$db_id" || { echo "Could not create or locate staging D1 database"; exit 1; }
+          echo "database_id=$db_id" >> "$GITHUB_OUTPUT"
+
+      - name: Render staging Wrangler config
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+          D1_DATABASE_ID: ${{ steps.d1.outputs.database_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path("wrangler.jsonc").read_text(encoding="utf-8"))
+          data["name"] = "adventure-license-staging"
+          data["account_id"] = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+          binding = data["d1_databases"][0]
+          binding["database_name"] = "adventure-license-staging"
+          binding["database_id"] = os.environ["D1_DATABASE_ID"]
+          data["routes"] = [
+              {"pattern": "license-staging.apixb.top", "custom_domain": True}
+          ]
+          Path("wrangler.staging.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Initialize staging schema
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        run: |
+          npx wrangler d1 execute "$DB_NAME"             --remote             --config wrangler.staging.json             --file migrations/0001_schema.sql
+
+      - name: Deploy staging Worker with an ephemeral admin setup key
+        id: deploy
+        working-directory: server/activation_worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          setup_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$setup_key"
+          printf '%s' "$setup_key" > .staging-setup-key
+          chmod 600 .staging-setup-key
+          python3 - "$setup_key" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          Path(".secrets.json").write_text(
+              json.dumps({"LICENSE_ADMIN_SETUP_KEY": sys.argv[1]}),
+              encoding="utf-8",
+          )
+          PY
+
+          deploy_output="$(npx wrangler deploy             --config wrangler.staging.json             --secrets-file .secrets.json)"
+          rm -f .secrets.json
+
+          printf '%s\n' "$deploy_output"
+          echo "worker_url=https://license-staging.apixb.top" >> "$GITHUB_OUTPUT"
+
+      - name: Staging health smoke test
+        env:
+          WORKER_URL: https://license-staging.apixb.top
+        run: |
+          set -euo pipefail
+          for attempt in {1..18}; do
+            if body="$(curl --fail --show-error --silent "$WORKER_URL/health" 2>/dev/null)" \
+              && printf '%s' "$body" | jq -e \
+                '.ok == true and .service == "adventure-license" and .version == 1' >/dev/null; then
+              echo "Staging health check passed."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Staging health check failed." >&2
+          exit 1
+
+      - name: Staging admin and reserve smoke test
+        env:
+          WORKER_URL: https://license-staging.apixb.top
+        working-directory: server/activation_worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          setup_key="$(cat .staging-setup-key)"
+          register_json="$(jq -cn --arg k "$setup_key" --arg n "staging-smoke" '{setupKey:$k,name:$n}')"
+          admin_json="$(curl --fail --show-error --silent \
+            -H 'Content-Type: application/json' \
+            --data "$register_json" \
+            "$WORKER_URL/v1/admin/register")"
+          token="$(printf '%s' "$admin_json" | jq -r '.token')"
+          test -n "$token" && test "$token" != "null"
+          echo "::add-mask::$token"
+
+          me_json="$(curl --fail --show-error --silent \
+            -H "Authorization: Bearer $token" \
+            "$WORKER_URL/v1/admin/me")"
+          printf '%s' "$me_json" | jq -e '.ok == true and .admin.name == "staging-smoke"' >/dev/null
+
+          reserve_json="$(curl --fail --show-error --silent \
+            -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' \
+            --data '{"note":"staging smoke"}' \
+            "$WORKER_URL/v1/licenses/reserve")"
+          account_id="$(printf '%s' "$reserve_json" | jq -r '.license.accountId')"
+          test -n "$account_id" && test "$account_id" != "null"
+
+          note_json="$(curl --fail --show-error --silent \
+            -X PATCH \
+            -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' \
+            --data '{"note":"staging smoke updated"}' \
+            "$WORKER_URL/v1/licenses/$account_id/note")"
+          printf '%s' "$note_json" | jq -e '.ok == true and .license.note == "staging smoke updated"' >/dev/null
+
+          delete_json="$(curl --fail --show-error --silent \
+            -X DELETE \
+            -H "Authorization: Bearer $token" \
+            "$WORKER_URL/v1/licenses/$account_id")"
+          printf '%s' "$delete_json" | jq -e '.ok == true' >/dev/null
+
+          rm -f .staging-setup-key
