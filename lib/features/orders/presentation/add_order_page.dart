@@ -8,6 +8,7 @@ import '../../../core/finance/pricing_adjustments.dart';
 import '../../../core/finance/pricing_preset_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../shared/presentation/pricing_preset_selector.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../data/node_presets.dart';
 import '../data/order_reference_image_store.dart';
 import '../domain/queue_order.dart';
@@ -22,6 +23,7 @@ class AddOrderPage extends StatefulWidget {
     required this.nodePresetStore,
     required this.featureStore,
     this.pricingPresetStore,
+    this.guideTargets,
     super.key,
   });
 
@@ -30,6 +32,7 @@ class AddOrderPage extends StatefulWidget {
   final NodePresetStore nodePresetStore;
   final PricingPresetStore? pricingPresetStore;
   final AppFeatureStore featureStore;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<AddOrderPage> createState() => _AddOrderPageState();
@@ -68,6 +71,70 @@ class _AddOrderPageState extends State<AddOrderPage> {
     _draftOrderId = 'order-${DateTime.now().microsecondsSinceEpoch}';
     final preset = widget.nodePresetStore.byId(_presetId);
     _currentNodeId = preset.nodes.first.id;
+    if (widget.guideTargets != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showGuide());
+      });
+    }
+  }
+
+  Future<void> _showGuide() async {
+    final targets = widget.guideTargets;
+    if (targets == null || !mounted) return;
+    final theme = Theme.of(context);
+    final saveShape =
+        TextButtonTheme.of(context).style?.shape?.resolve(const <WidgetState>{}) ??
+        (theme.useMaterial3
+            ? const StadiumBorder()
+            : const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(4)),
+              ));
+    await showSpotlightGuide(
+      context,
+      steps: [
+        SpotlightGuideStep(
+          targetKey: targets.addOrderTitleKey,
+          icon: Icons.title_rounded,
+          title: '先填图名',
+          body: '图名是这笔排单最主要的识别信息，之后搜索和小票都会用到。',
+          targetPadding: 0,
+          borderRadius: 0,
+        ),
+        if (widget.featureStore.clientInfo)
+          SpotlightGuideStep(
+            targetKey: targets.addOrderClientKey,
+            icon: Icons.person_outline_rounded,
+            title: '再记下单主',
+            body: '单主信息可以用于搜索，也会用于按单主生成年度小票。',
+            targetPadding: 0,
+            borderRadius: 0,
+          ),
+        SpotlightGuideStep(
+          targetKey: targets.addOrderPlatformKey,
+          icon: Icons.storefront_outlined,
+          title: '选择平台',
+          body: '平台会影响手续费规则，也会用于后续统计和筛选。',
+          targetPadding: 0,
+          borderRadius: 0,
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.addOrderPriceKey,
+          icon: Icons.payments_outlined,
+          title: '填写原始稿价',
+          body: '这里填写基础稿价；加价预设和其他调整项会在此基础上计算。',
+          targetPadding: 0,
+          borderRadius: 0,
+        ),
+        SpotlightGuideStep(
+          targetKey: targets.addOrderSaveKey,
+          icon: Icons.check_rounded,
+          title: '填完后保存',
+          body: '基础信息确认后就可以保存，截稿、节点、参考图、标签等都可以继续补充。',
+          targetShape: saveShape,
+          targetPadding: 0,
+        ),
+      ].where((step) => step.targetKey.currentContext != null).toList(),
+    );
   }
 
   @override
@@ -226,9 +293,12 @@ class _AddOrderPageState extends State<AddOrderPage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
-          TextButton(
-            onPressed: _pickingReferenceImages ? null : _save,
-            child: const Text('保存'),
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.addOrderSaveKey,
+            child: TextButton(
+              onPressed: _pickingReferenceImages ? null : _save,
+              child: const Text('保存'),
+            ),
           ),
           const SizedBox(width: 6),
         ],
@@ -242,16 +312,22 @@ class _AddOrderPageState extends State<AddOrderPage> {
         ),
         children: [
           const FormFieldLabel('图名'),
-          TextField(
-            controller: _titleController,
-            textInputAction: TextInputAction.next,
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.addOrderTitleKey,
+            child: TextField(
+              controller: _titleController,
+              textInputAction: TextInputAction.next,
+            ),
           ),
           if (widget.featureStore.clientInfo) ...[
             const SizedBox(height: 14),
             const FormFieldLabel('单主'),
-            TextField(
-              controller: _clientController,
-              textInputAction: TextInputAction.next,
+            SpotlightTarget(
+              targetKey: widget.guideTargets?.addOrderClientKey,
+              child: TextField(
+                controller: _clientController,
+                textInputAction: TextInputAction.next,
+              ),
             ),
           ],
           const SizedBox(height: 14),
@@ -261,6 +337,7 @@ class _AddOrderPageState extends State<AddOrderPage> {
             huajiaLoveLevel: _huajiaLoveLevel,
             onlineController: _onlineController,
             offlineController: _offlineController,
+            platformKey: widget.guideTargets?.addOrderPlatformKey,
             onPlatformChanged: (value) {
               setState(() {
                 _platform = value;
@@ -284,12 +361,15 @@ class _AddOrderPageState extends State<AddOrderPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const FormFieldLabel('原始稿价'),
-                TextField(
-                  controller: _priceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                SpotlightTarget(
+                  targetKey: widget.guideTargets?.addOrderPriceKey,
+                  child: TextField(
+                    controller: _priceController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(prefixText: '¥ '),
                   ),
-                  decoration: const InputDecoration(prefixText: '¥ '),
                 ),
               ],
             ),

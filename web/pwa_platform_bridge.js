@@ -2,6 +2,20 @@
   const DB_NAME = 'adventurers-guild-web-assets-v1';
   const STORE_NAME = 'referenceImages';
   let assetDbPromise = null;
+  let deferredPwaInstallPrompt = null;
+  let pwaInstalled =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    window.navigator.standalone === true;
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredPwaInstallPrompt = event;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    pwaInstalled = true;
+    deferredPwaInstallPrompt = null;
+  });
 
   function requestResult(request) {
     return new Promise((resolve, reject) => {
@@ -83,6 +97,30 @@
 
   window.adventurersGuildStorageRemove = (key) => {
     window.localStorage.removeItem(String(key));
+  };
+
+  window.adventurersGuildPwaInstallState = () => {
+    if (pwaInstalled) return 'installed';
+    if (deferredPwaInstallPrompt) return 'prompt';
+    const userAgent = window.navigator.userAgent || '';
+    const isIos =
+      /iPad|iPhone|iPod/.test(userAgent) ||
+      (window.navigator.platform === 'MacIntel' &&
+        window.navigator.maxTouchPoints > 1);
+    return isIos ? 'ios' : 'manual';
+  };
+
+  window.adventurersGuildPromptPwaInstall = async () => {
+    if (pwaInstalled) return 'installed';
+    const prompt = deferredPwaInstallPrompt;
+    if (!prompt) return window.adventurersGuildPwaInstallState();
+    deferredPwaInstallPrompt = null;
+    await prompt.prompt();
+    const choice = await prompt.userChoice;
+    if (choice && choice.outcome === 'accepted') {
+      return 'accepted';
+    }
+    return 'dismissed';
   };
 
   window.adventurersGuildDownloadBytes = (fileName, mimeType, base64Data) => {

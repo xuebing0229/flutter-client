@@ -40,6 +40,7 @@ import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/domain/collection_view_preferences.dart';
 import '../../shared/presentation/preset_center_page.dart';
 import '../../shared/presentation/receipt_center_page.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
@@ -107,6 +108,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
   final InteractionHintStore _hintStore = const InteractionHintStore();
+  final QuickStartGuideTargets _quickStartGuideTargets =
+      QuickStartGuideTargets();
+  String? _guidedOrderId;
+  bool _guidePreviewRouteOpen = false;
+  bool _guidePreviewUsesDesktopNavigator = false;
+  bool _guidePreviewIsEditor = false;
   final DesktopPetService _desktopPetService = DesktopPetService();
   late final DesktopPetAccountSync _desktopPetAccountSync;
   late final SyncCoordinator _syncCoordinator;
@@ -393,13 +400,259 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _prepareQuickStartGuide() async {
+    if (!mounted) return;
+    if (_index != 0 || _desktopToolSelection != null) {
+      _selectDesktopTab(0);
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  QuickStartGuideActions get _quickStartGuideActions => QuickStartGuideActions(
+        goTo: _goToGuideDestination,
+        createFirstOrder: _createFirstOrderForGuide,
+        waitForFirstOrderArchive: _waitForFirstOrderArchive,
+        isAvailable: _isGuideDestinationAvailable,
+        finish: _finishGuideNavigation,
+      );
+
+  bool _isGuideDestinationAvailable(QuickStartGuideDestination destination) {
+    return switch (destination) {
+      QuickStartGuideDestination.products => widget.featureStore.products,
+      QuickStartGuideDestination.schedule => widget.featureStore.schedule,
+      QuickStartGuideDestination.statistics => widget.featureStore.statistics,
+      QuickStartGuideDestination.pwaInstall => false,
+      QuickStartGuideDestination.featureToggle =>
+        !widget.featureStore.abstractMode ||
+            !widget.featureStore.abstractEffects ||
+            !_abstractFeatureToggleHidden,
+      _ => true,
+    };
+  }
+
+  int? _guideTabIndex(QuickStartGuideDestination destination) {
+    final ids = <String>[
+      'orders',
+      if (widget.featureStore.products) 'products',
+      if (widget.featureStore.schedule) 'schedule',
+      if (widget.featureStore.statistics) 'statistics',
+    ];
+    final id = switch (destination) {
+      QuickStartGuideDestination.orders => 'orders',
+      QuickStartGuideDestination.products => 'products',
+      QuickStartGuideDestination.schedule => 'schedule',
+      QuickStartGuideDestination.statistics => 'statistics',
+      _ => null,
+    };
+    if (id == null) return null;
+    final index = ids.indexOf(id);
+    return index < 0 ? null : index;
+  }
+
+  String? _guideTool(QuickStartGuideDestination destination) {
+    return switch (destination) {
+      QuickStartGuideDestination.presetCenter => AppToolMenu.presetTool,
+      QuickStartGuideDestination.receiptCenter => AppToolMenu.receiptTool,
+      QuickStartGuideDestination.archive => AppToolMenu.archiveTool,
+      QuickStartGuideDestination.sync => AppToolMenu.syncTool,
+      QuickStartGuideDestination.account => AppToolMenu.accountTool,
+      QuickStartGuideDestination.settings => AppToolMenu.settingsTool,
+      QuickStartGuideDestination.featureToggle => AppToolMenu.featureToggleTool,
+      _ => null,
+    };
+  }
+
+  Future<void> _closeGuidePreviewRoute() async {
+    if (!_guidePreviewRouteOpen || !mounted) return;
+    final navigator = _guidePreviewUsesDesktopNavigator
+        ? _desktopContentNavigatorKey.currentState
+        : Navigator.of(context);
+    if (navigator?.canPop() ?? false) {
+      navigator!.pop();
+    }
+    final wasEditor = _guidePreviewIsEditor;
+    _guidePreviewRouteOpen = false;
+    _guidePreviewUsesDesktopNavigator = false;
+    _guidePreviewIsEditor = false;
+    if (wasEditor && mounted) {
+      setState(() => _desktopAddEditorOpen = false);
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<void> _pushGuidePreviewPage(
+    Widget page, {
+    bool editor = false,
+  }) async {
+    if (!mounted) return;
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    final route = MaterialPageRoute<void>(builder: (_) => page);
+    final desktopNavigator =
+        useDesktopLayout ? _desktopContentNavigatorKey.currentState : null;
+    if (desktopNavigator != null) {
+      if (editor) setState(() => _desktopAddEditorOpen = true);
+      unawaited(desktopNavigator.push(route));
+      _guidePreviewRouteOpen = true;
+      _guidePreviewUsesDesktopNavigator = true;
+      _guidePreviewIsEditor = editor;
+    } else {
+      unawaited(Navigator.of(context).push(route));
+      _guidePreviewRouteOpen = true;
+      _guidePreviewUsesDesktopNavigator = false;
+      _guidePreviewIsEditor = false;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<void> _goToGuideDestination(
+    QuickStartGuideDestination destination,
+  ) async {
+    if (!mounted || !_isGuideDestinationAvailable(destination)) return;
+    await _closeGuidePreviewRoute();
+    if (!mounted) return;
+
+    final tabIndex = _guideTabIndex(destination);
+    if (tabIndex != null) {
+      if (MediaQuery.sizeOf(context).width >= 900 && !_desktopNavigationOpen) {
+        _setDesktopNavigationOpen(true);
+      }
+      _selectDesktopTab(tabIndex);
+      await WidgetsBinding.instance.endOfFrame;
+      return;
+    }
+
+    if (destination == QuickStartGuideDestination.screenshotImport) {
+      if (_desktopToolSelection != null) _selectDesktopTool(null);
+      await _pushGuidePreviewPage(
+        ScreenshotImportPage(
+          accountId: widget.accountId,
+          kind: ScreenshotImportKind.orders,
+          orderStore: _orderStore,
+          productStore: _productStore,
+          presetStore: _nodePresetStore,
+          guideTargets: _quickStartGuideTargets,
+          autoPick: false,
+        ),
+        editor: true,
+      );
+      return;
+    }
+
+    final tool = _guideTool(destination);
+    if (tool == null) return;
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    if (useDesktopLayout) {
+      if (!_desktopNavigationOpen) _setDesktopNavigationOpen(true);
+      _selectDesktopTool(tool);
+      await WidgetsBinding.instance.endOfFrame;
+    } else {
+      await _pushGuidePreviewPage(_buildDesktopToolPage(tool));
+    }
+  }
+
+  Future<String?> _createFirstOrderForGuide() async {
+    await _goToGuideDestination(QuickStartGuideDestination.orders);
+    if (!mounted) return null;
+
+    final beforeIds = _orderStore.orders.map((order) => order.id).toSet();
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    final route = MaterialPageRoute<void>(
+      builder: (_) => AddOrderPage(
+        accountId: widget.accountId,
+        store: _orderStore,
+        nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
+        featureStore: widget.featureStore,
+        guideTargets: _quickStartGuideTargets,
+      ),
+    );
+    final desktopNavigator =
+        useDesktopLayout ? _desktopContentNavigatorKey.currentState : null;
+    if (desktopNavigator != null) {
+      setState(() => _desktopAddEditorOpen = true);
+      await desktopNavigator.push(route);
+      if (mounted) setState(() => _desktopAddEditorOpen = false);
+    } else {
+      await Navigator.of(context).push(route);
+    }
+    if (!mounted) return null;
+
+    String? createdId;
+    for (final order in _orderStore.orders.reversed) {
+      if (!beforeIds.contains(order.id)) {
+        createdId = order.id;
+        break;
+      }
+    }
+    setState(() => _guidedOrderId = createdId);
+    await WidgetsBinding.instance.endOfFrame;
+    return createdId;
+  }
+
+  Future<bool> _waitForFirstOrderArchive(String orderId) async {
+    if (!mounted || !_orderStore.contains(orderId)) return false;
+    if (_orderStore.byId(orderId).isArchived) return true;
+
+    final completer = Completer<bool>();
+    void checkArchive() {
+      if (completer.isCompleted) return;
+      if (!_orderStore.contains(orderId)) {
+        completer.complete(false);
+        return;
+      }
+      if (_orderStore.byId(orderId).isArchived) {
+        completer.complete(true);
+      }
+    }
+
+    _orderStore.addListener(checkArchive);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(minutes: 30),
+        content: const Text('现在试着长按刚创建的排单 → 归档。完成归档后，新手引导会自动继续。'),
+        action: SnackBarAction(
+          label: '跳过',
+          onPressed: () {
+            if (!completer.isCompleted) completer.complete(false);
+          },
+        ),
+      ),
+    );
+
+    try {
+      final archived = await completer.future;
+      controller.close();
+      return archived;
+    } finally {
+      _orderStore.removeListener(checkArchive);
+    }
+  }
+
+  Future<void> _finishGuideNavigation() async {
+    await _closeGuidePreviewRoute();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    if (_guidedOrderId != null) {
+      setState(() => _guidedOrderId = null);
+    }
+    _selectDesktopTab(0);
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   Future<void> _showFirstRunGuideOnce() async {
     if (await _hintStore.hasSeenFirstRunGuide(widget.accountId)) return;
     if (!mounted) return;
 
     await _hintStore.markFirstRunGuideSeen(widget.accountId);
     if (!mounted) return;
-    await showFirstRunGuide(context);
+    await showFirstRunGuide(
+      context,
+      targets: _quickStartGuideTargets,
+      prepareQuickStart: _prepareQuickStartGuide,
+      actions: _quickStartGuideActions,
+    );
   }
 
   Future<void> _showTutorial() async {
@@ -407,7 +660,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (widget.featureStore.abstractMode) {
       await showAbstractModeGuide(context);
     } else {
-      await showFirstRunGuide(context, detailed: true);
+      await showFirstRunGuide(
+        context,
+        detailed: true,
+        targets: _quickStartGuideTargets,
+        prepareQuickStart: _prepareQuickStartGuide,
+        actions: _quickStartGuideActions,
+      );
     }
   }
 
@@ -1574,16 +1833,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AppToolMenu.presetTool => PresetCenterPage(
         nodePresetStore: _nodePresetStore,
         pricingPresetStore: _pricingPresetStore,
+        guideTargets: _quickStartGuideTargets,
       ),
       AppToolMenu.receiptTool => ReceiptCenterPage(
         orderStore: _orderStore,
         productStore: _productStore,
         receiptStyleStore: _receiptStyleStore,
         accountName: widget.accountStore.accountName ?? '',
+        guideTargets: _quickStartGuideTargets,
       ),
       AppToolMenu.featureToggleTool => FeatureTogglePage(
         store: widget.featureStore,
         onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
+        guideTargets: _quickStartGuideTargets,
       ),
       AppToolMenu.desktopPetTool => DesktopPetPage(
         orderStore: _orderStore,
@@ -1604,8 +1866,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         receiptStyleStore: _receiptStyleStore,
         featureStore: widget.featureStore,
         syncCoordinator: _syncCoordinatorView,
+        guideTargets: _quickStartGuideTargets,
+        guideOrderId: _guidedOrderId,
       ),
-      AppToolMenu.syncTool => DeviceSyncPage(coordinator: _syncCoordinator),
+      AppToolMenu.syncTool => DeviceSyncPage(
+        coordinator: _syncCoordinator,
+        guideTargets: _quickStartGuideTargets,
+      ),
       AppToolMenu.feedbackTool => const FeedbackPage(),
       AppToolMenu.accountTool => AccountPage(
         store: widget.accountStore,
@@ -1614,6 +1881,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         syncCoordinator: _syncCoordinator,
         onBeforeSignOut: _prepareForSignOut,
         onRevokeDevice: _syncCoordinator.revokeDevice,
+        guideTargets: _quickStartGuideTargets,
       ),
       AppToolMenu.settingsTool => SettingsPage(
         orderStore: _orderStore,
@@ -1626,6 +1894,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         accountStore: widget.accountStore,
         syncCoordinator: _syncCoordinator,
         onApplyWorkspaceSettings: _applySyncSettings,
+        guideTargets: _quickStartGuideTargets,
         // Keep SettingsPage alive while opening the palette picker. The update
         // download state lives in SettingsPage, so replacing the whole desktop
         // tool page here would make an in-progress Windows update appear to
@@ -1708,6 +1977,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onOverviewColumnsChanged: _setOrderOverviewColumns,
           sortModeName: _orderSortMode,
           onSortModeChanged: _setOrderSortMode,
+          guideTargets: _quickStartGuideTargets,
+          guideOrderId: _guidedOrderId,
         ),
       ),
       if (widget.featureStore.products)
@@ -1837,14 +2108,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ? null
         : switch (current.id) {
             'orders' => FloatingActionButton.extended(
-                onPressed: () => unawaited(_chooseAddMethod(products: false)),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增排单'),
+                key: _quickStartGuideTargets.addOrderKey,
+                onPressed: () =>
+                      unawaited(_chooseAddMethod(products: false)),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增排单'),
               ),
             'products' => FloatingActionButton.extended(
+                key: _quickStartGuideTargets.addProductKey,
                 onPressed: () => unawaited(_chooseAddMethod(products: true)),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增成品'),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增成品'),
               ),
             _ => null,
           };
@@ -1866,6 +2140,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       toolSelected: _desktopToolSelection != null,
       floatingActionButton: floatingAction,
       showAppBar: _desktopToolSelection == null,
+      guideTargets: _quickStartGuideTargets,
     );
 
     final progress = _syncProgressOverlay;

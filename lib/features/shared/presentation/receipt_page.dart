@@ -200,6 +200,9 @@ class _ReceiptContentDraft {
   final Map<String, String> textOverrides;
   final Map<String, double> fontSizeOverrides;
 
+  bool get isDefault =>
+      textOverrides.isEmpty && fontSizeOverrides.isEmpty;
+
   String text(String id, String fallback) => textOverrides[id] ?? fallback;
 
   double fontSize(String id, double fallback) =>
@@ -592,6 +595,10 @@ class _ReceiptPageState extends State<ReceiptPage> {
 
   Future<void> _resetStyle() async {
     widget.styleStore.resetDefault();
+    if (!mounted) return;
+    setState(() {
+      _contentDraft = const _ReceiptContentDraft();
+    });
   }
 
   Future<void> _saveCurrentStylePreset() async {
@@ -911,7 +918,10 @@ class _ReceiptPageState extends State<ReceiptPage> {
                     label: const Text('样式预设'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: style.isDefault ? null : _resetStyle,
+                    onPressed:
+                        style.isDefault && _contentDraft.isDefault
+                            ? null
+                            : _resetStyle,
                     icon: const Icon(Icons.restart_alt_rounded),
                     label: const Text('恢复默认'),
                   ),

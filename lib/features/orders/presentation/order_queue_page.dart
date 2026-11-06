@@ -8,6 +8,7 @@ import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../data/node_presets.dart';
 import '../domain/queue_order.dart';
@@ -45,6 +46,8 @@ class OrderQueuePage extends StatefulWidget {
     this.overviewColumns = 3,
     this.onOverviewColumnsChanged,
     required this.onSortModeChanged,
+    this.guideTargets,
+    this.guideOrderId,
     super.key,
   });
 
@@ -63,6 +66,23 @@ class OrderQueuePage extends StatefulWidget {
   final ValueChanged<int>? onOverviewColumnsChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
+  final QuickStartGuideTargets? guideTargets;
+  final String? guideOrderId;
+
+  GlobalKey? guideKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderCardKey
+          : null;
+
+  GlobalKey? guideProgressKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderProgressKey
+          : null;
+
+  GlobalKey? guideConfirmNodeKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderConfirmNodeKey
+          : null;
 
   @override
   State<OrderQueuePage> createState() => _OrderQueuePageState();
@@ -1054,8 +1074,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         return Column(
           children: [
             if (widget.featureStore.search)
-              CollectionSearchField(
-                controller: _searchController,
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.searchKey,
+                child: CollectionSearchField(
+                  controller: _searchController,
                 query: _query,
                 hintText: '搜索排单',
                 filters: [
@@ -1071,10 +1093,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   setState(() => _searchField = value);
                 },
                 onChanged: (value) => setState(() => _query = value),
-                onClear: () {
-                  _searchController.clear();
-                  setState(() => _query = '');
-                },
+                  onClear: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
+                ),
               ),
             if (widget.featureStore.customTags && availableTags.isNotEmpty)
               SizedBox(
@@ -1115,8 +1138,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 ),
               ),
             if (widget.featureStore.sorting || widget.featureStore.viewSwitch)
-              CollectionToolbar(
-                title: '排单',
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.toolbarKey,
+                child: CollectionToolbar(
+                  title: '排单',
                 count: orders.length,
                 summaryText:
                     '待收入 ¥${_formatMoney(orders.fold<double>(0, (sum, order) => sum + order.realIncome))}',
@@ -1222,6 +1247,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         ),
                       )
                     : null,
+                ),
               ),
             if (useOverviewView)
               Padding(
@@ -1275,7 +1301,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       childAspectRatio: OrderOverviewSummaryCard.aspectRatio,
                       itemBuilder: (context, index) {
                         final order = orders[index];
-                        return OrderOverviewSummaryCard(
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderOverviewSummaryCard(
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
@@ -1284,6 +1312,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           showClient: widget.featureStore.clientInfo,
                           onTap: () => _openOrder(order),
                           onLongPress: () => _showQuickActions(order),
+                          ),
                         );
                       },
                     )
@@ -1312,7 +1341,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           rowIndices: rowIndices,
                           cardWidth: cardWidth,
                         );
-                        return OrderSummaryCard(
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderSummaryCard(
+                          nodeProgressKey: widget.guideProgressKeyFor(order),
+                          confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
                           compactLayout: compactLayout,
                           hasSyncConflict: widget
@@ -1348,6 +1381,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                                   order.id,
                                   10,
                                 ),
+                          ),
                         );
                       },
                     )
@@ -1361,7 +1395,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final order = orders[index];
-                        return OrderSummaryCard(
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderSummaryCard(
+                          nodeProgressKey: widget.guideProgressKeyFor(order),
+                          confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
@@ -1395,6 +1433,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                                   order.id,
                                   10,
                                 ),
+                          ),
                         );
                       },
                     ),

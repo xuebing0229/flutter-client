@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/guild_visual_theme.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import 'app_drawer.dart';
 
 enum GuildAddMethod { manual, screenshot }
@@ -79,6 +80,7 @@ class GuildWorkspaceShell extends StatelessWidget {
     this.unavailableBody,
     this.floatingActionButton,
     this.showAppBar = true,
+    this.guideTargets,
     super.key,
   });
 
@@ -98,6 +100,7 @@ class GuildWorkspaceShell extends StatelessWidget {
   final Widget? unavailableBody;
   final Widget? floatingActionButton;
   final bool showAppBar;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +115,7 @@ class GuildWorkspaceShell extends StatelessWidget {
           ? AppBar(
               leading: useDesktopLayout
                   ? IconButton(
+                      key: guideTargets?.menuKey,
                       tooltip:
                           desktopNavigationOpen ? '收起主导航' : '展开主导航',
                       icon: Icon(
@@ -123,7 +127,14 @@ class GuildWorkspaceShell extends StatelessWidget {
                         !desktopNavigationOpen,
                       ),
                     )
-                  : null,
+                  : Builder(
+                      builder: (buttonContext) => IconButton(
+                        key: guideTargets?.menuKey,
+                        tooltip: '打开菜单',
+                        icon: const Icon(Icons.menu_rounded),
+                        onPressed: () => Scaffold.of(buttonContext).openDrawer(),
+                      ),
+                    ),
               title: Text(
                 title,
                 style: const TextStyle(fontWeight: FontWeight.w700),
@@ -172,6 +183,9 @@ class GuildWorkspaceShell extends StatelessWidget {
                                                   index++
                                                 )
                                                   AppMenuTile(
+                                                    key: guideTargets?.tabKey(
+                                                      tabs[index].id,
+                                                    ),
                                                     icon: tabs[index].icon,
                                                     selectedIcon:
                                                         tabs[index]
@@ -232,6 +246,7 @@ class GuildWorkspaceShell extends StatelessWidget {
                     destinations: [
                       for (final tab in tabs)
                         NavigationDestination(
+                          key: guideTargets?.tabKey(tab.id),
                           icon: Icon(tab.icon),
                           selectedIcon: Icon(tab.selectedIcon),
                           label: tab.label,
