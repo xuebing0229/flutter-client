@@ -32,6 +32,23 @@ void main() {
     expect(guess.platform, CommissionPlatform.mihuashi);
   });
 
+  test('MiHuashi cooperation-list long screenshot auto-selects platform', () {
+    final guess = preselectImportPlatform([
+      '全部合作', '默认排序', '截稿时间', '加入时间',
+      '待支付', '待接单', '待评价', '待处理', '纠纷',
+      '定向企划', '全额支付', '排单',
+    ]);
+    expect(guess.platform, CommissionPlatform.mihuashi);
+    expect(guess.confidence, greaterThanOrEqualTo(0.95));
+  });
+
+  test('generic payment/status words alone do not force MiHuashi', () {
+    final guess = preselectImportPlatform([
+      '待支付', '待处理', '全额支付', '2026-11-30 23:59',
+    ]);
+    expect(guess.platform, isNull);
+  });
+
   test('a cropped screenshot with insufficient platform cues stays unset', () {
     final guess = preselectImportPlatform([
       '【常驻】 黑白摸鱼头3.0', '2026-10-31', '60%',
