@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+242
-# beta-242: preserve OCR orders with missing/abstract titles and support long left-aligned screenshots
+version: 0.0.1+243
+# beta-243: consolidate secondary UI help copy behind shared tooltips
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
