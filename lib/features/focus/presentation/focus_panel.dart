@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../orders/domain/queue_order.dart';
+import '../../shared/presentation/help_tooltip.dart';
 import '../../orders/state/order_store.dart';
 import '../domain/focus_session.dart';
 import '../state/focus_store.dart';
@@ -557,6 +558,12 @@ class _FocusPanelState extends State<FocusPanel> {
                         fontWeight: FontWeight.w800,
                       ),
                 ),
+                const SizedBox(width: 6),
+                InlineHelpTooltip(
+                  message: widget.desktopSettings == null
+                      ? '开始时可以选择一个排单，或选择自由专注。'
+                      : '有“当前在画订单”时会在开始瞬间锁定该排单；没有时再选择排单或自由专注。',
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -566,13 +573,6 @@ class _FocusPanelState extends State<FocusPanel> {
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                widget.desktopSettings == null
-                    ? '开始时可以选择一个排单，或选择自由专注。'
-                    : '有“当前在画订单”时会在开始瞬间锁定该排单；没有时再选择排单或自由专注。',
-                style: TextStyle(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 14),
               FilledButton.icon(
@@ -752,9 +752,15 @@ class _FocusPanelState extends State<FocusPanel> {
               ],
             ),
             const SizedBox(height: 10),
-            Text(
-              '按专注开始时间筛选；不选择范围时显示全部记录。',
-              style: TextStyle(color: colors.onSurfaceVariant),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Text('时间范围'),
+                SizedBox(width: 6),
+                InlineHelpTooltip(
+                  message: '按专注开始时间筛选；不选择范围时显示全部记录。',
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Wrap(

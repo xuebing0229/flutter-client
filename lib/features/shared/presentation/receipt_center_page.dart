@@ -7,6 +7,7 @@ import '../../products/domain/finished_product.dart';
 import '../../products/state/product_store.dart';
 import '../domain/receipt_style_store.dart';
 import 'collection_widgets.dart';
+import 'help_tooltip.dart';
 import 'receipt_page.dart';
 
 enum _ArchiveFilter {
@@ -545,20 +546,11 @@ class _ReceiptCenterPageState extends State<ReceiptCenterPage> {
                     ? null
                     : (value) => setState(() => _selectedYear = value),
               ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '年度小票只统计已归档业务；成品仅统计已记录单主的售出记录。',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 12,
+              const SizedBox(width: 6),
+              const InlineHelpTooltip(
+                message: '年度小票只统计已归档业务；成品仅统计已记录单主的售出记录。',
               ),
-            ),
+            ],
           ),
         ),
         Expanded(

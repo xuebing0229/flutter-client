@@ -1,3 +1,4 @@
+import '../../shared/presentation/help_tooltip.dart';
 import '../../shared/presentation/spotlight_guide.dart';
 // ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:async';
@@ -1249,12 +1250,21 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
-                      child: Text(
-                        _working
-                            ? '正在本机识别截图…'
-                            : '选择一张或多张平台订单截图，先识别并检查，确认后才会写入。',
-                        textAlign: TextAlign.center,
-                      ),
+                      child: _working
+                          ? const Text(
+                              '正在本机识别截图…',
+                              textAlign: TextAlign.center,
+                            )
+                          : const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('选择截图开始识别'),
+                                SizedBox(width: 6),
+                                InlineHelpTooltip(
+                                  message: '支持一次选择一张或多张平台订单截图；识别后先检查，确认后才会写入。',
+                                ),
+                              ],
+                            ),
                     ),
                   )
                 : ListView.builder(

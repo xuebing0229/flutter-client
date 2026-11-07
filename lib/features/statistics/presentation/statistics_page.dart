@@ -360,16 +360,27 @@ class _SummaryCard extends StatelessWidget {
       required String label,
       required int count,
       required double amount,
+      String? helpText,
     }) {
       return Row(
         children: [
           Expanded(
-            child: Text(
-              '$label $count 笔',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: muted,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    '$label $count 笔',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (helpText != null) ...[
+                  const SizedBox(width: 6),
+                  InlineHelpTooltip(message: helpText),
+                ],
+              ],
             ),
           ),
           Text(
@@ -408,6 +419,7 @@ class _SummaryCard extends StatelessWidget {
             label: '待收入',
             count: pendingCount,
             amount: pendingTotal,
+            helpText: '统计本月截稿、尚未归档且未标记已交稿的排单预计收入。',
           ),
         ],
       ),
