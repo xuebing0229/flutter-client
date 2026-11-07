@@ -825,7 +825,6 @@ class _DesktopPetPlacementDialogState
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final slotName =
         widget.slot == DesktopPetAssetSlot.idleA ? 'A · 平时状态' : 'B · 操作状态';
     final guideFile = widget.guidePath == null ? null : File(widget.guidePath!);
