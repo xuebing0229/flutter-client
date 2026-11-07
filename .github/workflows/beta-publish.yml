@@ -110,6 +110,7 @@ jobs:
           flutter build apk \
             --release \
             --flavor beta \
+            -Pdisable-abi-filtering=true \
             --target-platform android-arm64 \
             --dart-define=APP_CHANNEL=beta \
             --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
