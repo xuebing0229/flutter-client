@@ -42,11 +42,21 @@ void main() {
     expect(guess.confidence, greaterThanOrEqualTo(0.95));
   });
 
-  test('generic payment/status words alone do not force MiHuashi', () {
+  test('shared payment/status words never force MiHuashi', () {
     final guess = preselectImportPlatform([
-      '待支付', '待处理', '全额支付', '2026-11-30 23:59',
+      '待支付', '待接单', '待评价', '待处理', '纠纷',
+      '全额支付', '2026-11-30 23:59',
     ]);
     expect(guess.platform, isNull);
+  });
+
+  test('Huajia order-list shell wins over shared status wording', () {
+    final guess = preselectImportPlatform([
+      '约稿订单', '进行中', '待评价', '已完成', '失效/终止',
+      '待上传稿件', '添加备注', '¥50', '截稿时间：2027-01-03',
+    ]);
+    expect(guess.platform, CommissionPlatform.huajia);
+    expect(guess.confidence, greaterThanOrEqualTo(0.95));
   });
 
   test('a cropped screenshot with insufficient platform cues stays unset', () {
