@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/app_ui_style.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../shared/presentation/spotlight_guide.dart';
+import '../../shared/presentation/help_tooltip.dart';
 import 'about_page.dart';
 import 'theme_color_page.dart';
 
@@ -28,13 +29,14 @@ class GuildSettingsAppearanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('夜间模式'),
-          const SizedBox(height: 6),
-          Text(
-            '可以固定浅色、固定深色，或跟随手机系统切换。',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          const Row(
+            children: [
+              Text('夜间模式'),
+              SizedBox(width: 6),
+              InlineHelpTooltip(
+                message: '可以固定浅色、固定深色，或跟随手机系统切换。',
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           _ThemeModeSelector(store: themeStore),
@@ -186,7 +188,6 @@ class GuildSettingsNewsCard extends StatelessWidget {
       child: ListTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('查看更新日志'),
-        subtitle: const Text('回顾已经加入公会的新功能'),
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: onOpen,
       ),
@@ -218,7 +219,6 @@ class GuildSettingsAboutCard extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         leading: const Icon(Icons.shield_outlined),
         title: const Text('关于冒险者公会'),
-        subtitle: const Text('版本信息、开源软件与致谢'),
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: onOpen ??
             () {

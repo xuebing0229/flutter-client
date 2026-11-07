@@ -80,7 +80,7 @@ class _OrderTagsEditorState extends State<OrderTagsEditor> {
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _addTag(),
           decoration: InputDecoration(
-            hintText: '输入标签名称，点击加号添加',
+            hintText: '输入标签名称',
             prefixIcon: const Icon(Icons.label_outline_rounded),
             suffixIcon: IconButton(
               tooltip: '添加标签',
@@ -91,7 +91,7 @@ class _OrderTagsEditorState extends State<OrderTagsEditor> {
         ),
         if (suggestions.isNotEmpty) ...[
           Text(
-            '已有标签（点击添加）',
+            '已有标签',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 5),

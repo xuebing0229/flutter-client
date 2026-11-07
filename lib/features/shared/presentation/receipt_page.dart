@@ -13,6 +13,7 @@ import '../data/receipt_style_image_bridge.dart';
 import '../domain/receipt_style_store.dart';
 import '../domain/receipt_style_transfer.dart';
 import 'layout_spacing.dart';
+import 'help_tooltip.dart';
 import 'receipt_style_share_image_page.dart';
 
 class ReceiptData {
@@ -939,9 +940,14 @@ class _ReceiptPageState extends State<ReceiptPage> {
                         });
                       },
                 controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('透明底导出'),
-                subtitle: const Text(
-                  '导出不包含背景图的纯内容',
+                title: const Row(
+                  children: [
+                    Text('透明底导出'),
+                    SizedBox(width: 6),
+                    InlineHelpTooltip(
+                      message: '导出不包含背景图的纯内容。',
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 10),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/help_tooltip.dart';
 import 'theme_color_picker.dart';
 
 class CustomThemeColorPage extends StatefulWidget {
@@ -135,32 +136,11 @@ class _CustomThemeColorPageState extends State<CustomThemeColorPage> {
           if (!_advanced) ...[
             _ColorSettingTile(
               title: '主主题色',
-              description: '按钮、选中态、进度条、开关和重点图标',
+              description: '按钮、选中态、进度条、开关和重点图标；基础模式下背景、卡片、文字和边框等会根据主主题色自动生成。',
               color: _seed,
               onTap: () => _pickSeedColor(),
             ),
-            const SizedBox(height: 8),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.auto_awesome_rounded,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        '基础模式只需要选择主主题色，浅色和深色下的背景、卡片、文字、边框等会自动生成；切到高级模式可以逐项覆盖。',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+
           ] else ...[
             SegmentedButton<Brightness>(
               segments: const [
@@ -182,20 +162,20 @@ class _CustomThemeColorPageState extends State<CustomThemeColorPage> {
             ),
             if (_editingBrightness == Brightness.dark) ...[
               const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _applyLightToDark,
-                  icon: const Icon(Icons.copy_all_rounded),
-                  label: const Text('套用浅色配色'),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '把浅色模式当前的 8 项颜色完整复制到深色模式；复制后仍可以继续单独调整深色配色。',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _applyLightToDark,
+                      icon: const Icon(Icons.copy_all_rounded),
+                      label: const Text('套用浅色配色'),
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  const InlineHelpTooltip(
+                    message: '把浅色模式当前的 8 项颜色完整复制到深色模式；复制后仍可以继续单独调整深色配色。',
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 12),
@@ -511,11 +491,18 @@ class _ColorSettingTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         onTap: onTap,
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 6),
+            InlineHelpTooltip(message: description),
+          ],
         ),
-        subtitle: Text(description),
         trailing: Container(
           width: 44,
           height: 34,

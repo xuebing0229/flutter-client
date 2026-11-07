@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/help_tooltip.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/finance/pricing_preset_store.dart';
@@ -321,7 +322,12 @@ class _ProductPageState extends State<ProductPage> {
                 controller: clientController,
                 decoration: const InputDecoration(
                   labelText: '单主（可选）',
-                  hintText: '填写后可计入该单主的年度小票',
+                  suffixIcon: Center(
+                    widthFactor: 1,
+                    child: InlineHelpTooltip(
+                      message: '填写后，这次售出可计入该单主的年度小票。',
+                    ),
+                  ),
                 ),
               ),
             ],
