@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui_style.dart';
 import '../../../core/theme/guild_visual_theme.dart';
+import 'help_tooltip.dart';
 import 'layout_spacing.dart';
 
 class CollectionBulkItem {
@@ -293,18 +294,7 @@ class CollectionToolbar extends StatelessWidget {
                 ],
                 if (helpMessage != null) ...[
                   const SizedBox(width: 6),
-                  Tooltip(
-                    message: helpMessage!,
-                    triggerMode: TooltipTriggerMode.tap,
-                    child: Icon(
-                      Icons.help_outline_rounded,
-                      size: 18,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant
-                          .withValues(alpha: 0.55),
-                    ),
-                  ),
+                  InlineHelpTooltip(message: helpMessage!),
                 ],
               ],
             ),

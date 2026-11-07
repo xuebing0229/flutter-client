@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../shared/presentation/help_tooltip.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../orders/domain/queue_order.dart';
@@ -316,15 +317,7 @@ class _PeriodMetric extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Tooltip(
-              message: helpText,
-              triggerMode: TooltipTriggerMode.tap,
-              child: Icon(
-                Icons.help_outline_rounded,
-                size: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
+            InlineHelpTooltip(message: helpText),
           ],
         ),
         const SizedBox(height: 10),
