@@ -112,6 +112,31 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     );
   }
 
+  Future<CommissionPlatform?> _chooseScreenshotImportPlatform() {
+    const platforms = <CommissionPlatform>[
+      CommissionPlatform.mihuashi,
+      CommissionPlatform.huajia,
+      CommissionPlatform.bilibiliWorkshop,
+      CommissionPlatform.linjie,
+    ];
+    return showDialog<CommissionPlatform>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('选择截图平台'),
+        children: [
+          for (final platform in platforms)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, platform),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(platform.label),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _copyOcrDiagnostic() async {
     if (_ocrDiagnostics.isEmpty) {
       _message('请先选择截图并等待识别结束');
@@ -172,6 +197,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       _message('当前平台暂不支持截图识别，请先使用手动导入。');
       return;
     }
+
+    final selectedPlatform = await _chooseScreenshotImportPlatform();
+    if (!mounted || selectedPlatform == null) return;
 
     try {
       final selected = await _platform.pickImages();
@@ -234,29 +262,24 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             }
           }
 
-          final guess = preselectImportPlatform(
-            recognized.lines.map((line) => line.text),
-          );
-          // Detect the actual platform's detail layout before assigning an
-          // order to any app. A detail page is not automatically MiHuashi:
-          // Huajia also has a single-order page with attachment timestamps.
+          // Platform is explicit user input for this whole batch. UI wording
+          // and list layouts change over time, so OCR must never silently
+          // override the platform the user selected.
+          final platform = selectedPlatform;
           final huajiaDetail = !_products &&
+              platform == CommissionPlatform.huajia &&
               isHuajiaOrderDetailScreenshot(
                 lines: recognized.lines,
                 imageWidth: recognized.width,
                 imageHeight: recognized.height,
               );
-          final mihuashiDetail = !_products && !huajiaDetail &&
+          final mihuashiDetail = !_products &&
+              platform == CommissionPlatform.mihuashi &&
               isMiHuashiOrderDetailScreenshot(
                 lines: recognized.lines,
                 imageWidth: recognized.width,
                 imageHeight: recognized.height,
               );
-          final platform = huajiaDetail
-              ? CommissionPlatform.huajia
-              : mihuashiDetail
-                  ? CommissionPlatform.mihuashi
-                  : guess.platform;
           if (_products) {
             final found = _productsParser.parse(
               lines: recognized.lines,
@@ -367,7 +390,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       : mihuashiDetail
                           ? '米画师详情页'
                           : '排单列表或未识别详情页',
-              platform: platform?.label ?? '待选择',
+              platform: platform.label,
               parsedRows: parsedForReport,
             ),
           );
