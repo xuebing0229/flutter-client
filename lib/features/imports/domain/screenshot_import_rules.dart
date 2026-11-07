@@ -23,6 +23,25 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
     return const PlatformGuess(CommissionPlatform.huajia, 1);
   }
 
+  // MiHuashi's cooperation-list page often has no visible app name in a
+  // stitched/long screenshot. Its header + workflow tabs are much stronger
+  // evidence than any single order-card word such as "定向企划".
+  final mihuashiListHeader = text.contains('全部合作') &&
+      <String>['默认排序', '截稿时间', '加入时间']
+          .where(text.contains)
+          .length >= 2;
+  final mihuashiListTabs =
+      <String>['待支付', '待接单', '待评价', '待处理', '纠纷']
+          .where(text.contains)
+          .length;
+  if (mihuashiListHeader ||
+      (mihuashiListTabs >= 3 &&
+          (text.contains('全部合作') ||
+              text.contains('加入时间') ||
+              text.contains('默认排序')))) {
+    return const PlatformGuess(CommissionPlatform.mihuashi, 0.98);
+  }
+
   // Huajia completed-product/storefront pages often omit the literal
   // platform name. Their cards expose the distinctive "查看评价" action
   // together with a "截稿时间" policy/date line.
