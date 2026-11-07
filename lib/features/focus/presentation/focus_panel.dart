@@ -660,8 +660,8 @@ class _FocusPanelState extends State<FocusPanel> {
             ),
             const SizedBox(height: 12),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: 8,
+              runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 DropdownButton<_FocusScope>(
@@ -717,6 +717,11 @@ class _FocusPanelState extends State<FocusPanel> {
                 ] else ...[
                   DropdownButton<_FocusGroupSortField>(
                     value: _groupSortField,
+                    selectedItemBuilder: (context) => const [
+                      Text('按累计时长'),
+                      Text('按专注次数'),
+                      Text('按最近时间'),
+                    ],
                     items: const [
                       DropdownMenuItem(
                         value: _FocusGroupSortField.totalDuration,
@@ -739,6 +744,12 @@ class _FocusPanelState extends State<FocusPanel> {
                   ),
                   IconButton(
                     tooltip: _groupSortDescending ? '当前：从大到小' : '当前：从小到大',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    padding: EdgeInsets.zero,
                     onPressed: () => setState(
                       () => _groupSortDescending = !_groupSortDescending,
                     ),
