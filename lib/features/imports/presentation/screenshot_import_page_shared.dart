@@ -72,6 +72,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   bool _releaseTemporaryImagesWhenIdle = false;
   String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
+  CommissionPlatform? _selectedImportPlatform;
   late ScreenshotImportKind _kind;
 
   bool get _products => _kind == ScreenshotImportKind.products;
@@ -200,6 +201,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
 
     final selectedPlatform = await _chooseScreenshotImportPlatform();
     if (!mounted || selectedPlatform == null) return;
+    setState(() => _selectedImportPlatform = selectedPlatform);
 
     try {
       final selected = await _platform.pickImages();
@@ -885,7 +887,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         title: '',
         client: '',
         price: null,
-        platform: null,
+        platform: _selectedImportPlatform,
       ));
     });
   }
