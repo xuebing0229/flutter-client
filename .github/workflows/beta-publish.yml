@@ -110,13 +110,14 @@ jobs:
           flutter build apk \
             --release \
             --flavor beta \
+            --target-platform android-arm64 \
             --dart-define=APP_CHANNEL=beta \
             --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-beta-release.apk app-beta.apk
 
       - name: Verify Android runtime payload
-        run: python3 tool/verify_android_apk_payload.py app-beta.apk
+        run: python3 tool/verify_android_apk_payload.py app-beta.apk --abis arm64-v8a
 
       - name: Verify Beta APK signature
         run: |
