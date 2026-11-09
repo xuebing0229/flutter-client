@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/features/imports/domain/screenshot_import_draft.dart';
+import 'package:flutter_app/features/imports/domain/screenshot_import_rules.dart';
 import 'package:flutter_app/features/orders/domain/queue_order.dart';
 import 'package:flutter_app/features/orders/data/node_presets.dart';
 import 'package:flutter_app/features/products/domain/finished_product.dart';
@@ -84,6 +85,41 @@ void main() {
     expect(middle.nodeId, 'start');
     expect(bottom.presetId, 'custom');
     expect(manual.presetId, defaultNodePreset.id);
+  });
+
+  test('manual price only changes later same-title unedited rows', () {
+    final earlier = create('earlier')..price = 80;
+    final changed = create('changed')..price = 120;
+    final later = create('later')..price = 95;
+    final laterManual = create('later-manual')
+      ..price = 150
+      ..priceManuallyChanged = true;
+    final otherTitle = create('other', title: '另一个橱窗')..price = 60;
+
+    changed.priceManuallyChanged = true;
+    cascadeScreenshotPrice(
+      changed: changed,
+      rows: [earlier, changed, later, laterManual, otherTitle],
+      price: 120,
+    );
+
+    expect(earlier.price, 80, reason: '以前的条目不能被回改');
+    expect(changed.price, 120);
+    expect(later.price, 120);
+    expect(later.priceInputRevision, 1);
+    expect(laterManual.price, 150, reason: '后面手动改过的条目优先');
+    expect(otherTitle.price, 60);
+  });
+
+  test('price memory key follows complete normalized artwork title only', () {
+    expect(
+      orderPriceMemoryKey('  【常驻】  黑白摸鱼头3.0  '),
+      orderPriceMemoryKey('【常驻】 黑白摸鱼头3.0'),
+    );
+    expect(
+      orderPriceMemoryKey('【常驻】 黑白摸鱼头3.0'),
+      isNot(orderPriceMemoryKey('【常驻】 黑白摸鱼头4.0')),
+    );
   });
 
   test('screenshot commit rejects a preset removed by sync', () {

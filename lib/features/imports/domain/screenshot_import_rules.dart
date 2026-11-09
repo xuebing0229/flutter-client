@@ -95,6 +95,11 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
 String orderPresetMemoryKey(CommissionPlatform platform, String title) =>
     '${platform.name}|${normalizedImportTitle(title)}';
 
+/// A repeated complete artwork title is treated as the same storefront price
+/// memory regardless of buyer. OCR-detected prices never write this memory;
+/// only explicit user edits do.
+String orderPriceMemoryKey(String title) => normalizedImportTitle(title);
+
 /// Prefer explicit previous user choices. Existing orders also serve as a
 /// useful fallback when importing into an account without a saved hint.
 NodePreset resolveImportPreset({

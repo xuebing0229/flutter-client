@@ -56,6 +56,7 @@ class ScreenshotImportDraft {
   /// Ordinary keyboard edits must keep a stable widget key and input focus.
   int titleInputRevision = 0;
   int clientInputRevision = 0;
+  int priceInputRevision = 0;
   CommissionPlatform? platform;
   final DateTime? detectedDate;
   /// Whether the actual screenshot contained HH:mm, not a user guess.
@@ -74,6 +75,8 @@ class ScreenshotImportDraft {
   bool duplicateAutoSkipped = false;
   bool presetManuallyChanged = false;
   bool nodeManuallyChanged = false;
+  bool priceManuallyChanged = false;
+  int? priceManualChangeSerial;
   String presetId;
   String nodeId;
   String? duplicateWarning;
@@ -227,5 +230,34 @@ void cascadeScreenshotPreset({
       row.presetManuallyChanged = true;
       row.nodeManuallyChanged = false;
     }
+  }
+}
+
+
+/// A manual price edit is chronological: only matching rows after the edited
+/// row inherit it. Earlier preview rows and any row explicitly edited by hand
+/// stay unchanged. Future OCR rows use the page's remembered latest value.
+void cascadeScreenshotPrice({
+  required ScreenshotImportDraft changed,
+  required Iterable<ScreenshotImportDraft> rows,
+  required double price,
+}) {
+  if (!price.isFinite || price < 0) return;
+  final key = orderPriceMemoryKey(changed.title);
+  if (key.isEmpty) return;
+
+  var afterChanged = false;
+  for (final row in rows) {
+    if (row.id == changed.id) {
+      afterChanged = true;
+      continue;
+    }
+    if (!afterChanged ||
+        row.priceManuallyChanged ||
+        orderPriceMemoryKey(row.title) != key) {
+      continue;
+    }
+    row.price = price;
+    row.priceInputRevision += 1;
   }
 }
