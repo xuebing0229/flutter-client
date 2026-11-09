@@ -39,6 +39,8 @@ void main() {
     expect(store.isImageThemeActive, isTrue);
     expect(store.imageBackgroundMode, AppImageBackgroundMode.cover);
     expect(store.imageFontColorValue, 0xFF123456);
+    expect(store.saved?['appearanceMode'], 'image');
+    expect(store.saved?['imageBackgroundMode'], 'cover');
 
     await store.setAppearanceMode(AppAppearanceMode.color);
 
