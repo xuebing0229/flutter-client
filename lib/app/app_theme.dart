@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme_background.dart';
+import '../core/theme/app_theme_palette.dart';
 import '../core/theme/app_theme_store.dart';
+import '../core/theme/app_ui_style.dart';
 import '../core/theme/guild_visual_theme.dart';
 
 class GuildAppTheme {
@@ -93,6 +96,7 @@ class GuildAppTheme {
   }
 
   static ThemeData light(AppThemeStore store) {
+    if (store.isImageThemeActive) return _imageTheme(store);
     final palette = store.palette;
     return GuildVisualTheme.build(
       scheme(store, Brightness.light),
@@ -102,11 +106,145 @@ class GuildAppTheme {
   }
 
   static ThemeData dark(AppThemeStore store) {
+    if (store.isImageThemeActive) return _imageTheme(store);
     final palette = store.palette;
     return GuildVisualTheme.build(
       scheme(store, Brightness.dark),
       style: store.style,
       semanticColors: palette.semanticColorsFor(Brightness.dark),
+    );
+  }
+
+  static ThemeData _imageTheme(AppThemeStore store) {
+    final font = store.imageFontColor;
+    final brightness =
+        font.computeLuminance() > 0.55 ? Brightness.dark : Brightness.light;
+    final glass = store.imageBackgroundMode == AppImageBackgroundMode.glass;
+    final tintBase =
+        brightness == Brightness.dark ? Colors.black : Colors.white;
+    final semantic = AppThemeSemanticColors(
+      primary: font,
+      accent: font,
+      background: Colors.transparent,
+      surface: glass ? tintBase : Colors.transparent,
+      surfaceAlt: glass ? tintBase : Colors.transparent,
+      foreground: font,
+      mutedForeground: font.withValues(alpha: 0.72),
+      border: font.withValues(alpha: glass ? 0.26 : 0.34),
+    );
+    final seedScheme = ColorScheme.fromSeed(
+      seedColor: font,
+      brightness: brightness,
+    );
+    final base = GuildVisualTheme.build(
+      seedScheme,
+      style: glass ? AppUiStyle.glass : AppUiStyle.minimal,
+      semanticColors: semantic,
+    );
+    return _applyImageSurfaceOverrides(
+      base,
+      font: font,
+      brightness: brightness,
+      glass: glass,
+    );
+  }
+
+  static ThemeData _applyImageSurfaceOverrides(
+    ThemeData base, {
+    required Color font,
+    required Brightness brightness,
+    required bool glass,
+  }) {
+    final tintBase =
+        brightness == Brightness.dark ? Colors.black : Colors.white;
+    final layer = glass
+        ? tintBase.withValues(
+            alpha: brightness == Brightness.dark ? 0.30 : 0.42,
+          )
+        : Colors.transparent;
+    final overlayLayer = glass
+        ? tintBase.withValues(
+            alpha: brightness == Brightness.dark ? 0.48 : 0.62,
+          )
+        : Colors.transparent;
+    final side = BorderSide(
+      color: font.withValues(alpha: glass ? 0.24 : 0.42),
+      width: 1,
+    );
+
+    ButtonStyle transparentButton(ButtonStyle? current) {
+      return (current ?? const ButtonStyle()).copyWith(
+        backgroundColor:
+            const WidgetStatePropertyAll<Color>(Colors.transparent),
+        foregroundColor: WidgetStatePropertyAll<Color>(font),
+        elevation: const WidgetStatePropertyAll<double>(0),
+        side: WidgetStatePropertyAll<BorderSide>(side),
+      );
+    }
+
+    return base.copyWith(
+      canvasColor: Colors.transparent,
+      scaffoldBackgroundColor: Colors.transparent,
+      appBarTheme: base.appBarTheme.copyWith(
+        backgroundColor: layer,
+        foregroundColor: font,
+        surfaceTintColor: Colors.transparent,
+      ),
+      cardTheme: base.cardTheme.copyWith(
+        color: layer,
+        surfaceTintColor: Colors.transparent,
+      ),
+      drawerTheme: base.drawerTheme.copyWith(
+        backgroundColor: layer,
+        surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: base.dialogTheme.copyWith(
+        backgroundColor: overlayLayer,
+        surfaceTintColor: Colors.transparent,
+      ),
+      popupMenuTheme: base.popupMenuTheme.copyWith(
+        color: overlayLayer,
+        surfaceTintColor: Colors.transparent,
+      ),
+      bottomSheetTheme: base.bottomSheetTheme.copyWith(
+        backgroundColor: overlayLayer,
+        modalBackgroundColor: overlayLayer,
+        surfaceTintColor: Colors.transparent,
+      ),
+      navigationBarTheme: base.navigationBarTheme.copyWith(
+        backgroundColor: layer,
+      ),
+      navigationRailTheme: base.navigationRailTheme.copyWith(
+        backgroundColor: layer,
+      ),
+      inputDecorationTheme: base.inputDecorationTheme.copyWith(
+        filled: true,
+        fillColor: layer,
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: layer,
+        selectedColor: font.withValues(alpha: 0.16),
+      ),
+      filledButtonTheme: glass
+          ? base.filledButtonTheme
+          : FilledButtonThemeData(
+              style: transparentButton(base.filledButtonTheme.style),
+            ),
+      elevatedButtonTheme: glass
+          ? base.elevatedButtonTheme
+          : ElevatedButtonThemeData(
+              style: transparentButton(base.elevatedButtonTheme.style),
+            ),
+      floatingActionButtonTheme: glass
+          ? base.floatingActionButtonTheme
+          : base.floatingActionButtonTheme.copyWith(
+              backgroundColor: Colors.transparent,
+              foregroundColor: font,
+              elevation: 0,
+              focusElevation: 0,
+              hoverElevation: 0,
+              highlightElevation: 0,
+            ),
     );
   }
 }

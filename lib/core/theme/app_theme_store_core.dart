@@ -1,17 +1,35 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme_background.dart';
 import 'app_theme_palette.dart';
 import 'app_ui_style.dart';
 
 abstract class AppThemeStoreCore extends ChangeNotifier {
+  static const int defaultImageFontColorValue = 0xFFFFFFFF;
+
   ThemeMode _mode = ThemeMode.system;
   String _paletteId = AppThemePalettes.guildOriginal.id;
   AppUiStyle _style = AppUiStyle.classic;
+  AppAppearanceMode _appearanceMode = AppAppearanceMode.color;
+  AppImageBackgroundMode _imageBackgroundMode = AppImageBackgroundMode.glass;
+  String? _imageBackgroundBase64;
+  String? _imageBackgroundName;
+  int _imageFontColorValue = defaultImageFontColorValue;
   final List<AppThemePalette> _customPalettes = <AppThemePalette>[];
 
   ThemeMode get mode => _mode;
   String get paletteId => _paletteId;
   AppUiStyle get style => _style;
+  AppAppearanceMode get appearanceMode => _appearanceMode;
+  AppImageBackgroundMode get imageBackgroundMode => _imageBackgroundMode;
+  String? get imageBackgroundBase64 => _imageBackgroundBase64;
+  String? get imageBackgroundName => _imageBackgroundName;
+  int get imageFontColorValue => _imageFontColorValue;
+  Color get imageFontColor => Color(_imageFontColorValue);
+  bool get hasImageBackground =>
+      _imageBackgroundBase64 != null && _imageBackgroundBase64!.isNotEmpty;
+  bool get isImageThemeActive =>
+      _appearanceMode == AppAppearanceMode.image && hasImageBackground;
   List<AppThemePalette> get customPalettes =>
       List<AppThemePalette>.unmodifiable(_customPalettes);
 
@@ -70,10 +88,35 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
             ? AppUiStyle.fromLegacyTextureId(legacyTextureId)
             : AppUiStyle.classic;
       }
+
+      _appearanceMode = AppAppearanceMode.byId(
+        raw['appearanceMode'] is String
+            ? raw['appearanceMode'] as String
+            : null,
+      );
+      _imageBackgroundMode = AppImageBackgroundMode.byId(
+        raw['imageBackgroundMode'] is String
+            ? raw['imageBackgroundMode'] as String
+            : null,
+      );
+      final imageBase64 = raw['imageBackgroundBase64'];
+      _imageBackgroundBase64 =
+          imageBase64 is String && imageBase64.isNotEmpty ? imageBase64 : null;
+      final imageName = raw['imageBackgroundName'];
+      _imageBackgroundName =
+          imageName is String && imageName.isNotEmpty ? imageName : null;
+      final imageFont = raw['imageFontColorValue'];
+      _imageFontColorValue =
+          imageFont is int ? imageFont : defaultImageFontColorValue;
     } catch (_) {
       _mode = ThemeMode.system;
       _paletteId = AppThemePalettes.guildOriginal.id;
       _style = AppUiStyle.classic;
+      _appearanceMode = AppAppearanceMode.color;
+      _imageBackgroundMode = AppImageBackgroundMode.glass;
+      _imageBackgroundBase64 = null;
+      _imageBackgroundName = null;
+      _imageFontColorValue = defaultImageFontColorValue;
       _customPalettes.clear();
     }
     notifyListeners();
@@ -84,10 +127,12 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
   Future<void> resetToDefaults() async {
     final changed = _mode != ThemeMode.system ||
         _paletteId != AppThemePalettes.guildOriginal.id ||
-        _style != AppUiStyle.classic;
+        _style != AppUiStyle.classic ||
+        _appearanceMode != AppAppearanceMode.color;
     _mode = ThemeMode.system;
     _paletteId = AppThemePalettes.guildOriginal.id;
     _style = AppUiStyle.classic;
+    _appearanceMode = AppAppearanceMode.color;
     if (changed) notifyListeners();
     await persistTheme(_snapshot());
   }
@@ -110,6 +155,49 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
   Future<void> setStyle(AppUiStyle style) async {
     if (_style == style) return;
     _style = style;
+    notifyListeners();
+    await persistTheme(_snapshot());
+  }
+
+  Future<void> setAppearanceMode(AppAppearanceMode mode) async {
+    if (_appearanceMode == mode) return;
+    _appearanceMode = mode;
+    notifyListeners();
+    await persistTheme(_snapshot());
+  }
+
+  Future<void> setImageBackgroundMode(AppImageBackgroundMode mode) async {
+    if (_imageBackgroundMode == mode) return;
+    _imageBackgroundMode = mode;
+    notifyListeners();
+    await persistTheme(_snapshot());
+  }
+
+  Future<void> setImageFontColorValue(int value) async {
+    if (_imageFontColorValue == value) return;
+    _imageFontColorValue = value;
+    notifyListeners();
+    await persistTheme(_snapshot());
+  }
+
+  Future<void> setImageBackground({
+    required String base64,
+    required String name,
+  }) async {
+    final normalized = base64.trim();
+    if (normalized.isEmpty) {
+      throw const FormatException('图片主题背景不能为空。');
+    }
+    _imageBackgroundBase64 = normalized;
+    _imageBackgroundName = name.trim().isEmpty ? '背景图' : name.trim();
+    notifyListeners();
+    await persistTheme(_snapshot());
+  }
+
+  Future<void> clearImageBackground() async {
+    if (_imageBackgroundBase64 == null && _imageBackgroundName == null) return;
+    _imageBackgroundBase64 = null;
+    _imageBackgroundName = null;
     notifyListeners();
     await persistTheme(_snapshot());
   }
@@ -191,6 +279,13 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
         'paletteId': _paletteId,
         'style': _style.id,
         'customPalettes': exportCustomPalettes(),
+        'appearanceMode': _appearanceMode.id,
+        'imageBackgroundMode': _imageBackgroundMode.id,
+        if (_imageBackgroundBase64 != null)
+          'imageBackgroundBase64': _imageBackgroundBase64,
+        if (_imageBackgroundName != null)
+          'imageBackgroundName': _imageBackgroundName,
+        'imageFontColorValue': _imageFontColorValue,
       };
 
   Future<Map<String, dynamic>?> readPersistedTheme();

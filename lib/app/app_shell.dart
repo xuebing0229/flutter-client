@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -34,6 +36,35 @@ class GuildMaterialApp extends StatelessWidget {
       themeMode: themeStore.mode,
       theme: GuildAppTheme.light(themeStore),
       darkTheme: GuildAppTheme.dark(themeStore),
+      builder: (context, child) {
+        final encoded = themeStore.imageBackgroundBase64;
+        if (!themeStore.isImageThemeActive ||
+            encoded == null ||
+            encoded.isEmpty) {
+          return child ?? const SizedBox.shrink();
+        }
+        try {
+          final bytes = base64Decode(encoded);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: Image.memory(
+                  bytes,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                ),
+              ),
+              Positioned.fill(
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ],
+          );
+        } catch (_) {
+          return child ?? const SizedBox.shrink();
+        }
+      },
       home: home,
     );
   }
