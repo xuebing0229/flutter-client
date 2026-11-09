@@ -14,6 +14,8 @@ class AppThemeStore extends AppThemeStoreCore {
   Future<File> _customPalettesFile() async =>
       File('${(await _dir()).path}/theme-custom-palettes.json');
   Future<File> _styleFile() async => File('${(await _dir()).path}/ui-style.txt');
+  Future<File> _imageThemeFile() async =>
+      File('${(await _dir()).path}/theme-image.json');
   Future<File> _legacyTextureFile() async =>
       File('${(await _dir()).path}/ui-texture.txt');
 
@@ -48,6 +50,23 @@ class AppThemeStore extends AppThemeStoreCore {
         }
       }
     } catch (_) {}
+    try {
+      final file = await _imageThemeFile();
+      if (await file.exists()) {
+        final raw = jsonDecode(await file.readAsString());
+        if (raw is Map) {
+          for (final key in const <String>[
+            'appearanceMode',
+            'imageBackgroundMode',
+            'imageBackgroundBase64',
+            'imageBackgroundName',
+            'imageFontColorValue',
+          ]) {
+            if (raw.containsKey(key)) result[key] = raw[key];
+          }
+        }
+      }
+    } catch (_) {}
     return result.isEmpty ? null : result;
   }
 
@@ -59,6 +78,7 @@ class AppThemeStore extends AppThemeStoreCore {
         final palette = await _paletteFile();
         final custom = await _customPalettesFile();
         final style = await _styleFile();
+        final imageTheme = await _imageThemeFile();
         await mode.parent.create(recursive: true);
         await Future.wait<void>([
           mode.writeAsString(value['mode']?.toString() ?? 'system', flush: true),
@@ -72,6 +92,20 @@ class AppThemeStore extends AppThemeStoreCore {
           ),
           style.writeAsString(
             value['style']?.toString() ?? 'classic',
+            flush: true,
+          ),
+          imageTheme.writeAsString(
+            jsonEncode(<String, dynamic>{
+              'appearanceMode': value['appearanceMode']?.toString() ?? 'color',
+              'imageBackgroundMode':
+                  value['imageBackgroundMode']?.toString() ?? 'glass',
+              if (value['imageBackgroundBase64'] != null)
+                'imageBackgroundBase64': value['imageBackgroundBase64'],
+              if (value['imageBackgroundName'] != null)
+                'imageBackgroundName': value['imageBackgroundName'],
+              'imageFontColorValue':
+                  value['imageFontColorValue'] ?? defaultImageFontColorValue,
+            }),
             flush: true,
           ),
         ]);
