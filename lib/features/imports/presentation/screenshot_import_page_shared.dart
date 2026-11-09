@@ -438,7 +438,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           final row = miRows[index];
           if (row.title == titles[index]) continue;
           row.title = titles[index];
-          if (!_products && !row.priceManuallyChanged) {
+          if (!_products &&
+              !row.priceManuallyChanged &&
+              !row.priceRecognized) {
             row.price = _resolvedPriceForTitle(
               row.title,
               fallback: row.price,
@@ -563,7 +565,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       recognizedPercent: percentage,
       recognizedNodeLabel: recognizedNodeLabel,
     );
-    final resolvedPrice = _products
+    final recognizedPrice =
+        price != null && price.isFinite && price >= 0;
+    final resolvedPrice = _products || recognizedPrice
         ? price
         : _resolvedPriceForTitle(title, fallback: price);
     return ScreenshotImportDraft(
@@ -583,6 +587,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       title: title,
       clientName: client,
       price: resolvedPrice,
+      priceRecognized: recognizedPrice,
       platform: platform,
       tags: normalizeOrderTags(tags),
       detectedDate: date,
@@ -626,7 +631,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   }
 
   void _applyRememberedPriceToRow(ScreenshotImportDraft row) {
-    if (_products || row.priceManuallyChanged) return;
+    if (_products || row.priceManuallyChanged || row.priceRecognized) return;
     final next = _resolvedPriceForTitle(row.title, fallback: row.price);
     if (next == row.price) return;
     row.price = next;

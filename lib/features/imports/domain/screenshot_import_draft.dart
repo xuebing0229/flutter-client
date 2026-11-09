@@ -13,6 +13,7 @@ class ScreenshotImportDraft {
     required this.title,
     required this.clientName,
     required this.price,
+    this.priceRecognized = false,
     required this.platform,
     required this.detectedDate,
     required this.recognizedPercent,
@@ -52,6 +53,9 @@ class ScreenshotImportDraft {
   String title;
   String clientName;
   double? price;
+  /// True only when OCR itself produced a valid price for this card.
+  /// Remembered/manual defaults must never replace a recognized price.
+  final bool priceRecognized;
   /// Increment only when another UI action replaces a field programmatically.
   /// Ordinary keyboard edits must keep a stable widget key and input focus.
   int titleInputRevision = 0;
@@ -254,6 +258,7 @@ void cascadeScreenshotPrice({
     }
     if (!afterChanged ||
         row.priceManuallyChanged ||
+        row.priceRecognized ||
         orderPriceMemoryKey(row.title) != key) {
       continue;
     }

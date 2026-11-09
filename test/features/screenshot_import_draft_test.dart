@@ -9,12 +9,14 @@ void main() {
   ScreenshotImportDraft create(String id, {
     int percent = 60,
     String title = '【常驻】 黑白摸鱼头3.0',
+    bool priceRecognized = false,
   }) => ScreenshotImportDraft(
     id: id,
     sourceImageId: 'shot1',
     title: title,
     clientName: '画师测试',
     price: 94,
+    priceRecognized: priceRecognized,
     platform: CommissionPlatform.mihuashi,
     detectedDate: DateTime(2026, 10, 31),
     deadline: DateTime(2026, 10, 31, 23, 59),
@@ -87,10 +89,14 @@ void main() {
     expect(manual.presetId, defaultNodePreset.id);
   });
 
-  test('manual price only changes later same-title unedited rows', () {
+  test('manual price fills only later same-title rows missing OCR price', () {
     final earlier = create('earlier')..price = 80;
     final changed = create('changed')..price = 120;
-    final later = create('later')..price = 95;
+    final laterMissing = create('later-missing')..price = null;
+    final laterRecognized = create(
+      'later-recognized',
+      priceRecognized: true,
+    )..price = 135;
     final laterManual = create('later-manual')
       ..price = 150
       ..priceManuallyChanged = true;
@@ -99,14 +105,23 @@ void main() {
     changed.priceManuallyChanged = true;
     cascadeScreenshotPrice(
       changed: changed,
-      rows: [earlier, changed, later, laterManual, otherTitle],
+      rows: [
+        earlier,
+        changed,
+        laterMissing,
+        laterRecognized,
+        laterManual,
+        otherTitle,
+      ],
       price: 120,
     );
 
     expect(earlier.price, 80, reason: '以前的条目不能被回改');
     expect(changed.price, 120);
-    expect(later.price, 120);
-    expect(later.priceInputRevision, 1);
+    expect(laterMissing.price, 120, reason: 'OCR 未识别价格时才跟随记忆价');
+    expect(laterMissing.priceInputRevision, 1);
+    expect(laterRecognized.price, 135, reason: 'OCR 识别出的价格必须优先');
+    expect(laterRecognized.priceInputRevision, 0);
     expect(laterManual.price, 150, reason: '后面手动改过的条目优先');
     expect(otherTitle.price, 60);
   });
