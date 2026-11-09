@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
+import '../../../core/theme/app_theme_background.dart';
 import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/app_ui_style.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../shared/presentation/spotlight_guide.dart';
 import '../../shared/presentation/help_tooltip.dart';
 import 'about_page.dart';
+import 'image_theme_page.dart';
 import 'theme_color_page.dart';
 
 class GuildSettingsAppearanceCard extends StatelessWidget {
@@ -14,102 +16,194 @@ class GuildSettingsAppearanceCard extends StatelessWidget {
     required this.themeStore,
     required this.featureStore,
     this.onOpenThemeColor,
+    this.onOpenImageTheme,
     super.key,
   });
 
   final AppThemeStore themeStore;
   final AppFeatureStore featureStore;
   final VoidCallback? onOpenThemeColor;
+  final VoidCallback? onOpenImageTheme;
 
   @override
   Widget build(BuildContext context) {
+    void openThemeColor() {
+      final callback = onOpenThemeColor;
+      if (callback != null) {
+        callback();
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ThemeColorPage(store: themeStore),
+        ),
+      );
+    }
+
+    void openImageTheme() {
+      final callback = onOpenImageTheme;
+      if (callback != null) {
+        callback();
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ImageThemePage(store: themeStore),
+        ),
+      );
+    }
+
     return GuildSettingsSectionCard(
       title: '外观',
       icon: Icons.brightness_6_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
+      child: AnimatedBuilder(
+        animation: themeStore,
+        builder: (context, _) {
+          final imageTheme =
+              themeStore.appearanceMode == AppAppearanceMode.image;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('夜间模式'),
-              SizedBox(width: 6),
-              InlineHelpTooltip(
-                message: '可以固定浅色、固定深色，或跟随手机系统切换。',
+              const Row(
+                children: [
+                  Text('主题类型'),
+                  SizedBox(width: 6),
+                  InlineHelpTooltip(
+                    message: '彩色主题和图片主题彼此独立，切换不会覆盖另一套设置。',
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _ThemeModeSelector(store: themeStore),
-          const SizedBox(height: 8),
-          const Divider(height: 24),
-          AnimatedBuilder(
-            animation: themeStore,
-            builder: (context, _) {
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('UI主题色'),
-                subtitle: Text('当前：${themeStore.palette.name}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 12),
+              SegmentedButton<AppAppearanceMode>(
+                segments: const [
+                  ButtonSegment<AppAppearanceMode>(
+                    value: AppAppearanceMode.color,
+                    icon: Icon(Icons.palette_outlined),
+                    label: Text('彩色主题'),
+                  ),
+                  ButtonSegment<AppAppearanceMode>(
+                    value: AppAppearanceMode.image,
+                    icon: Icon(Icons.image_outlined),
+                    label: Text('图片主题'),
+                  ),
+                ],
+                selected: <AppAppearanceMode>{themeStore.appearanceMode},
+                onSelectionChanged: (selection) async {
+                  final mode = selection.first;
+                  await themeStore.setAppearanceMode(mode);
+                  if (mode == AppAppearanceMode.image &&
+                      !themeStore.hasImageBackground &&
+                      context.mounted) {
+                    openImageTheme();
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 24),
+              if (!imageTheme) ...[
+                const Row(
                   children: [
-                    ThemePalettePreview(
-                      palette: themeStore.palette,
-                      width: 58,
-                      height: 32,
+                    Text('夜间模式'),
+                    SizedBox(width: 6),
+                    InlineHelpTooltip(
+                      message: '可以固定浅色、固定深色，或跟随手机系统切换。',
                     ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.chevron_right_rounded),
                   ],
                 ),
-                onTap: onOpenThemeColor ??
-                    () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ThemeColorPage(store: themeStore),
-                        ),
+                const SizedBox(height: 14),
+                _ThemeModeSelector(store: themeStore),
+                const SizedBox(height: 8),
+                const Divider(height: 24),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.palette_outlined),
+                  title: const Text('UI主题色'),
+                  subtitle: Text('当前：${themeStore.palette.name}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ThemePalettePreview(
+                        palette: themeStore.palette,
+                        width: 58,
+                        height: 32,
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right_rounded),
+                    ],
+                  ),
+                  onTap: openThemeColor,
+                ),
+                const Divider(height: 24),
+                const Text('UI风格'),
+                const SizedBox(height: 6),
+                Text(
+                  '当前：${themeStore.style.label}',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _UiStyleSelector(store: themeStore),
+                const SizedBox(height: 8),
+              ] else ...[
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.wallpaper_rounded),
+                  title: const Text('图片背景'),
+                  subtitle: Text(
+                    themeStore.hasImageBackground
+                        ? '当前：${themeStore.imageBackgroundMode.label} · ${themeStore.imageBackgroundName ?? '背景图'}'
+                        : '尚未选择背景图',
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: openImageTheme,
+                ),
+                const SizedBox(height: 6),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.format_color_text_rounded,
+                    color: themeStore.imageFontColor,
+                  ),
+                  title: const Text('字体颜色'),
+                  subtitle: const Text('在图片主题页中单独设置'),
+                  trailing: Container(
+                    width: 42,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: themeStore.imageFontColor,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
+                  ),
+                  onTap: openImageTheme,
+                ),
+                const SizedBox(height: 8),
+              ],
+              const Divider(height: 24),
+              AnimatedBuilder(
+                animation: featureStore,
+                builder: (context, _) {
+                  return SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.auto_awesome_outlined),
+                    title: const Text('抽象版'),
+                    subtitle: const Text('切换普通版与抽象版；首次进入抽象版会自动打开一次教程。'),
+                    value: featureStore.abstractMode,
+                    onChanged: (value) {
+                      featureStore.setEnabled(
+                        AppFeature.abstractMode,
+                        value,
                       );
                     },
-              );
-            },
-          ),
-          const Divider(height: 24),
-          const Text('UI风格'),
-          const SizedBox(height: 6),
-          AnimatedBuilder(
-            animation: themeStore,
-            builder: (context, _) {
-              return Text(
-                '当前：${themeStore.style.label}',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 14),
-          _UiStyleSelector(store: themeStore),
-          const SizedBox(height: 8),
-          const Divider(height: 24),
-          AnimatedBuilder(
-            animation: featureStore,
-            builder: (context, _) {
-              return SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.auto_awesome_outlined),
-                title: const Text('抽象版'),
-                subtitle: const Text('切换普通版与抽象版；首次进入抽象版会自动打开一次教程。'),
-                value: featureStore.abstractMode,
-                onChanged: (value) {
-                  featureStore.setEnabled(
-                    AppFeature.abstractMode,
-                    value,
                   );
                 },
-              );
-            },
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
