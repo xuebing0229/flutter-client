@@ -104,7 +104,7 @@ class AppThemeStore extends AppThemeStoreCore {
               if (value['imageBackgroundName'] != null)
                 'imageBackgroundName': value['imageBackgroundName'],
               'imageFontColorValue':
-                  value['imageFontColorValue'] ?? defaultImageFontColorValue,
+                  value['imageFontColorValue'] ?? AppThemeStoreCore.defaultImageFontColorValue,
             }),
             flush: true,
           ),
