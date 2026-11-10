@@ -68,6 +68,8 @@ void main() {
     );
   });
 
+  // Restore remains a later causal action; the archive preference above
+  // must not turn isArchived into a one-way flag.
   test('causally newer restore still wins after archive race', () {
     final engine = SyncMergeEngine();
     const active = <String, dynamic>{
