@@ -26,6 +26,93 @@ void main() {
     expect(engine.materialize(changed)!['currentNodeProgress'], 30);
   });
 
+  test('concurrent stale active state cannot undo first archive', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'archive-race',
+      'isArchived': false,
+    };
+
+    // The local device edits from its last known baseline while another
+    // independently-seeded peer still carries the old active value.
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-race',
+      values: active,
+      deviceId: 'phone',
+    );
+    final archived = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: active,
+      nextValues: const <String, dynamic>{
+        'id': 'archive-race',
+        'isArchived': true,
+      },
+      deviceId: 'phone',
+    );
+    final staleActive = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-race',
+      values: active,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(archived, staleActive);
+    final reverseMerged = engine.merge(staleActive, archived);
+
+    expect(engine.materialize(merged)!['isArchived'], isTrue);
+    expect(engine.materialize(reverseMerged)!['isArchived'], isTrue);
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'isArchived'),
+      isEmpty,
+    );
+  });
+
+  // Restore remains a later causal action; the archive preference above
+  // must not turn isArchived into a one-way flag.
+  test('causally newer restore still wins after archive race', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'archive-restore',
+      'isArchived': false,
+    };
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-restore',
+      values: active,
+      deviceId: 'phone',
+    );
+    final archived = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: active,
+      nextValues: const <String, dynamic>{
+        'id': 'archive-restore',
+        'isArchived': true,
+      },
+      deviceId: 'phone',
+    );
+    final staleActive = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-restore',
+      values: active,
+      deviceId: 'desktop',
+    );
+    final merged = engine.merge(archived, staleActive);
+    final archivedValues = engine.materialize(merged)!;
+
+    final restored = engine.applyLocalSnapshot(
+      record: merged,
+      previousValues: archivedValues,
+      nextValues: <String, dynamic>{
+        ...archivedValues,
+        'isArchived': false,
+      },
+      deviceId: 'phone',
+    );
+
+    expect(engine.materialize(restored)!['isArchived'], isFalse);
+  });
+
   test('materializes multi-sale operation', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
