@@ -156,6 +156,29 @@ class SyncMergeEngine {
       }
 
       final relation = a.clock.compare(b.clock);
+
+      // Archiving is a domain transition, not an ordinary boolean toggle.
+      // If an archive races with an older independently-seeded "active"
+      // snapshot, keeping false makes the first archive appear to do nothing.
+      // Prefer the archived side only for equal/concurrent clocks. A genuine
+      // restore is performed from the archived state and therefore has a
+      // causally newer clock, so the normal before/after rules still let it
+      // restore the order.
+      if (fieldName == 'isArchived' &&
+          a.value is bool &&
+          b.value is bool &&
+          a.value != b.value &&
+          (relation == SyncClockRelation.equal ||
+              relation == SyncClockRelation.concurrent)) {
+        final archived = a.value == true ? a : b;
+        fields[fieldName] = SyncFieldValue(
+          value: true,
+          clock: a.clock.merge(b.clock),
+          updatedBy: archived.updatedBy,
+        );
+        continue;
+      }
+
       switch (relation) {
         case SyncClockRelation.before:
           fields[fieldName] = b;
