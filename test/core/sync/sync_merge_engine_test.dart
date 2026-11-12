@@ -113,6 +113,169 @@ void main() {
     expect(engine.materialize(restored)!['isArchived'], isFalse);
   });
 
+  test('explicit node advance beats a stale concurrent node snapshot', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'node-race',
+      values: start,
+      deviceId: 'phone',
+    );
+    final advanced = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'node-race',
+        'currentNodeId': 'line-art',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'node-race',
+      values: start,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(advanced, stale);
+    final reverseMerged = engine.merge(stale, advanced);
+
+    expect(engine.materialize(merged)!['currentNodeId'], 'line-art');
+    expect(engine.materialize(reverseMerged)!['currentNodeId'], 'line-art');
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'currentNodeId'),
+      isEmpty,
+    );
+  });
+
+  test('coalesced rapid node advance still beats the old starting node', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'rapid-node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'rapid-node-race',
+      values: start,
+      deviceId: 'phone',
+    );
+    // The 220 ms local debounce may observe draft -> coloring as one snapshot
+    // when the user confirms two nodes quickly. The operation still carries
+    // the explicit from/to pair and must not be rolled back to draft.
+    final rapidlyAdvanced = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'rapid-node-race',
+        'currentNodeId': 'coloring',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'rapid-node-race',
+      values: start,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(rapidlyAdvanced, stale);
+    expect(engine.materialize(merged)!['currentNodeId'], 'coloring');
+  });
+
+  test('compacted node transition still beats a stale peer snapshot', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'compacted-node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'compacted-node-race',
+      values: start,
+      deviceId: 'phone',
+    );
+    final advanced = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'compacted-node-race',
+        'currentNodeId': 'line-art',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final compacted = engine.compactAcknowledgedOperations(
+      advanced,
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'compacted-node-race',
+      values: start,
+      deviceId: 'desktop',
+    );
+
+    expect(
+      engine.materialize(engine.merge(compacted, stale))!['currentNodeId'],
+      'line-art',
+    );
+  });
+
+  test('divergent concurrent node advances remain a real conflict', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'divergent-node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'divergent-node-race',
+      values: start,
+      deviceId: 'seed',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'divergent-node-race',
+        'currentNodeId': 'line-art',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'divergent-node-race',
+        'currentNodeId': 'coloring',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'currentNodeId'),
+      hasLength(1),
+    );
+  });
+
   test('materializes multi-sale operation', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
