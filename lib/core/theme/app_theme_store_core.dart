@@ -12,6 +12,7 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
   AppUiStyle _style = AppUiStyle.classic;
   AppAppearanceMode _appearanceMode = AppAppearanceMode.color;
   AppImageBackgroundMode _imageBackgroundMode = AppImageBackgroundMode.glass;
+  AppImageFitMode _imageFitMode = AppImageFitMode.fit;
   String? _imageBackgroundBase64;
   String? _imageBackgroundName;
   int _imageFontColorValue = defaultImageFontColorValue;
@@ -22,6 +23,7 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
   AppUiStyle get style => _style;
   AppAppearanceMode get appearanceMode => _appearanceMode;
   AppImageBackgroundMode get imageBackgroundMode => _imageBackgroundMode;
+  AppImageFitMode get imageFitMode => _imageFitMode;
   String? get imageBackgroundBase64 => _imageBackgroundBase64;
   String? get imageBackgroundName => _imageBackgroundName;
   int get imageFontColorValue => _imageFontColorValue;
@@ -99,6 +101,9 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
             ? raw['imageBackgroundMode'] as String
             : null,
       );
+      _imageFitMode = AppImageFitMode.byId(
+        raw['imageFitMode'] is String ? raw['imageFitMode'] as String : null,
+      );
       final imageBase64 = raw['imageBackgroundBase64'];
       _imageBackgroundBase64 =
           imageBase64 is String && imageBase64.isNotEmpty ? imageBase64 : null;
@@ -114,6 +119,7 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
       _style = AppUiStyle.classic;
       _appearanceMode = AppAppearanceMode.color;
       _imageBackgroundMode = AppImageBackgroundMode.glass;
+      _imageFitMode = AppImageFitMode.fit;
       _imageBackgroundBase64 = null;
       _imageBackgroundName = null;
       _imageFontColorValue = defaultImageFontColorValue;
@@ -169,6 +175,13 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
   Future<void> setImageBackgroundMode(AppImageBackgroundMode mode) async {
     if (_imageBackgroundMode == mode) return;
     _imageBackgroundMode = mode;
+    notifyListeners();
+    await persistTheme(_snapshot());
+  }
+
+  Future<void> setImageFitMode(AppImageFitMode mode) async {
+    if (_imageFitMode == mode) return;
+    _imageFitMode = mode;
     notifyListeners();
     await persistTheme(_snapshot());
   }
@@ -281,6 +294,7 @@ abstract class AppThemeStoreCore extends ChangeNotifier {
         'customPalettes': exportCustomPalettes(),
         'appearanceMode': _appearanceMode.id,
         'imageBackgroundMode': _imageBackgroundMode.id,
+        'imageFitMode': _imageFitMode.id,
         if (_imageBackgroundBase64 != null)
           'imageBackgroundBase64': _imageBackgroundBase64,
         if (_imageBackgroundName != null)

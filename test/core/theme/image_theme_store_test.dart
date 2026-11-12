@@ -33,14 +33,17 @@ void main() {
       name: 'background.png',
     );
     await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+    await store.setImageFitMode(AppImageFitMode.fill);
     await store.setImageFontColorValue(0xFF123456);
     await store.setAppearanceMode(AppAppearanceMode.image);
 
     expect(store.isImageThemeActive, isTrue);
     expect(store.imageBackgroundMode, AppImageBackgroundMode.cover);
+    expect(store.imageFitMode, AppImageFitMode.fill);
     expect(store.imageFontColorValue, 0xFF123456);
     expect(store.saved?['appearanceMode'], 'image');
     expect(store.saved?['imageBackgroundMode'], 'cover');
+    expect(store.saved?['imageFitMode'], 'fill');
 
     await store.setAppearanceMode(AppAppearanceMode.color);
 
@@ -56,6 +59,20 @@ void main() {
     expect(store.style, AppUiStyle.bold);
   });
 
+  test('legacy image theme defaults to complete screen fit', () async {
+    final store = _MemoryThemeStore()
+      ..initial = <String, dynamic>{
+        'appearanceMode': 'image',
+        'imageBackgroundMode': 'glass',
+        'imageBackgroundBase64': 'aW1hZ2U=',
+        'imageBackgroundName': 'legacy.png',
+      };
+
+    await store.load();
+
+    expect(store.imageFitMode, AppImageFitMode.fit);
+  });
+
   test('reset returns to color theme without deleting image theme data', () async {
     final store = _MemoryThemeStore();
     await store.load();
@@ -63,6 +80,7 @@ void main() {
       base64: 'aW1hZ2U=',
       name: 'background.png',
     );
+    await store.setImageFitMode(AppImageFitMode.fill);
     await store.setImageFontColorValue(0xFFABCDEF);
     await store.setAppearanceMode(AppAppearanceMode.image);
 
@@ -70,6 +88,7 @@ void main() {
 
     expect(store.appearanceMode, AppAppearanceMode.color);
     expect(store.imageBackgroundBase64, 'aW1hZ2U=');
+    expect(store.imageFitMode, AppImageFitMode.fill);
     expect(store.imageFontColorValue, 0xFFABCDEF);
   });
 }

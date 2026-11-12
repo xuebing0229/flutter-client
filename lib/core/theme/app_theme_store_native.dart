@@ -58,6 +58,7 @@ class AppThemeStore extends AppThemeStoreCore {
           for (final key in const <String>[
             'appearanceMode',
             'imageBackgroundMode',
+            'imageFitMode',
             'imageBackgroundBase64',
             'imageBackgroundName',
             'imageFontColorValue',
@@ -99,6 +100,7 @@ class AppThemeStore extends AppThemeStoreCore {
               'appearanceMode': value['appearanceMode']?.toString() ?? 'color',
               'imageBackgroundMode':
                   value['imageBackgroundMode']?.toString() ?? 'glass',
+              'imageFitMode': value['imageFitMode']?.toString() ?? 'fit',
               if (value['imageBackgroundBase64'] != null)
                 'imageBackgroundBase64': value['imageBackgroundBase64'],
               if (value['imageBackgroundName'] != null)

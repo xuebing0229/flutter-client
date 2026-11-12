@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import '../core/theme/app_theme_background.dart';
 import '../core/theme/app_theme_store.dart';
 import 'app_theme.dart';
 
@@ -49,11 +50,20 @@ class GuildMaterialApp extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               Positioned.fill(
-                child: Image.memory(
-                  bytes,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  filterQuality: FilterQuality.medium,
+                child: ColoredBox(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF121212)
+                      : const Color(0xFFF4F4F4),
+                  child: Image.memory(
+                    bytes,
+                    fit: switch (themeStore.imageFitMode) {
+                      AppImageFitMode.fit => BoxFit.contain,
+                      AppImageFitMode.fill => BoxFit.cover,
+                    },
+                    alignment: Alignment.center,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.medium,
+                  ),
                 ),
               ),
               Positioned.fill(

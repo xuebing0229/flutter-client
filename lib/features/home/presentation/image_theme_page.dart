@@ -103,6 +103,7 @@ class _ImageThemePageState extends State<ImageThemePage> {
         builder: (context, _) {
           final image = _imageProvider();
           final mode = widget.store.imageBackgroundMode;
+          final fitMode = widget.store.imageFitMode;
           final font = widget.store.imageFontColor;
           return ListView(
             padding: AppLayoutSpacing.pageScrollPadding(
@@ -115,6 +116,7 @@ class _ImageThemePageState extends State<ImageThemePage> {
               _ImageThemePreview(
                 image: image,
                 mode: mode,
+                fitMode: fitMode,
                 fontColor: font,
               ),
               const SizedBox(height: 14),
@@ -168,6 +170,38 @@ class _ImageThemePageState extends State<ImageThemePage> {
                 ),
               ),
               const SizedBox(height: 18),
+              Text(
+                '图片适配',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              SegmentedButton<AppImageFitMode>(
+                segments: const [
+                  ButtonSegment<AppImageFitMode>(
+                    value: AppImageFitMode.fit,
+                    icon: Icon(Icons.fit_screen_outlined),
+                    label: Text('完整适应'),
+                  ),
+                  ButtonSegment<AppImageFitMode>(
+                    value: AppImageFitMode.fill,
+                    icon: Icon(Icons.fullscreen_rounded),
+                    label: Text('铺满屏幕'),
+                  ),
+                ],
+                selected: <AppImageFitMode>{fitMode},
+                onSelectionChanged: (value) =>
+                    widget.store.setImageFitMode(value.first),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                fitMode.description,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 18),
               Card(
                 child: ListTile(
                   onTap: _pickFontColor,
@@ -208,11 +242,13 @@ class _ImageThemePreview extends StatelessWidget {
   const _ImageThemePreview({
     required this.image,
     required this.mode,
+    required this.fitMode,
     required this.fontColor,
   });
 
   final MemoryImage? image;
   final AppImageBackgroundMode mode;
+  final AppImageFitMode fitMode;
   final Color fontColor;
 
   @override
@@ -244,23 +280,39 @@ class _ImageThemePreview extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.58)
         : Colors.black.withValues(alpha: 0.34);
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: SizedBox(
-        height: 210,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image(
-              image: image,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+    final screenAspectRatio = MediaQuery.sizeOf(context).aspectRatio;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 240,
+          maxHeight: 320,
+        ),
+        child: AspectRatio(
+          aspectRatio: screenAspectRatio,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF121212)
+                      : const Color(0xFFF4F4F4),
+                  child: Image(
+                    image: image,
+                    fit: switch (fitMode) {
+                      AppImageFitMode.fit => BoxFit.contain,
+                      AppImageFitMode.fill => BoxFit.cover,
+                    },
+                    alignment: Alignment.center,
+                    gaplessPlayback: true,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                   Text(
                     '冒险者公会',
                     style: TextStyle(
@@ -311,9 +363,11 @@ class _ImageThemePreview extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

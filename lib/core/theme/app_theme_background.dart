@@ -47,3 +47,33 @@ enum AppImageBackgroundMode {
     return AppImageBackgroundMode.glass;
   }
 }
+
+enum AppImageFitMode {
+  fit(
+    id: 'fit',
+    label: '完整适应',
+    description: '完整显示背景图，不再为了铺满屏幕强行放大裁切。',
+  ),
+  fill(
+    id: 'fill',
+    label: '铺满屏幕',
+    description: '铺满整个窗口；图片比例不同时会裁掉边缘。',
+  );
+
+  const AppImageFitMode({
+    required this.id,
+    required this.label,
+    required this.description,
+  });
+
+  final String id;
+  final String label;
+  final String description;
+
+  static AppImageFitMode byId(String? id) {
+    for (final value in AppImageFitMode.values) {
+      if (value.id == id) return value;
+    }
+    return AppImageFitMode.fit;
+  }
+}
