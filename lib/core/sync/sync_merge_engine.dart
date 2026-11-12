@@ -179,6 +179,42 @@ class SyncMergeEngine {
         continue;
       }
 
+      // A node advance already carries explicit domain evidence as a
+      // node-transition operation. When that transition races with a stale
+      // snapshot still sitting at its "from" node, the transition must win;
+      // otherwise a fast local advance can visibly jump backwards and the
+      // confirmation UI then mistakes our own rollback for "another device".
+      //
+      // Do not guess when both sides made real, divergent transitions. That is
+      // still a genuine conflict and falls through to the normal merge path.
+      if (fieldName == 'currentNodeId' &&
+          a.value is String &&
+          b.value is String &&
+          a.value != b.value &&
+          (relation == SyncClockRelation.equal ||
+              relation == SyncClockRelation.concurrent)) {
+        final transitionWinner = _directNodeTransitionWinner(
+          left: left,
+          right: right,
+          leftValue: a.value as String,
+          rightValue: b.value as String,
+        );
+        final compactedWinner =
+            transitionWinner == null
+                ? _compactionWinnerForField(fieldName, left, right)
+                : null;
+        final winner = transitionWinner ?? compactedWinner;
+        if (winner != null) {
+          final selected = winner == 0 ? a : b;
+          fields[fieldName] = SyncFieldValue(
+            value: selected.value,
+            clock: a.clock.merge(b.clock),
+            updatedBy: selected.updatedBy,
+          );
+          continue;
+        }
+      }
+
       switch (relation) {
         case SyncClockRelation.before:
           fields[fieldName] = b;
@@ -1071,6 +1107,41 @@ class SyncMergeEngine {
     return false;
   }
 
+  int? _directNodeTransitionWinner({
+    required SyncRecord left,
+    required SyncRecord right,
+    required String leftValue,
+    required String rightValue,
+  }) {
+    bool hasDirectTransition(
+      SyncRecord record, {
+      required String from,
+      required String to,
+    }) {
+      return record.operations.values.any(
+        (operation) =>
+            operation.kind == 'node-transition' &&
+            operation.field == 'currentNodeId' &&
+            operation.metadata['from'] == from &&
+            operation.metadata['to'] == to,
+      );
+    }
+
+    final leftAdvanced = hasDirectTransition(
+      left,
+      from: rightValue,
+      to: leftValue,
+    );
+    final rightAdvanced = hasDirectTransition(
+      right,
+      from: leftValue,
+      to: rightValue,
+    );
+
+    if (leftAdvanced == rightAdvanced) return null;
+    return leftAdvanced ? 0 : 1;
+  }
+
   bool _operationAffectsField(SyncOperation operation, String field) {
     if (operation.kind == 'amount-delta') {
       return operation.field == field;
@@ -1081,6 +1152,9 @@ class SyncMergeEngine {
     }
     if (operation.kind == 'progress-delta') {
       return field == 'currentNodeProgress';
+    }
+    if (operation.kind == 'node-transition') {
+      return field == 'currentNodeId';
     }
     if (operation.kind == 'reference-image-delta') {
       return field == 'referenceImages';
