@@ -999,4 +999,108 @@ void main() {
     }
   });
 
+  test('legacy archive transaction stays consistent against stale active snapshot', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'legacy-archive-bundle',
+      'currentNodeId': 'node-a',
+      'currentNodeProgress': 50,
+      'completedAt': null,
+      'settledAt': null,
+      'settledIncome': null,
+      'archiveOutcome': null,
+      'settlementNodeId': null,
+      'customRefundAmount': null,
+      'isArchived': false,
+      'isPinned': true,
+    };
+    const archived = <String, dynamic>{
+      'id': 'legacy-archive-bundle',
+      'currentNodeId': 'node-final',
+      'currentNodeProgress': 0,
+      'completedAt': '2026-11-10T10:00:00.000Z',
+      'settledAt': '2026-11-10T10:01:00.000Z',
+      'settledIncome': 88.0,
+      'archiveOutcome': 'successful',
+      'settlementNodeId': null,
+      'customRefundAmount': null,
+      'isArchived': true,
+      'isPinned': false,
+    };
+
+    // Bootstrap both sides directly to simulate records created by clients
+    // predating state-transition operations.
+    final archivedRecord = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'legacy-archive-bundle',
+      values: archived,
+      deviceId: 'phone',
+    );
+    final staleActive = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'legacy-archive-bundle',
+      values: active,
+      deviceId: 'desktop',
+    );
+
+    for (final merged in <SyncRecord>[
+      engine.merge(archivedRecord, staleActive),
+      engine.merge(staleActive, archivedRecord),
+    ]) {
+      final values = engine.materialize(merged)!;
+      expect(values['currentNodeId'], 'node-final');
+      expect(values['currentNodeProgress'], 0);
+      expect(values['completedAt'], '2026-11-10T10:00:00.000Z');
+      expect(values['settledAt'], '2026-11-10T10:01:00.000Z');
+      expect(values['settledIncome'], 88.0);
+      expect(values['archiveOutcome'], 'successful');
+      expect(values['isArchived'], isTrue);
+      expect(values['isPinned'], isFalse);
+    }
+  });
+
+  test('opposing explicit archive and restore transitions remain a conflict', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'archive-opposition',
+      'isArchived': false,
+    };
+    const archivedValues = <String, dynamic>{
+      'id': 'archive-opposition',
+      'isArchived': true,
+    };
+
+    final archiveBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-opposition',
+      values: active,
+      deviceId: 'phone',
+    );
+    final archived = engine.applyLocalSnapshot(
+      record: archiveBaseline,
+      previousValues: active,
+      nextValues: archivedValues,
+      deviceId: 'phone',
+    );
+
+    final restoreBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-opposition',
+      values: archivedValues,
+      deviceId: 'desktop',
+    );
+    final restored = engine.applyLocalSnapshot(
+      record: restoreBaseline,
+      previousValues: archivedValues,
+      nextValues: active,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(archived, restored);
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'isArchived'),
+      hasLength(1),
+    );
+  });
+
 }

@@ -47,6 +47,30 @@ class SyncMergeEngine {
     },
   };
 
+  // Compatibility only: records created before state-transition evidence was
+  // introduced still need their archive transaction to stay internally
+  // consistent when they meet an independently-seeded stale active snapshot.
+  // New records do not rely on this list; they are handled by transition
+  // evidence above.
+  static const Map<SyncEntityKind, Set<String>> _legacyArchiveBoundFields =
+      <SyncEntityKind, Set<String>>{
+    SyncEntityKind.order: <String>{
+      'currentNodeId',
+      'currentNodeProgress',
+      'completedAt',
+      'settledAt',
+      'settledIncome',
+      'archiveOutcome',
+      'settlementNodeId',
+      'customRefundAmount',
+      'isPinned',
+    },
+    SyncEntityKind.product: <String>{
+      'archivedAt',
+      'isPinned',
+    },
+  };
+
   /// A newer app may introduce an operation this version cannot materialize.
   /// Preserve such history verbatim instead of compacting or stripping it;
   /// the newer peer can perform GC once every active device understands it.
@@ -216,10 +240,39 @@ class SyncMergeEngine {
         }
       }
 
-      // Keep the previous archive preference as a compatibility fallback for
-      // records produced before state-transition evidence existed. A genuine
-      // restore is causally newer, while new clients are handled above.
+      // Old archive records predate state-transition operations. If the
+      // archive flag itself is still an equal/concurrent archive-vs-active
+      // race, keep the archived side for the small set of fields that belong
+      // to that same archive transaction. Never use this fallback when either
+      // side has modern transition evidence for the field.
+      final legacyArchiveWinner =
+          !_hasStateTransitionEvidence(left, fieldName) &&
+                  !_hasStateTransitionEvidence(right, fieldName)
+              ? _legacyArchiveWinnerForField(
+                  kind: left.kind,
+                  field: fieldName,
+                  left: left,
+                  right: right,
+                )
+              : null;
+      if (legacyArchiveWinner != null &&
+          (relation == SyncClockRelation.equal ||
+              relation == SyncClockRelation.concurrent)) {
+        final selected = legacyArchiveWinner == 0 ? a : b;
+        fields[fieldName] = SyncFieldValue(
+          value: selected.value,
+          clock: a.clock.merge(b.clock),
+          updatedBy: selected.updatedBy,
+        );
+        continue;
+      }
+
+      // Keep the previous archive-flag preference only for truly legacy
+      // records. If both modern branches carry opposing explicit transitions,
+      // that is a real conflict and must not be silently forced back to true.
       if (fieldName == 'isArchived' &&
+          !_hasStateTransitionEvidence(left, fieldName) &&
+          !_hasStateTransitionEvidence(right, fieldName) &&
           a.value is bool &&
           b.value is bool &&
           a.value != b.value &&
@@ -1203,6 +1256,35 @@ class SyncMergeEngine {
     return record.operations.values.any(
       (operation) => _isStateTransitionOperationForField(operation, field),
     );
+  }
+
+  int? _legacyArchiveWinnerForField({
+    required SyncEntityKind kind,
+    required String field,
+    required SyncRecord left,
+    required SyncRecord right,
+  }) {
+    if (_legacyArchiveBoundFields[kind]?.contains(field) != true) {
+      return null;
+    }
+
+    final leftArchived = left.fields['isArchived'];
+    final rightArchived = right.fields['isArchived'];
+    if (leftArchived == null ||
+        rightArchived == null ||
+        leftArchived.value is! bool ||
+        rightArchived.value is! bool ||
+        leftArchived.value == rightArchived.value) {
+      return null;
+    }
+
+    final archiveRelation = leftArchived.clock.compare(rightArchived.clock);
+    if (archiveRelation != SyncClockRelation.equal &&
+        archiveRelation != SyncClockRelation.concurrent) {
+      return null;
+    }
+
+    return leftArchived.value == true ? 0 : 1;
   }
 
   int? _directStateTransitionWinner({
