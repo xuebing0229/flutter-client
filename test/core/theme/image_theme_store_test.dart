@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/app/app_theme.dart';
 import 'package:flutter_app/core/theme/app_theme_background.dart';
 import 'package:flutter_app/core/theme/app_theme_palette.dart';
-import 'package:flutter_app/core/theme/app_theme_store_core.dart';
+import 'package:flutter_app/core/theme/app_theme_store.dart';
 import 'package:flutter_app/core/theme/app_ui_style.dart';
 import 'package:flutter_app/core/theme/guild_visual_theme.dart';
 
-class _MemoryThemeStore extends AppThemeStoreCore {
+class _MemoryThemeStore extends AppThemeStore {
   Map<String, dynamic>? initial;
   Map<String, dynamic>? saved;
 
