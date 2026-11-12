@@ -53,6 +53,9 @@ jobs:
       - name: Run full Flutter test suite
         run: flutter test
 
+      - name: Smoke test Cloudflare relay runtime
+        run: dart tool/test_public_relay_runtime.dart
+
   android:
     needs: check
     runs-on: ubuntu-latest
@@ -107,13 +110,15 @@ jobs:
           flutter build apk \
             --release \
             --flavor beta \
+            -Pdisable-abi-filtering=true \
+            --target-platform android-arm64 \
             --dart-define=APP_CHANNEL=beta \
             --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
             --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
           cp build/app/outputs/flutter-apk/app-beta-release.apk app-beta.apk
 
       - name: Verify Android runtime payload
-        run: python3 tool/verify_android_apk_payload.py app-beta.apk
+        run: python3 tool/verify_android_apk_payload.py app-beta.apk --abis arm64-v8a
 
       - name: Verify Beta APK signature
         run: |
@@ -179,6 +184,10 @@ jobs:
       - name: Bundle embedded Syncthing core
         shell: pwsh
         run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.7
+
+      - name: Smoke test embedded Syncthing runtime
+        shell: pwsh
+        run: ./tool/test_syncthing_windows_runtime.ps1
 
       - name: Cache official PaddleOCR Windows runtime
         uses: actions/cache@v4
@@ -272,6 +281,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Sync PWA icons from native app icon
+        run: dart run tool/sync_pwa_icons_from_android.dart
+
       - name: Build PWA Beta
         run: |
           flutter build web \
@@ -289,18 +301,46 @@ jobs:
         run: |
           test -s build/web/index.html
           test -s build/web/manifest.json
+          test -s build/web/icons/app-icon-192.png
+          test -s build/web/icons/app-icon-512.png
+          test ! -e build/web/icons/app-icon-maskable-512.png
           test -s build/web/pwa_service_worker.js
+          test -s build/web/flutter_bootstrap.js
+          grep -Fq "_flutter.loader.load({" web/flutter_bootstrap.js
+          if grep -Fq "canvasKitForceCpuOnly" web/flutter_bootstrap.js; then
+            echo "Android Web must keep GPU-backed CanvasKit; CPU-only rendering is too slow." >&2
+            exit 1
+          fi
+          grep -Fq "__PWA_BOOT_VERSION__" web/index.html
+          grep -Fq "__PWA_BOOT_VERSION__" web/flutter_bootstrap.js
+          if grep -q "serviceWorkerSettings" web/flutter_bootstrap.js; then
+            echo "Flutter bootstrap must not register the legacy worker." >&2
+            exit 1
+          fi
           test -s build/web/main.dart.js
           test -s build/web/canvaskit/canvaskit.js
           test -s build/web/canvaskit/canvaskit.wasm
           grep -q '"display": "standalone"' build/web/manifest.json
-          grep -q "serviceWorker.register" build/web/index.html
+          grep -Fq "registerCurrentWorker" build/web/index.html
           grep -q './main.dart.js' build/web/pwa_service_worker.js
           grep -q './canvaskit/canvaskit.wasm' build/web/pwa_service_worker.js
           if grep -q '__PWA_PRECACHE_FILES__' build/web/pwa_service_worker.js; then
             echo "PWA precache manifest was not finalized." >&2
             exit 1
           fi
+          if grep -q '__PWA_CACHE_VERSION__' build/web/pwa_service_worker.js; then
+            echo "PWA cache version was not finalized." >&2
+            exit 1
+          fi
+          grep -q "const CACHE_VERSION = 'adventurers-guild-pwa-" build/web/pwa_service_worker.js
+          if grep -q "__PWA_BOOT_VERSION__" build/web/index.html build/web/flutter_bootstrap.js; then
+            echo "PWA boot build id was not finalized." >&2
+            exit 1
+          fi
+          grep -Fq "adventurers-guild.pwa.boot-version" build/web/index.html
+          grep -Fq "navigator.serviceWorker.getRegistrations()" build/web/index.html
+          grep -Fq "build.mainJsPath" build/web/flutter_bootstrap.js
+          grep -Fq "NETWORK_FIRST_PATHS" build/web/pwa_service_worker.js
 
       - name: Package PWA Beta
         run: |

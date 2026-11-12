@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../orders/domain/queue_order.dart';
+import '../../shared/presentation/help_tooltip.dart';
 import '../../orders/state/order_store.dart';
 import '../domain/focus_session.dart';
 import '../state/focus_store.dart';
@@ -557,6 +558,12 @@ class _FocusPanelState extends State<FocusPanel> {
                         fontWeight: FontWeight.w800,
                       ),
                 ),
+                const SizedBox(width: 6),
+                InlineHelpTooltip(
+                  message: widget.desktopSettings == null
+                      ? '开始时可以选择一个排单，或选择自由专注。'
+                      : '有“当前在画订单”时会在开始瞬间锁定该排单；没有时再选择排单或自由专注。',
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -566,13 +573,6 @@ class _FocusPanelState extends State<FocusPanel> {
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                widget.desktopSettings == null
-                    ? '开始时可以选择一个排单，或选择自由专注。'
-                    : '有“当前在画订单”时会在开始瞬间锁定该排单；没有时再选择排单或自由专注。',
-                style: TextStyle(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 14),
               FilledButton.icon(
@@ -659,102 +659,146 @@ class _FocusPanelState extends State<FocusPanel> {
               },
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                DropdownButton<_FocusScope>(
-                  value: _scope,
-                  items: const [
-                    DropdownMenuItem(
-                      value: _FocusScope.all,
-                      child: Text('全部专注'),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: DropdownButton<_FocusScope>(
+                      value: _scope,
+                      isExpanded: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: _FocusScope.all,
+                          child: Text('全部专注'),
+                        ),
+                        DropdownMenuItem(
+                          value: _FocusScope.orders,
+                          child: Text('排单专注'),
+                        ),
+                        DropdownMenuItem(
+                          value: _FocusScope.free,
+                          child: Text('自由专注'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) setState(() => _scope = value);
+                      },
                     ),
-                    DropdownMenuItem(
-                      value: _FocusScope.orders,
-                      child: Text('排单专注'),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_mode == _FocusListMode.sessions) ...[
+                    Expanded(
+                      flex: 5,
+                      child: DropdownButton<_FocusSessionSortField>(
+                        value: _sessionSortField,
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(
+                            value: _FocusSessionSortField.startedAt,
+                            child: Text('按开始时间'),
+                          ),
+                          DropdownMenuItem(
+                            value: _FocusSessionSortField.duration,
+                            child: Text('按时长'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _sessionSortField = value);
+                          }
+                        },
+                      ),
                     ),
-                    DropdownMenuItem(
-                      value: _FocusScope.free,
-                      child: Text('自由专注'),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 44,
+                      child: IconButton(
+                        tooltip: _sessionSortDescending
+                            ? '当前：从大到小'
+                            : '当前：从小到大',
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        padding: EdgeInsets.zero,
+                        onPressed: () => setState(
+                          () => _sessionSortDescending =
+                              !_sessionSortDescending,
+                        ),
+                        icon: Icon(
+                          _sessionSortDescending
+                              ? Icons.arrow_downward_rounded
+                              : Icons.arrow_upward_rounded,
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    Expanded(
+                      flex: 5,
+                      child: DropdownButton<_FocusGroupSortField>(
+                        value: _groupSortField,
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(
+                            value: _FocusGroupSortField.totalDuration,
+                            child: Text('按累计时长'),
+                          ),
+                          DropdownMenuItem(
+                            value: _FocusGroupSortField.sessionCount,
+                            child: Text('按专注次数'),
+                          ),
+                          DropdownMenuItem(
+                            value: _FocusGroupSortField.recentFocus,
+                            child: Text('按最近时间'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _groupSortField = value);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 44,
+                      child: IconButton(
+                        tooltip: _groupSortDescending
+                            ? '当前：从大到小'
+                            : '当前：从小到大',
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        padding: EdgeInsets.zero,
+                        onPressed: () => setState(
+                          () => _groupSortDescending = !_groupSortDescending,
+                        ),
+                        icon: Icon(
+                          _groupSortDescending
+                              ? Icons.arrow_downward_rounded
+                              : Icons.arrow_upward_rounded,
+                        ),
+                      ),
                     ),
                   ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _scope = value);
-                  },
-                ),
-                if (_mode == _FocusListMode.sessions) ...[
-                  DropdownButton<_FocusSessionSortField>(
-                    value: _sessionSortField,
-                    items: const [
-                      DropdownMenuItem(
-                        value: _FocusSessionSortField.startedAt,
-                        child: Text('按开始时间'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusSessionSortField.duration,
-                        child: Text('按时长'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _sessionSortField = value);
-                      }
-                    },
-                  ),
-                  IconButton(
-                    tooltip: _sessionSortDescending ? '当前：从大到小' : '当前：从小到大',
-                    onPressed: () => setState(
-                      () => _sessionSortDescending = !_sessionSortDescending,
-                    ),
-                    icon: Icon(
-                      _sessionSortDescending
-                          ? Icons.arrow_downward_rounded
-                          : Icons.arrow_upward_rounded,
-                    ),
-                  ),
-                ] else ...[
-                  DropdownButton<_FocusGroupSortField>(
-                    value: _groupSortField,
-                    items: const [
-                      DropdownMenuItem(
-                        value: _FocusGroupSortField.totalDuration,
-                        child: Text('按累计时长'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusGroupSortField.sessionCount,
-                        child: Text('按专注次数'),
-                      ),
-                      DropdownMenuItem(
-                        value: _FocusGroupSortField.recentFocus,
-                        child: Text('按最近专注时间'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _groupSortField = value);
-                      }
-                    },
-                  ),
-                  IconButton(
-                    tooltip: _groupSortDescending ? '当前：从大到小' : '当前：从小到大',
-                    onPressed: () => setState(
-                      () => _groupSortDescending = !_groupSortDescending,
-                    ),
-                    icon: Icon(
-                      _groupSortDescending
-                          ? Icons.arrow_downward_rounded
-                          : Icons.arrow_upward_rounded,
-                    ),
-                  ),
                 ],
-              ],
+              ),
             ),
             const SizedBox(height: 10),
-            Text(
-              '按专注开始时间筛选；不选择范围时显示全部记录。',
-              style: TextStyle(color: colors.onSurfaceVariant),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Text('时间范围'),
+                SizedBox(width: 6),
+                InlineHelpTooltip(
+                  message: '按专注开始时间筛选；不选择范围时显示全部记录。',
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Wrap(

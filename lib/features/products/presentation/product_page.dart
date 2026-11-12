@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/help_tooltip.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/finance/pricing_preset_store.dart';
@@ -66,6 +67,7 @@ class _ProductPageState extends State<ProductPage> {
   late final FocusNode _overviewColumnsFocusNode;
   String _query = '';
   String _searchField = 'all';
+  final Set<String> _saleConfirmationsInFlight = <String>{};
 
   _ProductSortMode get _sortMode => _ProductSortMode.values.firstWhere(
         (mode) => mode.name == widget.sortModeName,
@@ -297,90 +299,104 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   Future<void> _confirmSale(FinishedProduct product) async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    final isMultiple = product.saleType == ProductSaleType.multiple;
-    final clientController = TextEditingController();
-    final clientName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('确认售出'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                isMultiple
-                    ? '确认“${product.title}”新增 1 次售出？\n'
-                        '售出数量将从 ${product.soldCount} 次变为 ${product.soldCount + 1} 次，'
-                        '并记录到本次售出时间对应的日程。'
-                    : '确认将“${product.title}”标记为已售出？\n'
-                        '确认后会记录本次售出时间，并显示在日程中。',
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: clientController,
-                decoration: const InputDecoration(
-                  labelText: '单主（可选）',
-                  hintText: '填写后可计入该单主的年度小票',
+    // Reuse the same per-entity in-flight guard as node confirmation: a rapid
+    // double tap on a still-visible action must not stack two confirmation
+    // dialogs and accidentally record two sales.
+    if (!_saleConfirmationsInFlight.add(product.id)) return;
+
+    try {
+      FocusManager.instance.primaryFocus?.unfocus();
+      final isMultiple = product.saleType == ProductSaleType.multiple;
+      final clientController = TextEditingController();
+      final clientName = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('确认售出'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isMultiple
+                      ? '确认“${product.title}”新增 1 次售出？\n'
+                          '售出数量将从 ${product.soldCount} 次变为 ${product.soldCount + 1} 次，'
+                          '并记录到本次售出时间对应的日程。'
+                      : '确认将“${product.title}”标记为已售出？\n'
+                          '确认后会记录本次售出时间，并显示在日程中。',
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: clientController,
+                  decoration: const InputDecoration(
+                    labelText: '单主（可选）',
+                    suffixIcon: Center(
+                      widthFactor: 1,
+                      child: InlineHelpTooltip(
+                        message: '填写后，这次售出可计入该单主的年度小票。',
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(
+                  clientController.text.trim(),
+                ),
+                child: const Text('确认售出'),
               ),
             ],
+          );
+        },
+      );
+      clientController.dispose();
+
+      if (clientName == null || !mounted) return;
+
+      if (!widget.store.contains(product.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('这个成品已经不存在，未记录售出。'),
+            behavior: SnackBarBehavior.floating,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(
-                clientController.text.trim(),
-              ),
-              child: const Text('确认售出'),
-            ),
-          ],
         );
-      },
-    );
-    clientController.dispose();
+        return;
+      }
+      final current = widget.store.byId(product.id);
+      if (current.isArchived || current.saleType != product.saleType) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('成品状态已在另一处更新，请按当前状态重新确认售出。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
 
-    if (clientName == null || !mounted) return;
+      widget.store.markSold(
+        product.id,
+        clientName: clientName,
+      );
 
-    if (!widget.store.contains(product.id)) {
+      if (!mounted || !widget.store.contains(product.id)) return;
+      final updated = widget.store.byId(product.id);
+      final message = updated.saleType == ProductSaleType.multiple
+          ? '已记录第 ${updated.soldCount} 次售出'
+          : '已标记为售出';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('这个成品已经不存在，未记录售出。'),
+        SnackBar(
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
         ),
       );
-      return;
+    } finally {
+      _saleConfirmationsInFlight.remove(product.id);
     }
-    final current = widget.store.byId(product.id);
-    if (current.isArchived || current.saleType != product.saleType) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('成品状态已在另一处更新，请按当前状态重新确认售出。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    widget.store.markSold(
-      product.id,
-      clientName: clientName,
-    );
-
-    if (!mounted || !widget.store.contains(product.id)) return;
-    final updated = widget.store.byId(product.id);
-    final message = updated.saleType == ProductSaleType.multiple
-        ? '已记录第 ${updated.soldCount} 次售出'
-        : '已标记为售出';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   Future<void> _confirmDelete(FinishedProduct product) async {

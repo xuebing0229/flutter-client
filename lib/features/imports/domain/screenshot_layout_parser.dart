@@ -182,6 +182,12 @@ class ScreenshotLayoutParser {
         return byY == 0 ? a.left.compareTo(b.left) : byY;
       });
 
+    // OCR coordinates scale with screenshot resolution. Keep the old 690px
+    // phone geometry as the baseline, but never use those pixel distances as
+    // absolute layout rules: long screenshots can be much narrower or wider.
+    final geometryScale =
+        (imageWidth / 690.0).clamp(0.55, 1.8).toDouble();
+
     final dates = <(ScreenshotTextLine, DateTime, bool)>[];
     for (final line in prepared) {
       final match = _date.firstMatch(_repairDateMonthOcr(line.text));
@@ -320,8 +326,10 @@ class ScreenshotLayoutParser {
       // Keep some headroom for cards with a large portrait area.
       final previousDateY =
           i == 0 ? 0.0 : anchors[i - 1].line.centerY;
-      final startY = (anchor.centerY - 370).clamp(
-        previousDateY + (i == 0 ? 0 : 24), anchor.centerY).toDouble();
+      final startY = (anchor.centerY - 370 * geometryScale).clamp(
+        previousDateY + (i == 0 ? 0 : 24 * geometryScale),
+        anchor.centerY,
+      ).toDouble();
       final nextDateY = i + 1 < anchors.length
           ? anchors[i + 1].line.centerY
           : imageHeight;
@@ -331,40 +339,52 @@ class ScreenshotLayoutParser {
           ? (anchor.centerY + nextDateY) / 2
           : imageHeight;
       final endY = (anchor.centerY +
-              (deadlineAnchor.isTitleAnchor ? 270 : 260))
+              (deadlineAnchor.isTitleAnchor ? 270 : 260) * geometryScale)
           .clamp(anchor.centerY, maximumEnd)
           .toDouble();
 
       final preceding = prepared.where((line) =>
           line.centerY >= startY &&
-          line.centerY < anchor.centerY - 7).toList();
-      final titles = preceding.where((line) =>
-          line.centerY > anchor.centerY - 260 &&
-          _plausibleTitle(line.text) &&
-          (line.left >= imageWidth * 0.20 ||
-              line.text.trim().startsWith('【') ||
-              line.text.trim().startsWith('定向企划'))).toList();
-      if (!deadlineAnchor.isTitleAnchor && titles.isEmpty) continue;
+          line.centerY < anchor.centerY - 7 * geometryScale).toList();
 
-      // With no date anchor the header itself is the title; otherwise select
-      // the nearest plausible title before the deadline field.
-      titles.sort((a, b) => b.centerY.compareTo(a.centerY));
-      final titleLine =
-          deadlineAnchor.isTitleAnchor ? anchor : titles.first;
-      final title = _stripKnownUiLabel(titleLine.text);
-      if (title.isEmpty) continue;
-
-      final buyers = preceding.where((line) =>
-          line.centerY < titleLine.centerY - 10 &&
-          line.centerY >= titleLine.centerY - 210 &&
-          line.left < imageWidth * 0.65 &&
-          _plausibleBuyer(line.text)).toList()
+      // First prefer the established title geometry. If a platform renders
+      // titles flush-left, also accept a nearer line without imposing any
+      // horizontal percentage gate. The nearer fallback is deliberately
+      // tighter so a buyer name above a missing title does not become the
+      // title merely because it is the only free-form text in the card.
+      final titleCandidates = preceding.where((line) =>
+          line.centerY > anchor.centerY - 260 * geometryScale &&
+          _plausibleTitle(line.text)).toList();
+      final titles = titleCandidates.where((line) =>
+          line.left >= imageWidth * 0.20 ||
+          line.text.trim().startsWith('【') ||
+          line.text.trim().startsWith('定向企划') ||
+          line.centerY > anchor.centerY - 205 * geometryScale).toList()
         ..sort((a, b) => b.centerY.compareTo(a.centerY));
+
+      // A recognized deadline/relative-deadline is already a strong order
+      // anchor. Missing or abstract artwork titles must never delete that
+      // whole order; keep an editable row with an empty title instead.
+      final ScreenshotTextLine? titleLine = deadlineAnchor.isTitleAnchor
+          ? anchor
+          : (titles.isEmpty ? null : titles.first);
+      final title =
+          titleLine == null ? '' : _stripKnownUiLabel(titleLine.text);
+
+      final buyers = titleLine == null
+          ? <ScreenshotTextLine>[]
+          : (preceding.where((line) =>
+              line.centerY < titleLine.centerY - 10 * geometryScale &&
+              line.centerY >= titleLine.centerY - 210 * geometryScale &&
+              line.left < imageWidth * 0.65 &&
+              _plausibleBuyer(line.text)).toList()
+            ..sort((a, b) => b.centerY.compareTo(a.centerY)));
       final buyer = buyers.isEmpty ? '' :
           _cleanBuyerName(buyers.first.text);
 
       final cardArea = prepared.where((line) =>
-          line.centerY >= titleLine.centerY - 12 &&
+          line.centerY >=
+              (titleLine?.centerY ?? startY) - 12 * geometryScale &&
           line.centerY <= endY).toList();
       final amount = _findCardPrice(
         cardArea, titleLine: titleLine,
@@ -652,7 +672,7 @@ class ScreenshotLayoutParser {
   /// Standalone digits are trusted only in a known price location.
   static (double, ScreenshotTextLine)? _findCardPrice(
     List<ScreenshotTextLine> lines, {
-    required ScreenshotTextLine titleLine,
+    required ScreenshotTextLine? titleLine,
     required ScreenshotTextLine deadlineLine,
     required double imageWidth,
     bool detail = false,
@@ -685,7 +705,7 @@ class ScreenshotLayoutParser {
       final belowDeadline = line.centerY > deadlineLine.centerY + 12;
       final huajiaPricePosition = belowDeadline &&
           line.left >= imageWidth * 0.69;
-      final mihuashiPricePosition =
+      final mihuashiPricePosition = titleLine != null &&
           line.centerY > titleLine.centerY + 10 &&
           line.centerY < deadlineLine.centerY - 8 &&
           (line.left - titleLine.left).abs() < imageWidth * 0.19 &&
@@ -721,7 +741,12 @@ class ScreenshotLayoutParser {
     final hasLanguageGlyph = RegExp(
       r'[A-Za-z\u3400-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]',
     ).hasMatch(text);
-    if (text.length < 2 || !hasLanguageGlyph || _date.hasMatch(text) ||
+    final hasEmojiGlyph = text.runes.any((rune) =>
+        (rune >= 0x1F000 && rune <= 0x1FAFF) ||
+        (rune >= 0x2600 && rune <= 0x27BF));
+    if (text.length < 2 ||
+        (!hasLanguageGlyph && !hasEmojiGlyph) ||
+        _date.hasMatch(text) ||
         _money.hasMatch(text) || _percent.hasMatch(text) ||
         RegExp(r'^[¥￥]?\d+(?:\.\d+)?$').hasMatch(text) ||
         RegExp(r'^[yY]\s*\d+(?:\.\d+)?$').hasMatch(text)) {

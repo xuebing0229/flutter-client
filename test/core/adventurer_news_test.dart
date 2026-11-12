@@ -220,4 +220,178 @@ void main() {
       ['成品总概览与小票预设分享'],
     );
   });
+
+  test('211 包含快速上手引导与小票恢复完善见闻', () {
+    final picked = newsBetweenBuilds(210, 211);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['快速上手引导与小票恢复完善'],
+    );
+  });
+
+  test('212 包含完整新手引导见闻', () {
+    final picked = newsBetweenBuilds(211, 212);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['完整新手引导'],
+    );
+  });
+
+  test('213 包含新手引导高亮与网页版安装完善见闻', () {
+    final picked = newsBetweenBuilds(212, 213);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导高亮与网页版安装完善'],
+    );
+  });
+
+  test('214 包含新手引导定位修正见闻', () {
+    final picked = newsBetweenBuilds(213, 214);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导定位修正'],
+    );
+  });
+
+  test('215 包含新手引导直接操作见闻', () {
+    final picked = newsBetweenBuilds(214, 215);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导可以直接操作高亮控件'],
+    );
+  });
+
+  test('219 包含新手引导下拉菜单遮挡修复见闻', () {
+    final picked = newsBetweenBuilds(218, 219);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导下拉菜单遮挡修复'],
+    );
+  });
+
+  test('220 包含新手引导不遮挡高亮内容见闻', () {
+    final picked = newsBetweenBuilds(219, 220);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导不再遮挡高亮内容'],
+    );
+  });
+
+  test('221 包含新手引导自动找到屏幕外目标见闻', () {
+    final picked = newsBetweenBuilds(220, 221);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['新手引导自动找到屏幕外目标'],
+    );
+  });
+
+  test('222 包含电脑端新手引导定位修复见闻', () {
+    final picked = newsBetweenBuilds(221, 222);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['电脑端新手引导定位修复'],
+    );
+  });
+
+  test('223 包含电脑端首次添加设备流程修复见闻', () {
+    final picked = newsBetweenBuilds(222, 223);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['电脑端首次添加设备流程修复'],
+    );
+  });
+
+  test('224 包含手机端首次添加设备启动流程修复见闻', () {
+    final picked = newsBetweenBuilds(223, 224);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['手机端首次添加设备启动流程修复'],
+    );
+  });
+
+  test('225 包含首次添加设备备用连接见闻', () {
+    final picked = newsBetweenBuilds(224, 225);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['首次添加设备增加备用连接'],
+    );
+  });
+  test('230 包含三端一致性继续完善见闻', () {
+    final picked = newsBetweenBuilds(229, 230);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['手机、电脑与网页版一致性继续完善'],
+    );
+  });
+  test('231 包含网页版更新缓存修复见闻', () {
+    final picked = newsBetweenBuilds(230, 231);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版更新缓存修复'],
+    );
+  });
+
+
+  test('232 包含网页版安装提示状态修复见闻', () {
+    final picked = newsBetweenBuilds(231, 232);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版安装提示状态修复'],
+    );
+  });
+
+
+  test('233 包含网页版旧缓存白屏修复见闻', () {
+    final picked = newsBetweenBuilds(232, 233);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版旧缓存白屏修复'],
+    );
+  });
+
+
+  test('234 包含安卓网页版白屏稳定性修复见闻', () {
+    final picked = newsBetweenBuilds(233, 234);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['安卓网页版白屏稳定性修复'],
+    );
+  });
+
+
+  test('235 包含网页版更新启动链修复见闻', () {
+    final picked = newsBetweenBuilds(234, 235);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版更新启动链修复'],
+    );
+  });
+
+
+  test('236 包含网页版启动诊断完善见闻', () {
+    final picked = newsBetweenBuilds(235, 236);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版启动诊断完善'],
+    );
+  });
+
+
+  test('237 包含网页版流畅度与教程高亮修复见闻', () {
+    final picked = newsBetweenBuilds(236, 237);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版流畅度与教程高亮修复'],
+    );
+  });
+
+
+  test('238 包含网页版教程高亮挖洞修复见闻', () {
+    final picked = newsBetweenBuilds(237, 238);
+    expect(
+      picked.map((e) => e.title).toList(),
+      ['网页版教程高亮挖洞修复'],
+    );
+  });
+
 }

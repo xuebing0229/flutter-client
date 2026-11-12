@@ -13,21 +13,190 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="冒险者公会">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/app-icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/app-icon-192.png">
   <title>冒险者公会</title>
 </head>
 <body>
-  <script src="pwa_platform_bridge.js"></script>
-  <script type="module" src="pwa_ocr_bridge.js"></script>
-  <script src="flutter_bootstrap.js" async></script>
+  <main id="pwa-startup-status" style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,-apple-system,sans-serif;padding:24px;box-sizing:border-box;background:#fff;color:#222">
+    <div style="width:min(520px,100%);text-align:center">
+      <div style="font-size:18px;font-weight:700;margin-bottom:10px">冒险者公会正在启动</div>
+      <div id="pwa-startup-stage" style="font-size:14px;opacity:.76;line-height:1.6">准备网页运行环境…</div>
+      <pre id="pwa-startup-detail" style="display:none;margin-top:14px;padding:12px;border-radius:10px;background:rgba(0,0,0,.06);text-align:left;white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace"></pre>
+      <div style="margin-top:14px;font-size:12px;opacity:.5">Beta __PWA_BOOT_VERSION__</div>
+    </div>
+  </main>
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('pwa_service_worker.js').catch(function (error) {
-          console.warn('PWA service worker registration failed:', error);
-        });
+    (() => {
+      const pwaBuildId = '__PWA_BOOT_VERSION__';
+      const bootVersionKey = 'adventurers-guild.pwa.boot-version';
+      let bootFailed = false;
+      let firstFrameShown = false;
+      let currentStage = '准备网页运行环境…';
+
+      const stageNode = () => document.getElementById('pwa-startup-stage');
+      const detailNode = () => document.getElementById('pwa-startup-detail');
+
+      const formatError = (error) => {
+        if (error == null) return '未知错误';
+        if (typeof error === 'string') return error;
+        const stack = error.stack || error.message || String(error);
+        return String(stack).slice(0, 1800);
+      };
+
+      window.adventurersGuildBootStage = (stage, detail = '') => {
+        if (bootFailed || firstFrameShown) return;
+        currentStage = String(stage || '正在启动…');
+        const target = stageNode();
+        if (target) target.textContent = currentStage;
+        if (detail) {
+          const detailTarget = detailNode();
+          if (detailTarget) {
+            detailTarget.style.display = 'block';
+            detailTarget.textContent = String(detail).slice(0, 1800);
+          }
+        }
+      };
+
+      window.adventurersGuildBootFailure = (stage, error) => {
+        if (firstFrameShown) return;
+        bootFailed = true;
+        const message = formatError(error);
+        console.error(stage, error);
+        const title = document.querySelector('#pwa-startup-status > div > div');
+        if (title) title.textContent = '网页版启动失败';
+        const target = stageNode();
+        if (target) target.textContent = String(stage || '启动失败');
+        const detailTarget = detailNode();
+        if (detailTarget) {
+          detailTarget.style.display = 'block';
+          detailTarget.textContent = message;
+        }
+      };
+
+      window.addEventListener('error', (event) => {
+        const resource = event.target && event.target !== window
+          ? (event.target.src || event.target.href || event.target.tagName)
+          : null;
+        const error = event.error || event.message || resource || '资源加载失败';
+        window.adventurersGuildBootFailure(
+          resource ? '启动资源加载失败' : '网页脚本执行失败',
+          error,
+        );
+      }, true);
+
+      window.addEventListener('unhandledrejection', (event) => {
+        window.adventurersGuildBootFailure(
+          '网页异步启动失败',
+          event.reason || 'Promise rejection',
+        );
       });
-    }
+
+      window.addEventListener('flutter-first-frame', () => {
+        firstFrameShown = true;
+        const status = document.getElementById('pwa-startup-status');
+        if (status) status.remove();
+      }, {once: true});
+
+      setTimeout(() => {
+        if (bootFailed || firstFrameShown) return;
+        window.adventurersGuildBootStage(
+          currentStage,
+          '超过 20 秒仍未出现 Flutter 首帧。当前阶段：' + currentStage,
+        );
+      }, 20000);
+
+      const ownsCache = (key) =>
+        key.startsWith('adventurers-guild-pwa-') ||
+        key === 'flutter-app-cache' ||
+        key === 'flutter-temp-cache' ||
+        key === 'flutter-app-manifest';
+
+      const loadScript = (src, module = false) =>
+        new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = src;
+          if (module) script.type = 'module';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('加载失败：' + src));
+          document.head.appendChild(script);
+        });
+
+      const registerCurrentWorker = () => {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker
+          .register(
+            'pwa_service_worker.js?v=' + encodeURIComponent(pwaBuildId),
+          )
+          .catch((error) => {
+            console.warn('PWA service worker registration failed:', error);
+          });
+      };
+
+      const start = async () => {
+        window.adventurersGuildBootStage('检查网页版本与缓存…');
+        let previousBuild = null;
+        try {
+          previousBuild = localStorage.getItem(bootVersionKey);
+        } catch (_) {}
+
+        if (previousBuild !== pwaBuildId && 'serviceWorker' in navigator) {
+          try {
+            const registrations =
+              await navigator.serviceWorker.getRegistrations();
+            const cacheKeys =
+              'caches' in window ? await window.caches.keys() : [];
+            const ownedCaches = cacheKeys.filter(ownsCache);
+            const hasLegacyRuntime =
+              registrations.length > 0 || ownedCaches.length > 0;
+
+            if (hasLegacyRuntime) {
+              window.adventurersGuildBootStage('清理旧版网页运行缓存…');
+              await Promise.all(
+                registrations.map((registration) =>
+                  registration.unregister(),
+                ),
+              );
+              await Promise.all(
+                ownedCaches.map((key) => window.caches.delete(key)),
+              );
+              try {
+                localStorage.setItem(bootVersionKey, pwaBuildId);
+              } catch (_) {}
+
+              const reloadUrl = new URL(window.location.href);
+              reloadUrl.searchParams.set('_pwa_build', pwaBuildId);
+              window.location.replace(reloadUrl.toString());
+              return;
+            }
+          } catch (error) {
+            console.warn('PWA legacy runtime migration failed:', error);
+          }
+        }
+
+        try {
+          localStorage.setItem(bootVersionKey, pwaBuildId);
+        } catch (_) {}
+
+        const versionQuery = '?v=' + encodeURIComponent(pwaBuildId);
+        window.adventurersGuildBootStage('加载网页平台桥接…');
+        await loadScript('pwa_platform_bridge.js' + versionQuery);
+        window.adventurersGuildBootStage('加载网页识别桥接…');
+        await loadScript('pwa_ocr_bridge.js' + versionQuery, true);
+        window.adventurersGuildBootStage('加载 Flutter 启动器…');
+        await loadScript('flutter_bootstrap.js' + versionQuery);
+
+        if (document.readyState === 'complete') {
+          registerCurrentWorker();
+        } else {
+          window.addEventListener('load', registerCurrentWorker, {once: true});
+        }
+      };
+
+      start().catch((error) => {
+        window.adventurersGuildBootFailure('网页启动链失败', error);
+      });
+    })();
   </script>
 </body>
 </html>

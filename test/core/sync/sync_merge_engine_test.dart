@@ -26,6 +26,258 @@ void main() {
     expect(engine.materialize(changed)!['currentNodeProgress'], 30);
   });
 
+  test('concurrent stale active state cannot undo first archive', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'archive-race',
+      'isArchived': false,
+    };
+
+    // The local device edits from its last known baseline while another
+    // independently-seeded peer still carries the old active value.
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-race',
+      values: active,
+      deviceId: 'phone',
+    );
+    final archived = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: active,
+      nextValues: const <String, dynamic>{
+        'id': 'archive-race',
+        'isArchived': true,
+      },
+      deviceId: 'phone',
+    );
+    final staleActive = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-race',
+      values: active,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(archived, staleActive);
+    final reverseMerged = engine.merge(staleActive, archived);
+
+    expect(engine.materialize(merged)!['isArchived'], isTrue);
+    expect(engine.materialize(reverseMerged)!['isArchived'], isTrue);
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'isArchived'),
+      isEmpty,
+    );
+  });
+
+  // Restore remains a later causal action; the archive preference above
+  // must not turn isArchived into a one-way flag.
+  test('causally newer restore still wins after archive race', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'archive-restore',
+      'isArchived': false,
+    };
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-restore',
+      values: active,
+      deviceId: 'phone',
+    );
+    final archived = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: active,
+      nextValues: const <String, dynamic>{
+        'id': 'archive-restore',
+        'isArchived': true,
+      },
+      deviceId: 'phone',
+    );
+    final staleActive = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-restore',
+      values: active,
+      deviceId: 'desktop',
+    );
+    final merged = engine.merge(archived, staleActive);
+    final archivedValues = engine.materialize(merged)!;
+
+    final restored = engine.applyLocalSnapshot(
+      record: merged,
+      previousValues: archivedValues,
+      nextValues: <String, dynamic>{
+        ...archivedValues,
+        'isArchived': false,
+      },
+      deviceId: 'phone',
+    );
+
+    expect(engine.materialize(restored)!['isArchived'], isFalse);
+  });
+
+  test('explicit node advance beats a stale concurrent node snapshot', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'node-race',
+      values: start,
+      deviceId: 'phone',
+    );
+    final advanced = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'node-race',
+        'currentNodeId': 'line-art',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'node-race',
+      values: start,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(advanced, stale);
+    final reverseMerged = engine.merge(stale, advanced);
+
+    expect(engine.materialize(merged)!['currentNodeId'], 'line-art');
+    expect(engine.materialize(reverseMerged)!['currentNodeId'], 'line-art');
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'currentNodeId'),
+      isEmpty,
+    );
+  });
+
+  test('coalesced rapid node advance still beats the old starting node', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'rapid-node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+
+    final localBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'rapid-node-race',
+      values: start,
+      deviceId: 'phone',
+    );
+    // The 220 ms local debounce may observe draft -> coloring as one snapshot
+    // when the user confirms two nodes quickly. The operation still carries
+    // the explicit from/to pair and must not be rolled back to draft.
+    final rapidlyAdvanced = engine.applyLocalSnapshot(
+      record: localBaseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'rapid-node-race',
+        'currentNodeId': 'coloring',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'rapid-node-race',
+      values: start,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(rapidlyAdvanced, stale);
+    expect(engine.materialize(merged)!['currentNodeId'], 'coloring');
+  });
+
+  test('compacted node transition still beats a stale peer snapshot', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'compacted-node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'compacted-node-race',
+      values: start,
+      deviceId: 'phone',
+    );
+    final advanced = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'compacted-node-race',
+        'currentNodeId': 'line-art',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final compacted = engine.compactAcknowledgedOperations(
+      advanced,
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'compacted-node-race',
+      values: start,
+      deviceId: 'desktop',
+    );
+
+    expect(
+      engine.materialize(engine.merge(compacted, stale))!['currentNodeId'],
+      'line-art',
+    );
+  });
+
+  // Two real advances are intentionally different from "advance vs stale":
+  // keep surfacing those so the user can resolve a genuine cross-device race.
+  test('divergent concurrent node advances remain a real conflict', () {
+    final engine = SyncMergeEngine();
+    const start = <String, dynamic>{
+      'id': 'divergent-node-race',
+      'currentNodeId': 'draft',
+      'currentNodeProgress': 0,
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'divergent-node-race',
+      values: start,
+      deviceId: 'seed',
+    );
+
+    final phone = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'divergent-node-race',
+        'currentNodeId': 'line-art',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'phone',
+    );
+    final desktop = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: start,
+      nextValues: const <String, dynamic>{
+        'id': 'divergent-node-race',
+        'currentNodeId': 'coloring',
+        'currentNodeProgress': 0,
+      },
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(phone, desktop);
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'currentNodeId'),
+      hasLength(1),
+    );
+  });
+
   test('materializes multi-sale operation', () {
     final engine = SyncMergeEngine();
     const values = <String, dynamic>{
@@ -601,6 +853,253 @@ void main() {
         (conflict) => conflict.field == 'saleClientNames',
       ),
       isEmpty,
+    );
+  });
+
+  test('explicit state transitions beat stale independently-seeded snapshots', () {
+    final engine = SyncMergeEngine();
+
+    const activeOrder = <String, dynamic>{
+      'id': 'transition-order',
+      'currentNodeId': 'node-a',
+      'currentNodeProgress': 60,
+      'completedAt': null,
+      'settledAt': null,
+      'settledIncome': null,
+      'archiveOutcome': null,
+      'settlementNodeId': null,
+      'customRefundAmount': null,
+      'isArchived': false,
+      'isPinned': false,
+    };
+    final orderBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'transition-order',
+      values: activeOrder,
+      deviceId: 'phone',
+    );
+    final archivedOrder = engine.applyLocalSnapshot(
+      record: orderBaseline,
+      previousValues: activeOrder,
+      nextValues: <String, dynamic>{
+        ...activeOrder,
+        'currentNodeId': 'node-final',
+        'currentNodeProgress': 0,
+        'completedAt': '2026-11-12T10:00:00.000Z',
+        'settledAt': '2026-11-12T10:01:00.000Z',
+        'settledIncome': 123.0,
+        'archiveOutcome': 'successful',
+        'isArchived': true,
+      },
+      deviceId: 'phone',
+    );
+    final staleOrder = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'transition-order',
+      values: activeOrder,
+      deviceId: 'desktop',
+    );
+
+    for (final merged in <SyncRecord>[
+      engine.merge(archivedOrder, staleOrder),
+      engine.merge(staleOrder, archivedOrder),
+    ]) {
+      final values = engine.materialize(merged)!;
+      expect(values['currentNodeId'], 'node-final');
+      expect(values['currentNodeProgress'], 0);
+      expect(values['completedAt'], '2026-11-12T10:00:00.000Z');
+      expect(values['settledAt'], '2026-11-12T10:01:00.000Z');
+      expect(values['settledIncome'], 123.0);
+      expect(values['archiveOutcome'], 'successful');
+      expect(values['isArchived'], isTrue);
+      expect(
+        merged.conflicts.values.where(
+          (conflict) => <String>{
+            'currentNodeId',
+            'currentNodeProgress',
+            'completedAt',
+            'settledAt',
+            'settledIncome',
+            'archiveOutcome',
+            'isArchived',
+          }.contains(conflict.field),
+        ),
+        isEmpty,
+      );
+    }
+
+    final pinned = engine.applyLocalSnapshot(
+      record: orderBaseline,
+      previousValues: activeOrder,
+      nextValues: <String, dynamic>{...activeOrder, 'isPinned': true},
+      deviceId: 'phone',
+    );
+    for (final merged in <SyncRecord>[
+      engine.merge(pinned, staleOrder),
+      engine.merge(staleOrder, pinned),
+    ]) {
+      expect(engine.materialize(merged)!['isPinned'], isTrue);
+      expect(
+        merged.conflicts.values.where((item) => item.field == 'isPinned'),
+        isEmpty,
+      );
+    }
+  });
+
+  test('single-sale transition beats stale unsold snapshot as one state change', () {
+    final engine = SyncMergeEngine();
+    const unsold = <String, dynamic>{
+      'id': 'single-sale-stale',
+      'saleType': 'single',
+      'soldCount': 0,
+      'saleRecords': <String>[],
+      'saleClientNames': <String, dynamic>{},
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'single-sale-stale',
+      values: unsold,
+      deviceId: 'phone',
+    );
+    final sold = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: unsold,
+      nextValues: <String, dynamic>{
+        ...unsold,
+        'soldCount': 1,
+        'saleRecords': <String>['2026-11-12T10:00:00.000Z'],
+      },
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'single-sale-stale',
+      values: unsold,
+      deviceId: 'desktop',
+    );
+
+    for (final merged in <SyncRecord>[
+      engine.merge(sold, stale),
+      engine.merge(stale, sold),
+    ]) {
+      final values = engine.materialize(merged)!;
+      expect(values['soldCount'], 1);
+      expect(
+        values['saleRecords'],
+        <String>['2026-11-12T10:00:00.000Z'],
+      );
+      expect(
+        merged.conflicts.values.where(
+          (conflict) =>
+              conflict.field == 'soldCount' ||
+              conflict.field == 'saleRecords',
+        ),
+        isEmpty,
+      );
+    }
+  });
+
+  test('legacy archive transaction stays consistent against stale active snapshot', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'legacy-archive-bundle',
+      'currentNodeId': 'node-a',
+      'currentNodeProgress': 50,
+      'completedAt': null,
+      'settledAt': null,
+      'settledIncome': null,
+      'archiveOutcome': null,
+      'settlementNodeId': null,
+      'customRefundAmount': null,
+      'isArchived': false,
+      'isPinned': true,
+    };
+    const archived = <String, dynamic>{
+      'id': 'legacy-archive-bundle',
+      'currentNodeId': 'node-final',
+      'currentNodeProgress': 0,
+      'completedAt': '2026-11-10T10:00:00.000Z',
+      'settledAt': '2026-11-10T10:01:00.000Z',
+      'settledIncome': 88.0,
+      'archiveOutcome': 'successful',
+      'settlementNodeId': null,
+      'customRefundAmount': null,
+      'isArchived': true,
+      'isPinned': false,
+    };
+
+    // Bootstrap both sides directly to simulate records created by clients
+    // predating state-transition operations.
+    final archivedRecord = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'legacy-archive-bundle',
+      values: archived,
+      deviceId: 'phone',
+    );
+    final staleActive = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'legacy-archive-bundle',
+      values: active,
+      deviceId: 'desktop',
+    );
+
+    for (final merged in <SyncRecord>[
+      engine.merge(archivedRecord, staleActive),
+      engine.merge(staleActive, archivedRecord),
+    ]) {
+      final values = engine.materialize(merged)!;
+      expect(values['currentNodeId'], 'node-final');
+      expect(values['currentNodeProgress'], 0);
+      expect(values['completedAt'], '2026-11-10T10:00:00.000Z');
+      expect(values['settledAt'], '2026-11-10T10:01:00.000Z');
+      expect(values['settledIncome'], 88.0);
+      expect(values['archiveOutcome'], 'successful');
+      expect(values['isArchived'], isTrue);
+      expect(values['isPinned'], isFalse);
+    }
+  });
+
+  test('opposing explicit archive and restore transitions remain a conflict', () {
+    final engine = SyncMergeEngine();
+    const active = <String, dynamic>{
+      'id': 'archive-opposition',
+      'isArchived': false,
+    };
+    const archivedValues = <String, dynamic>{
+      'id': 'archive-opposition',
+      'isArchived': true,
+    };
+
+    final archiveBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-opposition',
+      values: active,
+      deviceId: 'phone',
+    );
+    final archived = engine.applyLocalSnapshot(
+      record: archiveBaseline,
+      previousValues: active,
+      nextValues: archivedValues,
+      deviceId: 'phone',
+    );
+
+    final restoreBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'archive-opposition',
+      values: archivedValues,
+      deviceId: 'desktop',
+    );
+    final restored = engine.applyLocalSnapshot(
+      record: restoreBaseline,
+      previousValues: archivedValues,
+      nextValues: active,
+      deviceId: 'desktop',
+    );
+
+    final merged = engine.merge(archived, restored);
+    expect(
+      merged.conflicts.values.where((item) => item.field == 'isArchived'),
+      hasLength(1),
     );
   });
 

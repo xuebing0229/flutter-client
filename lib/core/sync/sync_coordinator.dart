@@ -25,10 +25,11 @@ import 'sync_gc_ack_store.dart';
 import 'sync_merge_engine.dart';
 import 'sync_models.dart';
 import 'sync_record_store.dart';
+import 'sync_record_local_change.dart';
 import 'sync_reference_image_gc.dart';
+import 'sync_workspace_engine.dart';
 
-typedef SyncSettingsCapture = Map<String, dynamic> Function();
-typedef SyncSettingsApply = Future<void> Function(Map<String, dynamic> settings);
+export 'sync_workspace_engine.dart' show SyncConflictView, syncFieldLabel;
 
 @visibleForTesting
 Future<void> runWorkspaceRestoreTransaction({
@@ -79,97 +80,6 @@ class PortableWorkspaceSnapshot {
   final List<Map<String, dynamic>> syncRecords;
 }
 
-class SyncConflictView {
-  const SyncConflictView({
-    required this.kind,
-    required this.recordId,
-    required this.conflict,
-  });
-
-  final SyncEntityKind kind;
-  final String recordId;
-  final SyncConflict conflict;
-
-  String get entityLabel => switch (kind) {
-    SyncEntityKind.order => '排单',
-    SyncEntityKind.product => '成品',
-    SyncEntityKind.nodePreset => '节点预设',
-    SyncEntityKind.focusSession => '专注记录',
-    SyncEntityKind.settings => '界面设置',
-  };
-
-  String get fieldLabel => syncFieldLabel(conflict.field);
-}
-
-String syncFieldLabel(String field) {
-  return switch (field) {
-    'title' => '名称',
-    'clientName' => '单主',
-    'platform' => '平台',
-    'deadline' => '截稿日期',
-    'nodePresetId' => '节点预设',
-    'nodePresetSnapshot' => '节点预设快照',
-    'currentNodeId' => '当前节点',
-    'currentNodeProgress' => '节点小进度',
-    'price' => '稿费',
-    'feeEnabled' => '手续费',
-    'huajiaLoveLevel' => '真爱永恒',
-    'onlinePercent' => '线上比例',
-    'supplementAmount' => '补款基准',
-    'supplementFeeEnabled' => '补款手续费',
-    'deductionAmount' => '减款基准',
-    'deductionFeeEnabled' => '减款手续费',
-    'description' => '备注',
-    'tags' => '自定义标签',
-    'referenceImages' => '参考图',
-    'completedAt' => '交稿时间',
-    'settledAt' => '结算时间',
-    'settledIncome' => '结算收入',
-    'archiveOutcome' => '归档结果',
-    'settlementNodeId' => '结算节点',
-    'customRefundAmount' => '退款金额',
-    'isArchived' => '归档状态',
-    'isPinned' => '置顶状态',
-    'saleType' => '售卖方式',
-    'soldCount' => '售出数量基准',
-    'saleRecords' => '售出记录',
-    'saleClientNames' => '售出单主',
-    'archivedAt' => '归档时间',
-    'themeMode' => '主题模式',
-    'themePaletteId' => '主题色',
-    'customThemePalettes' => '自定义主题色方案',
-    'uiStyle' => 'UI风格',
-    'uiTexture' => 'UI风格',
-    'features' => '功能开关',
-    'feature.clientInfo' => '显示单主信息',
-    'feature.customTags' => '自定义标签开关',
-    'feature.referenceImages' => '参考图开关',
-    'feature.nodeProgress' => '节点小进度',
-    'feature.search' => '搜索',
-    'feature.sorting' => '排序',
-    'feature.viewSwitch' => '列表 / 卡片视图切换',
-    'feature.products' => '成品功能开关',
-    'feature.schedule' => '日程功能开关',
-    'feature.statistics' => '统计功能开关',
-    'feature.deadlineReminders' => '截稿提醒开关',
-    'feature.abstractMode' => '抽象版开关',
-    'feature.abstractEffects' => '抽象版表现',
-    'orderCardView' => '排单卡片视图',
-    'productCardView' => '成品卡片视图',
-    'orderSortMode' => '排单排序',
-    'productSortMode' => '成品排序',
-    'desktopNavigationOpen' => '电脑导航栏状态',
-    'name' => '预设名称',
-    'nodes' => '节点内容',
-    'startedAt' => '专注开始时间',
-    'endedAt' => '专注结束时间',
-    'orderId' => '专注排单',
-    'orderTitleSnapshot' => '排单标题快照',
-    SyncRecord.deletedField => '删除状态',
-    _ => field,
-  };
-}
-
 class SyncCoordinator extends ChangeNotifier {
   static const settingsRecordId = 'app';
   static const _transportReauthorizationLifetime = Duration(minutes: 30);
@@ -198,7 +108,18 @@ class SyncCoordinator extends ChangeNotifier {
        ),
        _accountSyncStore = accountSyncStore ?? AccountSyncRecordStore(),
        _gcAckStore = gcAckStore ?? SyncGcAckStore(recordStore: recordStore),
-       _bridge = bridge;
+       _bridge = bridge {
+    _workspaceEngine = SyncWorkspaceEngine(
+      orderStore: orderStore,
+      productStore: productStore,
+      nodePresetStore: nodePresetStore,
+      focusStore: this.focusStore,
+      captureSettings: captureSettings,
+      applySettings: applySettings,
+      mergeEngine: _mergeEngine,
+      settingsRecordId: settingsRecordId,
+    );
+  }
 
   final String accountId;
   String deviceId;
@@ -216,6 +137,7 @@ class SyncCoordinator extends ChangeNotifier {
   final AccountSyncRecordStore _accountSyncStore;
   final SyncGcAckStore _gcAckStore;
   final EmbeddedSyncthingBridge _bridge;
+  late final SyncWorkspaceEngine _workspaceEngine;
   final Lock _pauseLock = Lock();
 
   bool _initialized = false;
@@ -996,6 +918,39 @@ class SyncCoordinator extends ChangeNotifier {
     });
   }
 
+  Future<void> bootstrapRelayPeer({
+    required String appDeviceId,
+    required String name,
+    required String platform,
+  }) {
+    return _enqueue(() async {
+      if (_syncPaused) {
+        throw StateError('同步已暂停，请先恢复同步后再添加设备。');
+      }
+
+      final normalizedPlatform = platform.trim();
+      if (normalizedPlatform != 'web') {
+        throw const FormatException('当前设备需要使用正式同步通道加入。');
+      }
+
+      await accountStore.registerRelayOnlyDevice(
+        appDeviceId: appDeviceId,
+        name: name,
+        platform: normalizedPlatform,
+      );
+
+      // Persist the browser device into the same account state graph before
+      // acknowledging bootstrap. HomePage's existing PublicPeerSyncService
+      // will then discover platform=web and start normal encrypted CF sync.
+      await _syncAccountState();
+      if (_transportPrepared) {
+        try {
+          await _bridge.requestScan(accountId: accountId);
+        } catch (_) {}
+      }
+    });
+  }
+
   Future<void> refreshNow() {
     return _enqueue(() async {
       // A manual sync is also an explicit repair request. Re-prepare the
@@ -1474,64 +1429,23 @@ class SyncCoordinator extends ChangeNotifier {
     final ids = <String>{...previous.keys, ...current.keys};
 
     for (final id in ids) {
-      final before = previous[id];
-      final after = current[id];
-      if (syncJsonEquals(before, after)) continue;
-
       final currentRecord = await _recordStore.readMergedRecord(
         accountId: accountId,
         kind: kind,
         recordId: id,
       );
-      final baselineRecord = _lastFlushedRecords[kind]![id];
-      SyncRecord localRecord;
-
-      if (after == null) {
-        final baseRecord = baselineRecord ?? currentRecord;
-        if (baseRecord == null) {
-          if (before == null) continue;
-          localRecord = SyncRecord.bootstrap(
-            kind: kind,
-            id: id,
-            values: before,
-            deviceId: deviceId,
-          );
-        } else {
-          localRecord = baseRecord;
-        }
-        localRecord = _mergeEngine.markDeleted(
-          localRecord,
-          deviceId: deviceId,
-        );
-      } else if (baselineRecord != null) {
-        // Edit the last record this device actually observed, not the remote
-        // version that may have arrived since. Otherwise concurrent edits are
-        // incorrectly stamped as happening after that remote version.
-        localRecord = _mergeEngine.applyLocalSnapshot(
-          record: baselineRecord,
-          previousValues: before ?? after,
-          nextValues: after,
-          deviceId: deviceId,
-        );
-      } else if (currentRecord == null) {
-        localRecord = SyncRecord.bootstrap(
-          kind: kind,
-          id: id,
-          values: after,
-          deviceId: deviceId,
-        );
-      } else {
-        localRecord = _mergeEngine.applyLocalSnapshot(
-          record: currentRecord,
-          previousValues: before ?? after,
-          nextValues: after,
-          deviceId: deviceId,
-        );
-      }
-
-      final record = currentRecord == null
-          ? localRecord
-          : _mergeEngine.merge(currentRecord, localRecord);
+      final record = buildLocalSyncRecordChange(
+        accountId: accountId,
+        deviceId: deviceId,
+        kind: kind,
+        id: id,
+        before: previous[id],
+        after: current[id],
+        baselineRecord: _lastFlushedRecords[kind]![id],
+        currentRecord: currentRecord,
+        mergeEngine: _mergeEngine,
+      );
+      if (record == null) continue;
 
       await _recordStore.write(accountId: accountId, record: record);
       _lastFlushedRecords[kind]![id] = record;
@@ -1641,13 +1555,12 @@ class SyncCoordinator extends ChangeNotifier {
     for (final kind in SyncEntityKind.values) {
       _lastFlushedRecords[kind] = recordsByKind[kind]!;
     }
-    if (_awaitingInitialRemoteWorkspace) {
-      final hasRemoteSettings =
-          recordsByKind[SyncEntityKind.settings]!.containsKey(settingsRecordId);
-      final hasRemotePresets = recordsByKind[SyncEntityKind.nodePreset]!.isNotEmpty;
-      if (hasRemoteSettings && hasRemotePresets) {
-        _awaitingInitialRemoteWorkspace = false;
-      }
+    if (_awaitingInitialRemoteWorkspace &&
+        hasInitialRemoteWorkspaceBaseline(
+          recordsByKind,
+          settingsRecordId: settingsRecordId,
+        )) {
+      _awaitingInitialRemoteWorkspace = false;
     }
     _hasRestoredSyncBaseline = false;
     _conflicts = _collectConflicts(recordsByKind);
@@ -1972,22 +1885,6 @@ class SyncCoordinator extends ChangeNotifier {
     }
   }
 
-  Map<String, dynamic> _normalizeMaterializedSettings(
-    Map<String, dynamic> settings,
-  ) {
-    final normalized = <String, dynamic>{...settings};
-    final hasFieldLevelFeatures = normalized.keys.any(
-      (key) => key.startsWith('feature.'),
-    );
-    if (hasFieldLevelFeatures) {
-      normalized.remove('features');
-    }
-    if (normalized.containsKey('uiStyle')) {
-      normalized.remove('uiTexture');
-    }
-    return normalized;
-  }
-
   Future<void> _backfillMissingRecordFields({
     required SyncEntityKind kind,
     required Map<String, Map<String, dynamic>> local,
@@ -2089,201 +1986,8 @@ class SyncCoordinator extends ChangeNotifier {
     SyncEntityKind kind,
     Map<String, SyncRecord> records,
   ) async {
-    switch (kind) {
-      case SyncEntityKind.order:
-        _applyOrderRecords(records);
-      case SyncEntityKind.product:
-        _applyProductRecords(records);
-      case SyncEntityKind.nodePreset:
-        _applyPresetRecords(records);
-      case SyncEntityKind.focusSession:
-        _applyFocusRecords(records);
-      case SyncEntityKind.settings:
-        await _applySettingsRecords(records);
-    }
-  }
-
-  Future<void> _applySettingsRecords(
-    Map<String, SyncRecord> records,
-  ) async {
-    final record = records[settingsRecordId];
-    if (record == null) return;
-
-    final local = captureSettings();
-    final settings = _mergeEngine.materializeKeepingLocalConflicts(
-      record,
-      local,
-    );
-    if (settings == null) return;
-
-    final normalized = _normalizeMaterializedSettings(settings);
-    if (syncJsonEquals(normalized, local)) return;
-
-    try {
-      await applySettings(normalized);
-    } catch (error) {
-      _lastError = '应用远端界面设置失败：$error';
-    }
-  }
-
-  void _applyOrderRecords(Map<String, SyncRecord> records) {
-    final result = <QueueOrder>[];
-
-    for (final existing in orderStore.orders) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.orderToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.orderFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-    }
-
-    for (final record in records.values) {
-      if (orderStore.contains(record.id)) continue;
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.orderFromFields(fields));
-      } catch (_) {
-        // Invalid remote record stays on disk for later repair.
-      }
-    }
-
-    if (!_sameOrderList(orderStore.orders, result)) {
-      orderStore.replaceAll(result);
-    }
-  }
-
-  void _applyProductRecords(Map<String, SyncRecord> records) {
-    final result = <FinishedProduct>[];
-
-    for (final existing in productStore.products) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.productToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.productFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-    }
-
-    for (final record in records.values) {
-      if (productStore.contains(record.id)) continue;
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.productFromFields(fields));
-      } catch (_) {
-        // Invalid remote record stays on disk for later repair.
-      }
-    }
-
-    if (!_sameProductList(productStore.products, result)) {
-      productStore.replaceAll(result);
-    }
-  }
-
-  void _applyPresetRecords(Map<String, SyncRecord> records) {
-    final current = <String, NodePreset>{
-      for (final preset in nodePresetStore.presets) preset.id: preset,
-    };
-    final result = <NodePreset>[];
-
-    for (final existing in nodePresetStore.presets) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.nodePresetToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.nodePresetFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-      current.remove(existing.id);
-    }
-
-    for (final record in records.values) {
-      if (current.containsKey(record.id) ||
-          nodePresetStore.presets.any((preset) => preset.id == record.id)) {
-        continue;
-      }
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.nodePresetFromFields(fields));
-      } catch (_) {
-        // Keep processing other presets.
-      }
-    }
-
-    final currentFields = _capturePresets();
-    final resultFields = <String, Map<String, dynamic>>{
-      for (final preset in result)
-        preset.id: SyncEntityCodec.nodePresetToFields(preset),
-    };
-    if (!syncJsonEquals(currentFields, resultFields)) {
-      nodePresetStore.replaceAll(result);
-    }
-  }
-
-  void _applyFocusRecords(Map<String, SyncRecord> records) {
-    final result = <FocusSession>[];
-
-    for (final existing in focusStore.sessions) {
-      final record = records[existing.id];
-      if (record == null) {
-        result.add(existing);
-        continue;
-      }
-      final fields = _mergeEngine.materializeKeepingLocalConflicts(
-        record,
-        SyncEntityCodec.focusSessionToFields(existing),
-      );
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.focusSessionFromFields(fields));
-      } catch (_) {
-        result.add(existing);
-      }
-    }
-
-    for (final record in records.values) {
-      if (focusStore.contains(record.id)) continue;
-      final fields = _mergeEngine.materialize(record);
-      if (fields == null) continue;
-      try {
-        result.add(SyncEntityCodec.focusSessionFromFields(fields));
-      } catch (_) {
-        // Invalid remote focus record stays on disk for later repair.
-      }
-    }
-
-    if (!_sameFocusList(focusStore.sessions, result)) {
-      focusStore.replaceAll(result);
-    }
+    final error = await _workspaceEngine.applyEntityRecords(kind, records);
+    if (error != null) _lastError = error;
   }
 
   Future<void> _persistFocusNormalization(
@@ -2310,29 +2014,8 @@ class SyncCoordinator extends ChangeNotifier {
 
   List<SyncConflictView> _collectConflicts(
     Map<SyncEntityKind, Map<String, SyncRecord>> recordsByKind,
-  ) {
-    final result = <SyncConflictView>[];
-    for (final kind in SyncEntityKind.values) {
-      result.addAll(_viewsFor(kind, recordsByKind[kind]!));
-    }
-    result.sort((a, b) => b.conflict.createdAt.compareTo(a.conflict.createdAt));
-    return result;
-  }
-
-  Iterable<SyncConflictView> _viewsFor(
-    SyncEntityKind kind,
-    Map<String, SyncRecord> records,
-  ) sync* {
-    for (final record in records.values) {
-      for (final conflict in record.conflicts.values) {
-        yield SyncConflictView(
-          kind: kind,
-          recordId: record.id,
-          conflict: conflict,
-        );
-      }
-    }
-  }
+  ) =>
+      _workspaceEngine.collectConflicts(recordsByKind);
 
   Future<void> _rebuildConflicts() async {
     final recordsByKind = <SyncEntityKind, Map<String, SyncRecord>>{};
@@ -2354,83 +2037,20 @@ class SyncCoordinator extends ChangeNotifier {
     return values;
   }
 
-  Map<String, Map<String, dynamic>> _captureOrders() {
-    return <String, Map<String, dynamic>>{
-      for (final order in orderStore.orders)
-        order.id: SyncEntityCodec.orderToFields(order),
-    };
-  }
+  Map<String, Map<String, dynamic>> _captureOrders() =>
+      _workspaceEngine.captureOrders();
 
-  Map<String, Map<String, dynamic>> _captureProducts() {
-    return <String, Map<String, dynamic>>{
-      for (final product in productStore.products)
-        product.id: SyncEntityCodec.productToFields(product),
-    };
-  }
+  Map<String, Map<String, dynamic>> _captureProducts() =>
+      _workspaceEngine.captureProducts();
 
-  Map<String, Map<String, dynamic>> _capturePresets() {
-    return <String, Map<String, dynamic>>{
-      for (final preset in nodePresetStore.presets)
-        preset.id: SyncEntityCodec.nodePresetToFields(preset),
-    };
-  }
+  Map<String, Map<String, dynamic>> _capturePresets() =>
+      _workspaceEngine.capturePresets();
 
-  Map<String, Map<String, dynamic>> _captureFocusSessions() {
-    return <String, Map<String, dynamic>>{
-      for (final session in focusStore.sessions)
-        session.id: SyncEntityCodec.focusSessionToFields(session),
-    };
-  }
+  Map<String, Map<String, dynamic>> _captureFocusSessions() =>
+      _workspaceEngine.captureFocusSessions();
 
-  Map<SyncEntityKind, Map<String, Map<String, dynamic>>> _captureEntities() {
-    return <SyncEntityKind, Map<String, Map<String, dynamic>>>{
-      SyncEntityKind.order: _captureOrders(),
-      SyncEntityKind.product: _captureProducts(),
-      SyncEntityKind.nodePreset: _capturePresets(),
-      SyncEntityKind.focusSession: _captureFocusSessions(),
-      SyncEntityKind.settings: <String, Map<String, dynamic>>{
-        settingsRecordId: captureSettings(),
-      },
-    };
-  }
-
-  bool _sameOrderList(Iterable<QueueOrder> left, Iterable<QueueOrder> right) {
-    final a = <Map<String, dynamic>>[
-      for (final order in left) SyncEntityCodec.orderToFields(order),
-    ];
-    final b = <Map<String, dynamic>>[
-      for (final order in right) SyncEntityCodec.orderToFields(order),
-    ];
-    return syncJsonEquals(a, b);
-  }
-
-  bool _sameProductList(
-    Iterable<FinishedProduct> left,
-    Iterable<FinishedProduct> right,
-  ) {
-    final a = <Map<String, dynamic>>[
-      for (final product in left) SyncEntityCodec.productToFields(product),
-    ];
-    final b = <Map<String, dynamic>>[
-      for (final product in right) SyncEntityCodec.productToFields(product),
-    ];
-    return syncJsonEquals(a, b);
-  }
-
-  bool _sameFocusList(
-    Iterable<FocusSession> left,
-    Iterable<FocusSession> right,
-  ) {
-    final a = <Map<String, dynamic>>[
-      for (final session in left)
-        SyncEntityCodec.focusSessionToFields(session),
-    ];
-    final b = <Map<String, dynamic>>[
-      for (final session in right)
-        SyncEntityCodec.focusSessionToFields(session),
-    ];
-    return syncJsonEquals(a, b);
-  }
+  Map<SyncEntityKind, Map<String, Map<String, dynamic>>> _captureEntities() =>
+      _workspaceEngine.captureEntities();
 
   void _enqueueBackground(Future<void> Function() action) {
     if (_disposed || _removingLocalAccount) return;

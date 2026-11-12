@@ -9,6 +9,7 @@ import '../../focus/state/focus_store.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/state/order_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/help_tooltip.dart';
 
 const int _desktopPetPreviewCacheWidth = 1024;
 const int _desktopPetThumbnailCacheWidth = 256;
@@ -384,18 +385,9 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
             ),
             children: [
               if (widget.showDesktopPet) ...[
-                _InfoCard(
-                child: Text(
-                  '每个桌宠预设就是一组 A/B 图片：A 是平时状态，B 只在键盘按键或鼠标点击时显示。'
-                  '导入时会先进入固定桌宠画布定位，A/B 使用同一坐标系，避免切换时人物跳位。',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
               _Section(
                 title: '桌宠预设',
+                helpMessage: '每个桌宠预设由 A/B 两张图组成：A 是平时状态，B 只在键盘按键或鼠标点击时显示；A/B 共用同一坐标系，避免切换时人物跳位。桌宠图片、预设、显示大小和文字泡设置只保存在本机电脑，专注计时与历史记录会随账号同步。',
                 trailing: FilledButton.tonalIcon(
                   onPressed: _createPreset,
                   icon: const Icon(Icons.add_rounded, size: 18),
@@ -460,7 +452,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       const Divider(height: 1),
                       _AssetTile(
                         title: 'A · 平时状态',
-                        subtitle: '没有按键操作时显示',
+                        helpMessage: '没有按键操作时显示',
                         path: selected.imageA,
                         onImport: () =>
                             _pick(selected, DesktopPetAssetSlot.idleA),
@@ -474,7 +466,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       const Divider(height: 1),
                       _AssetTile(
                         title: 'B · 操作状态',
-                        subtitle: '键盘按键或鼠标点击时显示；松开后回到 A',
+                        helpMessage: '键盘按键或鼠标点击时显示；松开后回到 A',
                         path: selected.imageB,
                         onImport: () =>
                             _pick(selected, DesktopPetAssetSlot.keyB),
@@ -505,6 +497,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
               const SizedBox(height: 14),
               _Section(
                 title: '桌面显示',
+                helpMessage: '可在预览中拖动文字泡和计时板；横向、竖向文字泡位置分别记忆，计时板位置独立记忆。文字模式按文字大小撑开，图片模式保持原比例；这些位置只在预览中调整，桌面正常使用时不会误拖。',
                 children: [
                   const SizedBox(height: 4),
                   Text(
@@ -589,14 +582,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                     ),
                     const SizedBox(height: 16),
                   ] else ...[
-                    Text(
-                      '导入桌宠 A 图后，可以在这里直接拖动文字泡和计时板，调整它们相对桌宠的位置。',
-                      style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
-                      ),
-                    ),
+                    const Text('导入 A 图后可调整组件位置'),
                     const SizedBox(height: 16),
                   ],
                   _ScaleSetting(
@@ -640,18 +626,13 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       () => _settings.setFocusClockScale(value),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '文字模式按文字大小自动撑开；图片模式按图片大小保持原比例缩放，气泡会跟着图片自动撑开。横向和竖向的文字泡位置分别记忆，计时板位置独立记忆；这些位置只在上面的桌宠预览里调整，桌面正常使用时不会误拖乱。',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+
                 ],
               ),
               const SizedBox(height: 14),
               _Section(
                 title: '文字泡内容',
+                helpMessage: '文字和图片二选一显示；图片模式下不会再叠加文字。“当前在画订单”由你在这里手动选择具体排单。',
                 children: [
                   const SizedBox(height: 4),
                   SegmentedButton<DesktopPetBubbleContentMode>(
@@ -676,11 +657,6 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                         () => _settings.setBubbleContentMode(selection.first),
                       );
                     },
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '图片和文字二选一显示，避免两套内容同时刷新、抢布局。',
-                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 14),
                   if (_settings.bubbleContentMode ==
@@ -712,11 +688,7 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                             ),
                         ],
                       ),
-                      if (selected.bubbleImage == null)
-                        Text(
-                          '当前还没有气泡图片；导入后桌面会只显示这张图片，不再叠加文字。',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+
                     ],
                   ] else ...[
                     SegmentedButton<DesktopPetTextMode>(
@@ -764,13 +736,6 @@ class _DesktopPetPageState extends State<DesktopPetPage> {
                       ),
                   ],
                 ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                '“当前在画订单”由你在这里手动选择具体排单；桌宠图片、预设、显示大小和文字泡设置只保存在本机电脑，专注计时与历史记录会随账号在手机和电脑间同步。',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
               ),
               const SizedBox(height: 14),
             ],
@@ -860,7 +825,6 @@ class _DesktopPetPlacementDialogState
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final slotName =
         widget.slot == DesktopPetAssetSlot.idleA ? 'A · 平时状态' : 'B · 操作状态';
     final guideFile = widget.guidePath == null ? null : File(widget.guidePath!);
@@ -875,16 +839,21 @@ class _DesktopPetPlacementDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '定位 $slotName',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '定位 $slotName',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
                     ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '下面的方框就是桌宠人物的固定显示画布。拖动图片调整位置，用滑杆调整大小；A/B 共用同一套坐标。',
-                style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+                  const SizedBox(width: 6),
+                  const InlineHelpTooltip(
+                    message: '下面的方框是桌宠人物的固定显示画布。拖动图片调整位置，用滑杆调整大小；A/B 共用同一套坐标。',
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               Flexible(
@@ -1755,19 +1724,20 @@ class _DesktopPetOverlayPreviewState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '组件位置',
-          style: Theme.of(context)
-              .textTheme
-              .labelLarge
-              ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '在预览里拖动文字泡和计时板。位置按桌宠为基准保存，之后移动桌宠时会一起移动。',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
+        Row(
+          children: [
+            Text(
+              '组件位置',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 6),
+            const InlineHelpTooltip(
+              message: '在预览里拖动文字泡和计时板。位置按桌宠为基准保存，之后移动桌宠时会一起移动。',
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         LayoutBuilder(
@@ -2024,14 +1994,14 @@ class _CurrentOrderChoiceCard extends StatelessWidget {
 class _AssetTile extends StatelessWidget {
   const _AssetTile({
     required this.title,
-    required this.subtitle,
+    required this.helpMessage,
     required this.path,
     required this.onImport,
     required this.onClear,
   });
 
   final String title;
-  final String subtitle;
+  final String helpMessage;
   final String? path;
   final VoidCallback onImport;
   final VoidCallback onClear;
@@ -2061,8 +2031,13 @@ class _AssetTile extends StatelessWidget {
               : const Icon(Icons.add_photo_alternate_outlined),
         ),
       ),
-      title: Text(title),
-      subtitle: Text(subtitle),
+      title: Row(
+        children: [
+          Flexible(child: Text(title)),
+          const SizedBox(width: 6),
+          InlineHelpTooltip(message: helpMessage),
+        ],
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2163,11 +2138,13 @@ class _Section extends StatelessWidget {
   const _Section({
     required this.title,
     required this.children,
+    this.helpMessage,
     this.trailing,
   });
 
   final String title;
   final List<Widget> children;
+  final String? helpMessage;
   final Widget? trailing;
 
   @override
@@ -2183,11 +2160,21 @@ class _Section extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
                         ),
+                      ),
+                      if (helpMessage != null) ...[
+                        const SizedBox(width: 6),
+                        InlineHelpTooltip(message: helpMessage!),
+                      ],
+                    ],
                   ),
                 ),
                 if (trailing != null) trailing!,

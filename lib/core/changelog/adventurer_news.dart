@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
-
-import '../storage/atomic_file.dart';
+import 'adventurer_news_storage_native.dart'
+    if (dart.library.html) 'adventurer_news_storage_web.dart';
 
 /// Each feature is recorded once, against the FIRST build where it ships.
 /// Keep historical entries when publishing later builds: skipping versions
@@ -378,6 +375,146 @@ const adventurerNewsCatalog = <AdventurerNewsEntry>[
     title: '小票中心与单主年度小票',
     description: '左侧栏新增统一“生成小票”中心：可按排单或成品生成单张小票，并按归档状态、时间和关键字筛选；也可按年份搜索单主，汇总其已归档的排单与成品业务，列出图名、平台、每单金额和全年总额。小票新增透明底 PNG 导出；成品每次售出可选记录单主，历史售出记录也能补填。原“节点预设”和“加价预设”合并为“节点＆加价预设”入口。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 211,
+    title: '快速上手引导与小票恢复完善',
+    description: '新增可重复播放的快速上手引导，会直接在真实界面上高亮“新增排单”、搜索、排序/视图和菜单入口，手机、电脑与网页版保持一致。小票“恢复默认”现在会同时恢复样式和已经编辑过的文字内容、字号，不再只恢复抬头或外观。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 212,
+    title: '完整新手引导',
+    description: '快速上手升级为跨页面实操引导：会带着创建第一笔排单，继续认识节点小进度、确认节点与归档，再依次跳到截图导入、节点＆加价预设、成品、日程、统计、小票、同步、设备、完整备份和附加功能。手机、电脑与网页版共用同一套引导逻辑；网页版会自动跳过不适用的原生设备步骤。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 213,
+    title: '新手引导高亮与网页版安装完善',
+    description: '新手引导的高亮会按完整控件尺寸和按钮形状显示，不再只亮局部或用生硬矩形框住圆角按钮；账号与附加功能改为高亮页面标题介绍整体用途。网页版新增“添加到桌面”引导，支持直接调用浏览器安装提示，也会在不支持直接安装的浏览器里给出对应操作说明。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 214,
+    title: '新手引导定位修正',
+    description: '修正部分高亮只覆盖控件一部分或把不存在的区域当成高亮目标的问题。新增排单不再框一整块虚拟区域，而是依次指向图名、单主、平台、稿价和保存；新增排单按钮直接绑定真实按钮，并沿用实际按钮圆角形状。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 215,
+    title: '新手引导可以直接操作高亮控件',
+    description: '高亮输入框、下拉框和按钮现在可以直接点击操作，不需要先退出引导；暗色遮罩区域仍会阻止误触。图名、单主、平台和稿价改用严格跟随真实控件尺寸的定位方式，修正首个输入框横向偏移的问题。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 219,
+    title: '新手引导下拉菜单遮挡修复',
+    description: '新增排单教程打开平台下拉菜单时，教程会暂时收成屏幕边缘控制条，不再遮挡平台选项；选项仍可直接点击，上一/下一步、跳过本节和退出教程也会继续保留。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 220,
+    title: '新手引导不再遮挡高亮内容',
+    description: '教程卡片现在会严格避开当前高亮区域：自动选择上方或下方安全空间，空间不足时改为卡片内部滚动，不再因为小屏幕或长说明压住节点进度、确认节点等正在介绍的控件。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 221,
+    title: '新手引导自动找到屏幕外目标',
+    description: '教程介绍长页面下方的功能前会先自动滚到对应位置再高亮；教程说明过长时只滚动正文，退出、跳过、上一步和下一步始终固定可见，不再被挤出卡片。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 222,
+    title: '电脑端新手引导定位修复',
+    description: '修复电脑端右侧工作区使用独立页面层时，高亮仍按整窗坐标计算导致整体横向错位的问题。新增排单里的图名、单主、平台、稿价和保存等教程现在会按实际工作区位置准确高亮。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 223,
+    title: '电脑端首次添加设备流程修复',
+    description: '电脑端首次添加设备会先等待设备同步组件真正启动，再创建临时加入目录并开始扫描，修复冷启动时偶发“no such folder”导致第一次添加失败的问题。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 224,
+    title: '手机端首次添加设备启动流程修复',
+    description: '手机端首次加入设备时会等待设备同步组件的接口真正可用后再继续，不再把正常的启动过程直接当作“同步核心正在启动，请稍后重试”。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 225,
+    title: '首次添加设备增加备用连接',
+    description: '首次添加设备仍优先使用原来的设备同步通道；如果临时连接握手失败、传输迟迟没有完成，会自动切换备用在线连接传递同一份加密账号信息，加入成功后继续回到原来的正式同步通道。同时加强手机和电脑端设备同步启动边界，并在发布前真实检查同步核心与备用连接能否运行。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 226,
+    title: '网页版可以直接加入已有账号',
+    description: '网页版新增从已登录手机或电脑直接加入账号：复制设备码后生成网页回应码，确认后通过加密在线连接接收账号身份，不再必须先导出再导入完整备份。不同浏览器会作为独立网页设备加入同一账号，并继续使用现有在线同步保持工作数据更新。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 227,
+    title: '网页版新手引导高亮全面修正',
+    description: '系统检查并修正网页版快速上手引导：表单字段会完整高亮标签与输入区域，页面切换后稍晚出现的目标不再被教程提前跳过；账号与设备重新纳入网页版教程，完整备份会直接指向实际导出/导入区域，透明控件在网页端也会沿真实控件轮廓明确显示高亮。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 228,
+    title: '网页版界面与客户端进一步统一',
+    description: '网页版的账号、设置、主题色、设备同步和参考图进一步与手机、电脑共用同一套界面组件，只保留平台能力不同的部分单独适配；新手引导会按完整导航项高亮成品、日程和统计。添加到桌面时也会使用冒险者公会当前 App 图标。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 229,
+    title: '网页版操作稳定性与桌面图标修复',
+    description: '修复网页版在线同步时页面可能反复重建、打断正在进行的操作；设备间日常同步只补充发生变化的数据，离线设备也不会反复触发传输；同时修正添加到桌面后的图标缩放比例，使它保持与客户端图标一致的构图。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 230,
+    title: '手机、电脑与网页版一致性继续完善',
+    description: '继续统一手机、电脑与网页版的账号、设置、同步、备份、主题、截图导入、参考图和小票等使用体验，减少同一功能在不同平台出现细节不一致或修复不同步的情况。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 231,
+    title: '网页版更新缓存修复',
+    description: '修复网页版发布新版后仍可能继续使用旧页面资源，导致更新没有生效、白屏或一直停在加载状态的问题。后续网页资源更新会自动刷新对应缓存。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 232,
+    title: '网页版安装提示状态修复',
+    description: '修复网页版把“浏览器已安装应用”误显示成“已经添加到桌面”的问题；可直接安装时仍会调用浏览器安装提示，安装完成后也会明确说明桌面图标由手机系统桌面决定。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 233,
+    title: '网页版旧缓存白屏修复',
+    description: '网页版更新后只会读取当前版本自己的页面资源，并自动清理旧版 Flutter 网页缓存，避免新旧脚本混用导致白屏或加载失败。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 234,
+    title: '安卓网页版白屏稳定性修复',
+    description: '安卓浏览器上的网页版改用更稳妥的绘制方式，减少后台切换或系统回收图形资源后出现整页白屏；参考图显示也降低了额外图形内存占用。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 235,
+    title: '网页版更新启动链修复',
+    description: '修复旧版网页缓存仍控制启动过程、导致新版已经发布却继续加载旧脚本的问题。更新时会先清理旧网页运行缓存，再按当前版本加载启动文件，避免新旧资源混用造成白屏。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 236,
+    title: '网页版启动诊断完善',
+    description: '网页版启动时会显示实际启动阶段，若网页资源、Flutter 引擎或应用首帧出现异常会直接显示错误，不再只剩空白页面，便于准确定位启动失败原因。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 237,
+    title: '网页版流畅度与教程高亮修复',
+    description: '恢复安卓网页版正常图形加速，解决页面操作明显卡顿；快速上手会等待页面真实控件完成布局再高亮，并修复设置页“安装网页版应用”等首屏外目标无法正确定位的问题。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 238,
+    title: '网页版教程高亮挖洞修复',
+    description: '修复部分教程目标虽然可以点击、但视觉上仍被黑色遮罩盖住的问题；高亮会从遮罩层真正挖出目标区域，并保持“安装网页版应用”等步骤直接绑定实际可操作控件。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 239,
+    title: '网页版安装教程自动定位修复',
+    description: '快速上手介绍“网页版也可以添加到桌面”时，会先进入设置并自动滚动到真实的网页版安装入口，再开始高亮，不需要手动向下寻找对应位置。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 240,
+    title: '新手教程章节与跳过逻辑修复',
+    description: '修复“添加到桌面”被插进上一小节、屏幕外安装入口仍无法定位，以及“跳过本节”在跨页面章节里只相当于下一步的问题；现在章节边界、整节跳过和网页版安装入口自动定位会按实际教程结构工作。',
+  ),
+  AdventurerNewsEntry(
+    introducedBuild: 241,
+    title: '排单标签筛选显示优化',
+    description: '“加急”继续作为新增和编辑排单时的内置快捷标签；标签筛选只显示当前未归档排单实际使用过的标签，没有加急单时不再固定显示“加急”。',
+  ),
 ];
 
 List<AdventurerNewsEntry> newsBetweenBuilds(
@@ -413,31 +550,16 @@ class AdventurerNewsNotice {
 class AdventurerNewsStore {
   const AdventurerNewsStore();
 
-  static const _fileName = 'adventurer-news-last-seen-build-v1.txt';
-
-  Future<File> _file() async {
-    final dir = await getApplicationSupportDirectory();
-    return File('${dir.path}/$_fileName');
-  }
+  static const AdventurerNewsStorage _storage = AdventurerNewsStorage();
 
   Future<int> installedBuild() async {
     final info = await PackageInfo.fromPlatform();
     return int.tryParse(info.buildNumber) ?? 0;
   }
 
-  Future<int?> _readLastSeen() async {
-    final file = await _file();
-    if (!await file.exists()) return null;
-    // Corrupt files must not accidentally mark a newer version as read.
-    final value = int.tryParse((await file.readAsString()).trim());
-    return value != null && value >= 0 ? value : null;
-  }
+  Future<int?> _readLastSeen() => _storage.readLastSeen();
 
-  Future<void> _writeLastSeen(int build) async {
-    final file = await _file();
-    await file.parent.create(recursive: true);
-    await atomicWriteString(file, build.toString());
-  }
+  Future<void> _writeLastSeen(int build) => _storage.writeLastSeen(build);
 
   /// Called once on startup after account discovery but before the app can
   /// create its first account. A clean install has no update to announce.

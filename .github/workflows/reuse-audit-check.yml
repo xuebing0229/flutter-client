@@ -1,0 +1,27 @@
+name: Reuse audit check
+
+on:
+  push:
+    branches:
+      - 'build/beta-229-web-stability-icon-parity'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reuse-audit-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test

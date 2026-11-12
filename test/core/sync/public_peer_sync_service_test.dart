@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'unacknowledged web change is retried when the other device comes online',
+    'offline peer does not cause repeated relay traffic and still syncs on later startup',
     () async {
       final hub = _RelayHub();
       final nativeDevice = AccountDevice(
@@ -28,6 +28,7 @@ void main() {
       AccountSyncState nativeState = _state(
         devices: <String, AccountDevice>{
           nativeDevice.id: nativeDevice,
+          webDevice.id: webDevice,
         },
       );
       AccountSyncState webState = _state(
@@ -38,7 +39,11 @@ void main() {
       );
 
       final webRecords = <Map<String, dynamic>>[
-        <String, dynamic>{'marker': 'edited-on-web'},
+        <String, dynamic>{
+          'kind': 'order',
+          'id': 'order-1',
+          'marker': 'edited-on-web',
+        },
       ];
       List<Map<String, dynamic>> nativeReceived = const [];
       final received = Completer<void>();
@@ -59,10 +64,16 @@ void main() {
 
       await web.start();
 
-      // Let the first snapshot be sent while the native peer is offline. The
+      // Let the first record manifest be sent while the native peer is offline. The
       // relay deliberately has no offline queue, so this attempt is dropped.
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(web.lastSuccessfulSyncAt, isNull);
+
+      // Multiple local heartbeat intervals must stay completely idle while
+      // the known peer is offline. This protects the public relay quota.
+      final publishCountWhileOffline = hub.publishCount;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(hub.publishCount, publishCountWhileOffline);
 
       final native = PublicPeerSyncService(
         accountId: nativeState.accountId,
@@ -85,6 +96,8 @@ void main() {
 
       await native.start();
 
+      // Native startup itself announces presence. Web receives that manifest
+      // and answers once with its latest records; no polling/retry loop is needed.
       await received.future.timeout(const Duration(seconds: 1));
 
       expect(nativeReceived, webRecords);
@@ -107,13 +120,191 @@ void main() {
       expect(native.lastSuccessfulSyncAt, isNotNull);
 
       // Once both directions are acknowledged, the protocol must become idle
-      // instead of bouncing snapshots forever.
+      // instead of bouncing manifests or deltas forever.
       await Future<void>.delayed(const Duration(milliseconds: 80));
       final settledPublishCount = hub.publishCount;
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(hub.publishCount, settledPublishCount);
     },
   );
+
+  test('daily relay sends only changed SyncRecords', () async {
+    final hub = _RelayHub();
+    final aDevice = AccountDevice(
+      id: 'device-a',
+      name: '电脑',
+      platform: 'windows',
+      firstSeenAt: DateTime.utc(2026, 1, 1),
+      lastSeenAt: DateTime.utc(2026, 1, 1),
+    );
+    final bDevice = AccountDevice(
+      id: 'device-b',
+      name: '网页设备',
+      platform: 'web',
+      firstSeenAt: DateTime.utc(2026, 1, 2),
+      lastSeenAt: DateTime.utc(2026, 1, 2),
+    );
+    final devices = <String, AccountDevice>{
+      aDevice.id: aDevice,
+      bDevice.id: bDevice,
+    };
+
+    AccountSyncState aState = _state(devices: devices);
+    AccountSyncState bState = _state(devices: devices);
+    final aRecords = <Map<String, dynamic>>[
+      <String, dynamic>{'kind': 'order', 'id': 'order-1', 'value': 1},
+      <String, dynamic>{'kind': 'order', 'id': 'order-2', 'value': 2},
+    ];
+    final bRecords = <Map<String, dynamic>>[
+      for (final item in aRecords) Map<String, dynamic>.from(item),
+    ];
+    final receivedBatches = <List<Map<String, dynamic>>>[];
+
+    final a = PublicPeerSyncService(
+      accountId: aState.accountId,
+      deviceId: aDevice.id,
+      captureAccountState: () => aState,
+      mergeAccountState: (incoming) async {
+        aState = aState.merge(incoming);
+      },
+      exportRecords: () async => [
+        for (final item in aRecords) Map<String, dynamic>.from(item),
+      ],
+      mergeRecords: (_) async {},
+      relayFactory: hub.createClient,
+      heartbeatInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(a.dispose);
+
+    final b = PublicPeerSyncService(
+      accountId: bState.accountId,
+      deviceId: bDevice.id,
+      captureAccountState: () => bState,
+      mergeAccountState: (incoming) async {
+        bState = bState.merge(incoming);
+      },
+      exportRecords: () async => [
+        for (final item in bRecords) Map<String, dynamic>.from(item),
+      ],
+      mergeRecords: (incoming) async {
+        receivedBatches.add([
+          for (final item in incoming) Map<String, dynamic>.from(item),
+        ]);
+        for (final incomingRecord in incoming) {
+          final id = incomingRecord['id'];
+          final index = bRecords.indexWhere((item) => item['id'] == id);
+          if (index >= 0) {
+            bRecords[index] = Map<String, dynamic>.from(incomingRecord);
+          } else {
+            bRecords.add(Map<String, dynamic>.from(incomingRecord));
+          }
+        }
+      },
+      relayFactory: hub.createClient,
+      heartbeatInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(b.dispose);
+
+    await b.start();
+    await a.start();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    receivedBatches.clear();
+
+    aRecords[0] = <String, dynamic>{
+      'kind': 'order',
+      'id': 'order-1',
+      'value': 99,
+    };
+    a.requestSync(immediate: true);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while (receivedBatches.isEmpty && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(receivedBatches, isNotEmpty);
+    expect(receivedBatches.last, hasLength(1));
+    expect(receivedBatches.last.single['id'], 'order-1');
+    expect(receivedBatches.last.single['value'], 99);
+  });
+
+  test('relay reuses grow-only screenshot import history across platforms',
+      () async {
+    final hub = _RelayHub();
+    final aDevice = AccountDevice(
+      id: 'history-native',
+      name: '电脑',
+      platform: 'windows',
+      firstSeenAt: DateTime.utc(2026, 1, 1),
+      lastSeenAt: DateTime.utc(2026, 1, 1),
+    );
+    final bDevice = AccountDevice(
+      id: 'history-web',
+      name: '网页设备',
+      platform: 'web',
+      firstSeenAt: DateTime.utc(2026, 1, 2),
+      lastSeenAt: DateTime.utc(2026, 1, 2),
+    );
+    final devices = <String, AccountDevice>{
+      aDevice.id: aDevice,
+      bDevice.id: bDevice,
+    };
+    AccountSyncState aState = _state(devices: devices);
+    AccountSyncState bState = _state(devices: devices);
+    final aHistory = <String>{'orders|image-a|0'};
+    final bHistory = <String>{'orders|image-b|1'};
+
+    PublicPeerSyncService service({
+      required AccountDevice device,
+      required AccountSyncState Function() state,
+      required Future<void> Function(AccountSyncState) mergeState,
+      required Set<String> history,
+    }) {
+      return PublicPeerSyncService(
+        accountId: state().accountId,
+        deviceId: device.id,
+        captureAccountState: state,
+        mergeAccountState: mergeState,
+        exportRecords: () async => const <Map<String, dynamic>>[],
+        mergeRecords: (_) async {},
+        captureImportHistory: () async => Set<String>.from(history),
+        mergeImportHistory: (incoming) async => history.addAll(incoming),
+        relayFactory: hub.createClient,
+        heartbeatInterval: const Duration(milliseconds: 20),
+      );
+    }
+
+    final b = service(
+      device: bDevice,
+      state: () => bState,
+      mergeState: (incoming) async {
+        bState = bState.merge(incoming);
+      },
+      history: bHistory,
+    );
+    addTearDown(b.dispose);
+    final a = service(
+      device: aDevice,
+      state: () => aState,
+      mergeState: (incoming) async {
+        aState = aState.merge(incoming);
+      },
+      history: aHistory,
+    );
+    addTearDown(a.dispose);
+
+    await b.start();
+    await a.start();
+
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while ((aHistory.length < 2 || bHistory.length < 2) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(aHistory, containsAll(<String>['orders|image-a|0', 'orders|image-b|1']));
+    expect(bHistory, containsAll(<String>['orders|image-a|0', 'orders|image-b|1']));
+  });
 }
 
 AccountSyncState _state({

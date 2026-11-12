@@ -1,343 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
-import 'package:cryptography/cryptography.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../sync/embedded_syncthing_bridge.dart';
+import 'account_transfer_protocol.dart';
 import 'device_descriptor.dart';
 
-class AccountTransferDescriptor {
-  const AccountTransferDescriptor({
-    required this.encryptionKey,
-    required this.sourceDeviceId,
-    required this.folderId,
-  });
-
-  final String encryptionKey;
-  final String sourceDeviceId;
-  final String folderId;
-
-  String encode() {
-    if (_decodeTransferKey(encryptionKey) == null) {
-      throw StateError('设备加入二维码必须包含有效的加密密钥。');
-    }
-    if (sourceDeviceId.trim().length < 20) {
-      throw StateError('设备加入二维码缺少有效的同步设备 ID。');
-    }
-    if (!_validBootstrapFolderId(folderId)) {
-      throw StateError('设备加入二维码缺少有效的临时同步目录。');
-    }
-
-    return jsonEncode(<String, dynamic>{
-      'kind': 'artist_queue_account_transfer_syncthing',
-      'version': 1,
-      'sourceDeviceId': sourceDeviceId,
-      'folderId': folderId,
-      'key': encryptionKey,
-    });
-  }
-
-  factory AccountTransferDescriptor.decode(String source) {
-    final decoded = jsonDecode(source);
-    if (decoded is! Map ||
-        decoded['kind'] != 'artist_queue_account_transfer_syncthing' ||
-        decoded['version'] != 1) {
-      throw const FormatException('这不是有效的设备加入二维码。');
-    }
-
-    final sourceDeviceId = decoded['sourceDeviceId'];
-    final folderId = decoded['folderId'];
-    final rawKey = decoded['key'];
-
-    if (sourceDeviceId is! String || sourceDeviceId.trim().length < 20) {
-      throw const FormatException('设备加入二维码缺少有效的同步设备 ID。');
-    }
-    if (folderId is! String || !_validBootstrapFolderId(folderId)) {
-      throw const FormatException('设备加入二维码缺少有效的临时同步目录。');
-    }
-    if (rawKey is! String || _decodeTransferKey(rawKey) == null) {
-      throw const FormatException('设备加入二维码缺少有效的加密密钥。');
-    }
-
-    return AccountTransferDescriptor(
-      encryptionKey: rawKey,
-      sourceDeviceId: sourceDeviceId.trim(),
-      folderId: folderId,
-    );
-  }
-}
-
-class AccountTransferResponseCode {
-  const AccountTransferResponseCode({
-    required this.folderId,
-    required this.sourceDeviceId,
-    required this.receiverDeviceId,
-    required this.receiverName,
-    required this.proof,
-    this.receiverAppDeviceId,
-    this.receiverPlatform,
-    this.bindingProof,
-  });
-
-  final String folderId;
-  final String sourceDeviceId;
-  final String receiverDeviceId;
-  final String receiverName;
-  final String proof;
-
-  /// v175+: provisional app-device identity created before the permanent
-  /// account folder is shared. Older response codes omit these fields.
-  final String? receiverAppDeviceId;
-  final String? receiverPlatform;
-  final String? bindingProof;
-
-  static Future<AccountTransferResponseCode> create({
-    required AccountTransferDescriptor descriptor,
-    required String receiverDeviceId,
-    required String receiverName,
-    required String receiverAppDeviceId,
-    required String receiverPlatform,
-  }) async {
-    final normalizedReceiverId = receiverDeviceId.trim();
-    if (normalizedReceiverId.length < 20) {
-      throw const FormatException('无法读取新设备的同步身份。');
-    }
-    final keyBytes = _decodeTransferKey(descriptor.encryptionKey);
-    if (keyBytes == null) {
-      throw const FormatException('设备加入二维码的加密密钥无效。');
-    }
-
-    final name = receiverName.trim();
-    if (name.isEmpty) {
-      throw const FormatException('无法读取新设备名称。');
-    }
-    final appDeviceId = receiverAppDeviceId.trim();
-    final platform = receiverPlatform.trim();
-    if (appDeviceId.length < 16 || platform.isEmpty) {
-      throw const FormatException('无法建立新设备的应用身份。');
-    }
-    final proofBytes = await _responseProof(
-      keyBytes: keyBytes,
-      folderId: descriptor.folderId,
-      sourceDeviceId: descriptor.sourceDeviceId,
-      receiverDeviceId: normalizedReceiverId,
-      receiverName: name,
-    );
-    final bindingProofBytes = await _responseBindingProof(
-      keyBytes: keyBytes,
-      folderId: descriptor.folderId,
-      sourceDeviceId: descriptor.sourceDeviceId,
-      receiverDeviceId: normalizedReceiverId,
-      receiverName: name,
-      receiverAppDeviceId: appDeviceId,
-      receiverPlatform: platform,
-    );
-
-    return AccountTransferResponseCode(
-      folderId: descriptor.folderId,
-      sourceDeviceId: descriptor.sourceDeviceId,
-      receiverDeviceId: normalizedReceiverId,
-      receiverName: name,
-      proof: _encodeBase64Url(proofBytes),
-      receiverAppDeviceId: appDeviceId,
-      receiverPlatform: platform,
-      bindingProof: _encodeBase64Url(bindingProofBytes),
-    );
-  }
-
-  String encode() {
-    if (!_validBootstrapFolderId(folderId) ||
-        sourceDeviceId.trim().length < 20 ||
-        receiverDeviceId.trim().length < 20 ||
-        receiverName.trim().isEmpty ||
-        proof.trim().isEmpty) {
-      throw StateError('设备回应码内容无效。');
-    }
-
-    return jsonEncode(<String, dynamic>{
-      'kind': 'artist_queue_account_transfer_response',
-      'version': 1,
-      'folderId': folderId,
-      'sourceDeviceId': sourceDeviceId,
-      'receiverDeviceId': receiverDeviceId,
-      'receiverName': receiverName,
-      'proof': proof,
-      if (receiverAppDeviceId?.trim().isNotEmpty == true)
-        'receiverAppDeviceId': receiverAppDeviceId,
-      if (receiverPlatform?.trim().isNotEmpty == true)
-        'receiverPlatform': receiverPlatform,
-      if (bindingProof?.trim().isNotEmpty == true)
-        'bindingProof': bindingProof,
-    });
-  }
-
-  factory AccountTransferResponseCode.decode(String source) {
-    final decoded = jsonDecode(source);
-    if (decoded is! Map ||
-        decoded['kind'] != 'artist_queue_account_transfer_response' ||
-        decoded['version'] != 1) {
-      throw const FormatException('这不是有效的新设备回应码。');
-    }
-
-    final folderId = decoded['folderId'];
-    final sourceDeviceId = decoded['sourceDeviceId'];
-    final receiverDeviceId = decoded['receiverDeviceId'];
-    final receiverName = decoded['receiverName'];
-    final proof = decoded['proof'];
-    final receiverAppDeviceId = decoded['receiverAppDeviceId'];
-    final receiverPlatform = decoded['receiverPlatform'];
-    final bindingProof = decoded['bindingProof'];
-
-    if (folderId is! String || !_validBootstrapFolderId(folderId)) {
-      throw const FormatException('回应码的临时会话无效。');
-    }
-    if (sourceDeviceId is! String || sourceDeviceId.trim().length < 20) {
-      throw const FormatException('回应码缺少原设备身份。');
-    }
-    if (receiverDeviceId is! String || receiverDeviceId.trim().length < 20) {
-      throw const FormatException('回应码缺少新设备身份。');
-    }
-    if (receiverName is! String || receiverName.trim().isEmpty) {
-      throw const FormatException('回应码缺少新设备名称。');
-    }
-    if (proof is! String || proof.trim().isEmpty) {
-      throw const FormatException('回应码缺少会话校验信息。');
-    }
-
-    final hasBindingFields =
-        receiverAppDeviceId != null ||
-        receiverPlatform != null ||
-        bindingProof != null;
-    if (hasBindingFields &&
-        (receiverAppDeviceId is! String ||
-            receiverAppDeviceId.trim().length < 16 ||
-            receiverPlatform is! String ||
-            receiverPlatform.trim().isEmpty ||
-            bindingProof is! String ||
-            bindingProof.trim().isEmpty)) {
-      throw const FormatException('回应码的新设备绑定信息不完整。');
-    }
-
-    return AccountTransferResponseCode(
-      folderId: folderId,
-      sourceDeviceId: sourceDeviceId.trim(),
-      receiverDeviceId: receiverDeviceId.trim(),
-      receiverName: receiverName.trim(),
-      proof: proof.trim(),
-      receiverAppDeviceId: receiverAppDeviceId is String
-          ? receiverAppDeviceId.trim()
-          : null,
-      receiverPlatform:
-          receiverPlatform is String ? receiverPlatform.trim() : null,
-      bindingProof: bindingProof is String ? bindingProof.trim() : null,
-    );
-  }
-
-  Future<bool> verifies(AccountTransferDescriptor descriptor) async {
-    if (folderId != descriptor.folderId ||
-        sourceDeviceId != descriptor.sourceDeviceId) {
-      return false;
-    }
-    final keyBytes = _decodeTransferKey(descriptor.encryptionKey);
-    if (keyBytes == null) return false;
-
-    final expected = await _responseProof(
-      keyBytes: keyBytes,
-      folderId: folderId,
-      sourceDeviceId: sourceDeviceId,
-      receiverDeviceId: receiverDeviceId,
-      receiverName: receiverName,
-    );
-    try {
-      if (!_secureBytesEqual(_decodeBase64UrlStrict(proof), expected)) {
-        return false;
-      }
-
-      final appDeviceId = receiverAppDeviceId;
-      final platform = receiverPlatform;
-      final extraProof = bindingProof;
-      if (appDeviceId == null && platform == null && extraProof == null) {
-        return true;
-      }
-      if (appDeviceId == null || platform == null || extraProof == null) {
-        return false;
-      }
-
-      final expectedBinding = await _responseBindingProof(
-        keyBytes: keyBytes,
-        folderId: folderId,
-        sourceDeviceId: sourceDeviceId,
-        receiverDeviceId: receiverDeviceId,
-        receiverName: receiverName,
-        receiverAppDeviceId: appDeviceId,
-        receiverPlatform: platform,
-      );
-      return _secureBytesEqual(
-        _decodeBase64UrlStrict(extraProof),
-        expectedBinding,
-      );
-    } catch (_) {
-      return false;
-    }
-  }
-}
-
-class AddDeviceCode {
-  const AddDeviceCode({
-    required this.accountTransferPayload,
-    this.syncPairingPayload,
-  });
-
-  final String accountTransferPayload;
-  final String? syncPairingPayload;
-
-  String encode() {
-    return jsonEncode(<String, dynamic>{
-      'kind': 'artist_queue_add_device',
-      'version': 1,
-      'accountTransfer': accountTransferPayload,
-      if (syncPairingPayload?.trim().isNotEmpty == true)
-        'syncPairing': syncPairingPayload,
-    });
-  }
-
-  factory AddDeviceCode.decode(String source) {
-    final decoded = jsonDecode(source);
-    if (decoded is! Map ||
-        decoded['kind'] != 'artist_queue_add_device' ||
-        decoded['version'] != 1) {
-      throw const FormatException('这不是有效的添加设备二维码。');
-    }
-
-    final transfer = decoded['accountTransfer'];
-    if (transfer is! String || transfer.trim().isEmpty) {
-      throw const FormatException('添加设备二维码缺少账号传输信息。');
-    }
-
-    final pairing = decoded['syncPairing'];
-    return AddDeviceCode(
-      accountTransferPayload: transfer,
-      syncPairingPayload: pairing is String && pairing.trim().isNotEmpty
-          ? pairing
-          : null,
-    );
-  }
-
-  static String accountTransferFrom(String source) {
-    return AddDeviceCode.decode(source).accountTransferPayload;
-  }
-
-  static String syncPairingFrom(String source) {
-    final pairing = AddDeviceCode.decode(source).syncPairingPayload;
-    if (pairing == null || pairing.trim().isEmpty) {
-      throw const FormatException('这个添加设备二维码里没有同步配对信息。');
-    }
-    return pairing;
-  }
-}
+export 'account_transfer_protocol.dart';
 
 class _AccountTransferDiagnostics {
   _AccountTransferDiagnostics({required this.role});
@@ -402,6 +74,7 @@ class SyncthingAccountTransferServer {
     required File payloadFile,
     required File doneFile,
     required File ackFile,
+    required String encryptedPayload,
     required _AccountTransferDiagnostics diagnostics,
     void Function()? onTransferred,
   }) : _bridge = bridge,
@@ -409,6 +82,7 @@ class SyncthingAccountTransferServer {
        _payloadFile = payloadFile,
        _doneFile = doneFile,
        _ackFile = ackFile,
+       _encryptedPayload = encryptedPayload,
        _diagnostics = diagnostics,
        _onTransferred = onTransferred;
 
@@ -417,10 +91,18 @@ class SyncthingAccountTransferServer {
   final File _payloadFile;
   final File _doneFile;
   final File _ackFile;
+  final String _encryptedPayload;
   final _AccountTransferDiagnostics _diagnostics;
   final void Function()? _onTransferred;
 
   final AccountTransferDescriptor descriptor;
+
+  AccountTransferRelaySession? _relaySession;
+  String? _relayReceiverDeviceId;
+  DateTime? _lastRelayPayloadPublishAt;
+  AccountTransferResponseCode? _acceptedResponse;
+  DateTime? _responseAcceptedAt;
+  bool _relayFallbackActive = false;
 
   bool _closed = false;
   bool _receiverFinished = false;
@@ -432,6 +114,7 @@ class SyncthingAccountTransferServer {
 
   bool get receiverFinished => _receiverFinished;
   bool get transferred => _transferred;
+  bool get relayFallbackActive => _relayFallbackActive;
   String? get acceptedReceiverDeviceId => _acceptedReceiverDeviceId;
   String? get acceptedReceiverName => _acceptedReceiverName;
   String? get acceptedReceiverAppDeviceId => _acceptedReceiverAppDeviceId;
@@ -464,7 +147,7 @@ class SyncthingAccountTransferServer {
       throw StateError('当前平台不支持无局域网设备加入。');
     }
 
-    final token = _randomToken();
+    final token = randomAccountTransferToken();
     final folderId = 'artist-workbench-bootstrap-$token';
     final diagnostics = _AccountTransferDiagnostics(role: 'source');
     diagnostics.event('server.start', <String, Object?>{
@@ -480,7 +163,7 @@ class SyncthingAccountTransferServer {
     await folder.create(recursive: true);
 
     try {
-      final keyBytes = _randomBytes(32);
+      final keyBytes = randomAccountTransferBytes(32);
       final payloadFile = File(
         '${folder.path}${Platform.pathSeparator}transfer.json',
       );
@@ -502,8 +185,12 @@ class SyncthingAccountTransferServer {
         force: true,
       );
       diagnostics.event('server.prepareFolder.ok');
+      final encryptedPayload = await encryptAccountTransferPayload(
+        payload,
+        keyBytes,
+      );
       await payloadFile.writeAsString(
-        await _encryptTransferPayload(payload, keyBytes),
+        encryptedPayload,
         flush: true,
       );
       await bridge.requestScanFolder(folderId);
@@ -523,7 +210,7 @@ class SyncthingAccountTransferServer {
 
       return SyncthingAccountTransferServer._(
         descriptor: AccountTransferDescriptor(
-          encryptionKey: _encodeBase64Url(keyBytes),
+          encryptionKey: encodeAccountTransferBase64Url(keyBytes),
           sourceDeviceId: sourceDeviceId,
           folderId: folderId,
         ),
@@ -532,6 +219,7 @@ class SyncthingAccountTransferServer {
         payloadFile: payloadFile,
         doneFile: doneFile,
         ackFile: ackFile,
+        encryptedPayload: encryptedPayload,
         diagnostics: diagnostics,
         onTransferred: onTransferred,
       );
@@ -568,94 +256,81 @@ class SyncthingAccountTransferServer {
     _acceptedReceiverName = response.receiverName;
     _acceptedReceiverAppDeviceId = response.receiverAppDeviceId;
     _acceptedReceiverPlatform = response.receiverPlatform;
+    _acceptedResponse = response;
+    _responseAcceptedAt = DateTime.now();
 
-    // Device-level connectivity is not enough. Wait until Syncthing confirms
-    // that the receiver shares THIS bootstrap folder back (remoteState=valid).
-    final deadline = DateTime.now().add(const Duration(seconds: 45));
+    // Browsers do not have a Syncthing transport identity. Their response uses
+    // the app-device ID as the temporary relay address, so skip the native
+    // handshake entirely and enter the same encrypted Cloudflare fallback that
+    // native clients use when Syncthing cannot bootstrap in time.
+    if (response.receiverPlatform?.trim() == 'web') {
+      _diagnostics.event('server.webBootstrap.relayOnly', <String, Object?>{
+        'receiverDeviceId': response.receiverDeviceId,
+        'receiverAppDeviceId': response.receiverAppDeviceId,
+      });
+      if (!await _activateRelayFallback(response)) {
+        throw const FormatException(
+          '网页设备已确认，但备用连接暂时不可用，请保持两端联网后重试。',
+        );
+      }
+      return;
+    }
+
+    // Give the native Syncthing bootstrap path a short first chance. It remains
+    // the preferred path, but account adoption must not fail just because the
+    // temporary folder cannot complete its handshake on this network.
+    final nativeDeadline = DateTime.now().add(const Duration(seconds: 10));
     String? lastRemoteState;
     String? lastFolderError;
+    Object? nativeFailure;
     var attempt = 0;
-    while (!_closed && DateTime.now().isBefore(deadline)) {
+    while (!_closed && DateTime.now().isBefore(nativeDeadline)) {
       attempt++;
       try {
         await _bridge.pairFolder(
-        folderId: descriptor.folderId,
-        deviceId: response.receiverDeviceId,
+          folderId: descriptor.folderId,
+          deviceId: response.receiverDeviceId,
           name: response.receiverName,
         );
-        if (attempt == 1) {
-          _diagnostics.event('server.pairFolder.ok', <String, Object?>{
-            'attempt': attempt,
-            'receiverDeviceId': response.receiverDeviceId,
-          });
-        }
-      } catch (error) {
-        _diagnostics.event('server.pairFolder.error', <String, Object?>{
-          'attempt': attempt,
-          'error': '$error',
-        });
-        rethrow;
-      }
-      try {
         await _bridge.setFolderPaused(
-        folderId: descriptor.folderId,
+          folderId: descriptor.folderId,
           paused: false,
         );
-        if (attempt == 1) {
-          _diagnostics.event('server.unpauseFolder.ok');
-        }
-      } catch (error) {
-        _diagnostics.event('server.unpauseFolder.error', <String, Object?>{
-          'attempt': attempt,
-          'error': '$error',
-        });
-        rethrow;
-      }
-      try {
         await _bridge.requestScanFolder(descriptor.folderId);
-        if (attempt == 1) {
-          _diagnostics.event('server.scanAfterAccept.ok');
-        }
-      } catch (error) {
-        _diagnostics.event('server.scanAfterAccept.error', <String, Object?>{
-          'attempt': attempt,
-          'error': '$error',
-        });
-        rethrow;
-      }
 
-      final status = await _bridge.statusFolder(descriptor.folderId);
-      _diagnostics.status(
-        'server.acceptResponse.status',
-        status,
-        folderId: descriptor.folderId,
-      );
-      lastRemoteState =
-          status.remoteFolderStates[response.receiverDeviceId]?.trim();
-      if (status.folderErrors.isNotEmpty) {
-        lastFolderError = status.folderErrors.first;
-      }
-
-      final connected = status.connectedDeviceIds.contains(
-        response.receiverDeviceId,
-      );
-      if (connected && lastRemoteState == 'valid') {
-        _diagnostics.event('server.acceptResponse.folder.valid', <String, Object?>{
-          'attempt': attempt,
-          'receiverDeviceId': response.receiverDeviceId,
-        });
-        await _bridge.requestScanFolder(descriptor.folderId);
-        return;
-      }
-
-      if (lastRemoteState == 'paused') {
-        _diagnostics.event('server.acceptResponse.folder.paused', <String, Object?>{
-          'attempt': attempt,
-        });
-        throw const FormatException(
-          '新设备已经连接，但临时账号同步目录在对端处于暂停状态。'
-          '请让新设备保持在“确认新设备”页面后重新尝试。',
+        final status = await _bridge.statusFolder(descriptor.folderId);
+        _diagnostics.status(
+          'server.acceptResponse.status',
+          status,
+          folderId: descriptor.folderId,
         );
+        lastRemoteState =
+            status.remoteFolderStates[response.receiverDeviceId]?.trim();
+        if (status.folderErrors.isNotEmpty) {
+          lastFolderError = status.folderErrors.first;
+        }
+
+        final connected = status.connectedDeviceIds.contains(
+          response.receiverDeviceId,
+        );
+        if (connected && lastRemoteState == 'valid') {
+          _diagnostics.event(
+            'server.acceptResponse.folder.valid',
+            <String, Object?>{
+              'attempt': attempt,
+              'receiverDeviceId': response.receiverDeviceId,
+            },
+          );
+          await _bridge.requestScanFolder(descriptor.folderId);
+          return;
+        }
+      } catch (error) {
+        nativeFailure = error;
+        _diagnostics.event('server.nativeBootstrap.error', <String, Object?>{
+          'attempt': attempt,
+          'error': '$error',
+        });
+        break;
       }
 
       await Future<void>.delayed(const Duration(milliseconds: 750));
@@ -665,25 +340,108 @@ class SyncthingAccountTransferServer {
       _diagnostics.event('server.acceptResponse.closed');
       throw const FormatException('这次添加设备会话已经结束，请重新生成二维码。');
     }
-    _diagnostics.event('server.acceptResponse.timeout', <String, Object?>{
+
+    _diagnostics.event('server.nativeBootstrap.fallback', <String, Object?>{
       'attempts': attempt,
       'lastRemoteState': lastRemoteState,
       'lastFolderError': lastFolderError,
+      'nativeFailure': nativeFailure == null ? null : '$nativeFailure',
     });
+    if (await _activateRelayFallback(response)) {
+      return;
+    }
+
+    if (nativeFailure != null) {
+      throw FormatException('临时账号连接失败：$nativeFailure');
+    }
     if (lastFolderError != null && lastFolderError.isNotEmpty) {
       throw FormatException('临时账号同步目录建立失败：$lastFolderError');
     }
-    if (lastRemoteState == 'notSharing') {
-      throw const FormatException(
-        '两台设备已经连接，但新设备没有真正共享临时账号目录。'
-        '请让新设备保持在“确认新设备”页面并重新生成配对。',
-      );
-    }
     throw FormatException(
-      '临时账号同步目录没有完成握手'
-      '${lastRemoteState == null || lastRemoteState.isEmpty ? '' : '（状态：$lastRemoteState）'}。'
-      '请让两台设备都保持当前页面后重试。',
+      '临时账号连接没有完成'
+      '${lastRemoteState == null || lastRemoteState.isEmpty ? '' : '（状态：$lastRemoteState）'}，'
+      '并且备用连接也暂时不可用。',
     );
+  }
+
+  Future<bool> _activateRelayFallback(
+    AccountTransferResponseCode response,
+  ) async {
+    try {
+      var relay = _relaySession;
+      if (relay == null) {
+        relay = await AccountTransferRelaySession.connect(
+          descriptor: descriptor,
+          localDeviceId: descriptor.sourceDeviceId,
+          onFrame: _handleRelayFrame,
+        );
+        _relaySession = relay;
+      }
+      _relayReceiverDeviceId = response.receiverDeviceId;
+      _relayFallbackActive = true;
+      _diagnostics.event('server.relay.connected', <String, Object?>{
+        'receiverDeviceId': response.receiverDeviceId,
+      });
+      _publishRelayPayload();
+      return true;
+    } catch (error) {
+      _diagnostics.event('server.relay.connect.error', <String, Object?>{
+        'error': '$error',
+      });
+      return false;
+    }
+  }
+
+  void _publishRelayPayload() {
+    final relay = _relaySession;
+    final receiverDeviceId = _relayReceiverDeviceId;
+    if (!_relayFallbackActive ||
+        relay == null ||
+        !relay.connected ||
+        receiverDeviceId == null) {
+      return;
+    }
+    relay.publish(
+      targetDeviceId: receiverDeviceId,
+      frame: AccountTransferRelayFrame(
+        type: 'payload',
+        folderId: descriptor.folderId,
+        receiverDeviceId: receiverDeviceId,
+        body: _encryptedPayload,
+      ),
+    );
+    _lastRelayPayloadPublishAt = DateTime.now();
+    _diagnostics.event('server.relay.payload.publish');
+  }
+
+  Future<void> _handleRelayFrame(AccountTransferRelayFrame frame) async {
+    final receiverDeviceId = _acceptedReceiverDeviceId;
+    if (_closed ||
+        receiverDeviceId == null ||
+        frame.receiverDeviceId != receiverDeviceId ||
+        frame.type != 'done') {
+      return;
+    }
+    try {
+      final clear = await decryptAccountTransferPayload(
+        frame.body,
+        descriptor.encryptionKey,
+      );
+      final expected = accountTransferRelayControlMessage(
+        type: 'done',
+        folderId: descriptor.folderId,
+        receiverDeviceId: receiverDeviceId,
+      );
+      if (clear != expected) return;
+      if (!_receiverFinished) {
+        _receiverFinished = true;
+        _diagnostics.event('server.relay.done.received');
+      }
+    } catch (error) {
+      _diagnostics.event('server.relay.done.invalid', <String, Object?>{
+        'error': '$error',
+      });
+    }
   }
 
   Future<void> poll() async {
@@ -703,7 +461,40 @@ class SyncthingAccountTransferServer {
     }
 
     if (_acceptedReceiverDeviceId != null) {
-      await _bridge.requestScanFolder(descriptor.folderId);
+      try {
+        await _bridge.requestScanFolder(descriptor.folderId);
+      } catch (error) {
+        _diagnostics.event('server.poll.scan.error', <String, Object?>{
+          'error': '$error',
+          'relayFallbackActive': _relayFallbackActive,
+        });
+        if (!_relayFallbackActive) rethrow;
+      }
+    }
+
+    final acceptedResponse = _acceptedResponse;
+    final acceptedAt = _responseAcceptedAt;
+    if (!_relayFallbackActive &&
+        !_receiverFinished &&
+        acceptedResponse != null &&
+        acceptedAt != null &&
+        DateTime.now().difference(acceptedAt) >= const Duration(seconds: 15)) {
+      _diagnostics.event('server.relay.fallback.afterDeliveryDelay');
+      await _activateRelayFallback(acceptedResponse);
+    }
+
+    if (_relayFallbackActive && !_receiverFinished) {
+      final last = _lastRelayPayloadPublishAt;
+      if (last == null ||
+          DateTime.now().difference(last) >= const Duration(seconds: 2)) {
+        try {
+          _publishRelayPayload();
+        } catch (error) {
+          _diagnostics.event('server.relay.payload.error', <String, Object?>{
+            'error': '$error',
+          });
+        }
+      }
     }
 
     if (!_receiverFinished && await _doneFile.exists()) {
@@ -717,15 +508,54 @@ class SyncthingAccountTransferServer {
     if (!_receiverFinished) {
       throw StateError('新设备尚未确认收到账号数据。');
     }
-    if (_acceptedReceiverDeviceId == null) {
+    final receiverDeviceId = _acceptedReceiverDeviceId;
+    if (receiverDeviceId == null) {
       throw StateError('新设备身份尚未确认。');
     }
 
     _diagnostics.event('server.completeTransfer.begin');
-    await _ackFile.writeAsString('ack', flush: true);
-    _diagnostics.event('server.ackFile.write.ok');
-    await _bridge.requestScanFolder(descriptor.folderId);
-    _diagnostics.event('server.completeTransfer.scan.ok');
+    try {
+      await _ackFile.writeAsString('ack', flush: true);
+      _diagnostics.event('server.ackFile.write.ok');
+      await _bridge.requestScanFolder(descriptor.folderId);
+      _diagnostics.event('server.completeTransfer.scan.ok');
+    } catch (error) {
+      _diagnostics.event('server.completeTransfer.nativeAck.error', <String, Object?>{
+        'error': '$error',
+        'relayFallbackActive': _relayFallbackActive,
+      });
+      if (!_relayFallbackActive) rethrow;
+    }
+
+    if (_relayFallbackActive) {
+      final relay = _relaySession;
+      if (relay == null || !relay.connected) {
+        throw StateError('备用设备连接已经断开，请保持两台设备在线后重试。');
+      }
+      final keyBytes = decodeAccountTransferKey(descriptor.encryptionKey);
+      if (keyBytes == null) {
+        throw const FormatException('设备加入二维码的加密密钥无效。');
+      }
+      final body = await encryptAccountTransferPayload(
+        accountTransferRelayControlMessage(
+          type: 'ack',
+          folderId: descriptor.folderId,
+          receiverDeviceId: receiverDeviceId,
+        ),
+        keyBytes,
+      );
+      relay.publish(
+        targetDeviceId: receiverDeviceId,
+        frame: AccountTransferRelayFrame(
+          type: 'ack',
+          folderId: descriptor.folderId,
+          receiverDeviceId: receiverDeviceId,
+          body: body,
+        ),
+      );
+      _diagnostics.event('server.relay.ack.publish');
+    }
+
     _transferred = true;
     _diagnostics.event('server.completeTransfer.done');
     _onTransferred?.call();
@@ -735,6 +565,11 @@ class SyncthingAccountTransferServer {
     if (_closed) return;
     _closed = true;
     _diagnostics.event('server.close.begin');
+    final relay = _relaySession;
+    _relaySession = null;
+    try {
+      await relay?.close();
+    } catch (_) {}
     try {
       await _bridge.removeFolderById(descriptor.folderId);
       _diagnostics.event('server.close.removeFolder.ok');
@@ -804,7 +639,7 @@ class SyncthingAccountTransferClient {
       }
 
       final device = await DeviceDescriptor.current();
-      final provisionalAppDeviceId = _randomToken();
+      final provisionalAppDeviceId = randomAccountTransferToken();
       final response = await AccountTransferResponseCode.create(
         descriptor: descriptor,
         receiverDeviceId: receiverDeviceId,
@@ -819,24 +654,7 @@ class SyncthingAccountTransferClient {
         'receiverPlatform': device.platform,
       });
 
-      diagnostics.event('client.pairSource.begin', <String, Object?>{
-        'sourceDeviceId': descriptor.sourceDeviceId,
-      });
-      await bridge.pairFolder(
-        folderId: descriptor.folderId,
-        deviceId: descriptor.sourceDeviceId,
-        name: '原设备',
-      );
-      diagnostics.event('client.pairSource.ok');
-      final afterPairStatus = await bridge.statusFolder(descriptor.folderId);
-      diagnostics.status(
-        'client.afterPairStatus',
-        afterPairStatus,
-        folderId: descriptor.folderId,
-        force: true,
-      );
-
-      return SyncthingAccountTransferClientSession._(
+      final session = SyncthingAccountTransferClientSession._(
         descriptor: descriptor,
         response: response,
         bridge: bridge,
@@ -846,6 +664,38 @@ class SyncthingAccountTransferClient {
         ackFile: ackFile,
         diagnostics: diagnostics,
       );
+      final relayReady = await session._startRelayListener();
+
+      diagnostics.event('client.pairSource.begin', <String, Object?>{
+        'sourceDeviceId': descriptor.sourceDeviceId,
+        'relayReady': relayReady,
+      });
+      try {
+        await bridge.pairFolder(
+          folderId: descriptor.folderId,
+          deviceId: descriptor.sourceDeviceId,
+          name: '原设备',
+        );
+        diagnostics.event('client.pairSource.ok');
+        final afterPairStatus = await bridge.statusFolder(descriptor.folderId);
+        diagnostics.status(
+          'client.afterPairStatus',
+          afterPairStatus,
+          folderId: descriptor.folderId,
+          force: true,
+        );
+      } catch (error) {
+        diagnostics.event('client.pairSource.error', <String, Object?>{
+          'error': '$error',
+          'relayReady': relayReady,
+        });
+        if (!relayReady) {
+          await session.close();
+          rethrow;
+        }
+      }
+
+      return session;
     } catch (_) {
       await _cleanupBootstrapFolder(bridge, descriptor.folderId, folder);
       rethrow;
@@ -914,9 +764,126 @@ class SyncthingAccountTransferClientSession {
   final File _ackFile;
   final _AccountTransferDiagnostics _diagnostics;
 
+  AccountTransferRelaySession? _relaySession;
+  String? _relayClearPayload;
+  bool _relayAckReceived = false;
+  bool _relayPayloadObserved = false;
   bool _closed = false;
 
+  bool get relayAvailable => _relaySession?.connected == true;
+  bool get relayFallbackObserved => _relayPayloadObserved;
   String get diagnosticReport => _diagnostics.report();
+
+  Future<bool> _startRelayListener() async {
+    try {
+      final relay = await AccountTransferRelaySession.connect(
+        descriptor: descriptor,
+        localDeviceId: response.receiverDeviceId,
+        onFrame: _handleRelayFrame,
+      );
+      if (_closed) {
+        await relay.close();
+        return false;
+      }
+      _relaySession = relay;
+      _diagnostics.event('client.relay.connected');
+      return true;
+    } catch (error) {
+      _diagnostics.event('client.relay.connect.error', <String, Object?>{
+        'error': '$error',
+      });
+      return false;
+    }
+  }
+
+  Future<void> _handleRelayFrame(AccountTransferRelayFrame frame) async {
+    if (_closed || frame.receiverDeviceId != response.receiverDeviceId) return;
+    try {
+      if (frame.type == 'payload') {
+        final clear = await decryptAccountTransferPayload(
+          frame.body,
+          descriptor.encryptionKey,
+        );
+        _relayClearPayload = clear;
+        _relayPayloadObserved = true;
+        _diagnostics.event('client.relay.payload.received');
+        return;
+      }
+      if (frame.type == 'ack') {
+        final clear = await decryptAccountTransferPayload(
+          frame.body,
+          descriptor.encryptionKey,
+        );
+        final expected = accountTransferRelayControlMessage(
+          type: 'ack',
+          folderId: descriptor.folderId,
+          receiverDeviceId: response.receiverDeviceId,
+        );
+        if (clear == expected) {
+          _relayAckReceived = true;
+          _diagnostics.event('client.relay.ack.received');
+        }
+      }
+    } catch (error) {
+      _diagnostics.event('client.relay.frame.invalid', <String, Object?>{
+        'type': frame.type,
+        'error': '$error',
+      });
+    }
+  }
+
+  Future<String> _finishRelayReceive(String clear) async {
+    final relay = _relaySession;
+    if (relay == null || !relay.connected) {
+      throw const FormatException('备用设备连接已经断开，请保持两台设备在线后重试。');
+    }
+    final keyBytes = decodeAccountTransferKey(descriptor.encryptionKey);
+    if (keyBytes == null) {
+      throw const FormatException('设备加入二维码的加密密钥无效。');
+    }
+    final doneBody = await encryptAccountTransferPayload(
+      accountTransferRelayControlMessage(
+        type: 'done',
+        folderId: descriptor.folderId,
+        receiverDeviceId: response.receiverDeviceId,
+      ),
+      keyBytes,
+    );
+    final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
+    var lastDonePublishAt = DateTime.fromMillisecondsSinceEpoch(0);
+    while (!_closed && DateTime.now().isBefore(ackDeadline)) {
+      if (_relayAckReceived) return clear;
+      if (DateTime.now().difference(lastDonePublishAt) >=
+          const Duration(seconds: 1)) {
+        relay.publish(
+          targetDeviceId: descriptor.sourceDeviceId,
+          frame: AccountTransferRelayFrame(
+            type: 'done',
+            folderId: descriptor.folderId,
+            receiverDeviceId: response.receiverDeviceId,
+            body: doneBody,
+          ),
+        );
+        lastDonePublishAt = DateTime.now();
+        _diagnostics.event('client.relay.done.publish');
+      }
+      if (await _ackFile.exists()) {
+        _diagnostics.event('client.nativeAck.detected.afterRelay');
+        return clear;
+      }
+      try {
+        await _bridge.requestScanFolder(descriptor.folderId);
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (_closed) {
+      throw const FormatException('设备加入已取消。');
+    }
+    throw const FormatException(
+      '账号数据已经通过备用连接收到，但原设备没有完成最终确认。'
+      '请让原设备继续停留在“添加设备”页面后重试。',
+    );
+  }
 
   Future<String> captureDiagnosticReport() async {
     try {
@@ -988,7 +955,7 @@ class SyncthingAccountTransferClientSession {
     Duration timeout = const Duration(minutes: 5),
     void Function(AccountTransferStatus status)? onStatus,
   }) async {
-    final connectionDeadline = DateTime.now().add(timeout);
+    final overallDeadline = DateTime.now().add(timeout);
     DateTime? folderHandshakeDeadline;
     DateTime? payloadDeadline;
     var sourceConnected = false;
@@ -997,106 +964,154 @@ class SyncthingAccountTransferClientSession {
 
     _diagnostics.event('client.receive.begin');
     while (!_closed) {
-      await _runBridgeOperation(
-        'receive.scan',
-        () => _bridge.requestScanFolder(descriptor.folderId),
-      );
+      final relayPayloadAtLoopStart = _relayClearPayload;
+      if (relayPayloadAtLoopStart != null) {
+        _diagnostics.event('client.relay.takeover');
+        return _finishRelayReceive(relayPayloadAtLoopStart);
+      }
 
-      var status = await transferStatus();
-      onStatus?.call(status);
-
-      if (status.sourceConnected && !sourceConnected) {
-        sourceConnected = true;
-        folderHandshakeDeadline = DateTime.now().add(
-          const Duration(seconds: 45),
+      AccountTransferStatus? status;
+      try {
+        await _runBridgeOperation(
+          'receive.scan',
+          () => _bridge.requestScanFolder(descriptor.folderId),
         );
-        _diagnostics.event('client.sourceConnected', <String, Object?>{
-          'sourceDeviceId': descriptor.sourceDeviceId,
-          'remoteFolderState': status.remoteFolderState,
-        });
-      }
-
-      if (status.folderReady && !folderReady) {
-        folderReady = true;
-        payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
-        _diagnostics.event('client.folderReady');
-      }
-
-      if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
-        _diagnostics.event('client.repair.begin', <String, Object?>{
-          'remoteFolderState': status.remoteFolderState,
-        });
-        try {
-          await _runBridgeOperation(
-            'repair.pairFolder',
-            () => _bridge.pairFolder(
-              folderId: descriptor.folderId,
-              deviceId: descriptor.sourceDeviceId,
-              name: '原设备',
-            ),
-          );
-          _diagnostics.event('client.repair.pairFolder.ok');
-          await _runBridgeOperation(
-            'repair.unpause',
-            () => _bridge.setFolderPaused(
-              folderId: descriptor.folderId,
-              paused: false,
-            ),
-          );
-          _diagnostics.event('client.repair.unpause.ok');
-          await _runBridgeOperation(
-            'repair.scan',
-            () => _bridge.requestScanFolder(descriptor.folderId),
-          );
-          _diagnostics.event('client.repair.scan.ok');
-        } catch (error) {
-          _diagnostics.event('client.repair.error', <String, Object?>{
-            'error': '$error',
-          });
-          rethrow;
-        }
         status = await transferStatus();
         onStatus?.call(status);
-        if (status.folderReady) {
+      } catch (error) {
+        _diagnostics.event('client.nativeBootstrap.error', <String, Object?>{
+          'error': '$error',
+          'relayAvailable': relayAvailable,
+        });
+        if (!relayAvailable) rethrow;
+      }
+
+      if (status != null) {
+        if (status.sourceConnected && !sourceConnected) {
+          sourceConnected = true;
+          folderHandshakeDeadline = DateTime.now().add(
+            const Duration(seconds: 45),
+          );
+          _diagnostics.event('client.sourceConnected', <String, Object?>{
+            'sourceDeviceId': descriptor.sourceDeviceId,
+            'remoteFolderState': status.remoteFolderState,
+          });
+        }
+
+        if (status.folderReady && !folderReady) {
           folderReady = true;
           payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+          _diagnostics.event('client.folderReady');
+        }
+
+        if (sourceConnected && !folderReady && repairTick++ % 4 == 0) {
+          _diagnostics.event('client.repair.begin', <String, Object?>{
+            'remoteFolderState': status.remoteFolderState,
+          });
+          try {
+            await _runBridgeOperation(
+              'repair.pairFolder',
+              () => _bridge.pairFolder(
+                folderId: descriptor.folderId,
+                deviceId: descriptor.sourceDeviceId,
+                name: '原设备',
+              ),
+            );
+            _diagnostics.event('client.repair.pairFolder.ok');
+            await _runBridgeOperation(
+              'repair.unpause',
+              () => _bridge.setFolderPaused(
+                folderId: descriptor.folderId,
+                paused: false,
+              ),
+            );
+            _diagnostics.event('client.repair.unpause.ok');
+            await _runBridgeOperation(
+              'repair.scan',
+              () => _bridge.requestScanFolder(descriptor.folderId),
+            );
+            _diagnostics.event('client.repair.scan.ok');
+            status = await transferStatus();
+            onStatus?.call(status);
+            if (status.folderReady) {
+              folderReady = true;
+              payloadDeadline = DateTime.now().add(const Duration(minutes: 3));
+            }
+          } catch (error) {
+            _diagnostics.event('client.repair.error', <String, Object?>{
+              'error': '$error',
+              'relayAvailable': relayAvailable,
+            });
+            if (!relayAvailable) rethrow;
+          }
+        }
+
+        final folderErrors = status?.folderErrors ?? const <String>[];
+        if (folderErrors.isNotEmpty) {
+          _diagnostics.event('client.folderError', <String, Object?>{
+            'errors': folderErrors,
+            'relayAvailable': relayAvailable,
+          });
+          if (!relayAvailable) {
+            throw FormatException(
+              '临时账号目录同步失败：${folderErrors.first}',
+            );
+          }
         }
       }
 
-      if (status.folderErrors.isNotEmpty) {
-        _diagnostics.event('client.folderError', <String, Object?>{
-          'errors': status.folderErrors,
-        });
-        throw FormatException(
-          '临时账号目录同步失败：${status.folderErrors.first}',
-        );
+      final relayPayload = _relayClearPayload;
+      if (relayPayload != null) {
+        _diagnostics.event('client.relay.takeover');
+        return _finishRelayReceive(relayPayload);
       }
 
       if (await _payloadFile.exists()) {
         _diagnostics.event('client.payload.detected');
         final encrypted = await _payloadFile.readAsString();
-        final clear = await _decryptTransferPayload(
+        final clear = await decryptAccountTransferPayload(
           encrypted,
           descriptor.encryptionKey,
         );
 
         await _doneFile.writeAsString('done', flush: true);
         _diagnostics.event('client.doneFile.write.ok');
-        await _runBridgeOperation(
-          'done.scan',
-          () => _bridge.requestScanFolder(descriptor.folderId),
-        );
-        _diagnostics.event('client.doneFile.scan.ok');
+        try {
+          await _runBridgeOperation(
+            'done.scan',
+            () => _bridge.requestScanFolder(descriptor.folderId),
+          );
+          _diagnostics.event('client.doneFile.scan.ok');
+        } catch (error) {
+          _diagnostics.event('client.doneFile.scan.error', <String, Object?>{
+            'error': '$error',
+            'relayAvailable': relayAvailable,
+          });
+          if (!relayAvailable) rethrow;
+        }
 
         final ackDeadline = DateTime.now().add(const Duration(minutes: 2));
         while (!_closed && DateTime.now().isBefore(ackDeadline)) {
-          await _runBridgeOperation(
-            'ack.scan',
-            () => _bridge.requestScanFolder(descriptor.folderId),
-          );
+          try {
+            await _runBridgeOperation(
+              'ack.scan',
+              () => _bridge.requestScanFolder(descriptor.folderId),
+            );
+          } catch (error) {
+            _diagnostics.event('client.ack.scan.error', <String, Object?>{
+              'error': '$error',
+              'relayAvailable': relayAvailable,
+            });
+            if (!relayAvailable) rethrow;
+          }
           if (await _ackFile.exists()) {
             _diagnostics.event('client.ack.detected');
             return clear;
+          }
+          final fallbackPayload = _relayClearPayload;
+          if (fallbackPayload != null) {
+            _diagnostics.event('client.relay.takeover.afterNativePayload');
+            return _finishRelayReceive(fallbackPayload);
           }
           await Future<void>.delayed(const Duration(milliseconds: 500));
         }
@@ -1110,12 +1125,15 @@ class SyncthingAccountTransferClientSession {
         );
       }
 
-      if (!sourceConnected &&
-          !DateTime.now().isBefore(connectionDeadline)) {
-        _diagnostics.event('client.connection.timeout');
+      if (!DateTime.now().isBefore(overallDeadline)) {
+        _diagnostics.event('client.bootstrap.timeout', <String, Object?>{
+          'sourceConnected': sourceConnected,
+          'folderReady': folderReady,
+          'relayAvailable': relayAvailable,
+          'relayPayloadObserved': _relayPayloadObserved,
+        });
         throw const FormatException(
-          '等待原设备确认超时。请确认原设备仍停留在“添加设备”页面，'
-          '并已经扫描或粘贴了这台设备的回应码。',
+          '等待原设备确认超时。请确认两台设备都保持在设备加入页面并保持联网。',
         );
       }
 
@@ -1123,36 +1141,44 @@ class SyncthingAccountTransferClientSession {
           !folderReady &&
           folderHandshakeDeadline != null &&
           !DateTime.now().isBefore(folderHandshakeDeadline)) {
-        final state = status.remoteFolderState;
+        final state = status?.remoteFolderState;
         _diagnostics.event('client.folderHandshake.timeout', <String, Object?>{
           'remoteFolderState': state,
+          'relayAvailable': relayAvailable,
         });
-        if (state == 'paused') {
-          throw const FormatException(
-            '已经连接原设备，但临时账号同步目录在原设备上处于暂停状态。'
-            '请让原设备重新打开“添加设备”后再试。',
+        if (!relayAvailable) {
+          if (state == 'paused') {
+            throw const FormatException(
+              '已经连接原设备，但临时账号同步目录在原设备上处于暂停状态。',
+            );
+          }
+          if (state == 'notSharing') {
+            throw const FormatException(
+              '已经连接原设备，但原设备没有真正共享临时账号目录。',
+            );
+          }
+          throw FormatException(
+            '已经连接原设备，但临时账号目录没有完成同步握手'
+            '${state == null || state.isEmpty ? '' : '（状态：$state）'}。',
           );
         }
-        if (state == 'notSharing') {
-          throw const FormatException(
-            '已经连接原设备，但原设备没有真正共享临时账号目录。'
-            '请让原设备保持在“添加设备”页面并重新确认回应码。',
-          );
-        }
-        throw FormatException(
-          '已经连接原设备，但临时账号目录没有完成同步握手'
-          '${state == null || state.isEmpty ? '' : '（状态：$state）'}。',
-        );
+        // Do not keep firing the same native timeout while the encrypted relay
+        // is still available as the bootstrap fallback.
+        folderHandshakeDeadline = null;
       }
 
       if (folderReady &&
           payloadDeadline != null &&
           !DateTime.now().isBefore(payloadDeadline)) {
-        _diagnostics.event('client.payload.timeout');
-        throw const FormatException(
-          '临时账号同步目录已经对接成功，但账号数据仍没有传过来。'
-          '请让原设备继续停留在“添加设备”页面后重试。',
-        );
+        _diagnostics.event('client.payload.timeout', <String, Object?>{
+          'relayAvailable': relayAvailable,
+        });
+        if (!relayAvailable) {
+          throw const FormatException(
+            '临时账号同步目录已经对接成功，但账号数据仍没有传过来。',
+          );
+        }
+        payloadDeadline = null;
       }
 
       await Future<void>.delayed(const Duration(seconds: 1));
@@ -1166,6 +1192,11 @@ class SyncthingAccountTransferClientSession {
     if (_closed) return;
     _closed = true;
     _diagnostics.event('client.close.begin');
+    final relay = _relaySession;
+    _relaySession = null;
+    try {
+      await relay?.close();
+    } catch (_) {}
     try {
       await _bridge.removeFolderById(descriptor.folderId);
       _diagnostics.event('client.close.removeFolder.ok');
@@ -1175,137 +1206,4 @@ class SyncthingAccountTransferClientSession {
       } catch (_) {}
     }
   }
-}
-
-bool _validBootstrapFolderId(String value) {
-  return RegExp(
-    r'^artist-workbench-bootstrap-[A-Za-z0-9_-]{20,}$',
-  ).hasMatch(value);
-}
-
-String _randomToken() {
-  final random = Random.secure();
-  final bytes = List<int>.generate(24, (_) => random.nextInt(256));
-  return base64UrlEncode(bytes).replaceAll('=', '');
-}
-
-Future<List<int>> _responseProof({
-  required List<int> keyBytes,
-  required String folderId,
-  required String sourceDeviceId,
-  required String receiverDeviceId,
-  required String receiverName,
-}) async {
-  final message = utf8.encode(
-    '$folderId\n$sourceDeviceId\n$receiverDeviceId\n$receiverName',
-  );
-  final mac = await Hmac.sha256().calculateMac(
-    message,
-    secretKey: SecretKey(keyBytes),
-  );
-  return mac.bytes;
-}
-
-Future<List<int>> _responseBindingProof({
-  required List<int> keyBytes,
-  required String folderId,
-  required String sourceDeviceId,
-  required String receiverDeviceId,
-  required String receiverName,
-  required String receiverAppDeviceId,
-  required String receiverPlatform,
-}) async {
-  final message = utf8.encode(
-    'app-device-binding-v1\n'
-    '$folderId\n'
-    '$sourceDeviceId\n'
-    '$receiverDeviceId\n'
-    '$receiverName\n'
-    '$receiverAppDeviceId\n'
-    '$receiverPlatform',
-  );
-  final mac = await Hmac.sha256().calculateMac(
-    message,
-    secretKey: SecretKey(keyBytes),
-  );
-  return mac.bytes;
-}
-
-Future<String> _encryptTransferPayload(
-  String payload,
-  List<int> keyBytes,
-) async {
-  final algorithm = AesGcm.with256bits();
-  final secretBox = await algorithm.encrypt(
-    utf8.encode(payload),
-    secretKey: SecretKey(keyBytes),
-  );
-  return jsonEncode(<String, dynamic>{
-    'kind': 'artist_queue_account_transfer_payload',
-    'version': 1,
-    'nonce': _encodeBase64Url(secretBox.nonce),
-    'cipherText': _encodeBase64Url(secretBox.cipherText),
-    'mac': _encodeBase64Url(secretBox.mac.bytes),
-  });
-}
-
-Future<String> _decryptTransferPayload(String source, String encodedKey) async {
-  final keyBytes = _decodeTransferKey(encodedKey);
-  if (keyBytes == null) {
-    throw const FormatException('设备加入二维码的加密密钥无效。');
-  }
-
-  final decoded = jsonDecode(source);
-  if (decoded is! Map ||
-      decoded['kind'] != 'artist_queue_account_transfer_payload' ||
-      decoded['version'] != 1) {
-    throw const FormatException('设备传输的加密数据格式无效。');
-  }
-
-  try {
-    final nonce = _decodeBase64UrlStrict(decoded['nonce']);
-    final cipherText = _decodeBase64UrlStrict(decoded['cipherText']);
-    final mac = _decodeBase64UrlStrict(decoded['mac']);
-    final secretBox = SecretBox(cipherText, nonce: nonce, mac: Mac(mac));
-    final clear = await AesGcm.with256bits().decrypt(
-      secretBox,
-      secretKey: SecretKey(keyBytes),
-    );
-    return utf8.decode(clear);
-  } catch (_) {
-    throw const FormatException('设备加入数据解密失败，二维码可能已失效。');
-  }
-}
-
-List<int>? _decodeTransferKey(String source) {
-  try {
-    final bytes = base64Url.decode(base64Url.normalize(source));
-    return bytes.length == 32 ? bytes : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-List<int> _decodeBase64UrlStrict(Object? source) {
-  if (source is! String || source.isEmpty) {
-    throw const FormatException('加密数据字段无效。');
-  }
-  return base64Url.decode(base64Url.normalize(source));
-}
-
-bool _secureBytesEqual(List<int> left, List<int> right) {
-  if (left.length != right.length) return false;
-  var difference = 0;
-  for (var index = 0; index < left.length; index++) {
-    difference |= left[index] ^ right[index];
-  }
-  return difference == 0;
-}
-
-String _encodeBase64Url(List<int> bytes) =>
-    base64UrlEncode(bytes).replaceAll('=', '');
-
-List<int> _randomBytes(int length) {
-  final random = Random.secure();
-  return List<int>.generate(length, (_) => random.nextInt(256));
 }

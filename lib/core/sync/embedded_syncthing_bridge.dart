@@ -122,7 +122,13 @@ class EmbeddedSyncthingBridge {
         force: force,
       );
     }
-    await _channel.invokeMapMethod<Object?, Object?>('ensureStarted');
+    if (!force) {
+      final autoStart = await _channel.invokeMethod<bool>(
+        'isAutoStartEnabled',
+        <String, dynamic>{'folderId': folderId},
+      );
+      if (autoStart != true) return false;
+    }
     await _channel.invokeMethod<void>('configureFolder', <String, dynamic>{
       'folderId': folderId,
       'label': label,

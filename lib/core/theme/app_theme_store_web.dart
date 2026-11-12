@@ -1,196 +1,56 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-
-import 'app_theme_palette.dart';
-import 'app_ui_style.dart';
 import '../web/web_platform_bridge.dart';
+import 'app_theme_store_core.dart';
 
-class AppThemeStore extends ChangeNotifier {
+class AppThemeStore extends AppThemeStoreCore {
   static const String _storageKey = 'adventurers-guild.pwa.theme.v2';
+  static const String _imageAssetKey = 'appearance/theme-background-v1';
 
-  ThemeMode _mode = ThemeMode.system;
-  String _paletteId = AppThemePalettes.guildOriginal.id;
-  AppUiStyle _style = AppUiStyle.classic;
-  final List<AppThemePalette> _customPalettes = <AppThemePalette>[];
+  String? _cachedImageBase64;
 
-  ThemeMode get mode => _mode;
-  String get paletteId => _paletteId;
-  AppUiStyle get style => _style;
-  List<AppThemePalette> get customPalettes =>
-      List<AppThemePalette>.unmodifiable(_customPalettes);
-
-  AppThemePalette get palette =>
-      _paletteById(_paletteId) ?? AppThemePalettes.guildOriginal;
-
-  bool containsPaletteId(String id) => _paletteById(id) != null;
-
-  List<Map<String, dynamic>> exportCustomPalettes() => <Map<String, dynamic>>[
-        for (final palette in _customPalettes) palette.toCustomJson(),
-      ];
-
-  AppThemePalette? _paletteById(String id) {
-    for (final palette in _customPalettes) {
-      if (palette.id == id) return palette;
-    }
-    if (AppThemePalettes.containsId(id)) return AppThemePalettes.byId(id);
-    return null;
-  }
-
-  Future<void> load() async {
+  @override
+  Future<Map<String, dynamic>?> readPersistedTheme() async {
     try {
       final source = webStorageGet(_storageKey);
-      if (source == null || source.trim().isEmpty) {
-        notifyListeners();
-        return;
-      }
+      if (source == null || source.trim().isEmpty) return null;
       final decoded = jsonDecode(source);
-      if (decoded is! Map) return;
-
-      final mode = decoded['mode'];
-      _mode = switch (mode) {
-        'light' => ThemeMode.light,
-        'dark' => ThemeMode.dark,
-        _ => ThemeMode.system,
+      if (decoded is! Map) return null;
+      final result = <String, dynamic>{
+        for (final entry in decoded.entries)
+          entry.key.toString(): entry.value,
       };
-
-      final custom = decoded['customPalettes'];
-      _customPalettes.clear();
-      if (custom is List) {
-        for (final item in custom) {
-          final palette = AppThemePalette.fromCustomJson(item);
-          if (palette != null) _customPalettes.add(palette);
-        }
+      final imageBytes = await webAssetRead(_imageAssetKey);
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        _cachedImageBase64 = base64Encode(imageBytes);
+        result['imageBackgroundBase64'] = _cachedImageBase64;
       }
-
-      final paletteId = decoded['paletteId'];
-      if (paletteId is String && _paletteById(paletteId) != null) {
-        _paletteId = paletteId;
-      }
-
-      final styleId = decoded['style'];
-      _style = styleId is String
-          ? AppUiStyle.byId(styleId)
-          : AppUiStyle.classic;
+      return result;
     } catch (_) {
-      _mode = ThemeMode.system;
-      _paletteId = AppThemePalettes.guildOriginal.id;
-      _style = AppUiStyle.classic;
-      _customPalettes.clear();
+      return null;
     }
-    notifyListeners();
   }
 
-  Future<void> resetToDefaults() async {
-    _mode = ThemeMode.system;
-    _paletteId = AppThemePalettes.guildOriginal.id;
-    _style = AppUiStyle.classic;
-    _customPalettes.clear();
-    notifyListeners();
-    await _persist();
-  }
-
-  Future<void> setMode(ThemeMode mode) async {
-    if (_mode == mode) return;
-    _mode = mode;
-    notifyListeners();
-    await _persist();
-  }
-
-  Future<void> setPaletteId(String paletteId) async {
-    final resolved = _paletteById(paletteId) ?? AppThemePalettes.guildOriginal;
-    if (_paletteId == resolved.id) return;
-    _paletteId = resolved.id;
-    notifyListeners();
-    await _persist();
-  }
-
-  Future<void> setStyle(AppUiStyle style) async {
-    if (_style == style) return;
-    _style = style;
-    notifyListeners();
-    await _persist();
-  }
-
-  Future<AppThemePalette> saveCustomPalette({
-    String? id,
-    required String name,
-    required Color seed,
-    required AppThemeSemanticColors light,
-    required AppThemeSemanticColors dark,
-    required bool advanced,
-    bool select = true,
-  }) async {
-    final resolvedId = id != null && id.startsWith('custom:')
-        ? id
-        : 'custom:${DateTime.now().microsecondsSinceEpoch}';
-    final palette = AppThemePalette.custom(
-      id: resolvedId,
-      name: name,
-      seed: seed,
-      light: light,
-      dark: dark,
-      advanced: advanced,
-    );
-    final index = _customPalettes.indexWhere((item) => item.id == resolvedId);
-    if (index >= 0) {
-      _customPalettes[index] = palette;
-    } else {
-      _customPalettes.add(palette);
-    }
-    if (select) _paletteId = palette.id;
-    notifyListeners();
-    await _persist();
-    return palette;
-  }
-
-  Future<void> replaceCustomPalettesFromJson(Object? raw) async {
-    if (raw is! List) {
-      throw const FormatException('自定义主题色设置格式无效。');
-    }
-    final next = <AppThemePalette>[];
-    final ids = <String>{};
-    for (final item in raw) {
-      final palette = AppThemePalette.fromCustomJson(item);
-      if (palette == null || !ids.add(palette.id)) {
-        throw const FormatException('自定义主题色内容不完整或重复。');
-      }
-      next.add(palette);
-    }
-    _customPalettes
-      ..clear()
-      ..addAll(next);
-    if (_paletteId.startsWith('custom:') && _paletteById(_paletteId) == null) {
-      _paletteId = AppThemePalettes.guildOriginal.id;
-    }
-    notifyListeners();
-    await _persist();
-  }
-
-  Future<void> deleteCustomPalette(String id) async {
-    final before = _customPalettes.length;
-    _customPalettes.removeWhere((item) => item.id == id);
-    if (_customPalettes.length == before) return;
-    if (_paletteId == id) {
-      _paletteId = AppThemePalettes.guildOriginal.id;
-    }
-    notifyListeners();
-    await _persist();
-  }
-
-  Future<void> _persist() async {
+  @override
+  Future<void> persistTheme(Map<String, dynamic> value) async {
     try {
-      webStorageSet(
-        _storageKey,
-        jsonEncode(<String, dynamic>{
-          'mode': _mode.name,
-          'paletteId': _paletteId,
-          'style': _style.id,
-          'customPalettes': exportCustomPalettes(),
-        }),
-      );
+      final imageBase64 = value['imageBackgroundBase64'];
+      final normalizedImage =
+          imageBase64 is String && imageBase64.isNotEmpty ? imageBase64 : null;
+      if (normalizedImage != _cachedImageBase64) {
+        if (normalizedImage == null) {
+          await webAssetDelete(_imageAssetKey);
+        } else {
+          await webAssetWrite(_imageAssetKey, base64Decode(normalizedImage));
+        }
+        _cachedImageBase64 = normalizedImage;
+      }
+
+      final settings = Map<String, dynamic>.from(value)
+        ..remove('imageBackgroundBase64');
+      webStorageSet(_storageKey, jsonEncode(settings));
     } catch (_) {
-      // Theme remains usable for the current browser session.
+      // Appearance changes remain usable for the current browser session.
     }
   }
 }

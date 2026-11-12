@@ -2,6 +2,28 @@
   const DB_NAME = 'adventurers-guild-web-assets-v1';
   const STORE_NAME = 'referenceImages';
   let assetDbPromise = null;
+  let deferredPwaInstallPrompt = null;
+  let pwaInstallConfirmed = false;
+
+  function isStandalonePwa() {
+    return (
+      (window.matchMedia &&
+        window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true
+    );
+  }
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredPwaInstallPrompt = event;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    // This confirms that the browser installed the PWA. It does NOT prove that
+    // the Android launcher pinned an icon to the user's home screen.
+    pwaInstallConfirmed = true;
+    deferredPwaInstallPrompt = null;
+  });
 
   function requestResult(request) {
     return new Promise((resolve, reject) => {
@@ -83,6 +105,52 @@
 
   window.adventurersGuildStorageRemove = (key) => {
     window.localStorage.removeItem(String(key));
+  };
+
+  window.adventurersGuildPwaInstallState = () => {
+    if (isStandalonePwa()) return 'standalone';
+    if (deferredPwaInstallPrompt) return 'prompt';
+    if (pwaInstallConfirmed) return 'installed';
+    const userAgent = window.navigator.userAgent || '';
+    const isIos =
+      /iPad|iPhone|iPod/.test(userAgent) ||
+      (window.navigator.platform === 'MacIntel' &&
+        window.navigator.maxTouchPoints > 1);
+    return isIos ? 'ios' : 'manual';
+  };
+
+  window.adventurersGuildPwaInstalledState = async () => {
+    if (isStandalonePwa()) return 'standalone';
+    if (typeof navigator.getInstalledRelatedApps === 'function') {
+      try {
+        const related = await navigator.getInstalledRelatedApps();
+        if (Array.isArray(related) &&
+            related.some((app) => app && app.platform === 'webapp')) {
+          return 'installed';
+        }
+      } catch (_) {
+        // Fall back to the install event state below.
+      }
+    }
+    if (pwaInstallConfirmed) return 'installed';
+    if (deferredPwaInstallPrompt) return 'prompt';
+    return window.adventurersGuildPwaInstallState();
+  };
+
+  window.adventurersGuildPromptPwaInstall = async () => {
+    const state = window.adventurersGuildPwaInstallState();
+    if (state === 'standalone' || state === 'installed') return state;
+    const prompt = deferredPwaInstallPrompt;
+    if (!prompt) return state;
+    deferredPwaInstallPrompt = null;
+    await prompt.prompt();
+    const choice = await prompt.userChoice;
+    if (choice && choice.outcome === 'accepted') {
+      // userChoice only confirms the user's choice. appinstalled is the signal
+      // that the browser actually finished installing the PWA.
+      return 'accepted';
+    }
+    return 'dismissed';
   };
 
   window.adventurersGuildDownloadBytes = (fileName, mimeType, base64Data) => {

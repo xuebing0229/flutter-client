@@ -28,8 +28,9 @@ class NativeCloudflareRecordBridge {
   final SyncMergeEngine _mergeEngine;
 
   Future<List<Map<String, dynamic>>> exportRecords() async {
-    // Commit pending UI edits into the canonical record graph before taking a
-    // Cloudflare snapshot. No transport operation is performed here.
+    // Commit pending UI edits into the canonical record graph before the
+    // shared Cloudflare relay computes record fingerprints/deltas. No
+    // transport operation is performed here.
     await flushNativeWorkspace();
     return _recordStore.exportPortableRecords(accountId: accountId);
   }

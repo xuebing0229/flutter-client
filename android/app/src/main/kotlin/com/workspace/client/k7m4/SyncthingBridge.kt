@@ -186,16 +186,32 @@ class SyncthingBridge(
         if (state["available"] != true) {
             throw IllegalStateException(state["error"]?.toString() ?: "同步核心不可用")
         }
-        if (state["running"] != true) {
-            val reason = state["error"]?.toString()
-            throw IllegalStateException(
-                if (reason == "SYNCTHING_STARTING") {
-                    "同步核心正在启动，请稍后重试"
-                } else {
-                    reason ?: "同步核心正在启动，请稍后重试"
-                },
-            )
+        if (state["running"] == true) return
+
+        val reason = state["error"]?.toString()
+        if (reason == "APP_BACKGROUND_START_DEFERRED") {
+            throw IllegalStateException(reason)
         }
+
+        // Syncthing's REST API is the readiness boundary. Starting the Android
+        // Service only launches the process; it does not mean the REST API is
+        // already accepting requests. Wait for /rest/system/ping to answer
+        // before any config/folder/scan operation is allowed to continue.
+        val deadlineNanos = System.nanoTime() + 30_000_000_000L
+        var seenRunningProcess = SyncthingService.isRunning
+        while (System.nanoTime() < deadlineNanos) {
+            if (pingReady()) {
+                applyIntegrationPolicy()
+                return
+            }
+            if (SyncthingService.isRunning) {
+                seenRunningProcess = true
+            } else if (seenRunningProcess) {
+                throw IllegalStateException("同步核心进程启动后意外退出")
+            }
+            Thread.sleep(100L)
+        }
+        throw IllegalStateException("同步核心启动超时")
     }
 
     private fun status(folderId: String): Map<String, Any?> {
@@ -705,6 +721,17 @@ class SyncthingBridge(
             .put("crashReportingEnabled", false)
             .put("autoUpgradeIntervalH", 0)
         request("PATCH", "/rest/config/options", payload.toString())
+
+        // Syncthing v2.x removed --no-default-folder. This embedded profile is
+        // private to the app, so remove the generated unmanaged default folder
+        // through the supported REST config endpoint instead.
+        val folders = JSONArray(request("GET", "/rest/config/folders"))
+        val hasDefault = (0 until folders.length()).any { index ->
+            folders.optJSONObject(index)?.optString("id") == "default"
+        }
+        if (hasDefault) {
+            request("DELETE", "/rest/config/folders/default")
+        }
         integrationPolicyApplied = true
     }
 

@@ -1,5 +1,22 @@
-const CACHE_VERSION = 'adventurers-guild-pwa-182-v2';
+const CACHE_VERSION = '__PWA_CACHE_VERSION__';
 const PRECACHE = __PWA_PRECACHE_FILES__;
+
+const LEGACY_FLUTTER_CACHES = new Set([
+  'flutter-app-cache',
+  'flutter-temp-cache',
+  'flutter-app-manifest',
+]);
+
+const NETWORK_FIRST_PATHS = new Set([
+  '/',
+  '/index.html',
+  '/flutter_bootstrap.js',
+  '/main.dart.js',
+  '/pwa_platform_bridge.js',
+  '/pwa_ocr_bridge.js',
+  '/version.json',
+  '/manifest.json',
+]);
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -21,12 +38,27 @@ self.addEventListener('activate', (event) => {
     await Promise.all(
       keys
         .filter((key) =>
-          key.startsWith('adventurers-guild-pwa-') && key !== CACHE_VERSION)
+          (key.startsWith('adventurers-guild-pwa-') &&
+              key !== CACHE_VERSION) ||
+          LEGACY_FLUTTER_CACHES.has(key))
         .map((key) => caches.delete(key)),
     );
     await self.clients.claim();
   })());
 });
+
+async function networkFirst(request, cache) {
+  try {
+    const response = await fetch(request, {cache: 'no-cache'});
+    if (response.ok) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (_) {
+    return (await cache.match(request, {ignoreSearch: true})) ||
+        Response.error();
+  }
+}
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
@@ -35,32 +67,20 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      try {
-        const response = await fetch(request);
-        if (response.ok) {
-          const cache = await caches.open(CACHE_VERSION);
-          await cache.put('./index.html', response.clone());
-        }
-        return response;
-      } catch (_) {
-        return (await caches.match('./index.html')) ||
-            (await caches.match('./')) ||
-            Response.error();
-      }
-    })());
-    return;
-  }
-
   event.respondWith((async () => {
-    const cached = await caches.match(request);
+    const cache = await caches.open(CACHE_VERSION);
+
+    if (request.mode === 'navigate' ||
+        NETWORK_FIRST_PATHS.has(url.pathname)) {
+      return networkFirst(request, cache);
+    }
+
+    const cached = await cache.match(request);
     if (cached) return cached;
 
     try {
       const response = await fetch(request);
       if (response.ok) {
-        const cache = await caches.open(CACHE_VERSION);
         await cache.put(request, response.clone());
       }
       return response;

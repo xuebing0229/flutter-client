@@ -8,6 +8,7 @@ import '../../../core/finance/pricing_preset_store.dart';
 import '../../../core/sync/sync_coordinator_view.dart';
 import '../../shared/presentation/collection_card_grid.dart';
 import '../../shared/presentation/summary_card_widgets.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../shared/presentation/collection_widgets.dart';
 import '../data/node_presets.dart';
 import '../domain/queue_order.dart';
@@ -45,6 +46,8 @@ class OrderQueuePage extends StatefulWidget {
     this.overviewColumns = 3,
     this.onOverviewColumnsChanged,
     required this.onSortModeChanged,
+    this.guideTargets,
+    this.guideOrderId,
     super.key,
   });
 
@@ -63,6 +66,23 @@ class OrderQueuePage extends StatefulWidget {
   final ValueChanged<int>? onOverviewColumnsChanged;
   final String sortModeName;
   final ValueChanged<String> onSortModeChanged;
+  final QuickStartGuideTargets? guideTargets;
+  final String? guideOrderId;
+
+  GlobalKey? guideKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderCardKey
+          : null;
+
+  GlobalKey? guideProgressKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderProgressKey
+          : null;
+
+  GlobalKey? guideConfirmNodeKeyFor(QueueOrder order) =>
+      guideTargets != null && guideOrderId == order.id
+          ? guideTargets!.firstOrderConfirmNodeKey
+          : null;
 
   @override
   State<OrderQueuePage> createState() => _OrderQueuePageState();
@@ -77,6 +97,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   final Set<String> _selectedTags = <String>{};
   final Map<String, _TerminationDraft> _bulkTerminationDrafts =
       <String, _TerminationDraft>{};
+  final Set<String> _nodeConfirmationsInFlight = <String>{};
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -327,117 +348,134 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
   Future<void> _confirmNode(QueueOrder order) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    if (order.isCompleted || order.nodePresetSnapshot.nodes.isEmpty) return;
+    if (_nodeConfirmationsInFlight.contains(order.id)) return;
+    if (!widget.store.contains(order.id)) return;
 
-    final nodes = order.nodePresetSnapshot.nodes;
-    final currentName = order.currentNode.name;
-    String? nextNodeName;
-    var completesOrder = false;
+    _nodeConfirmationsInFlight.add(order.id);
+    try {
+      // The visible card can be one frame behind the store after a very fast
+      // previous confirmation. Always refresh by id before building the next
+      // confirmation dialog so a local rapid sequence is not mistaken for a
+      // remote concurrent edit.
+      final snapshot = widget.store.byId(order.id);
+      if (snapshot.isArchived ||
+          snapshot.isCompleted ||
+          snapshot.nodePresetSnapshot.nodes.isEmpty) {
+        return;
+      }
 
-    if (order.currentNodeId == notStartedNodeId) {
-      nextNodeName = nodes.first.name;
-    } else {
-      final currentIndex = nodes.indexWhere(
-        (node) => node.id == order.currentNodeId,
-      );
+      final nodes = snapshot.nodePresetSnapshot.nodes;
+      final currentName = snapshot.currentNode.name;
+      String? nextNodeName;
+      var completesOrder = false;
 
-      if (currentIndex < 0) {
+      if (snapshot.currentNodeId == notStartedNodeId) {
         nextNodeName = nodes.first.name;
-      } else if (currentIndex < nodes.length - 1) {
-        nextNodeName = nodes[currentIndex + 1].name;
       } else {
-        completesOrder = true;
-      }
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('确认节点'),
-          content: Text(
-            completesOrder
-                ? '将“${order.title}”标记为已交稿？\n\n'
-                      '标记后仍保留在排单中，需手动归档后才正式结算。'
-                : '将“${order.title}”从“$currentName”推进到“$nextNodeName”？',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认'),
-            ),
-          ],
+        final currentIndex = nodes.indexWhere(
+          (node) => node.id == snapshot.currentNodeId,
         );
-      },
-    );
 
-    if (confirmed != true || !mounted) return;
-
-    if (!widget.store.contains(order.id)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('这笔排单已经不存在，未执行节点推进。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final current = widget.store.byId(order.id);
-    if (current.isArchived ||
-        current.isCompleted != order.isCompleted ||
-        current.currentNodeId != order.currentNodeId ||
-        current.nodePresetId != order.nodePresetId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('排单节点已在另一处更新，请按当前状态重新确认。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    widget.store.advanceOrder(order.id);
-
-    if (!mounted || !widget.store.contains(order.id)) return;
-    final updated = widget.store.byId(order.id);
-
-    if (updated.isCompleted) {
-      final archiveNow = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          icon: const Icon(Icons.inventory_2_outlined),
-          title: const Text('提示'),
-          content: const Text('成稿归档后计入收入统计。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('稍后归档'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('现在归档'),
-            ),
-          ],
-        ),
-      );
-
-      if (archiveNow == true && mounted) {
-        await _showArchiveOptions(updated);
+        if (currentIndex < 0) {
+          nextNodeName = nodes.first.name;
+        } else if (currentIndex < nodes.length - 1) {
+          nextNodeName = nodes[currentIndex + 1].name;
+        } else {
+          completesOrder = true;
+        }
       }
-      return;
-    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已更新到「${updated.currentNode.name}」'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('确认节点'),
+            content: Text(
+              completesOrder
+                  ? '将“${snapshot.title}”标记为已交稿？\n\n'
+                        '标记后仍保留在排单中，需手动归档后才正式结算。'
+                  : '将“${snapshot.title}”从“$currentName”推进到“$nextNodeName”？',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('确认'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true || !mounted) return;
+
+      if (!widget.store.contains(snapshot.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('这笔排单已经不存在，未执行节点推进。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      final current = widget.store.byId(snapshot.id);
+      if (current.isArchived ||
+          current.isCompleted != snapshot.isCompleted ||
+          current.currentNodeId != snapshot.currentNodeId ||
+          current.nodePresetId != snapshot.nodePresetId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('排单节点已在另一处更新，请按当前状态重新确认。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      widget.store.advanceOrder(snapshot.id);
+
+      if (!mounted || !widget.store.contains(snapshot.id)) return;
+      final updated = widget.store.byId(snapshot.id);
+
+      if (updated.isCompleted) {
+        final archiveNow = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            icon: const Icon(Icons.inventory_2_outlined),
+            title: const Text('提示'),
+            content: const Text('成稿归档后计入收入统计。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('稍后归档'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('现在归档'),
+              ),
+            ],
+          ),
+        );
+
+        if (archiveNow == true && mounted) {
+          await _showArchiveOptions(updated);
+        }
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已更新到「${updated.currentNode.name}」'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      _nodeConfirmationsInFlight.remove(order.id);
+    }
   }
 
   bool _archiveSnapshotIsCurrent(QueueOrder snapshot) {
@@ -1038,12 +1076,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       builder: (context, _) {
         final orders = _visibleOrders();
         final availableTags = normalizeOrderTags(
-          <String>[
-            ...builtInOrderTags,
-            ...widget.store.orders
-                .where((order) => !order.isArchived)
-                .expand((order) => order.tags),
-          ],
+          widget.store.orders
+              .where((order) => !order.isArchived)
+              .expand((order) => order.tags),
         ).toList()
           ..sort();
         final useOverviewView =
@@ -1054,8 +1089,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
         return Column(
           children: [
             if (widget.featureStore.search)
-              CollectionSearchField(
-                controller: _searchController,
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.searchKey,
+                child: CollectionSearchField(
+                  controller: _searchController,
                 query: _query,
                 hintText: '搜索排单',
                 filters: [
@@ -1071,10 +1108,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                   setState(() => _searchField = value);
                 },
                 onChanged: (value) => setState(() => _query = value),
-                onClear: () {
-                  _searchController.clear();
-                  setState(() => _query = '');
-                },
+                  onClear: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
+                ),
               ),
             if (widget.featureStore.customTags && availableTags.isNotEmpty)
               SizedBox(
@@ -1115,8 +1153,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                 ),
               ),
             if (widget.featureStore.sorting || widget.featureStore.viewSwitch)
-              CollectionToolbar(
-                title: '排单',
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.toolbarKey,
+                child: CollectionToolbar(
+                  title: '排单',
                 count: orders.length,
                 summaryText:
                     '待收入 ¥${_formatMoney(orders.fold<double>(0, (sum, order) => sum + order.realIncome))}',
@@ -1222,6 +1262,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                         ),
                       )
                     : null,
+                ),
               ),
             if (useOverviewView)
               Padding(
@@ -1275,7 +1316,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       childAspectRatio: OrderOverviewSummaryCard.aspectRatio,
                       itemBuilder: (context, index) {
                         final order = orders[index];
-                        return OrderOverviewSummaryCard(
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderOverviewSummaryCard(
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
@@ -1284,6 +1327,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           showClient: widget.featureStore.clientInfo,
                           onTap: () => _openOrder(order),
                           onLongPress: () => _showQuickActions(order),
+                          ),
                         );
                       },
                     )
@@ -1312,7 +1356,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                           rowIndices: rowIndices,
                           cardWidth: cardWidth,
                         );
-                        return OrderSummaryCard(
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderSummaryCard(
+                          nodeProgressKey: widget.guideProgressKeyFor(order),
+                          confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
                           compactLayout: compactLayout,
                           hasSyncConflict: widget
@@ -1348,6 +1396,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                                   order.id,
                                   10,
                                 ),
+                          ),
                         );
                       },
                     )
@@ -1361,7 +1410,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final order = orders[index];
-                        return OrderSummaryCard(
+                        return SpotlightTarget(
+                          targetKey: widget.guideKeyFor(order),
+                          child: OrderSummaryCard(
+                          nodeProgressKey: widget.guideProgressKeyFor(order),
+                          confirmNodeKey: widget.guideConfirmNodeKeyFor(order),
                           order: order,
                           hasSyncConflict: widget
                               .syncCoordinator
@@ -1395,6 +1448,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
                                   order.id,
                                   10,
                                 ),
+                          ),
                         );
                       },
                     ),

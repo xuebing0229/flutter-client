@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'app_shell.dart';
 
 import '../core/account/account_store.dart';
 import '../core/changelog/adventurer_news.dart';
@@ -314,22 +314,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     return AnimatedBuilder(
       animation: _themeStore,
       builder: (context, _) {
-        return MaterialApp(
+        return GuildMaterialApp(
           navigatorKey: _navigatorKey,
-          title: '冒险者公会',
-          debugShowCheckedModeBanner: false,
-          locale: const Locale('zh', 'CN'),
-          supportedLocales: const [
-            Locale('zh', 'CN'),
-          ],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          themeMode: _themeStore.mode,
-          theme: GuildAppTheme.light(_themeStore),
-          darkTheme: GuildAppTheme.dark(_themeStore),
+          themeStore: _themeStore,
           home: AccountGate(
             store: _accountStore,
             onAdoptBackup: _adoptBackup,

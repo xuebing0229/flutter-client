@@ -4,102 +4,35 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'account_models.dart';
-import 'account_state_mutations.dart';
+import 'account_local_state.dart';
+
+export 'account_local_state.dart' show AccountStatus, LocalAccountSummary;
+import 'account_activation_flow.dart';
+import 'activation_api.dart';
+import 'account_session_logic.dart';
+import 'account_session_controller.dart';
 import 'offline_license.dart';
 import '../web/web_platform_bridge.dart';
-
-enum WebAccountStatus { loading, unactivated, locked, unlocked, revoked }
-
-class WebLocalAccountSummary {
-  const WebLocalAccountSummary({
-    required this.accountId,
-    required this.accountName,
-  });
-
-  final String accountId;
-  final String accountName;
-}
-
-class _WebAccountRecord {
-  const _WebAccountRecord({
-    required this.syncState,
-    required this.currentDeviceId,
-    required this.stayLoggedIn,
-    this.activationSerial,
-  });
-
-  final AccountSyncState syncState;
-  final String currentDeviceId;
-  final bool stayLoggedIn;
-  final String? activationSerial;
-
-  _WebAccountRecord copyWith({
-    AccountSyncState? syncState,
-    String? currentDeviceId,
-    bool? stayLoggedIn,
-    String? activationSerial,
-  }) {
-    return _WebAccountRecord(
-      syncState: syncState ?? this.syncState,
-      currentDeviceId: currentDeviceId ?? this.currentDeviceId,
-      stayLoggedIn: stayLoggedIn ?? this.stayLoggedIn,
-      activationSerial: activationSerial ?? this.activationSerial,
-    );
-  }
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'syncState': syncState.toJson(),
-        'currentDeviceId': currentDeviceId,
-        'stayLoggedIn': stayLoggedIn,
-        if (activationSerial != null) 'activationSerial': activationSerial,
-      };
-
-  factory _WebAccountRecord.fromJson(Map<String, dynamic> json) {
-    final rawState = json['syncState'];
-    final currentDeviceId = json['currentDeviceId'];
-    final stayLoggedIn = json['stayLoggedIn'];
-    final activationSerial = json['activationSerial'];
-    if (rawState is! Map ||
-        currentDeviceId is! String ||
-        currentDeviceId.isEmpty ||
-        stayLoggedIn is! bool ||
-        (activationSerial != null && activationSerial is! String)) {
-      throw const FormatException('网页账号记录格式无效。');
-    }
-
-    final state = AccountSyncState.fromCompatibleJson(
-      rawState.map((key, value) => MapEntry(key.toString(), value)),
-      allowMissingPassword: false,
-    );
-    if (!state.devices.containsKey(currentDeviceId)) {
-      throw const FormatException('网页账号记录缺少当前设备。');
-    }
-
-    return _WebAccountRecord(
-      syncState: state,
-      currentDeviceId: currentDeviceId,
-      stayLoggedIn: stayLoggedIn,
-      activationSerial: activationSerial as String?,
-    );
-  }
-}
 
 class WebAccountStore extends ChangeNotifier {
   WebAccountStore({
     OfflineLicenseVerifier verifier = const OfflineLicenseVerifier(),
-  }) : _verifier = verifier;
+    ActivationApiClient activationApi = const ActivationApiClient(),
+  })  : _verifier = verifier,
+        _activationApi = activationApi;
 
   static const String _storageKey = 'adventurers-guild.web.accounts.v1';
 
   final OfflineLicenseVerifier _verifier;
-  final Map<String, _WebAccountRecord> _accounts =
-      <String, _WebAccountRecord>{};
+  final ActivationApiClient _activationApi;
+  final Map<String, LocalAccountRecord> _accounts =
+      <String, LocalAccountRecord>{};
   final Random _random = Random.secure();
 
-  WebAccountStatus status = WebAccountStatus.loading;
+  AccountStatus status = AccountStatus.loading;
   String? _selectedAccountId;
 
-  _WebAccountRecord? get _selectedRecord {
+  LocalAccountRecord? get _selectedRecord {
     final id = _selectedAccountId;
     return id == null ? null : _accounts[id];
   }
@@ -107,39 +40,22 @@ class WebAccountStore extends ChangeNotifier {
   String? get accountId => _selectedAccountId;
   String? get accountName => _selectedRecord?.syncState.accountName;
   String? get accountPassword =>
-      status == WebAccountStatus.unlocked ? _selectedRecord?.syncState.password : null;
+      status == AccountStatus.unlocked ? _selectedRecord?.syncState.password : null;
   String? get currentDeviceId => _selectedRecord?.currentDeviceId;
   AccountSyncState? get syncSnapshot => _selectedRecord?.syncState;
-  bool get isUnlocked => status == WebAccountStatus.unlocked;
+  bool get isUnlocked => status == AccountStatus.unlocked;
 
-  List<AccountDevice> get activeDevices {
-    final state = syncSnapshot;
-    if (state == null) return const <AccountDevice>[];
-    final devices = state.activeDevices.toList()
-      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
-    return devices;
-  }
+  List<AccountDevice> get activeDevices =>
+      sortedActiveAccountDevices(syncSnapshot);
 
-  List<WebLocalAccountSummary> get localAccounts {
-    final result = <WebLocalAccountSummary>[
-      for (final entry in _accounts.entries)
-        WebLocalAccountSummary(
-          accountId: entry.key,
-          accountName: entry.value.syncState.accountName,
-        ),
-    ];
-    result.sort(
-      (a, b) =>
-          a.accountName.toLowerCase().compareTo(b.accountName.toLowerCase()),
-    );
-    return result;
-  }
+  List<LocalAccountSummary> get localAccounts =>
+      sortedLocalAccountSummaries(_accounts);
 
   Future<void> load() async {
     try {
       final source = webStorageGet(_storageKey);
       if (source == null || source.trim().isEmpty) {
-        status = WebAccountStatus.unactivated;
+        status = AccountStatus.unactivated;
         notifyListeners();
         return;
       }
@@ -158,7 +74,7 @@ class WebAccountStore extends ChangeNotifier {
         if (item is! Map) {
           throw const FormatException('网页账号记录格式无效。');
         }
-        final record = _WebAccountRecord.fromJson(
+        final record = LocalAccountRecord.fromJson(
           item.map((key, value) => MapEntry(key.toString(), value)),
         );
         _accounts[record.syncState.accountId] = record;
@@ -181,24 +97,13 @@ class WebAccountStore extends ChangeNotifier {
     } catch (_) {
       _accounts.clear();
       _selectedAccountId = null;
-      status = WebAccountStatus.unactivated;
+      status = AccountStatus.unactivated;
     }
     notifyListeners();
   }
 
   void _restoreStatus() {
-    final record = _selectedRecord;
-    if (record == null) {
-      status = WebAccountStatus.unactivated;
-      return;
-    }
-    if (record.syncState.isRevoked(record.currentDeviceId)) {
-      status = WebAccountStatus.revoked;
-      return;
-    }
-    status = record.stayLoggedIn
-        ? WebAccountStatus.unlocked
-        : WebAccountStatus.locked;
+    status = accountStatusForRecord(_selectedRecord);
   }
 
   Future<void> activate({
@@ -207,48 +112,38 @@ class WebAccountStore extends ChangeNotifier {
     required String password,
   }) async {
     final trimmedName = accountName.trim();
-    if (trimmedName.length < 2 || trimmedName.length > 32) {
-      throw const FormatException('账号名长度需要在 2–32 个字符之间。');
-    }
-    if (password.length < 6) {
-      throw const FormatException('密码至少需要 6 个字符。');
-    }
+    final license = await verifyAndRedeemAccountActivation(
+      activationCode: activationCode,
+      accountName: accountName,
+      password: password,
+      verifier: _verifier,
+      activationApi: _activationApi,
+      hasLocalAccount: _accounts.containsKey,
+      claimFor: _activationClaimFor,
+      clearClaim: _clearActivationClaim,
+    );
 
-    final license = await _verifier.verify(activationCode);
-    if (_accounts.containsKey(license.accountId)) {
-      throw const FormatException('这个账号已经保存在当前浏览器，请直接登录。');
-    }
-
-    final now = DateTime.now().toUtc();
     final deviceId = _randomDeviceId();
     _rememberDeviceId(license.accountId, deviceId);
-    final state = AccountSyncState(
+    final state = createActivatedAccountState(
       accountId: license.accountId,
       accountName: trimmedName,
       password: password,
-      accountNameUpdatedAt: now,
-      passwordUpdatedAt: now,
-      devices: <String, AccountDevice>{
-        deviceId: AccountDevice(
-          id: deviceId,
-          name: '网页设备',
-          platform: 'web',
-          firstSeenAt: now,
-          lastSeenAt: now,
-        ),
-      },
-      revocations: const <String, DeviceRevocation>{},
+      deviceId: deviceId,
+      deviceName: '网页设备',
+      platform: 'web',
     );
 
-    _accounts[license.accountId] = _WebAccountRecord(
+    _accounts[license.accountId] = LocalAccountRecord(
       syncState: state,
       currentDeviceId: deviceId,
       stayLoggedIn: true,
       activationSerial: license.serial,
     );
     _selectedAccountId = license.accountId;
-    status = WebAccountStatus.unlocked;
+    status = AccountStatus.unlocked;
     await _persist();
+    await _clearActivationClaim(license.accountId);
     notifyListeners();
   }
 
@@ -256,26 +151,41 @@ class WebAccountStore extends ChangeNotifier {
     AccountSyncState incoming, {
     bool select = true,
     bool stayLoggedIn = false,
+    String? preferredDeviceId,
   }) async {
     final existing = _accounts[incoming.accountId];
     if (existing != null) {
       final merged = existing.syncState.merge(incoming);
       _accounts[incoming.accountId] = existing.copyWith(
-        syncState: _touchDevice(
+        syncState: touchAccountDeviceState(
           merged,
-          existing.currentDeviceId,
+          deviceId: existing.currentDeviceId,
           createIfMissing: true,
+          defaultName: '网页设备',
+          platform: 'web',
         ),
         stayLoggedIn: stayLoggedIn,
       );
     } else {
-      var deviceId = _deviceIdForAccount(incoming.accountId);
+      final preferred = preferredDeviceId?.trim();
+      var deviceId =
+          preferred != null &&
+              preferred.length >= 16 &&
+              !incoming.isRevoked(preferred)
+          ? preferred
+          : _deviceIdForAccount(incoming.accountId);
       if (incoming.isRevoked(deviceId)) {
         deviceId = _randomDeviceId();
-        _rememberDeviceId(incoming.accountId, deviceId);
       }
-      _accounts[incoming.accountId] = _WebAccountRecord(
-        syncState: _touchDevice(incoming, deviceId, createIfMissing: true),
+      _rememberDeviceId(incoming.accountId, deviceId);
+      _accounts[incoming.accountId] = LocalAccountRecord(
+        syncState: touchAccountDeviceState(
+          incoming,
+          deviceId: deviceId,
+          createIfMissing: true,
+          defaultName: '网页设备',
+          platform: 'web',
+        ),
         currentDeviceId: deviceId,
         stayLoggedIn: stayLoggedIn,
       );
@@ -294,147 +204,87 @@ class WebAccountStore extends ChangeNotifier {
     if (record == null || incoming.accountId != record.syncState.accountId) {
       throw const FormatException('备份账号与当前登录账号不一致。');
     }
-    final merged = _touchDevice(
-      record.syncState.merge(incoming),
-      record.currentDeviceId,
-      createIfMissing: true,
-    );
+
+    var merged = record.syncState.merge(incoming);
+    // Receiving a peer snapshot is not local user activity. Updating this
+    // browser's lastSeenAt on every remote retry made otherwise identical
+    // snapshots look different and forced the whole app to rebuild forever.
+    // Only create the current browser record when it is genuinely missing.
+    if (!merged.devices.containsKey(record.currentDeviceId)) {
+      merged = touchAccountDeviceState(
+        merged,
+        deviceId: record.currentDeviceId,
+        createIfMissing: true,
+        defaultName: '网页设备',
+        platform: 'web',
+      );
+    }
+
+    if (jsonEncode(merged.toJson()) ==
+        jsonEncode(record.syncState.toJson())) {
+      return;
+    }
+
     _accounts[record.syncState.accountId] = record.copyWith(syncState: merged);
     await _persist();
     notifyListeners();
   }
 
-  Future<void> selectLocalAccount(String accountId) async {
-    final record = _accounts[accountId];
-    if (record == null) {
-      throw const FormatException('这个本机账号已经不存在。');
-    }
-    _selectedAccountId = accountId;
-    _accounts[accountId] = record.copyWith(stayLoggedIn: false);
-    _restoreStatus();
-    await _persist();
-    notifyListeners();
+  AccountSessionController _sessionController() {
+    return AccountSessionController(
+      accounts: _accounts,
+      getSelectedAccountId: () => _selectedAccountId,
+      setSelectedAccountId: (value) => _selectedAccountId = value,
+      getStatus: () => status,
+      setStatus: (value) => status = value,
+      persist: _persist,
+      notify: notifyListeners,
+      touchForLogin: (record) async => touchAccountDeviceState(
+        record.syncState,
+        deviceId: record.currentDeviceId,
+        createIfMissing: false,
+        platform: 'web',
+      ),
+    );
   }
+
+  Future<void> selectLocalAccount(String accountId) =>
+      _sessionController().selectLocalAccount(accountId);
 
   Future<bool> unlock({
     required String accountName,
     required String password,
-  }) async {
-    final record = _selectedRecord;
-    if (record == null ||
-        record.syncState.isRevoked(record.currentDeviceId)) {
-      _restoreStatus();
-      notifyListeners();
-      return false;
-    }
+  }) =>
+      _sessionController().unlock(
+        accountName: accountName,
+        password: password,
+      );
 
-    final ok = accountName.trim() == record.syncState.accountName &&
-        _constantTimeEquals(password, record.syncState.password);
-    if (!ok) return false;
+  Future<void> renameDevice(String deviceId, String name) =>
+      _sessionController().renameDevice(deviceId, name);
 
-    final touched = _touchDevice(
-      record.syncState,
-      record.currentDeviceId,
-      createIfMissing: false,
-    );
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: touched,
-      stayLoggedIn: true,
-    );
-    status = WebAccountStatus.unlocked;
-    await _persist();
-    notifyListeners();
-    return true;
-  }
+  Future<void> renameCurrentDevice(String name) =>
+      _sessionController().renameCurrentDevice(name);
 
-  Future<void> renameDevice(String deviceId, String name) async {
-    final record = _selectedRecord;
-    if (record == null) return;
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: renameAccountDeviceState(
-        record.syncState,
-        deviceId: deviceId,
-        name: name,
-      ),
-    );
-    await _persist();
-    notifyListeners();
-  }
-
-  Future<void> renameCurrentDevice(String name) {
-    final id = currentDeviceId;
-    if (id == null) return Future<void>.value();
-    return renameDevice(id, name);
-  }
-
-  Future<void> renameAccount(String name) async {
-    final record = _selectedRecord;
-    if (record == null) return;
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: renameAccountState(record.syncState, name),
-    );
-    await _persist();
-    notifyListeners();
-  }
+  Future<void> renameAccount(String name) =>
+      _sessionController().renameAccount(name);
 
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
-  }) async {
-    final record = _selectedRecord;
-    if (record == null || !isUnlocked) {
-      throw const FormatException('当前账号未登录，不能修改密码。');
-    }
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: changeAccountPasswordState(
-        record.syncState,
+  }) =>
+      _sessionController().changePassword(
         currentPassword: currentPassword,
         newPassword: newPassword,
-      ),
-    );
-    await _persist();
-    notifyListeners();
-  }
+      );
 
-  Future<void> revokeDevice(String deviceId) async {
-    final record = _selectedRecord;
-    if (record == null) return;
-    _accounts[record.syncState.accountId] = record.copyWith(
-      syncState: revokeAccountDeviceState(
-        record.syncState,
-        currentDeviceId: record.currentDeviceId,
-        deviceId: deviceId,
-      ),
-    );
-    await _persist();
-    notifyListeners();
-  }
+  Future<void> revokeDevice(String deviceId) =>
+      _sessionController().revokeDevice(deviceId);
 
-  Future<void> lock() async {
-    final record = _selectedRecord;
-    if (record == null) {
-      status = WebAccountStatus.unactivated;
-      notifyListeners();
-      return;
-    }
-    _accounts[record.syncState.accountId] =
-        record.copyWith(stayLoggedIn: false);
-    _restoreStatus();
-    await _persist();
-    notifyListeners();
-  }
+  Future<void> lock() => _sessionController().lock();
 
-  Future<void> returnToAccountChooser() async {
-    final record = _selectedRecord;
-    if (record != null) {
-      _accounts[record.syncState.accountId] =
-          record.copyWith(stayLoggedIn: false);
-    }
-    _selectedAccountId = null;
-    status = WebAccountStatus.unactivated;
-    await _persist();
-    notifyListeners();
-  }
+  Future<void> returnToAccountChooser() =>
+      _sessionController().returnToAccountChooser();
 
   Future<void> removeSelectedLocalAccount() async {
     final id = _selectedAccountId;
@@ -448,43 +298,47 @@ class WebAccountStore extends ChangeNotifier {
     } catch (_) {}
     _accounts.remove(id);
     _selectedAccountId = null;
-    status = WebAccountStatus.unactivated;
+    status = AccountStatus.unactivated;
     await _persist();
     notifyListeners();
   }
 
-  AccountSyncState _touchDevice(
-    AccountSyncState state,
-    String deviceId, {
-    required bool createIfMissing,
-  }) {
-    final now = DateTime.now().toUtc();
-    final current = state.devices[deviceId];
-    if (current == null && !createIfMissing) return state;
+  Future<String> _activationClaimFor(ActivationLicense license) async {
+    final key =
+        'adventurers-guild.web.activation-claim.v1.${license.accountId}';
+    try {
+      final source = webStorageGet(key);
+      if (source != null && source.trim().isNotEmpty) {
+        final decoded = jsonDecode(source);
+        if (decoded is Map &&
+            decoded['serial'] == license.serial &&
+            decoded['claimId'] is String &&
+            (decoded['claimId'] as String).length >= 16) {
+          return decoded['claimId'] as String;
+        }
+      }
+    } catch (_) {}
 
-    final devices = <String, AccountDevice>{...state.devices};
-    devices[deviceId] = current == null
-        ? AccountDevice(
-            id: deviceId,
-            name: '网页设备',
-            platform: 'web',
-            firstSeenAt: now,
-            lastSeenAt: now,
-          )
-        : current.copyWith(
-            platform: 'web',
-            lastSeenAt: now,
-          );
-    return state.copyWith(devices: devices);
+    final claimId =
+        'claim-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+        '${_random.nextInt(0x7fffffff).toRadixString(36)}';
+    webStorageSet(
+      key,
+      jsonEncode(<String, dynamic>{
+        'accountId': license.accountId,
+        'serial': license.serial,
+        'claimId': claimId,
+      }),
+    );
+    return claimId;
   }
 
-  bool _constantTimeEquals(String a, String b) {
-    if (a.length != b.length) return false;
-    var result = 0;
-    for (var index = 0; index < a.length; index++) {
-      result |= a.codeUnitAt(index) ^ b.codeUnitAt(index);
-    }
-    return result == 0;
+  Future<void> _clearActivationClaim(String accountId) async {
+    try {
+      webStorageRemove(
+        'adventurers-guild.web.activation-claim.v1.$accountId',
+      );
+    } catch (_) {}
   }
 
   String _deviceIdForAccount(String accountId) {

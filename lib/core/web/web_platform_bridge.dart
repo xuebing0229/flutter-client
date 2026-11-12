@@ -30,6 +30,15 @@ external JSPromise<JSString> _assetWrite(JSString key, JSString base64Data);
 @JS('adventurersGuildAssetDelete')
 external JSPromise<JSString> _assetDelete(JSString key);
 
+@JS('adventurersGuildPwaInstallState')
+external JSString _pwaInstallState();
+
+@JS('adventurersGuildPromptPwaInstall')
+external JSPromise<JSString> _promptPwaInstall();
+
+@JS('adventurersGuildPwaInstalledState')
+external JSPromise<JSString> _pwaInstalledState();
+
 String? webStorageGet(String key) => _storageGet(key.toJS)?.toDart;
 
 void webStorageSet(String key, String value) {
@@ -39,6 +48,14 @@ void webStorageSet(String key, String value) {
 void webStorageRemove(String key) {
   _storageRemove(key.toJS);
 }
+
+String webPwaInstallState() => _pwaInstallState().toDart;
+
+Future<String> webPromptPwaInstall() async =>
+    (await _promptPwaInstall().toDart).toDart;
+
+Future<String> webPwaInstalledState() async =>
+    (await _pwaInstalledState().toDart).toDart;
 
 void webDownloadBytes({
   required String fileName,

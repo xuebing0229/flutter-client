@@ -7,6 +7,7 @@ import '../../../core/account/account_models.dart';
 import '../../../core/account/account_store.dart';
 import '../../../core/changelog/adventurer_news.dart';
 import '../../../core/cloud_sync/native_cloudflare_record_bridge.dart';
+import '../../../core/cloud_sync/public_peer_sync_factory.dart';
 import '../../../core/cloud_sync/native_sync_coordinator_view_adapter.dart';
 import '../../../core/desktop_pet/desktop_pet_service.dart';
 import '../../../core/features/app_feature_store.dart';
@@ -15,11 +16,11 @@ import '../../../core/notifications/order_deadline_reminder_service.dart';
 import '../../../core/onboarding/interaction_hint_store.dart';
 import '../../../core/portability/app_backup_data.dart';
 import '../../../core/storage/app_data_persistence.dart';
+import '../../../core/settings/workspace_settings_codec.dart';
+import '../../../core/settings/workspace_navigation_model.dart';
 import '../../../core/sync/public_peer_sync_service.dart';
 import '../../../core/sync/sync_coordinator.dart';
-import '../../../core/theme/app_theme_palette.dart';
 import '../../../core/theme/app_theme_store.dart';
-import '../../../core/theme/app_ui_style.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../account/presentation/account_page.dart';
 import '../../imports/presentation/screenshot_import_page.dart';
@@ -27,27 +28,22 @@ import '../../focus/state/focus_store.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/data/order_reference_image_store.dart';
 import '../../orders/domain/queue_order.dart';
-import '../../orders/presentation/add_order_page.dart';
 import '../../orders/presentation/order_detail_page.dart';
-import '../../orders/presentation/order_queue_page.dart';
 import '../../orders/state/order_store.dart';
-import '../../products/presentation/add_product_page.dart';
-import '../../products/presentation/product_page.dart';
 import '../../products/state/product_store.dart';
-import '../../schedule/presentation/schedule_page.dart';
-import '../../statistics/presentation/statistics_page.dart';
 import '../../shared/domain/receipt_style_store.dart';
 import '../../shared/domain/collection_view_preferences.dart';
-import '../../shared/presentation/preset_center_page.dart';
-import '../../shared/presentation/receipt_center_page.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../sync/presentation/device_sync_page.dart';
 import 'abstract_mode_guide.dart';
 import 'adventurer_news_dialog.dart';
 import 'app_drawer.dart';
 import 'workspace_shell.dart';
-import 'archive_page.dart';
+import 'workspace_main_pages.dart';
+import 'workspace_common_tool_pages.dart';
+import 'quick_start_guide_helpers.dart';
+import 'workspace_add_pages.dart';
 import 'desktop_pet_page.dart';
-import 'feature_toggle_page.dart';
 import 'feedback_page.dart';
 import 'first_run_guide.dart';
 import 'reminder_background_guide.dart';
@@ -107,6 +103,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final OrderDeadlineReminderService _reminderService =
       const OrderDeadlineReminderService();
   final InteractionHintStore _hintStore = const InteractionHintStore();
+  final QuickStartGuideTargets _quickStartGuideTargets =
+      QuickStartGuideTargets();
+  String? _guidedOrderId;
+  bool _guidePreviewRouteOpen = false;
+  bool _guidePreviewUsesDesktopNavigator = false;
+  bool _guidePreviewIsEditor = false;
   final DesktopPetService _desktopPetService = DesktopPetService();
   late final DesktopPetAccountSync _desktopPetAccountSync;
   late final SyncCoordinator _syncCoordinator;
@@ -114,9 +116,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final NativeSyncCoordinatorViewAdapter _syncCoordinatorView;
   PublicPeerSyncService? _publicPeerSync;
 
-  static const _pricingPresetsSettingKey = 'pricingAdjustmentPresets';
-  static const _receiptStyleSettingKey = 'receiptStyle';
-  static const _desktopNavigationOpenSettingKey = 'desktopNavigationOpen';
   static const _featureSettingPrefix = 'feature.';
 
   int _index = 0;
@@ -393,13 +392,200 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _prepareQuickStartGuide() async {
+    if (!mounted) return;
+    if (_index != 0 || _desktopToolSelection != null) {
+      _selectDesktopTab(0);
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  QuickStartGuideActions get _quickStartGuideActions => QuickStartGuideActions(
+        goTo: _goToGuideDestination,
+        createFirstOrder: _createFirstOrderForGuide,
+        waitForFirstOrderArchive: _waitForFirstOrderArchive,
+        isAvailable: _isGuideDestinationAvailable,
+        finish: _finishGuideNavigation,
+      );
+
+  bool _isGuideDestinationAvailable(
+    QuickStartGuideDestination destination,
+  ) {
+    if (destination == QuickStartGuideDestination.pwaInstall) return false;
+    if (destination == QuickStartGuideDestination.featureToggle) {
+      return !widget.featureStore.abstractMode ||
+          !widget.featureStore.abstractEffects ||
+          !_abstractFeatureToggleHidden;
+    }
+    return quickStartDestinationAvailable(destination, widget.featureStore);
+  }
+
+  int? _guideTabIndex(QuickStartGuideDestination destination) {
+    final id = quickStartTabId(destination);
+    if (id == null) return null;
+    final ids = workspaceTabSpecs(widget.featureStore)
+        .map((item) => item.id)
+        .toList(growable: false);
+    final index = ids.indexOf(id);
+    return index < 0 ? null : index;
+  }
+
+  String? _guideTool(QuickStartGuideDestination destination) =>
+      quickStartTool(destination);
+
+  Future<void> _closeGuidePreviewRoute() async {
+    if (!_guidePreviewRouteOpen || !mounted) return;
+    final navigator = _guidePreviewUsesDesktopNavigator
+        ? _desktopContentNavigatorKey.currentState
+        : Navigator.of(context);
+    if (navigator?.canPop() ?? false) {
+      navigator!.pop();
+    }
+    final wasEditor = _guidePreviewIsEditor;
+    _guidePreviewRouteOpen = false;
+    _guidePreviewUsesDesktopNavigator = false;
+    _guidePreviewIsEditor = false;
+    if (wasEditor && mounted) {
+      setState(() => _desktopAddEditorOpen = false);
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<void> _pushGuidePreviewPage(
+    Widget page, {
+    bool editor = false,
+  }) async {
+    if (!mounted) return;
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    final route = MaterialPageRoute<void>(builder: (_) => page);
+    final desktopNavigator =
+        useDesktopLayout ? _desktopContentNavigatorKey.currentState : null;
+    if (desktopNavigator != null) {
+      if (editor) setState(() => _desktopAddEditorOpen = true);
+      unawaited(desktopNavigator.push(route));
+      _guidePreviewRouteOpen = true;
+      _guidePreviewUsesDesktopNavigator = true;
+      _guidePreviewIsEditor = editor;
+    } else {
+      unawaited(Navigator.of(context).push(route));
+      _guidePreviewRouteOpen = true;
+      _guidePreviewUsesDesktopNavigator = false;
+      _guidePreviewIsEditor = false;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<void> _goToGuideDestination(
+    QuickStartGuideDestination destination,
+  ) async {
+    if (!mounted || !_isGuideDestinationAvailable(destination)) return;
+    await _closeGuidePreviewRoute();
+    if (!mounted) return;
+
+    final tabIndex = _guideTabIndex(destination);
+    if (tabIndex != null) {
+      if (MediaQuery.sizeOf(context).width >= 900 && !_desktopNavigationOpen) {
+        _setDesktopNavigationOpen(true);
+      }
+      _selectDesktopTab(tabIndex);
+      await WidgetsBinding.instance.endOfFrame;
+      return;
+    }
+
+    if (destination == QuickStartGuideDestination.screenshotImport) {
+      if (_desktopToolSelection != null) _selectDesktopTool(null);
+      await _pushGuidePreviewPage(
+        ScreenshotImportPage(
+          accountId: widget.accountId,
+          kind: ScreenshotImportKind.orders,
+          orderStore: _orderStore,
+          productStore: _productStore,
+          presetStore: _nodePresetStore,
+          guideTargets: _quickStartGuideTargets,
+          autoPick: false,
+        ),
+        editor: true,
+      );
+      return;
+    }
+
+    final tool = _guideTool(destination);
+    if (tool == null) return;
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    if (useDesktopLayout) {
+      if (!_desktopNavigationOpen) _setDesktopNavigationOpen(true);
+      _selectDesktopTool(tool);
+      await WidgetsBinding.instance.endOfFrame;
+    } else {
+      await _pushGuidePreviewPage(_buildDesktopToolPage(tool));
+    }
+  }
+
+  Future<String?> _createFirstOrderForGuide() async {
+    await _goToGuideDestination(QuickStartGuideDestination.orders);
+    if (!mounted) return null;
+
+    final beforeIds = _orderStore.orders.map((order) => order.id).toSet();
+    final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    final route = MaterialPageRoute<void>(
+      builder: (_) => buildQuickStartAddOrderPage(
+        accountId: widget.accountId,
+        orderStore: _orderStore,
+        nodePresetStore: _nodePresetStore,
+        pricingPresetStore: _pricingPresetStore,
+        featureStore: widget.featureStore,
+        guideTargets: _quickStartGuideTargets,
+      ),
+    );
+    final desktopNavigator =
+        useDesktopLayout ? _desktopContentNavigatorKey.currentState : null;
+    if (desktopNavigator != null) {
+      setState(() => _desktopAddEditorOpen = true);
+      await desktopNavigator.push(route);
+      if (mounted) setState(() => _desktopAddEditorOpen = false);
+    } else {
+      await Navigator.of(context).push(route);
+    }
+    if (!mounted) return null;
+
+    final createdId = findNewGuideOrderId(beforeIds, _orderStore);
+    setState(() => _guidedOrderId = createdId);
+    await WidgetsBinding.instance.endOfFrame;
+    return createdId;
+  }
+
+  Future<bool> _waitForFirstOrderArchive(String orderId) {
+    if (!mounted) return Future<bool>.value(false);
+    return waitForGuideOrderArchive(
+      context: context,
+      orderStore: _orderStore,
+      orderId: orderId,
+    );
+  }
+
+  Future<void> _finishGuideNavigation() async {
+    await _closeGuidePreviewRoute();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    if (_guidedOrderId != null) {
+      setState(() => _guidedOrderId = null);
+    }
+    _selectDesktopTab(0);
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   Future<void> _showFirstRunGuideOnce() async {
     if (await _hintStore.hasSeenFirstRunGuide(widget.accountId)) return;
     if (!mounted) return;
 
     await _hintStore.markFirstRunGuideSeen(widget.accountId);
     if (!mounted) return;
-    await showFirstRunGuide(context);
+    await showFirstRunGuide(
+      context,
+      targets: _quickStartGuideTargets,
+      prepareQuickStart: _prepareQuickStartGuide,
+      actions: _quickStartGuideActions,
+    );
   }
 
   Future<void> _showTutorial() async {
@@ -407,7 +593,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (widget.featureStore.abstractMode) {
       await showAbstractModeGuide(context);
     } else {
-      await showFirstRunGuide(context, detailed: true);
+      await showFirstRunGuide(
+        context,
+        detailed: true,
+        targets: _quickStartGuideTargets,
+        prepareQuickStart: _prepareQuickStartGuide,
+        actions: _quickStartGuideActions,
+      );
     }
   }
 
@@ -471,36 +663,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final state = widget.accountStore.syncSnapshot;
     if (currentDeviceId == null || state == null) return;
 
-    final service = PublicPeerSyncService(
+    final service = createWorkspacePublicPeerSyncService(
       accountId: widget.accountId,
       deviceId: currentDeviceId,
-      captureAccountState: () =>
-          widget.accountStore.syncSnapshot ?? state,
+      captureAccountState: () => widget.accountStore.syncSnapshot ?? state,
       mergeAccountState: widget.accountStore.mergeSyncedState,
       exportRecords: _cloudflareRecordBridge.exportRecords,
       mergeRecords: _cloudflareRecordBridge.mergeRecords,
+      orderStore: _orderStore,
+      productStore: _productStore,
+      referenceImageStore: _referenceImageStore,
       shouldTargetDevice: (device) => device.platform == 'web',
-      captureAssetPaths: () => <String>{
-        for (final order in _orderStore.orders)
-          for (final image in order.referenceImages) image.relativePath,
-        for (final product in _productStore.products)
-          for (final image in product.referenceImages) image.relativePath,
-      },
-      assetExists: (path) async =>
-          (await _referenceImageStore.readAssetBytes(
-            accountId: widget.accountId,
-            relativePath: path,
-          )) !=
-          null,
-      readAsset: (path) => _referenceImageStore.readAssetBytes(
-        accountId: widget.accountId,
-        relativePath: path,
-      ),
-      writeAsset: (path, bytes) => _referenceImageStore.writeAssetBytes(
-        accountId: widget.accountId,
-        relativePath: path,
-        bytes: bytes,
-      ),
     );
     _publicPeerSync = service;
     unawaited(service.start());
@@ -924,129 +1097,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Map<String, dynamic> _captureSyncSettings() {
-    final features = widget.featureStore.toJson();
-    return <String, dynamic>{
-      'id': SyncCoordinator.settingsRecordId,
-      'themeMode': widget.themeStore.mode.name,
-      'themePaletteId': widget.themeStore.paletteId,
-      'customThemePalettes': widget.themeStore.exportCustomPalettes(),
-      'uiStyle': widget.themeStore.style.id,
-      for (final entry in features.entries)
-        '$_featureSettingPrefix${entry.key}': entry.value,
-      ..._collectionViews.toSettings(),
-      _pricingPresetsSettingKey: _pricingPresetStore.toJson(),
-      _receiptStyleSettingKey: _receiptStyleStore.toJson(),
-      _desktopNavigationOpenSettingKey: _desktopNavigationOpen,
-    };
+    return WorkspaceSettingsCodec.capture(
+      themeStore: widget.themeStore,
+      featureStore: widget.featureStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      collectionViews: _collectionViews,
+      desktopNavigationOpen: _desktopNavigationOpen,
+    );
   }
 
   Future<void> _applySyncSettings(Map<String, dynamic> settings) async {
-    final modeName = settings['themeMode'];
-    if (modeName is String) {
-      final mode = switch (modeName) {
-        'light' => ThemeMode.light,
-        'dark' => ThemeMode.dark,
-        'system' => ThemeMode.system,
-        _ => throw const FormatException('同步主题模式无效。'),
-      };
-      await widget.themeStore.setMode(mode);
-    }
+    final previousViews = _collectionViews;
+    final previousNavigationOpen = _desktopNavigationOpen;
+    final applied = await WorkspaceSettingsCodec.apply(
+      settings: settings,
+      themeStore: widget.themeStore,
+      featureStore: widget.featureStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      collectionViews: _collectionViews,
+      desktopNavigationOpen: _desktopNavigationOpen,
+    );
+    _collectionViews = applied.collectionViews;
+    _desktopNavigationOpen = applied.desktopNavigationOpen;
 
-    if (settings.containsKey('customThemePalettes')) {
-      await widget.themeStore.replaceCustomPalettesFromJson(
-        settings['customThemePalettes'],
-      );
-    }
-
-    final paletteId = settings['themePaletteId'];
-    if (paletteId is String) {
-      if (widget.themeStore.containsPaletteId(paletteId)) {
-        await widget.themeStore.setPaletteId(paletteId);
-      } else if (paletteId.startsWith('custom:')) {
-        // A UI preference must never make otherwise valid work data
-        // unreadable. Build 154 could persist a selected custom palette ID
-        // into workspace settings without embedding the custom palette itself.
-        // If that old preset is unavailable, keep/fall back to a valid local
-        // palette and continue restoring orders/products normally.
-        await widget.themeStore.setPaletteId(
-          AppThemePalettes.guildOriginal.id,
-        );
-      } else {
-        await widget.themeStore.setPaletteId(
-          AppThemePalettes.guildOriginal.id,
-        );
-      }
-    } else if (paletteId != null) {
-      await widget.themeStore.setPaletteId(
-        AppThemePalettes.guildOriginal.id,
-      );
-    }
-
-    final styleId = settings['uiStyle'];
-    if (styleId is String && AppUiStyle.containsId(styleId)) {
-      await widget.themeStore.setStyle(AppUiStyle.byId(styleId));
-    } else if (styleId == null) {
-      final legacyTextureId = settings['uiTexture'];
-      if (legacyTextureId == null) {
-        await widget.themeStore.setStyle(AppUiStyle.classic);
-      } else if (legacyTextureId is String) {
-        await widget.themeStore.setStyle(
-          AppUiStyle.fromLegacyTextureId(legacyTextureId),
-        );
-      } else {
-        throw const FormatException('同步 UI 风格设置无效。');
-      }
-    } else {
-      throw const FormatException('同步 UI 风格设置无效。');
-    }
-
-    // New settings records keep each feature as its own CRDT field so two
-    // devices can toggle different switches without manufacturing a conflict.
-    // Accept the old aggregate map when importing an earlier local backup.
-    final legacyFeatures = settings['features'];
-    if (legacyFeatures is Map) {
-      await widget.featureStore.applyJson(legacyFeatures);
-    } else if (legacyFeatures != null) {
-      throw const FormatException('同步功能开关设置无效。');
-    }
-
-    final nextFeatures = widget.featureStore.toJson();
-    var hasFeatureFields = false;
-    for (final feature in AppFeature.values) {
-      final key = '$_featureSettingPrefix${feature.name}';
-      if (!settings.containsKey(key)) continue;
-      final value = settings[key];
-      if (value is! bool) {
-        throw FormatException('同步功能开关 ${feature.name} 格式无效。');
-      }
-      nextFeatures[feature.name] = value;
-      hasFeatureFields = true;
-    }
-    if (hasFeatureFields) {
-      await widget.featureStore.applyJson(nextFeatures);
-    }
-
-    if (settings.containsKey(_pricingPresetsSettingKey)) {
-      _pricingPresetStore.applyJson(settings[_pricingPresetsSettingKey]);
-    }
-    if (settings.containsKey(_receiptStyleSettingKey)) {
-      _receiptStyleStore.applyJson(settings[_receiptStyleSettingKey]);
-    }
-
-    var layoutChanged = false;
-    final nextCollectionViews = _collectionViews.applySettings(settings);
-    if (nextCollectionViews != _collectionViews) {
-      _collectionViews = nextCollectionViews;
-      layoutChanged = true;
-    }
-    final nextNavigationOpen = settings[_desktopNavigationOpenSettingKey];
-    if (nextNavigationOpen is bool &&
-        nextNavigationOpen != _desktopNavigationOpen) {
-      _desktopNavigationOpen = nextNavigationOpen;
-      layoutChanged = true;
-    }
-
-    if (layoutChanged && mounted) {
+    if ((previousViews != _collectionViews ||
+            previousNavigationOpen != _desktopNavigationOpen) &&
+        mounted) {
       setState(() {
         _refreshDesktopCollectionRootIfNeeded();
       });
@@ -1321,14 +1399,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
     if (useDesktopLayout && _desktopAddEditorOpen) return;
     final route = MaterialPageRoute<void>(
-      builder: (_) => ScreenshotImportPage(
+      builder: (_) => buildWorkspaceScreenshotImportPage(
+        products: products,
         accountId: widget.accountId,
-        kind: products
-            ? ScreenshotImportKind.products
-            : ScreenshotImportKind.orders,
         orderStore: _orderStore,
         productStore: _productStore,
-        presetStore: _nodePresetStore,
+        nodePresetStore: _nodePresetStore,
       ),
     );
     final desktopNavigator = useDesktopLayout
@@ -1350,9 +1426,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (useDesktopLayout && _desktopAddEditorOpen) return;
 
     final route = MaterialPageRoute<void>(
-      builder: (_) => AddOrderPage(
+      builder: (_) => buildWorkspaceManualAddPage(
+        products: false,
         accountId: widget.accountId,
-        store: _orderStore,
+        orderStore: _orderStore,
+        productStore: _productStore,
         nodePresetStore: _nodePresetStore,
         pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
@@ -1378,9 +1456,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (useDesktopLayout && _desktopAddEditorOpen) return;
 
     final route = MaterialPageRoute<void>(
-      builder: (_) => AddProductPage(
+      builder: (_) => buildWorkspaceManualAddPage(
+        products: true,
         accountId: widget.accountId,
-        store: _productStore,
+        orderStore: _orderStore,
+        productStore: _productStore,
+        nodePresetStore: _nodePresetStore,
         pricingPresetStore: _pricingPresetStore,
         featureStore: widget.featureStore,
       ),
@@ -1570,71 +1651,65 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildDesktopToolPage(String tool) {
+    final common = buildWorkspaceCommonToolPage(
+      tool: tool,
+      accountId: widget.accountId,
+      accountName: widget.accountStore.accountName ?? '',
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      featureStore: widget.featureStore,
+      syncCoordinator: _syncCoordinatorView,
+      guideTargets: _quickStartGuideTargets,
+      guideOrderId: _guidedOrderId,
+      onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
+    );
+    if (common != null) return common;
+
     return switch (tool) {
-      AppToolMenu.presetTool => PresetCenterPage(
-        nodePresetStore: _nodePresetStore,
-        pricingPresetStore: _pricingPresetStore,
-      ),
-      AppToolMenu.receiptTool => ReceiptCenterPage(
-        orderStore: _orderStore,
-        productStore: _productStore,
-        receiptStyleStore: _receiptStyleStore,
-        accountName: widget.accountStore.accountName ?? '',
-      ),
-      AppToolMenu.featureToggleTool => FeatureTogglePage(
-        store: widget.featureStore,
-        onHideFeatureToggle: _hideFeatureToggleForAbstractSession,
-      ),
       AppToolMenu.desktopPetTool => DesktopPetPage(
-        orderStore: _orderStore,
-        focusStore: _focusStore,
-        settings: _desktopPetService.settings,
-        onOpenOrder: _openOrderFromFocus,
-        showDesktopPet:
-            Platform.isWindows &&
-            widget.featureStore.enabled(AppFeature.desktopPet),
-        showFocus: widget.featureStore.enabled(AppFeature.focus),
-      ),
-      AppToolMenu.archiveTool => ArchivePage(
-        accountId: widget.accountId,
-        orderStore: _orderStore,
-        productStore: _productStore,
-        nodePresetStore: _nodePresetStore,
-        pricingPresetStore: _pricingPresetStore,
-        receiptStyleStore: _receiptStyleStore,
-        featureStore: widget.featureStore,
-        syncCoordinator: _syncCoordinatorView,
-      ),
-      AppToolMenu.syncTool => DeviceSyncPage(coordinator: _syncCoordinator),
+          orderStore: _orderStore,
+          focusStore: _focusStore,
+          settings: _desktopPetService.settings,
+          onOpenOrder: _openOrderFromFocus,
+          showDesktopPet:
+              Platform.isWindows &&
+              widget.featureStore.enabled(AppFeature.desktopPet),
+          showFocus: widget.featureStore.enabled(AppFeature.focus),
+        ),
+      AppToolMenu.syncTool => DeviceSyncPage(
+          coordinator: _syncCoordinator,
+          guideTargets: _quickStartGuideTargets,
+        ),
       AppToolMenu.feedbackTool => const FeedbackPage(),
       AppToolMenu.accountTool => AccountPage(
-        store: widget.accountStore,
-        buildTransferPackage: () =>
-            _buildAccountTransferPackage(widget.accountStore),
-        syncCoordinator: _syncCoordinator,
-        onBeforeSignOut: _prepareForSignOut,
-        onRevokeDevice: _syncCoordinator.revokeDevice,
-      ),
+          store: widget.accountStore,
+          buildTransferPackage: () =>
+              _buildAccountTransferPackage(widget.accountStore),
+          syncCoordinator: _syncCoordinator,
+          onBeforeSignOut: _prepareForSignOut,
+          onRevokeDevice: _syncCoordinator.revokeDevice,
+          guideTargets: _quickStartGuideTargets,
+        ),
       AppToolMenu.settingsTool => SettingsPage(
-        orderStore: _orderStore,
-        productStore: _productStore,
-        nodePresetStore: _nodePresetStore,
-        focusStore: _focusStore,
-        themeStore: widget.themeStore,
-        featureStore: widget.featureStore,
-        desktopPetSettings: _desktopPetService.settings,
-        accountStore: widget.accountStore,
-        syncCoordinator: _syncCoordinator,
-        onApplyWorkspaceSettings: _applySyncSettings,
-        // Keep SettingsPage alive while opening the palette picker. The update
-        // download state lives in SettingsPage, so replacing the whole desktop
-        // tool page here would make an in-progress Windows update appear to
-        // restart after changing the UI theme color.
-      ),
+          orderStore: _orderStore,
+          productStore: _productStore,
+          nodePresetStore: _nodePresetStore,
+          focusStore: _focusStore,
+          themeStore: widget.themeStore,
+          featureStore: widget.featureStore,
+          desktopPetSettings: _desktopPetService.settings,
+          accountStore: widget.accountStore,
+          syncCoordinator: _syncCoordinator,
+          onApplyWorkspaceSettings: _applySyncSettings,
+          guideTargets: _quickStartGuideTargets,
+        ),
       AppToolMenu.themeColorTool => ThemeColorPage(
-        store: widget.themeStore,
-        onBack: () => _selectDesktopTool(AppToolMenu.settingsTool),
-      ),
+          store: widget.themeStore,
+          onBack: () => _selectDesktopTool(AppToolMenu.settingsTool),
+        ),
       _ => const SizedBox.shrink(),
     };
   }
@@ -1684,76 +1759,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _mainTabPage(String id) {
+    return buildWorkspaceMainPage(
+      id: id,
+      accountId: widget.accountId,
+      orderStore: _orderStore,
+      productStore: _productStore,
+      nodePresetStore: _nodePresetStore,
+      pricingPresetStore: _pricingPresetStore,
+      receiptStyleStore: _receiptStyleStore,
+      featureStore: widget.featureStore,
+      syncCoordinator: _syncCoordinatorView,
+      orderCardView: _orderCardView,
+      onOrderCardViewChanged: _setOrderCardView,
+      orderOverviewView: _orderOverviewView,
+      onOrderOverviewViewChanged: _setOrderOverviewView,
+      orderOverviewColumns: _orderOverviewColumns,
+      onOrderOverviewColumnsChanged: _setOrderOverviewColumns,
+      orderSortMode: _orderSortMode,
+      onOrderSortModeChanged: _setOrderSortMode,
+      productCardView: _productCardView,
+      onProductCardViewChanged: _setProductCardView,
+      productOverviewView: _productOverviewView,
+      onProductOverviewViewChanged: _setProductOverviewView,
+      productOverviewColumns: _productOverviewColumns,
+      onProductOverviewColumnsChanged: _setProductOverviewColumns,
+      productSortMode: _productSortMode,
+      onProductSortModeChanged: _setProductSortMode,
+      guideTargets: _quickStartGuideTargets,
+      guideOrderId: _guidedOrderId,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tabs = <GuildWorkspaceTab>[
-      GuildWorkspaceTab(
-        id: 'orders',
-        label: '排单',
-        icon: Icons.format_list_bulleted_rounded,
-        selectedIcon: Icons.view_list_rounded,
-        page: OrderQueuePage(
-          accountId: widget.accountId,
-          store: _orderStore,
-          nodePresetStore: _nodePresetStore,
-          pricingPresetStore: _pricingPresetStore,
-          receiptStyleStore: _receiptStyleStore,
-          featureStore: widget.featureStore,
-          syncCoordinator: _syncCoordinatorView,
-          cardView: _orderCardView,
-          onCardViewChanged: _setOrderCardView,
-          overviewView: _orderOverviewView,
-          onOverviewViewChanged: _setOrderOverviewView,
-          overviewColumns: _orderOverviewColumns,
-          onOverviewColumnsChanged: _setOrderOverviewColumns,
-          sortModeName: _orderSortMode,
-          onSortModeChanged: _setOrderSortMode,
-        ),
-      ),
-      if (widget.featureStore.products)
+      for (final spec in workspaceTabSpecs(widget.featureStore))
         GuildWorkspaceTab(
-          id: 'products',
-          label: '成品',
-          icon: Icons.image_outlined,
-          selectedIcon: Icons.image_rounded,
-          page: ProductPage(
-            accountId: widget.accountId,
-            store: _productStore,
-            pricingPresetStore: _pricingPresetStore,
-            receiptStyleStore: _receiptStyleStore,
-            featureStore: widget.featureStore,
-            syncCoordinator: _syncCoordinatorView,
-            cardView: _productCardView,
-            onCardViewChanged: _setProductCardView,
-            overviewView: _productOverviewView,
-            onOverviewViewChanged: _setProductOverviewView,
-            overviewColumns: _productOverviewColumns,
-            onOverviewColumnsChanged: _setProductOverviewColumns,
-            sortModeName: _productSortMode,
-            onSortModeChanged: _setProductSortMode,
-          ),
-        ),
-      if (widget.featureStore.schedule)
-        GuildWorkspaceTab(
-          id: 'schedule',
-          label: '日程',
-          icon: Icons.calendar_month_outlined,
-          selectedIcon: Icons.calendar_month_rounded,
-          page: SchedulePage(
-            accountId: widget.accountId,
-            store: _orderStore,
-            productStore: _productStore,
-            nodePresetStore: _nodePresetStore,
-            featureStore: widget.featureStore,
-          ),
-        ),
-      if (widget.featureStore.statistics)
-        GuildWorkspaceTab(
-          id: 'statistics',
-          label: '统计',
-          icon: Icons.bar_chart_outlined,
-          selectedIcon: Icons.bar_chart_rounded,
-          page: StatisticsPage(store: _orderStore, productStore: _productStore),
+          id: spec.id,
+          label: spec.label,
+          icon: spec.icon,
+          selectedIcon: spec.selectedIcon,
+          page: _mainTabPage(spec.id),
         ),
     ];
 
@@ -1769,17 +1816,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         !widget.featureStore.abstractEffects ||
         !_abstractFeatureToggleHidden;
     final title = switch (_desktopToolSelection) {
-      AppToolMenu.presetTool => '节点＆加价预设',
-      AppToolMenu.receiptTool => '生成小票',
-      AppToolMenu.featureToggleTool => '附加功能开关',
       AppToolMenu.desktopPetTool => showDesktopPet ? '桌宠' : '专注',
-      AppToolMenu.archiveTool => '归档',
-      AppToolMenu.syncTool => '设备同步',
       AppToolMenu.feedbackTool => '问题反馈',
-      AppToolMenu.accountTool => '账号与设备',
-      AppToolMenu.settingsTool => '设置',
-      AppToolMenu.themeColorTool => 'UI主题色',
-      _ => current.label,
+      null => current.label,
+      final tool => workspaceToolTitle(tool, fallback: current.label),
     };
     final useDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
 
@@ -1837,14 +1877,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ? null
         : switch (current.id) {
             'orders' => FloatingActionButton.extended(
-                onPressed: () => unawaited(_chooseAddMethod(products: false)),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增排单'),
+                key: _quickStartGuideTargets.addOrderKey,
+                onPressed: () =>
+                      unawaited(_chooseAddMethod(products: false)),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增排单'),
               ),
             'products' => FloatingActionButton.extended(
+                key: _quickStartGuideTargets.addProductKey,
                 onPressed: () => unawaited(_chooseAddMethod(products: true)),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('新增成品'),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('新增成品'),
               ),
             _ => null,
           };
@@ -1866,6 +1909,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       toolSelected: _desktopToolSelection != null,
       floatingActionButton: floatingAction,
       showAppBar: _desktopToolSelection == null,
+      guideTargets: _quickStartGuideTargets,
     );
 
     final progress = _syncProgressOverlay;

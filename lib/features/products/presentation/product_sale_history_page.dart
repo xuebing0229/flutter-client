@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/presentation/detail_form_widgets.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/help_tooltip.dart';
 import '../domain/finished_product.dart';
 import '../state/product_store.dart';
 
@@ -33,7 +34,12 @@ class _ProductSaleHistoryPageState extends State<ProductSaleHistoryPage> {
           autofocus: true,
           decoration: const InputDecoration(
             labelText: '单主',
-            hintText: '留空表示不归入单主年度统计',
+            suffixIcon: Center(
+              widthFactor: 1,
+              child: InlineHelpTooltip(
+                message: '留空表示不归入单主年度统计。',
+              ),
+            ),
           ),
         ),
         actions: [
@@ -111,11 +117,21 @@ class _ProductSaleHistoryPageState extends State<ProductSaleHistoryPage> {
                     ),
               ),
               const SizedBox(height: 4),
-              Text(
-                records.isEmpty
-                    ? '暂无售出时间记录'
-                    : '共 ${records.length} 次售出 · 可补填单主用于年度小票',
-                style: TextStyle(color: colors.onSurfaceVariant),
+              Row(
+                children: [
+                  Text(
+                    records.isEmpty
+                        ? '暂无售出时间记录'
+                        : '共 ${records.length} 次售出',
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+                  if (records.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    const InlineHelpTooltip(
+                      message: '可为每次售出补填单主，用于生成对应单主的年度小票。',
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 18),
               if (records.isEmpty)

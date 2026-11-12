@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../shared/presentation/help_tooltip.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
 import '../../orders/domain/queue_order.dart';
@@ -316,15 +317,7 @@ class _PeriodMetric extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Tooltip(
-              message: helpText,
-              triggerMode: TooltipTriggerMode.tap,
-              child: Icon(
-                Icons.help_outline_rounded,
-                size: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
+            InlineHelpTooltip(message: helpText),
           ],
         ),
         const SizedBox(height: 10),
@@ -367,16 +360,27 @@ class _SummaryCard extends StatelessWidget {
       required String label,
       required int count,
       required double amount,
+      String? helpText,
     }) {
       return Row(
         children: [
           Expanded(
-            child: Text(
-              '$label $count 笔',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: muted,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    '$label $count 笔',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (helpText != null) ...[
+                  const SizedBox(width: 6),
+                  InlineHelpTooltip(message: helpText),
+                ],
+              ],
             ),
           ),
           Text(
@@ -415,6 +419,7 @@ class _SummaryCard extends StatelessWidget {
             label: '待收入',
             count: pendingCount,
             amount: pendingTotal,
+            helpText: '统计本月截稿、尚未归档且未标记已交稿的排单预计收入。',
           ),
         ],
       ),

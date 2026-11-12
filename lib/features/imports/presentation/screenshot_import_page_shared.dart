@@ -1,3 +1,5 @@
+import '../../shared/presentation/help_tooltip.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 // ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:async';
 import 'dart:math' as math;
@@ -35,6 +37,8 @@ class ScreenshotImportPage extends StatefulWidget {
     required this.orderStore,
     required this.productStore,
     required this.presetStore,
+    this.guideTargets,
+    this.autoPick = true,
     super.key,
   });
 
@@ -43,6 +47,8 @@ class ScreenshotImportPage extends StatefulWidget {
   final OrderStore orderStore;
   final ProductStore productStore;
   final NodePresetStore presetStore;
+  final QuickStartGuideTargets? guideTargets;
+  final bool autoPick;
 
   @override
   State<ScreenshotImportPage> createState() => _ScreenshotImportPageState();
@@ -52,6 +58,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   final _ocr = const ScreenshotOcrService();
   final _history = const ScreenshotImportHistory();
   Set<String> _importedFingerprints = <String>{};
+  final Map<String, double> _rememberedPriceMemory = <String, double>{};
+  int _priceEditSerial = 0;
   final _platform = const ScreenshotImportPlatformBridge();
   final _ordersParser = const ScreenshotLayoutParser();
   final _productsParser = const ScreenshotProductLayoutParser();
@@ -66,6 +74,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   bool _releaseTemporaryImagesWhenIdle = false;
   String _recognitionStep = '准备识别';
   ProductSaleType _defaultSaleType = ProductSaleType.single;
+  CommissionPlatform? _selectedImportPlatform;
   late ScreenshotImportKind _kind;
 
   bool get _products => _kind == ScreenshotImportKind.products;
@@ -74,9 +83,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
   void initState() {
     super.initState();
     _kind = widget.kind;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_resumeOrSelectScreenshot());
-    });
+    if (widget.autoPick) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_resumeOrSelectScreenshot());
+      });
+    }
   }
 
   Future<void> _resumeOrSelectScreenshot() async {
@@ -101,6 +112,31 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(text), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  Future<CommissionPlatform?> _chooseScreenshotImportPlatform() {
+    const platforms = <CommissionPlatform>[
+      CommissionPlatform.mihuashi,
+      CommissionPlatform.huajia,
+      CommissionPlatform.bilibiliWorkshop,
+      CommissionPlatform.linjie,
+    ];
+    return showDialog<CommissionPlatform>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('选择截图平台'),
+        children: [
+          for (final platform in platforms)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, platform),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(platform.label),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -165,6 +201,10 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       return;
     }
 
+    final selectedPlatform = await _chooseScreenshotImportPlatform();
+    if (!mounted || selectedPlatform == null) return;
+    setState(() => _selectedImportPlatform = selectedPlatform);
+
     try {
       final selected = await _platform.pickImages();
       if (selected.isEmpty) return;
@@ -183,6 +223,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       });
       _importedFingerprints =
           await _history.read(accountId: widget.accountId);
+      _rememberedPriceMemory
+        ..clear()
+        ..addAll(
+          await _history.readPriceMemory(accountId: widget.accountId),
+        );
 
       final generated = <ScreenshotImportDraft>[];
       var unreadable = 0;
@@ -226,29 +271,24 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
             }
           }
 
-          final guess = preselectImportPlatform(
-            recognized.lines.map((line) => line.text),
-          );
-          // Detect the actual platform's detail layout before assigning an
-          // order to any app. A detail page is not automatically MiHuashi:
-          // Huajia also has a single-order page with attachment timestamps.
+          // Platform is explicit user input for this whole batch. UI wording
+          // and list layouts change over time, so OCR must never silently
+          // override the platform the user selected.
+          final platform = selectedPlatform;
           final huajiaDetail = !_products &&
+              platform == CommissionPlatform.huajia &&
               isHuajiaOrderDetailScreenshot(
                 lines: recognized.lines,
                 imageWidth: recognized.width,
                 imageHeight: recognized.height,
               );
-          final mihuashiDetail = !_products && !huajiaDetail &&
+          final mihuashiDetail = !_products &&
+              platform == CommissionPlatform.mihuashi &&
               isMiHuashiOrderDetailScreenshot(
                 lines: recognized.lines,
                 imageWidth: recognized.width,
                 imageHeight: recognized.height,
               );
-          final platform = huajiaDetail
-              ? CommissionPlatform.huajia
-              : mihuashiDetail
-                  ? CommissionPlatform.mihuashi
-                  : guess.platform;
           if (_products) {
             final found = _productsParser.parse(
               lines: recognized.lines,
@@ -359,7 +399,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       : mihuashiDetail
                           ? '米画师详情页'
                           : '排单列表或未识别详情页',
-              platform: platform?.label ?? '待选择',
+              platform: platform.label,
               parsedRows: parsedForReport,
             ),
           );
@@ -398,6 +438,14 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
           final row = miRows[index];
           if (row.title == titles[index]) continue;
           row.title = titles[index];
+          if (!_products &&
+              !row.priceManuallyChanged &&
+              !row.priceRecognized) {
+            row.price = _resolvedPriceForTitle(
+              row.title,
+              fallback: row.price,
+            );
+          }
           // The OCR correction must happen before a same-title preset is
           // resolved; merely changing the preview label leaves the wrong
           // workflow bound to the record.
@@ -517,6 +565,11 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       recognizedPercent: percentage,
       recognizedNodeLabel: recognizedNodeLabel,
     );
+    final recognizedPrice =
+        price != null && price.isFinite && price >= 0;
+    final resolvedPrice = _products || recognizedPrice
+        ? price
+        : _resolvedPriceForTitle(title, fallback: price);
     return ScreenshotImportDraft(
       id: 'preview-' + DateTime.now().microsecondsSinceEpoch.toString() +
           '-' + (++_rowSerial).toString(),
@@ -533,7 +586,8 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       deadlineBox: deadlineBox,
       title: title,
       clientName: client,
-      price: price,
+      price: resolvedPrice,
+      priceRecognized: recognizedPrice,
       platform: platform,
       tags: normalizeOrderTags(tags),
       detectedDate: date,
@@ -548,6 +602,87 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
       presetId: presetForRow.id,
       nodeId: selectedNodeId,
     );
+  }
+
+  double? _resolvedPriceForTitle(
+    String title, {
+    required double? fallback,
+  }) {
+    final key = orderPriceMemoryKey(title);
+    if (key.isEmpty) return fallback;
+
+    ScreenshotImportDraft? latestManual;
+    for (final row in _rows) {
+      if (!row.priceManuallyChanged ||
+          row.price == null ||
+          !row.price!.isFinite ||
+          row.price! < 0 ||
+          orderPriceMemoryKey(row.title) != key) {
+        continue;
+      }
+      if (latestManual == null ||
+          (row.priceManualChangeSerial ?? 0) >
+              (latestManual.priceManualChangeSerial ?? 0)) {
+        latestManual = row;
+      }
+    }
+    if (latestManual != null) return latestManual.price;
+    return _rememberedPriceMemory[key] ?? fallback;
+  }
+
+  void _applyRememberedPriceToRow(ScreenshotImportDraft row) {
+    if (_products || row.priceManuallyChanged || row.priceRecognized) return;
+    final next = _resolvedPriceForTitle(row.title, fallback: row.price);
+    if (next == row.price) return;
+    row.price = next;
+    row.priceInputRevision += 1;
+  }
+
+  void _changeDraftPrice(ScreenshotImportDraft row, String source) {
+    final next = double.tryParse(source.trim());
+    row.price = next;
+    row.priceManuallyChanged = true;
+    row.priceManualChangeSerial = ++_priceEditSerial;
+    if (next != null && next.isFinite && next >= 0) {
+      cascadeScreenshotPrice(
+        changed: row,
+        rows: _rows,
+        price: next,
+      );
+    }
+    _refreshDuplicateWarnings();
+  }
+
+  Map<String, double> _confirmedManualPriceMemory(
+    Iterable<ScreenshotImportDraft> selected,
+  ) {
+    if (_products) return const <String, double>{};
+    final selectedKeys = <String>{
+      for (final row in selected)
+        if (row.title.trim().isNotEmpty) orderPriceMemoryKey(row.title),
+    };
+    final latestByKey = <String, ScreenshotImportDraft>{};
+    for (final row in _rows) {
+      final price = row.price;
+      if (!row.priceManuallyChanged ||
+          price == null ||
+          !price.isFinite ||
+          price < 0) {
+        continue;
+      }
+      final key = orderPriceMemoryKey(row.title);
+      if (key.isEmpty || !selectedKeys.contains(key)) continue;
+      final previous = latestByKey[key];
+      if (previous == null ||
+          (row.priceManualChangeSerial ?? 0) >
+              (previous.priceManualChangeSerial ?? 0)) {
+        latestByKey[key] = row;
+      }
+    }
+    return <String, double>{
+      for (final entry in latestByKey.entries)
+        entry.key: entry.value.price!,
+    };
   }
 
   void _refreshDuplicateWarnings() {
@@ -854,7 +989,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         title: '',
         client: '',
         price: null,
-        platform: null,
+        platform: _selectedImportPlatform,
       ));
     });
   }
@@ -1034,8 +1169,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         ...created,
       ]);
     }
-    // The business write has succeeded. A failed provenance write must not
-    // lose an already imported order or pretend it was not committed.
+    // The business write has succeeded. Auxiliary OCR memory must never
+    // roll back imported orders, but we still try both stores independently.
+    var auxiliarySaveFailed = false;
     try {
       final fingerprints = selected
           .map((row) => row.sourceFingerprint)
@@ -1045,9 +1181,22 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
         fingerprints: fingerprints,
       );
     } catch (_) {
-      if (mounted) {
-        _message('导入成功，但本机截图去重记录保存失败；下次请检查疑似重复提示。');
+      auxiliarySaveFailed = true;
+    }
+    try {
+      final manualPrices = _confirmedManualPriceMemory(selected);
+      if (manualPrices.isNotEmpty) {
+        await _history.rememberPrices(
+          accountId: widget.accountId,
+          prices: manualPrices,
+        );
+        _rememberedPriceMemory.addAll(manualPrices);
       }
+    } catch (_) {
+      auxiliarySaveFailed = true;
+    }
+    if (auxiliarySaveFailed && mounted) {
+      _message('导入成功，但截图去重或稿价记忆保存失败；下次请检查识别结果。');
     }
     } finally {
       if (mounted) setState(() => _committing = false);
@@ -1081,12 +1230,15 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 : () => unawaited(_copyOcrDiagnostic()),
             icon: const Icon(Icons.bug_report_outlined),
           ),
-          TextButton.icon(
-            onPressed: _working || _committing
-                ? null
-                : () => unawaited(_pickAndRecognize()),
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: const Text('选择截图'),
+          SpotlightTarget(
+            targetKey: widget.guideTargets?.screenshotImportKey,
+            child: TextButton.icon(
+              onPressed: _working || _committing
+                  ? null
+                  : () => unawaited(_pickAndRecognize()),
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('选择截图'),
+            ),
           ),
         ],
       ),
@@ -1239,12 +1391,21 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
-                      child: Text(
-                        _working
-                            ? '正在本机识别截图…'
-                            : '选择一张或多张平台订单截图，先识别并检查，确认后才会写入。',
-                        textAlign: TextAlign.center,
-                      ),
+                      child: _working
+                          ? const Text(
+                              '正在本机识别截图…',
+                              textAlign: TextAlign.center,
+                            )
+                          : const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('选择截图开始识别'),
+                                SizedBox(width: 6),
+                                InlineHelpTooltip(
+                                  message: '支持一次选择一张或多张平台订单截图；识别后先检查，确认后才会写入。',
+                                ),
+                              ],
+                            ),
                     ),
                   )
                 : ListView.builder(
@@ -1410,6 +1571,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
               ),
               onChanged: (value) => setState(() {
                 row.title = value;
+                _applyRememberedPriceToRow(row);
                 _refreshDuplicateWarnings();
               }),
             ),
@@ -1436,7 +1598,9 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                 ],
                 Expanded(
                   child: TextFormField(
-                    key: ValueKey(row.id + '-price'),
+                    key: ValueKey(
+                      row.id + '-price-' + row.priceInputRevision.toString(),
+                    ),
                     initialValue: row.price?.toString() ?? '',
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -1446,8 +1610,7 @@ class _ScreenshotImportPageState extends State<ScreenshotImportPage> {
                       isDense: true,
                     ),
                     onChanged: (value) => setState(() {
-                      row.price = double.tryParse(value.trim());
-                      _refreshDuplicateWarnings();
+                      _changeDraftPrice(row, value);
                     }),
                   ),
                 ),

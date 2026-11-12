@@ -12,6 +12,81 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
+    'duplicate rapid taps keep only one node confirmation dialog in flight',
+    (tester) async {
+      final accountStore = AccountStore();
+      final orders = OrderStore();
+      final products = ProductStore();
+      final presets = NodePresetStore();
+      final features = AppFeatureStore();
+      final coordinator = SyncCoordinator(
+        accountId: 'test-account',
+        deviceId: 'test-device',
+        deviceName: 'test',
+        accountStore: accountStore,
+        orderStore: orders,
+        productStore: products,
+        nodePresetStore: presets,
+        captureSettings: () => <String, dynamic>{},
+        applySettings: (_) async {},
+      );
+      addTearDown(accountStore.dispose);
+      addTearDown(orders.dispose);
+      addTearDown(products.dispose);
+      addTearDown(presets.dispose);
+      addTearDown(features.dispose);
+      addTearDown(coordinator.dispose);
+
+      final nodes = defaultNodePreset.nodes;
+      orders.addOrder(
+        QueueOrder(
+          id: 'duplicate-confirm-order',
+          platform: CommissionPlatform.mihuashi,
+          title: '重复确认测试',
+          clientName: '单主',
+          deadline: null,
+          nodePresetId: defaultNodePreset.id,
+          nodePresetSnapshot: defaultNodePreset,
+          currentNodeId: nodes.first.id,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OrderQueuePage(
+              accountId: 'test-account',
+              store: orders,
+              nodePresetStore: presets,
+              featureStore: features,
+              syncCoordinator: NativeSyncCoordinatorViewAdapter(coordinator),
+              cardView: false,
+              onCardViewChanged: (_) {},
+              sortModeName: 'defaultOrder',
+              onSortModeChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      final button = find.text('确认节点');
+      // Both taps happen before the next frame, matching a real double-tap on
+      // a still-visible card action.
+      await tester.tap(button);
+      await tester.tap(button);
+      await tester.pump();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, '取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(orders.byId('duplicate-confirm-order').currentNodeId, nodes.first.id);
+    },
+  );
+
+  testWidgets(
     'stale node confirmation does not advance a remotely advanced order twice',
     (tester) async {
       final accountStore = AccountStore();
@@ -85,4 +160,88 @@ void main() {
       expect(find.text('排单节点已在另一处更新，请按当前状态重新确认。'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'rapid local second confirmation reads the latest store node before rebuild',
+    (tester) async {
+      final accountStore = AccountStore();
+      final orders = OrderStore();
+      final products = ProductStore();
+      final presets = NodePresetStore();
+      final features = AppFeatureStore();
+      final coordinator = SyncCoordinator(
+        accountId: 'test-account',
+        deviceId: 'test-device',
+        deviceName: 'test',
+        accountStore: accountStore,
+        orderStore: orders,
+        productStore: products,
+        nodePresetStore: presets,
+        captureSettings: () => <String, dynamic>{},
+        applySettings: (_) async {},
+      );
+      addTearDown(accountStore.dispose);
+      addTearDown(orders.dispose);
+      addTearDown(products.dispose);
+      addTearDown(presets.dispose);
+      addTearDown(features.dispose);
+      addTearDown(coordinator.dispose);
+
+      final nodes = defaultNodePreset.nodes;
+      orders.addOrder(
+        QueueOrder(
+          id: 'rapid-node-order',
+          platform: CommissionPlatform.mihuashi,
+          title: '快速推进测试',
+          clientName: '单主',
+          deadline: null,
+          nodePresetId: defaultNodePreset.id,
+          nodePresetSnapshot: defaultNodePreset,
+          currentNodeId: nodes.first.id,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OrderQueuePage(
+              accountId: 'test-account',
+              store: orders,
+              nodePresetStore: presets,
+              featureStore: features,
+              syncCoordinator: NativeSyncCoordinatorViewAdapter(coordinator),
+              cardView: false,
+              onCardViewChanged: (_) {},
+              sortModeName: 'defaultOrder',
+              onSortModeChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      // Simulate the previous local confirmation completing before Flutter has
+      // rebuilt the card. This is the exact rapid-tap window that used to
+      // mislabel a local update as "updated elsewhere".
+      orders.advanceOrder('rapid-node-order');
+      expect(orders.byId('rapid-node-order').currentNodeId, nodes[1].id);
+
+      await tester.tap(find.text('确认节点'));
+      await tester.pump();
+
+      expect(
+        find.text('将“快速推进测试”从“线稿”推进到“上色”？'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, '确认'));
+      await tester.pump();
+
+      expect(orders.byId('rapid-node-order').currentNodeId, nodes[2].id);
+      expect(
+        find.text('排单节点已在另一处更新，请按当前状态重新确认。'),
+        findsNothing,
+      );
+    },
+  );
+
 }

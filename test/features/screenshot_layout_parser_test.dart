@@ -417,4 +417,80 @@ void main() {
         DateTime(2026, 10, 31));
   });
 
+
+  test('narrow long screenshot keeps left-aligned order titles', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 375,
+      imageHeight: 1536,
+      lines: [
+        at('定向企划', 92, x: 18),
+        at('💕💕', 122, x: 32),
+        at('2026-11-30 23:59', 172, x: 31),
+        at('20%', 205, x: 85),
+
+        at('试营业立绘线稿', 350, x: 31),
+        at('2026-11-30 23:59', 402, x: 31),
+        at('20%', 435, x: 85),
+
+        at('试营业立绘线稿', 582, x: 31),
+        at('2026-11-30 23:59', 634, x: 31),
+        at('20%', 667, x: 85),
+
+        at('定向企划 云鬼鬼崇崇--', 815, x: 31),
+        at('2026-11-30 23:59', 867, x: 31),
+        at('20%', 900, x: 85),
+
+        at('QQ人全身立绘', 1046, x: 31),
+        at('2026-11-30 23:59', 1098, x: 31),
+        at('20%', 1131, x: 85),
+
+        at('定向企划 伟大的鸡师傅请帮我家产炒制小漫画', 1278, x: 31),
+        at('2026-12-31 23:59', 1330, x: 31),
+        at('20%', 1363, x: 85),
+      ],
+    );
+
+    expect(rows, hasLength(6));
+    expect(rows[0].title, '💕💕');
+    expect(rows[1].title, '试营业立绘线稿');
+    expect(rows[2].title, '试营业立绘线稿');
+    expect(rows[3].title, '云鬼鬼崇崇--');
+    expect(rows[4].title, 'QQ人全身立绘');
+    expect(rows[5].title, '伟大的鸡师傅请帮我家产炒制小漫画');
+    expect(rows.every((row) => row.progressPercent == 20), isTrue);
+  });
+
+  test('recognized deadline keeps an editable order when title OCR is missing', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 375,
+      imageHeight: 720,
+      lines: [
+        at('¥88', 210, x: 90),
+        at('2026-11-30 23:59', 280, x: 31),
+        at('20%', 318, x: 85),
+        at('全额支付', 350, x: 120),
+      ],
+    );
+
+    expect(rows, hasLength(1));
+    expect(rows.single.title, isEmpty);
+    expect(rows.single.detectedDate, DateTime(2026, 11, 30, 23, 59));
+    expect(rows.single.price, 88);
+    expect(rows.single.progressPercent, 20);
+  });
+
+  test('abstract emoji-only artwork title is a valid title near an order anchor', () {
+    final rows = const ScreenshotLayoutParser().parse(
+      imageWidth: 375,
+      imageHeight: 620,
+      lines: [
+        at('💕💕', 170, x: 30),
+        at('2026-11-30 23:59', 220, x: 31),
+      ],
+    );
+
+    expect(rows, hasLength(1));
+    expect(rows.single.title, '💕💕');
+  });
+
 }

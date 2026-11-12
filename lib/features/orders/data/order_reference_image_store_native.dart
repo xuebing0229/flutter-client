@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -7,19 +6,9 @@ import '../../../core/portability/data_portability_file_bridge.dart';
 import '../../../core/sync/embedded_syncthing_bridge.dart';
 import '../../../core/sync/sync_record_store.dart';
 import '../domain/queue_order.dart';
+import 'reference_image_store_common.dart';
 
 class OrderReferenceImageStore {
-  static const Set<String> _supportedImageExtensions = <String>{
-    '.png',
-    '.jpg',
-    '.jpeg',
-    '.webp',
-    '.gif',
-    '.bmp',
-    '.heic',
-    '.heif',
-  };
-
   OrderReferenceImageStore({
     SyncRecordStore? syncRecordStore,
     DataPortabilityFileBridge fileBridge =
@@ -87,9 +76,7 @@ class OrderReferenceImageStore {
     }
 
     final root = await _syncRecordStore.rootDirectory(accountId);
-    final orderKey = base64Url
-        .encode(utf8.encode(orderId))
-        .replaceAll('=', '');
+    final orderKey = ReferenceImageRules.orderKey(orderId);
     final directory = Directory(
       '${root.path}${Platform.pathSeparator}assets'
       '${Platform.pathSeparator}order-reference-images'
@@ -101,9 +88,10 @@ class OrderReferenceImageStore {
         'ref-${DateTime.now().microsecondsSinceEpoch}-'
         '${_random.nextInt(0x7fffffff).toRadixString(36)}';
     final detectedExtension =
-        _safeExtension(picked.name) ?? _safeExtension(source.path);
+        ReferenceImageRules.safeExtension(picked.name) ??
+        ReferenceImageRules.safeExtension(source.path);
     if (detectedExtension != null &&
-        !_supportedImageExtensions.contains(detectedExtension)) {
+        !ReferenceImageRules.supportedImageExtensions.contains(detectedExtension)) {
       throw const FormatException('参考图只支持图片文件。');
     }
     final extension = detectedExtension ?? '.img';
@@ -117,7 +105,7 @@ class OrderReferenceImageStore {
 
     return OrderReferenceImage(
       id: id,
-      fileName: _displayName(picked.name, extension),
+      fileName: ReferenceImageRules.displayName(picked.name, extension),
       relativePath:
           'assets/order-reference-images/$orderKey/$storedName',
       addedAt: DateTime.now(),
@@ -129,14 +117,8 @@ class OrderReferenceImageStore {
     required String accountId,
     required OrderReferenceImage image,
   }) async {
-    final segments = image.relativePath.split('/');
-    final valid = segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
-        segments.every(_safeSegment);
-    if (!valid || image.relativePath.contains('\\')) {
-      throw const FormatException('参考图路径无效。');
-    }
+    final segments =
+        ReferenceImageRules.validateReferencePath(image.relativePath);
 
     final root = await _syncRecordStore.rootDirectory(accountId);
     return File(
@@ -189,14 +171,8 @@ class OrderReferenceImageStore {
     required String accountId,
     required String relativePath,
   }) async {
-    final segments = relativePath.split('/');
-    final valid = segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
-        segments.every(_safeSegment);
-    if (!valid || relativePath.contains('\\')) {
-      throw const FormatException('参考图路径无效。');
-    }
+    final segments =
+        ReferenceImageRules.validateReferencePath(relativePath);
     final root = await _syncRecordStore.rootDirectory(accountId);
     return File(
       <String>[root.path, ...segments].join(Platform.pathSeparator),
@@ -231,6 +207,25 @@ class OrderReferenceImageStore {
     }
   }
 
+  Future<void> deleteAssetPaths({
+    required String accountId,
+    required Iterable<String> relativePaths,
+  }) async {
+    for (final relativePath in relativePaths.toSet()) {
+      try {
+        final segments = ReferenceImageRules.validateAssetPath(relativePath);
+        final root = await _syncRecordStore.rootDirectory(accountId);
+        final file = File(
+          <String>[root.path, ...segments].join(Platform.pathSeparator),
+        );
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // A stale optional bundle asset must not block the rest of restore.
+      }
+    }
+    await _requestScan(accountId);
+  }
+
   Future<bool> exportImage({
     required String accountId,
     required OrderReferenceImage image,
@@ -243,7 +238,7 @@ class OrderReferenceImageStore {
     return _fileBridge.exportLocalFile(
       sourcePath: file.path,
       fileName: image.fileName,
-      mimeType: _mimeType(image.fileName),
+      mimeType: ReferenceImageRules.mimeType(image.fileName),
     );
   }
 
@@ -256,40 +251,4 @@ class OrderReferenceImageStore {
     }
   }
 
-  bool _safeSegment(String value) {
-    if (value.isEmpty || value == '.' || value == '..') return false;
-    return RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(value);
-  }
-
-  String? _safeExtension(String value) {
-    final name = value.split(RegExp(r'[\\/]')).last;
-    final dot = name.lastIndexOf('.');
-    if (dot < 0 || dot == name.length - 1) return null;
-    final extension = name.substring(dot + 1).toLowerCase();
-    if (extension.length > 8 ||
-        !RegExp(r'^[a-z0-9]+$').hasMatch(extension)) {
-      return null;
-    }
-    return '.$extension';
-  }
-
-  String _displayName(String value, String extension) {
-    final name = value.split(RegExp(r'[\\/]')).last.trim();
-    if (name.isNotEmpty) return name;
-    return '参考图$extension';
-  }
-
-  String _mimeType(String fileName) {
-    final extension = _safeExtension(fileName)?.toLowerCase();
-    return switch (extension) {
-      '.jpg' || '.jpeg' => 'image/jpeg',
-      '.png' => 'image/png',
-      '.webp' => 'image/webp',
-      '.gif' => 'image/gif',
-      '.bmp' => 'image/bmp',
-      '.heic' => 'image/heic',
-      '.heif' => 'image/heif',
-      _ => 'application/octet-stream',
-    };
-  }
 }

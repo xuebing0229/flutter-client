@@ -1,18 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'screenshot_import_platform_types.dart';
 import 'web_screenshot_files.dart';
-
-class ScreenshotImportPickedImage {
-  const ScreenshotImportPickedImage({
-    required this.path,
-    required this.name,
-    required this.temporary,
-  });
-
-  final String path;
-  final String name;
-  final bool temporary;
-}
 
 class ScreenshotImportPlatformBridge {
   const ScreenshotImportPlatformBridge();

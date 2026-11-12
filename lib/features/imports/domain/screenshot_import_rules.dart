@@ -23,6 +23,28 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
     return const PlatformGuess(CommissionPlatform.huajia, 1);
   }
 
+  // MiHuashi's cooperation-list page often has no visible app name in a
+  // stitched/long screenshot. Only use its distinctive LIST HEADER cluster
+  // as decisive evidence. Generic workflow states such as "待支付/待评价/
+  // 待处理" also exist on Huajia and therefore must never determine platform.
+  final mihuashiListHeader = text.contains('全部合作') &&
+      <String>['默认排序', '截稿时间', '加入时间']
+          .where(text.contains)
+          .length >= 2;
+  if (mihuashiListHeader) {
+    return const PlatformGuess(CommissionPlatform.mihuashi, 0.98);
+  }
+
+  // Huajia's order-list page likewise has a recognizable page-level cluster.
+  // Do not classify from a lone status label; require independent list-shell
+  // wording plus an action/status that belongs to that layout.
+  final huajiaOrderList = text.contains('约稿订单') &&
+      (text.contains('失效/终止') || text.contains('失效／终止')) &&
+      (text.contains('待上传稿件') || text.contains('添加备注'));
+  if (huajiaOrderList) {
+    return const PlatformGuess(CommissionPlatform.huajia, 0.98);
+  }
+
   // Huajia completed-product/storefront pages often omit the literal
   // platform name. Their cards expose the distinctive "查看评价" action
   // together with a "截稿时间" policy/date line.
@@ -72,6 +94,11 @@ PlatformGuess preselectImportPlatform(Iterable<String> recognizedLines) {
 /// name. Do not bind on buyer alone: the same artwork can have many clients.
 String orderPresetMemoryKey(CommissionPlatform platform, String title) =>
     '${platform.name}|${normalizedImportTitle(title)}';
+
+/// A repeated complete artwork title is treated as the same storefront price
+/// memory regardless of buyer. OCR-detected prices never write this memory;
+/// only explicit user edits do.
+String orderPriceMemoryKey(String title) => normalizedImportTitle(title);
 
 /// Prefer explicit previous user choices. Existing orders also serve as a
 /// useful fallback when importing into an account without a saved hint.

@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:file_selector/file_selector.dart';
 
 import 'app_backup_data.dart';
+import 'backup_asset_rules.dart';
 
 class WebImportedBackup {
   const WebImportedBackup({
@@ -54,14 +55,14 @@ class WebBackupReader {
     for (final file in archive) {
       if (!file.isFile) continue;
       final name = file.name;
-      if (name == 'backup.json') {
+      if (name == BackupAssetRules.manifestFileName) {
         if (manifest != null) {
           throw const FormatException('备份中存在重复的 backup.json。');
         }
         manifest = file;
         continue;
       }
-      if (!_safeAssetPath(name)) {
+      if (!BackupAssetRules.isAllowedAssetPath(name)) {
         throw FormatException('备份中包含未知文件：$name');
       }
       files[name] = file;
@@ -92,7 +93,7 @@ class WebBackupReader {
     }
 
     final desktopPetPaths =
-        _desktopPetAssetPaths(backup.settings['desktopPetBackup']);
+        BackupAssetRules.desktopPetAssetPaths(backup.settings['desktopPetBackup'], strict: true);
     for (final path in desktopPetPaths) {
       final file = files[path];
       if (file == null) {
@@ -110,60 +111,4 @@ class WebBackupReader {
 
   Uint8List _archiveFileBytes(ArchiveFile file) => file.content;
 
-  Set<String> _desktopPetAssetPaths(Object? rawManifest) {
-    if (rawManifest == null) return const <String>{};
-    if (rawManifest is! Map || rawManifest['schema'] != 1) {
-      throw const FormatException('桌宠备份设置格式无效。');
-    }
-    final rawPresets = rawManifest['presets'];
-    if (rawPresets is! List) {
-      throw const FormatException('桌宠备份缺少预设列表。');
-    }
-
-    final result = <String>{};
-    for (final preset in rawPresets) {
-      if (preset is! Map) {
-        throw const FormatException('桌宠备份包含无效预设。');
-      }
-      for (final key in const <String>['imageA', 'imageB', 'bubbleImage']) {
-        final value = preset[key];
-        if (value == null) continue;
-        if (value is! String || !_isDesktopPetAssetPath(value)) {
-          throw const FormatException('桌宠备份素材路径无效。');
-        }
-        result.add(value);
-      }
-    }
-    return result;
-  }
-
-  bool _safeAssetPath(String value) =>
-      _isReferenceAssetPath(value) || _isDesktopPetAssetPath(value);
-
-  bool _isReferenceAssetPath(String value) {
-    if (!_safeFourSegmentPath(value)) return false;
-    final segments = value.split('/');
-    return segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images';
-  }
-
-  bool _isDesktopPetAssetPath(String value) {
-    if (!_safeFourSegmentPath(value)) return false;
-    final segments = value.split('/');
-    return segments[0] == 'desktop-pet' &&
-        segments[1] == 'presets';
-  }
-
-  bool _safeFourSegmentPath(String value) {
-    if (value.contains('\\') || value.startsWith('/')) return false;
-    final segments = value.split('/');
-    return segments.length == 4 &&
-        segments.skip(2).every(
-              (segment) =>
-                  segment.isNotEmpty &&
-                  segment != '.' &&
-                  segment != '..' &&
-                  RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
-            );
-  }
 }

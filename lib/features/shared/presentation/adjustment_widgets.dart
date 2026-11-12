@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'help_tooltip.dart';
 
 class AdjustmentDialogResult {
   const AdjustmentDialogResult({
@@ -145,8 +146,15 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
                   const SizedBox(height: 8),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('计手续费'),
-                    subtitle: const Text('按当前平台的手续费规则计算'),
+                    title: const Row(
+                      children: [
+                        Text('计手续费'),
+                        SizedBox(width: 6),
+                        InlineHelpTooltip(
+                          message: '按当前平台的手续费规则计算。',
+                        ),
+                      ],
+                    ),
                     value: nextFeeEnabled,
                     onChanged: (value) {
                       setDialogState(() {
@@ -157,8 +165,15 @@ Future<AdjustmentDialogResult?> showAdjustmentDialog({
                   if (allowPricingParticipation)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('参与加价计算'),
-                      subtitle: const Text('×N 和 ±N% 会作用于这笔补款；固定金额加价不重复计算'),
+                      title: const Row(
+                        children: [
+                          Text('参与加价计算'),
+                          SizedBox(width: 6),
+                          InlineHelpTooltip(
+                            message: '×N 和 ±N% 会作用于这笔补款；固定金额加价不重复计算。',
+                          ),
+                        ],
+                      ),
                       value: nextPricingEnabled,
                       onChanged: (value) {
                         setDialogState(() {

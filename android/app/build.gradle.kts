@@ -94,6 +94,12 @@ android {
         create("beta") {
             dimension = "channel"
             applicationIdSuffix = ".beta"
+            // Public Beta is intentionally arm64-only. Other channels keep
+            // their existing ABI compatibility policy.
+            ndk {
+                abiFilters.clear()
+                abiFilters.add("arm64-v8a")
+            }
             signingConfig = signingConfigs.findByName("betaRelease")
         }
         create("stable") {

@@ -19,12 +19,17 @@ typedef PeerAssetReader = Future<Uint8List?> Function(String relativePath);
 typedef PeerAssetWriter =
     Future<void> Function(String relativePath, Uint8List bytes);
 typedef PeerTargetFilter = bool Function(AccountDevice device);
+typedef PeerImportHistoryReader = Future<Set<String>> Function();
+typedef PeerImportHistoryMerger =
+    Future<void> Function(Iterable<String> fingerprints);
 typedef PeerRelayFactory = PublicRelayClient Function(String clientId);
 
 /// Browser-compatible online sync that keeps the native Syncthing path intact.
 ///
-/// Cloudflare only acts as an online transient relay. Every application payload
-/// is AES-GCM encrypted before it leaves the device and the relay stores no
+/// Cloudflare only transports the app's existing SyncRecord graph. Normal edits
+/// are sent as record-level deltas; startup/reconnect exchanges compact record
+/// fingerprints and requests only mismatches. Every application payload is
+/// AES-GCM encrypted before it leaves the device and the relay stores no
 /// workspace messages, so both devices still need to be online at the same time.
 class PublicPeerSyncService extends ChangeNotifier {
   PublicPeerSyncService({
@@ -38,6 +43,8 @@ class PublicPeerSyncService extends ChangeNotifier {
     this.assetExists,
     this.readAsset,
     this.writeAsset,
+    this.captureImportHistory,
+    this.mergeImportHistory,
     this.shouldTargetDevice,
     PeerRelayFactory? relayFactory,
     Duration heartbeatInterval = _defaultHeartbeat,
@@ -63,6 +70,8 @@ class PublicPeerSyncService extends ChangeNotifier {
   final PeerAssetExists? assetExists;
   final PeerAssetReader? readAsset;
   final PeerAssetWriter? writeAsset;
+  final PeerImportHistoryReader? captureImportHistory;
+  final PeerImportHistoryMerger? mergeImportHistory;
   final PeerTargetFilter? shouldTargetDevice;
   final PeerRelayFactory _relayFactory;
   final Duration _heartbeatInterval;
@@ -75,6 +84,9 @@ class PublicPeerSyncService extends ChangeNotifier {
       <String, String>{};
   final Map<String, _PendingSnapshot> _pendingSnapshotByTarget =
       <String, _PendingSnapshot>{};
+  Map<String, String> _lastLocalRecordFingerprints = <String, String>{};
+  Set<String> _lastLocalImportHistory = <String>{};
+  String? _lastLocalAccountFingerprint;
 
   PublicRelayClient? _relay;
   StreamSubscription<PublicRelayMessage>? _relaySubscription;
@@ -108,7 +120,7 @@ class PublicPeerSyncService extends ChangeNotifier {
       _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) {
         unawaited(_heartbeatTick());
       });
-      requestSync(immediate: true);
+      await _publishManifest();
     } catch (error) {
       _lastError = '在线同步启动失败：$error';
       _connected = false;
@@ -177,28 +189,19 @@ class PublicPeerSyncService extends ChangeNotifier {
   Future<void> _heartbeatTick() async {
     if (_disposed) return;
     _dropExpiredTransfers();
-    if (_relay?.connected != true) {
-      await _connectRelay();
-      if (_relay?.connected == true) {
-        requestSync(immediate: true);
-      }
-      return;
-    }
 
-    // The relay intentionally has no offline queue. A successful WebSocket
-    // write therefore does not prove that the target device was online.
-    // Retry only snapshots that have not been acknowledged by the peer.
-    if (_pendingSnapshotByTarget.isNotEmpty) {
-      final targets = _pendingSnapshotByTarget.keys.toList(growable: false);
-      for (final target in targets) {
-        if (_disposed || _relay?.connected != true) return;
-        final pending = _pendingSnapshotByTarget[target];
-        if (pending == null) continue;
-        await _publishSnapshot(
-          onlyTarget: target,
-          requestReply: pending.requestReply,
-        );
-      }
+    // An open relay socket is already a live listener. Do not resend workspace
+    // snapshots just because a peer has not acknowledged an earlier attempt:
+    // the peer may simply be offline, and repeating the full snapshot forever
+    // wastes relay traffic. When that peer later comes online it sends its own
+    // startup snapshot with requestReply=true, which makes this device answer
+    // once with its latest state.
+    if (_relay?.connected == true) return;
+
+    _connected = false;
+    await _connectRelay();
+    if (_relay?.connected == true) {
+      await _publishManifest();
     }
   }
 
@@ -206,13 +209,184 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (_disposed) return;
     _syncDebounce?.cancel();
     if (immediate) {
-      unawaited(_publishSnapshot());
+      unawaited(_publishDelta());
       return;
     }
     _syncDebounce = Timer(
       const Duration(milliseconds: 700),
-      () => unawaited(_publishSnapshot()),
+      () => unawaited(_publishDelta()),
     );
+  }
+
+  List<String> _targetIds({
+    String? onlyTarget,
+  }) {
+    final state = captureAccountState();
+    if (state.accountId != accountId || state.isRevoked(deviceId)) {
+      return const <String>[];
+    }
+    return <String>[
+      for (final device in state.activeDevices)
+        if (device.id != deviceId &&
+            (onlyTarget == null || device.id == onlyTarget) &&
+            (shouldTargetDevice?.call(device) ?? true))
+          device.id,
+    ];
+  }
+
+  Future<_RecordIndex> _recordIndex() async {
+    final records = await exportRecords();
+    final byKey = <String, Map<String, dynamic>>{};
+    final fingerprints = <String, String>{};
+    for (final raw in records) {
+      final key = _recordKey(raw);
+      if (key == null) continue;
+      final normalized = Map<String, dynamic>.from(raw);
+      byKey[key] = normalized;
+      fingerprints[key] = await _fingerprint(normalized);
+    }
+    return _RecordIndex(records: byKey, fingerprints: fingerprints);
+  }
+
+  String? _recordKey(Map<String, dynamic> raw) {
+    final kind = raw['kind'];
+    final id = raw['id'];
+    if (kind is! String || kind.isEmpty || id is! String || id.isEmpty) {
+      return null;
+    }
+    return '$kind\u0000$id';
+  }
+
+  Future<String> _fingerprint(Object? value) async {
+    return _hex((await Sha256().hash(utf8.encode(jsonEncode(value)))).bytes);
+  }
+
+  Future<Set<String>> _importHistory() async {
+    final reader = captureImportHistory;
+    if (reader == null) return const <String>{};
+    final values = await reader();
+    return values.where((item) => item.isNotEmpty).toSet();
+  }
+
+  Future<String> _importHistoryFingerprint(Set<String> values) async {
+    final sorted = values.toList()..sort();
+    return _fingerprint(sorted);
+  }
+
+  Future<void> _publishManifest({
+    String? onlyTarget,
+    bool requestReply = true,
+  }) async {
+    if (_disposed || _syncing) return;
+    if (_relay?.connected != true) {
+      await _connectRelay();
+      if (_relay?.connected != true) return;
+    }
+
+    final targets = _targetIds(onlyTarget: onlyTarget);
+    if (targets.isEmpty) return;
+
+    _syncing = true;
+    notifyListeners();
+    try {
+      final state = captureAccountState();
+      final index = await _recordIndex();
+      final importHistory = await _importHistory();
+      final accountFingerprint = await _fingerprint(state.toJson());
+      final payload = <String, dynamic>{
+        'type': 'manifest',
+        'accountId': accountId,
+        'sender': deviceId,
+        'requestReply': requestReply,
+        'account': state.toJson(),
+        'records': index.fingerprints,
+        if (captureImportHistory != null)
+          'importHistoryFingerprint':
+              await _importHistoryFingerprint(importHistory),
+      };
+      for (final target in targets) {
+        await _sendEncrypted(target, payload);
+      }
+      _lastLocalRecordFingerprints =
+          Map<String, String>.from(index.fingerprints);
+      _lastLocalImportHistory = Set<String>.from(importHistory);
+      _lastLocalAccountFingerprint = accountFingerprint;
+      _lastError = null;
+    } catch (error) {
+      _lastError = '发送同步摘要失败：$error';
+    } finally {
+      _syncing = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<void> _publishDelta({
+    String? onlyTarget,
+  }) async {
+    if (_disposed || _syncing) return;
+    if (_relay?.connected != true) {
+      await _connectRelay();
+      if (_relay?.connected != true) return;
+    }
+
+    final targets = _targetIds(onlyTarget: onlyTarget);
+    if (targets.isEmpty) return;
+
+    _syncing = true;
+    notifyListeners();
+    try {
+      final state = captureAccountState();
+      final index = await _recordIndex();
+      final importHistory = await _importHistory();
+      final accountFingerprint = await _fingerprint(state.toJson());
+
+      final changedKeys = <String>{
+        for (final entry in index.fingerprints.entries)
+          if (_lastLocalRecordFingerprints[entry.key] != entry.value)
+            entry.key,
+      };
+      final addedImportHistory =
+          importHistory.difference(_lastLocalImportHistory);
+      final accountChanged =
+          _lastLocalAccountFingerprint != accountFingerprint;
+      if (changedKeys.isEmpty &&
+          addedImportHistory.isEmpty &&
+          !accountChanged) {
+        _lastError = null;
+        return;
+      }
+
+      final changeId =
+          '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+          '${_random.nextInt(0x7fffffff).toRadixString(36)}';
+      final payload = <String, dynamic>{
+        'type': 'delta',
+        'changeId': changeId,
+        'accountId': accountId,
+        'sender': deviceId,
+        if (accountChanged) 'account': state.toJson(),
+        'records': <Map<String, dynamic>>[
+          for (final key in changedKeys)
+            if (index.records[key] != null) index.records[key]!,
+        ],
+        if (addedImportHistory.isNotEmpty)
+          'importHistoryAdded': addedImportHistory.toList(growable: false),
+      };
+      for (final target in targets) {
+        await _sendEncrypted(target, payload);
+      }
+
+      _lastLocalRecordFingerprints =
+          Map<String, String>.from(index.fingerprints);
+      _lastLocalImportHistory = Set<String>.from(importHistory);
+      _lastLocalAccountFingerprint = accountFingerprint;
+      _lastError = null;
+    } catch (error) {
+      _lastError = '发送同步增量失败：$error';
+    } finally {
+      _syncing = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   Future<void> _publishSnapshot({
@@ -408,6 +582,33 @@ class PublicPeerSyncService extends ChangeNotifier {
       }
 
       switch (payload['type'] as String) {
+        case 'manifest':
+          await _receiveManifest(sender, payload);
+          break;
+        case 'record-request':
+          final rawKeys = payload['keys'];
+          if (rawKeys is! List) return;
+          await _sendRequestedRecords(
+            sender,
+            rawKeys.whereType<String>(),
+          );
+          break;
+        case 'import-history-request':
+          await _sendImportHistory(sender);
+          break;
+        case 'import-history':
+          await _receiveImportHistory(payload);
+          break;
+        case 'delta':
+          await _receiveDelta(sender, payload);
+          break;
+        case 'delta-ack':
+          final changeId = payload['changeId'];
+          if (changeId is! String || changeId.isEmpty) return;
+          _lastSuccessfulSyncAt = DateTime.now();
+          _lastError = null;
+          if (!_disposed) notifyListeners();
+          break;
         case 'snapshot':
           final snapshotId = payload['snapshotId'];
           if (snapshotId is! String || snapshotId.isEmpty) return;
@@ -465,6 +666,210 @@ class PublicPeerSyncService extends ChangeNotifier {
     }
   }
 
+  Future<void> _receiveManifest(
+    String sender,
+    Map<String, dynamic> payload,
+  ) async {
+    final accountRaw = payload['account'];
+    final manifestRaw = payload['records'];
+    if (accountRaw is! Map || manifestRaw is! Map) return;
+
+    final incomingAccount = AccountSyncState.fromCompatibleJson(
+      accountRaw.map((key, value) => MapEntry(key.toString(), value)),
+    );
+    if (incomingAccount.accountId != accountId) return;
+
+    await mergeAccountState(incomingAccount);
+    if (captureAccountState().isRevoked(deviceId)) return;
+
+    final remoteManifest = <String, String>{
+      for (final entry in manifestRaw.entries)
+        if (entry.key is String && entry.value is String)
+          entry.key as String: entry.value as String,
+    };
+    final localIndex = await _recordIndex();
+    final needed = <String>[
+      for (final entry in remoteManifest.entries)
+        if (localIndex.fingerprints[entry.key] != entry.value) entry.key,
+    ];
+
+    if (needed.isNotEmpty) {
+      await _sendEncrypted(sender, <String, dynamic>{
+        'type': 'record-request',
+        'accountId': accountId,
+        'sender': deviceId,
+        'keys': needed,
+      });
+    }
+
+    final remoteHistoryFingerprint = payload['importHistoryFingerprint'];
+    if (remoteHistoryFingerprint is String &&
+        captureImportHistory != null &&
+        mergeImportHistory != null) {
+      final localHistory = await _importHistory();
+      if (await _importHistoryFingerprint(localHistory) !=
+          remoteHistoryFingerprint) {
+        await _sendEncrypted(sender, <String, dynamic>{
+          'type': 'import-history-request',
+          'accountId': accountId,
+          'sender': deviceId,
+        });
+      }
+      _lastLocalImportHistory = Set<String>.from(localHistory);
+    }
+
+    await _requestMissingAssets(sender);
+
+    if (payload['requestReply'] != false) {
+      unawaited(
+        _publishManifest(
+          onlyTarget: sender,
+          requestReply: false,
+        ),
+      );
+    }
+
+    _lastSuccessfulSyncAt = DateTime.now();
+    _lastError = null;
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _sendImportHistory(String sender) async {
+    if (captureImportHistory == null) return;
+    final values = await _importHistory();
+    await _sendEncrypted(sender, <String, dynamic>{
+      'type': 'import-history',
+      'accountId': accountId,
+      'sender': deviceId,
+      'fingerprints': values.toList(growable: false)..sort(),
+    });
+    _lastLocalImportHistory = Set<String>.from(values);
+  }
+
+  Future<void> _receiveImportHistory(Map<String, dynamic> payload) async {
+    final merger = mergeImportHistory;
+    final raw = payload['fingerprints'];
+    if (merger == null || raw is! List) return;
+    final values =
+        raw.whereType<String>().where((item) => item.isNotEmpty).toSet();
+    if (values.isEmpty) return;
+    await merger(values);
+    _lastLocalImportHistory = await _importHistory();
+  }
+
+  Future<void> _sendRequestedRecords(
+    String sender,
+    Iterable<String> keys,
+  ) async {
+    final requested = keys.toSet();
+    if (requested.isEmpty) return;
+
+    final index = await _recordIndex();
+    final records = <Map<String, dynamic>>[
+      for (final key in requested)
+        if (index.records[key] != null) index.records[key]!,
+    ];
+    if (records.isEmpty) return;
+
+    final changeId =
+        '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+        '${_random.nextInt(0x7fffffff).toRadixString(36)}';
+    await _sendEncrypted(sender, <String, dynamic>{
+      'type': 'delta',
+      'changeId': changeId,
+      'accountId': accountId,
+      'sender': deviceId,
+      'account': captureAccountState().toJson(),
+      'records': records,
+    });
+  }
+
+  Future<void> _receiveDelta(
+    String sender,
+    Map<String, dynamic> payload,
+  ) async {
+    final changeId = payload['changeId'];
+    final rawRecords = payload['records'];
+    if (changeId is! String || changeId.isEmpty || rawRecords is! List) {
+      return;
+    }
+
+    final accountRaw = payload['account'];
+    if (accountRaw is Map) {
+      final incomingAccount = AccountSyncState.fromCompatibleJson(
+        accountRaw.map((key, value) => MapEntry(key.toString(), value)),
+      );
+      if (incomingAccount.accountId != accountId) return;
+      await mergeAccountState(incomingAccount);
+      if (captureAccountState().isRevoked(deviceId)) return;
+    }
+
+    final records = <Map<String, dynamic>>[
+      for (final item in rawRecords)
+        if (item is Map)
+          item.map((key, value) => MapEntry(key.toString(), value)),
+    ];
+    if (records.isNotEmpty) {
+      await mergeRecords(records);
+    }
+
+    final historyAdded = payload['importHistoryAdded'];
+    if (historyAdded is List && mergeImportHistory != null) {
+      final values = historyAdded
+          .whereType<String>()
+          .where((item) => item.isNotEmpty)
+          .toSet();
+      if (values.isNotEmpty) await mergeImportHistory!(values);
+    }
+
+    // Remote merges may notify the same local stores that normally trigger
+    // requestSync(). Refresh the local relay baseline immediately so those
+    // notifications cannot echo the just-received records back to the sender.
+    final localIndex = await _recordIndex();
+    _lastLocalRecordFingerprints =
+        Map<String, String>.from(localIndex.fingerprints);
+    _lastLocalImportHistory = await _importHistory();
+    _lastLocalAccountFingerprint =
+        await _fingerprint(captureAccountState().toJson());
+
+    await _requestMissingAssets(sender);
+
+    await _sendEncrypted(sender, <String, dynamic>{
+      'type': 'delta-ack',
+      'changeId': changeId,
+      'accountId': accountId,
+      'sender': deviceId,
+    });
+
+    _lastSuccessfulSyncAt = DateTime.now();
+    _lastError = null;
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _requestMissingAssets(String sender) async {
+    final exists = assetExists;
+    final paths = captureAssetPaths;
+    if (exists == null || paths == null) return;
+
+    final missing = <String>[];
+    for (final path in paths().toSet()) {
+      if (path.isEmpty) continue;
+      try {
+        if (!await exists(path)) missing.add(path);
+      } catch (_) {}
+    }
+
+    for (var start = 0; start < missing.length; start += 200) {
+      final end = min(missing.length, start + 200);
+      await _sendEncrypted(sender, <String, dynamic>{
+        'type': 'asset-request',
+        'accountId': accountId,
+        'sender': deviceId,
+        'paths': missing.sublist(start, end),
+      });
+    }
+  }
+
   Future<void> _ackSnapshot(String sender, String snapshotId) async {
     await _sendEncrypted(sender, <String, dynamic>{
       'type': 'snapshot-ack',
@@ -502,6 +907,15 @@ class PublicPeerSyncService extends ChangeNotifier {
     await mergeAccountState(incomingAccount);
     if (captureAccountState().isRevoked(deviceId)) return;
     await mergeRecords(records);
+
+    // A legacy full snapshot may still arrive from Beta 228. Treat the merged
+    // records as the new relay baseline so normal store notifications do not
+    // echo the same data back through the new incremental protocol.
+    final localIndex = await _recordIndex();
+    _lastLocalRecordFingerprints =
+        Map<String, String>.from(localIndex.fingerprints);
+    _lastLocalAccountFingerprint =
+        await _fingerprint(captureAccountState().toJson());
 
     final missing = <String>[];
     final exists = assetExists;
@@ -598,6 +1012,16 @@ class PublicPeerSyncService extends ChangeNotifier {
     if (relay != null) unawaited(relay.dispose());
     super.dispose();
   }
+}
+
+class _RecordIndex {
+  const _RecordIndex({
+    required this.records,
+    required this.fingerprints,
+  });
+
+  final Map<String, Map<String, dynamic>> records;
+  final Map<String, String> fingerprints;
 }
 
 class _PendingSnapshot {

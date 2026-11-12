@@ -14,6 +14,7 @@ import '../../products/state/product_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../../core/finance/pricing_preset_store.dart';
 import '../../shared/domain/receipt_style_store.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 
 class ArchivePage extends StatefulWidget {
   const ArchivePage({
@@ -25,6 +26,8 @@ class ArchivePage extends StatefulWidget {
     this.receiptStyleStore,
     required this.featureStore,
     required this.syncCoordinator,
+    this.guideTargets,
+    this.guideOrderId,
     super.key,
   });
 
@@ -36,6 +39,8 @@ class ArchivePage extends StatefulWidget {
   final ReceiptStyleStore? receiptStyleStore;
   final AppFeatureStore featureStore;
   final SyncCoordinatorView syncCoordinator;
+  final QuickStartGuideTargets? guideTargets;
+  final String? guideOrderId;
 
   @override
   State<ArchivePage> createState() => _ArchivePageState();
@@ -394,11 +399,17 @@ class _ArchivePageState extends State<ArchivePage> {
               if (orders.isNotEmpty) ...[
                 const _SectionTitle('排单'),
                 for (final order in orders) ...[
-                  OrderSummaryCard(
+                  SpotlightTarget(
+                    targetKey: widget.guideTargets != null &&
+                            widget.guideOrderId == order.id
+                        ? widget.guideTargets!.archivedOrderKey
+                        : null,
+                    child: OrderSummaryCard(
                     order: order,
                     onTap: () => _openOrder(context, order.id),
                     showClient: widget.featureStore.clientInfo,
                     showNodeProgress: widget.featureStore.nodeProgress,
+                    ),
                   ),
                   SwitchListTile(
                     contentPadding:

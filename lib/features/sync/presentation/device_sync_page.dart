@@ -1,19 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
+import '../../shared/presentation/spotlight_guide.dart';
 
 import 'package:flutter/material.dart';
 
 import '../../../core/sync/sync_coordinator.dart';
 import '../../../core/sync/sync_models.dart';
-import '../../../core/theme/guild_visual_theme.dart';
+import 'sync_page_common.dart';
 
 class DeviceSyncPage extends StatefulWidget {
   const DeviceSyncPage({
     required this.coordinator,
+    this.guideTargets,
     super.key,
   });
 
   final SyncCoordinator coordinator;
+  final QuickStartGuideTargets? guideTargets;
 
   @override
   State<DeviceSyncPage> createState() => _DeviceSyncPageState();
@@ -85,7 +88,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
               : ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              _Card(
+              SpotlightTarget(
+                targetKey: widget.guideTargets?.syncKey,
+                child: SyncSectionCard(
                 title: '同步控制',
                 icon: coordinator.syncPaused
                     ? Icons.pause_circle_outline_rounded
@@ -116,6 +121,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                             }
                           }
                         },
+                ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -152,13 +158,13 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                 ),
               ),
               const SizedBox(height: 14),
-              _Card(
+              SyncSectionCard(
                 title: '同步状态',
                 icon: Icons.sync_alt_rounded,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _StatusRow(
+                    SyncStatusRow(
                       label: '同步服务',
                       value: coordinator.syncPaused
                           ? '已暂停'
@@ -172,7 +178,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                           status.running,
                     ),
                     const SizedBox(height: 8),
-                    _StatusRow(
+                    SyncStatusRow(
                       label: '传输状态',
                       value: coordinator.syncPaused
                           ? '已暂停'
@@ -189,7 +195,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                     ),
                     if (status.folderState != null) ...[
                       const SizedBox(height: 8),
-                      _StatusRow(
+                      SyncStatusRow(
                         label: '数据状态',
                         value: _folderStateLabel(status.folderState!),
                         good: status.folderState == 'idle',
@@ -200,7 +206,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                       _SyncTransferProgress(progress: status.syncProgress!),
                     ],
                     const SizedBox(height: 8),
-                    _StatusRow(
+                    SyncStatusRow(
                       label: '数据冲突',
                       value: coordinator.conflictCount == 0
                           ? '无'
@@ -219,7 +225,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
               ),
               if (coordinator.conflicts.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                _Card(
+                SyncSectionCard(
                   title: '同步冲突（${coordinator.conflictCount}）',
                   icon: Icons.rule_folder_outlined,
                   child: Column(
@@ -266,41 +272,6 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
       ),
-    );
-  }
-}
-
-class _StatusRow extends StatelessWidget {
-  const _StatusRow({
-    required this.label,
-    required this.value,
-    required this.good,
-  });
-
-  final String label;
-  final String value;
-  final bool good;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Icon(
-          good ? Icons.check_circle_rounded : Icons.circle_outlined,
-          size: 18,
-          color: good ? colors.primary : colors.onSurfaceVariant,
-        ),
-        const SizedBox(width: 8),
-        Text('$label：'),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -493,46 +464,6 @@ class _ConflictTile extends StatelessWidget {
               ],
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({
-    required this.title,
-    required this.icon,
-    required this.child,
-  });
-
-  final String title;
-  final IconData icon;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return GuildContentPanel(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
         ),
       ),
     );

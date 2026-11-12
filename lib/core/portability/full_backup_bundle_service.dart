@@ -4,6 +4,7 @@ import 'package:archive/archive_io.dart';
 
 import '../sync/sync_record_store.dart';
 import 'app_backup_data.dart';
+import 'backup_asset_rules.dart';
 import 'data_portability_file_bridge.dart';
 import '../../features/orders/domain/queue_order.dart';
 
@@ -47,7 +48,7 @@ class FullBackupBundleService {
   }) : _syncRecordStore = syncRecordStore ?? SyncRecordStore(),
        _fileBridge = fileBridge;
 
-  static const String manifestFileName = 'backup.json';
+  static const String manifestFileName = BackupAssetRules.manifestFileName;
 
   final SyncRecordStore _syncRecordStore;
   final DataPortabilityFileBridge _fileBridge;
@@ -91,7 +92,7 @@ class FullBackupBundleService {
           );
         }
         for (final entry in bundledLocalFiles.entries) {
-          if (!_isDesktopPetAssetPath(entry.key)) {
+          if (!BackupAssetRules.isDesktopPetAssetPath(entry.key)) {
             throw FormatException('完整备份包含不允许的本机文件路径：${entry.key}');
           }
           if (!await entry.value.exists()) {
@@ -181,7 +182,7 @@ class FullBackupBundleService {
         }
 
         final name = entry.name;
-        if (!_isSafeArchivePath(name)) {
+        if (!BackupAssetRules.isSafeArchivePath(name)) {
           throw const FormatException('备份中包含不安全的文件路径。');
         }
 
@@ -190,9 +191,9 @@ class FullBackupBundleService {
             hasManifest = true;
             continue;
           }
-          if (_isReferenceAssetPath(name)) {
+          if (BackupAssetRules.isReferenceAssetPath(name)) {
             assetEntryPaths.add(name);
-          } else if (!_isDesktopPetAssetPath(name)) {
+          } else if (!BackupAssetRules.isDesktopPetAssetPath(name)) {
             throw FormatException('备份中包含未知文件：$name');
           }
         } else if (name != 'assets' &&
@@ -264,7 +265,7 @@ class FullBackupBundleService {
     }) async {
       for (final image in images) {
         final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
+        if (!BackupAssetRules.isReferenceAssetPath(relativePath)) {
           throw FormatException(
             '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
@@ -320,7 +321,7 @@ class FullBackupBundleService {
     }) async {
       for (final image in images) {
         final relativePath = image.relativePath;
-        if (!_isReferenceAssetPath(relativePath)) {
+        if (!BackupAssetRules.isReferenceAssetPath(relativePath)) {
           throw FormatException(
             '$owner“${image.fileName}”包含无效参考图路径：$relativePath',
           );
@@ -356,46 +357,6 @@ class FullBackupBundleService {
         '${extraPaths.length > 3 ? ' 等 ${extraPaths.length} 个' : ''}',
       );
     }
-  }
-
-  static bool _isSafeArchivePath(String value) {
-    if (value.isEmpty || value.contains('\\')) return false;
-    if (value.startsWith('/') || RegExp(r'^[A-Za-z]:').hasMatch(value)) {
-      return false;
-    }
-
-    final segments = value
-        .split('/')
-        .where((segment) => segment.isNotEmpty)
-        .toList(growable: false);
-    if (segments.isEmpty) return false;
-    return !segments.any((segment) => segment == '.' || segment == '..');
-  }
-
-  static bool _isDesktopPetAssetPath(String value) {
-    if (!_isSafeArchivePath(value)) return false;
-    final segments = value.split('/');
-    return segments.length == 4 &&
-        segments[0] == 'desktop-pet' &&
-        segments[1] == 'presets' &&
-        segments.skip(2).every(
-          (segment) =>
-              segment.isNotEmpty &&
-              RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
-        );
-  }
-
-  static bool _isReferenceAssetPath(String value) {
-    if (!_isSafeArchivePath(value)) return false;
-    final segments = value.split('/');
-    return segments.length == 4 &&
-        segments[0] == 'assets' &&
-        segments[1] == 'order-reference-images' &&
-        segments.skip(2).every(
-          (segment) =>
-              segment.isNotEmpty &&
-              RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(segment),
-        );
   }
 
   static String _joinRelative(String root, String relativePath) {

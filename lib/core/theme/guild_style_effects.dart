@@ -228,6 +228,16 @@ class GuildSurfaceEffect extends StatelessWidget {
     final emphasized = role == GuildEffectRole.emphasized;
     switch (style) {
       case AppUiStyle.relief:
+        // Image-theme full cover reuses relief shadows with a transparent
+        // surface so the page background image continues through the control.
+        // Keep the outline in that case; normal opaque relief is unchanged.
+        if (surface.a == 0) {
+          return Border.all(
+            color: borderColor,
+            width: math.max(borderWidth, 1.0),
+          );
+        }
+        return null;
       case AppUiStyle.minimal:
       case AppUiStyle.clay:
         return null;

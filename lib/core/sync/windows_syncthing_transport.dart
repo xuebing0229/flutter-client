@@ -22,6 +22,7 @@ class WindowsSyncthingTransport {
   static const String _stateFileName = 'embedded-syncthing-windows.json';
   static const Duration _localApiRequestTimeout = Duration(seconds: 8);
   static const Duration _processStartTimeout = Duration(seconds: 10);
+  static const Duration _readyTimeout = Duration(seconds: 30);
   static const Duration _gracefulShutdownTimeout = Duration(seconds: 10);
   static const Duration _shutdownPollInterval = Duration(milliseconds: 100);
 
@@ -48,8 +49,11 @@ class WindowsSyncthingTransport {
     if (!Platform.isWindows) return false;
     if (!force && !await isAutoStartEnabled(folderId)) return false;
 
-    final ready = await _ensureStarted();
-    if (!ready) return false;
+    // Follow Syncthing's REST contract strictly: the API must be ready
+    // before changing /rest/config/folders, and folder configuration must
+    // succeed before any caller can issue /rest/db/scan for this folder.
+    // Do not treat "startup has been requested" as "Syncthing is ready".
+    await _ensureReady();
     await _configureFolder(
       folderId: folderId,
       label: label,
@@ -790,7 +794,8 @@ class WindowsSyncthingTransport {
       ),
     );
 
-    while (true) {
+    final readyDeadline = DateTime.now().add(_readyTimeout);
+    while (DateTime.now().isBefore(readyDeadline)) {
       if (await _pingAt(apiKey, port)) {
         await _applyIntegrationPolicy(apiKey);
         return;
@@ -806,6 +811,10 @@ class WindowsSyncthingTransport {
       }
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
+    throw StateError(
+      '${await _startupFailureMessage(logFile, port)}'
+      '（启动后 30 秒内 REST API 未就绪）',
+    );
   }
 
   Future<Process> _startProcess(
@@ -989,6 +998,20 @@ class WindowsSyncthingTransport {
         'autoUpgradeIntervalH': 0,
       }),
     );
+
+    // Syncthing v2.x no longer has the old --no-default-folder flag.
+    // This is an app-private profile, so remove Syncthing's generated
+    // unmanaged "default" folder through the supported REST config API.
+    final folders = _jsonList(
+      await _request('GET', '/rest/config/folders', apiKey: apiKey),
+    );
+    if (folders.any((item) => _asMap(item)['id']?.toString() == 'default')) {
+      await _request(
+        'DELETE',
+        '/rest/config/folders/default',
+        apiKey: apiKey,
+      );
+    }
     _runtimePolicyApplied = true;
   }
 

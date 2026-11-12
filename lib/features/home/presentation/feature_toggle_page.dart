@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/spotlight_guide.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
 import 'reminder_background_guide.dart';
 
@@ -10,11 +11,13 @@ class FeatureTogglePage extends StatelessWidget {
   const FeatureTogglePage({
     required this.store,
     this.onHideFeatureToggle,
+    this.guideTargets,
     super.key,
   });
 
   final AppFeatureStore store;
   final VoidCallback? onHideFeatureToggle;
+  final QuickStartGuideTargets? guideTargets;
 
   Future<void> _setDeadlineReminders(BuildContext context, bool enabled) async {
     if (!enabled) {
@@ -58,9 +61,12 @@ class FeatureTogglePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '附加功能开关',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: SpotlightTarget(
+          targetKey: guideTargets?.featureToggleTitleKey,
+          child: const Text(
+            '附加功能开关',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
         ),
       ),
       body: AnimatedBuilder(
@@ -83,7 +89,9 @@ class FeatureTogglePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              _FeatureSection(
+              SpotlightTarget(
+                targetKey: guideTargets?.featureToggleKey,
+                child: _FeatureSection(
                 title: '排单附加项',
                 children: [
                   _FeatureSwitch(
@@ -146,6 +154,7 @@ class FeatureTogglePage extends StatelessWidget {
                           _setDeadlineReminders(context, value),
                     ),
                 ],
+              ),
               ),
               const SizedBox(height: 14),
               _FeatureSection(
