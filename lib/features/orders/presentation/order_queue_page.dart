@@ -347,18 +347,29 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
   Future<void> _confirmNode(QueueOrder order) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    if (order.isCompleted || order.nodePresetSnapshot.nodes.isEmpty) return;
 
-    final nodes = order.nodePresetSnapshot.nodes;
-    final currentName = order.currentNode.name;
+    // The visible card can be one frame behind the store after a very fast
+    // previous confirmation. Always refresh by id before building the next
+    // confirmation dialog so a local rapid sequence is not mistaken for a
+    // remote concurrent edit.
+    if (!widget.store.contains(order.id)) return;
+    final snapshot = widget.store.byId(order.id);
+    if (snapshot.isArchived ||
+        snapshot.isCompleted ||
+        snapshot.nodePresetSnapshot.nodes.isEmpty) {
+      return;
+    }
+
+    final nodes = snapshot.nodePresetSnapshot.nodes;
+    final currentName = snapshot.currentNode.name;
     String? nextNodeName;
     var completesOrder = false;
 
-    if (order.currentNodeId == notStartedNodeId) {
+    if (snapshot.currentNodeId == notStartedNodeId) {
       nextNodeName = nodes.first.name;
     } else {
       final currentIndex = nodes.indexWhere(
-        (node) => node.id == order.currentNodeId,
+        (node) => node.id == snapshot.currentNodeId,
       );
 
       if (currentIndex < 0) {
@@ -377,9 +388,9 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
           title: const Text('确认节点'),
           content: Text(
             completesOrder
-                ? '将“${order.title}”标记为已交稿？\n\n'
+                ? '将“${snapshot.title}”标记为已交稿？\n\n'
                       '标记后仍保留在排单中，需手动归档后才正式结算。'
-                : '将“${order.title}”从“$currentName”推进到“$nextNodeName”？',
+                : '将“${snapshot.title}”从“$currentName”推进到“$nextNodeName”？',
           ),
           actions: [
             TextButton(
@@ -397,7 +408,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
     if (confirmed != true || !mounted) return;
 
-    if (!widget.store.contains(order.id)) {
+    if (!widget.store.contains(snapshot.id)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('这笔排单已经不存在，未执行节点推进。'),
@@ -407,11 +418,11 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       return;
     }
 
-    final current = widget.store.byId(order.id);
+    final current = widget.store.byId(snapshot.id);
     if (current.isArchived ||
-        current.isCompleted != order.isCompleted ||
-        current.currentNodeId != order.currentNodeId ||
-        current.nodePresetId != order.nodePresetId) {
+        current.isCompleted != snapshot.isCompleted ||
+        current.currentNodeId != snapshot.currentNodeId ||
+        current.nodePresetId != snapshot.nodePresetId) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('排单节点已在另一处更新，请按当前状态重新确认。'),
@@ -421,10 +432,10 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
       return;
     }
 
-    widget.store.advanceOrder(order.id);
+    widget.store.advanceOrder(snapshot.id);
 
-    if (!mounted || !widget.store.contains(order.id)) return;
-    final updated = widget.store.byId(order.id);
+    if (!mounted || !widget.store.contains(snapshot.id)) return;
+    final updated = widget.store.byId(snapshot.id);
 
     if (updated.isCompleted) {
       final archiveNow = await showDialog<bool>(
