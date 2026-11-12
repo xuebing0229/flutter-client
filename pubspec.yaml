@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+245
-# beta-245: publish Android test APK as arm64-v8a only (Flutter ABI override)
+version: 0.0.1+246
+# beta-246: publish Android test APK as arm64-v8a only (Flutter ABI override)
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
