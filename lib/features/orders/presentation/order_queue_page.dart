@@ -97,6 +97,7 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
   final Set<String> _selectedTags = <String>{};
   final Map<String, _TerminationDraft> _bulkTerminationDrafts =
       <String, _TerminationDraft>{};
+  final Set<String> _nodeConfirmationsInFlight = <String>{};
 
   _OrderSortMode get _sortMode => _OrderSortMode.values.firstWhere(
     (mode) => mode.name == widget.sortModeName,
@@ -347,128 +348,134 @@ class _OrderQueuePageState extends State<OrderQueuePage> {
 
   Future<void> _confirmNode(QueueOrder order) async {
     FocusManager.instance.primaryFocus?.unfocus();
-
-    // The visible card can be one frame behind the store after a very fast
-    // previous confirmation. Always refresh by id before building the next
-    // confirmation dialog so a local rapid sequence is not mistaken for a
-    // remote concurrent edit.
+    if (_nodeConfirmationsInFlight.contains(order.id)) return;
     if (!widget.store.contains(order.id)) return;
-    final snapshot = widget.store.byId(order.id);
-    if (snapshot.isArchived ||
-        snapshot.isCompleted ||
-        snapshot.nodePresetSnapshot.nodes.isEmpty) {
-      return;
-    }
 
-    final nodes = snapshot.nodePresetSnapshot.nodes;
-    final currentName = snapshot.currentNode.name;
-    String? nextNodeName;
-    var completesOrder = false;
+    _nodeConfirmationsInFlight.add(order.id);
+    try {
+      // The visible card can be one frame behind the store after a very fast
+      // previous confirmation. Always refresh by id before building the next
+      // confirmation dialog so a local rapid sequence is not mistaken for a
+      // remote concurrent edit.
+      final snapshot = widget.store.byId(order.id);
+      if (snapshot.isArchived ||
+          snapshot.isCompleted ||
+          snapshot.nodePresetSnapshot.nodes.isEmpty) {
+        return;
+      }
 
-    if (snapshot.currentNodeId == notStartedNodeId) {
-      nextNodeName = nodes.first.name;
-    } else {
-      final currentIndex = nodes.indexWhere(
-        (node) => node.id == snapshot.currentNodeId,
-      );
+      final nodes = snapshot.nodePresetSnapshot.nodes;
+      final currentName = snapshot.currentNode.name;
+      String? nextNodeName;
+      var completesOrder = false;
 
-      if (currentIndex < 0) {
+      if (snapshot.currentNodeId == notStartedNodeId) {
         nextNodeName = nodes.first.name;
-      } else if (currentIndex < nodes.length - 1) {
-        nextNodeName = nodes[currentIndex + 1].name;
       } else {
-        completesOrder = true;
-      }
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('确认节点'),
-          content: Text(
-            completesOrder
-                ? '将“${snapshot.title}”标记为已交稿？\n\n'
-                      '标记后仍保留在排单中，需手动归档后才正式结算。'
-                : '将“${snapshot.title}”从“$currentName”推进到“$nextNodeName”？',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认'),
-            ),
-          ],
+        final currentIndex = nodes.indexWhere(
+          (node) => node.id == snapshot.currentNodeId,
         );
-      },
-    );
 
-    if (confirmed != true || !mounted) return;
-
-    if (!widget.store.contains(snapshot.id)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('这笔排单已经不存在，未执行节点推进。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final current = widget.store.byId(snapshot.id);
-    if (current.isArchived ||
-        current.isCompleted != snapshot.isCompleted ||
-        current.currentNodeId != snapshot.currentNodeId ||
-        current.nodePresetId != snapshot.nodePresetId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('排单节点已在另一处更新，请按当前状态重新确认。'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    widget.store.advanceOrder(snapshot.id);
-
-    if (!mounted || !widget.store.contains(snapshot.id)) return;
-    final updated = widget.store.byId(snapshot.id);
-
-    if (updated.isCompleted) {
-      final archiveNow = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          icon: const Icon(Icons.inventory_2_outlined),
-          title: const Text('提示'),
-          content: const Text('成稿归档后计入收入统计。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('稍后归档'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('现在归档'),
-            ),
-          ],
-        ),
-      );
-
-      if (archiveNow == true && mounted) {
-        await _showArchiveOptions(updated);
+        if (currentIndex < 0) {
+          nextNodeName = nodes.first.name;
+        } else if (currentIndex < nodes.length - 1) {
+          nextNodeName = nodes[currentIndex + 1].name;
+        } else {
+          completesOrder = true;
+        }
       }
-      return;
-    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已更新到「${updated.currentNode.name}」'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('确认节点'),
+            content: Text(
+              completesOrder
+                  ? '将“${snapshot.title}”标记为已交稿？\n\n'
+                        '标记后仍保留在排单中，需手动归档后才正式结算。'
+                  : '将“${snapshot.title}”从“$currentName”推进到“$nextNodeName”？',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('确认'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true || !mounted) return;
+
+      if (!widget.store.contains(snapshot.id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('这笔排单已经不存在，未执行节点推进。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      final current = widget.store.byId(snapshot.id);
+      if (current.isArchived ||
+          current.isCompleted != snapshot.isCompleted ||
+          current.currentNodeId != snapshot.currentNodeId ||
+          current.nodePresetId != snapshot.nodePresetId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('排单节点已在另一处更新，请按当前状态重新确认。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      widget.store.advanceOrder(snapshot.id);
+
+      if (!mounted || !widget.store.contains(snapshot.id)) return;
+      final updated = widget.store.byId(snapshot.id);
+
+      if (updated.isCompleted) {
+        final archiveNow = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            icon: const Icon(Icons.inventory_2_outlined),
+            title: const Text('提示'),
+            content: const Text('成稿归档后计入收入统计。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('稍后归档'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('现在归档'),
+              ),
+            ],
+          ),
+        );
+
+        if (archiveNow == true && mounted) {
+          await _showArchiveOptions(updated);
+        }
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已更新到「${updated.currentNode.name}」'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      _nodeConfirmationsInFlight.remove(order.id);
+    }
   }
 
   bool _archiveSnapshotIsCurrent(QueueOrder snapshot) {
