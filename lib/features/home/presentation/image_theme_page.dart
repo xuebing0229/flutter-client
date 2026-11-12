@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme_background.dart';
 import '../../../core/theme/app_theme_store.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../shared/data/receipt_style_image_bridge.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import 'theme_color_picker.dart';
@@ -279,6 +280,7 @@ class _ImageThemePreview extends StatelessWidget {
     final glassColor = darkText
         ? Colors.white.withValues(alpha: 0.58)
         : Colors.black.withValues(alpha: 0.34);
+    final surfaceStyle = GuildStyleTheme.of(context);
 
     final screenAspectRatio = MediaQuery.sizeOf(context).aspectRatio;
     return Center(
@@ -339,6 +341,9 @@ class _ImageThemePreview extends StatelessWidget {
                       border: Border.all(
                         color: fontColor.withValues(alpha: 0.36),
                       ),
+                      boxShadow: mode == AppImageBackgroundMode.cover
+                          ? surfaceStyle.shadows
+                          : const <BoxShadow>[],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

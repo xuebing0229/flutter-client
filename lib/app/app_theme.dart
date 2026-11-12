@@ -138,7 +138,10 @@ class GuildAppTheme {
     );
     final base = GuildVisualTheme.build(
       seedScheme,
-      style: glass ? AppUiStyle.glass : AppUiStyle.minimal,
+      // Full-cover reuses the existing relief geometry/shadow system, but
+      // its surfaces are made transparent below so the same background image
+      // remains visible through each raised control.
+      style: glass ? AppUiStyle.glass : AppUiStyle.relief,
       semanticColors: semantic,
     );
     return _applyImageSurfaceOverrides(
@@ -172,15 +175,37 @@ class GuildAppTheme {
       width: 1,
     );
 
+    final baseButtonStyle =
+        base.filledButtonTheme.style ?? const ButtonStyle();
+    final coverElevation =
+        baseButtonStyle.elevation?.resolve(const <WidgetState>{}) ?? 0;
+    final coverShadowColor =
+        baseButtonStyle.shadowColor?.resolve(const <WidgetState>{}) ??
+            Colors.black.withValues(alpha: 0.22);
+    final coverTokens = base.extension<GuildStyleTheme>();
+    final coverRadius = coverTokens?.cardRadius ?? 20;
+
     ButtonStyle transparentButton(ButtonStyle? current) {
       return (current ?? const ButtonStyle()).copyWith(
         backgroundColor:
             const WidgetStatePropertyAll<Color>(Colors.transparent),
         foregroundColor: WidgetStatePropertyAll<Color>(font),
-        elevation: const WidgetStatePropertyAll<double>(0),
         side: WidgetStatePropertyAll<BorderSide>(side),
+        // Keep the elevation/shadow from the existing relief controls instead
+        // of flattening the button just because its fill is transparent.
+        elevation: glass
+            ? current?.elevation
+            : WidgetStatePropertyAll<double>(coverElevation),
+        shadowColor: glass
+            ? current?.shadowColor
+            : WidgetStatePropertyAll<Color>(coverShadowColor),
       );
     }
+
+    final coverCardShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(coverRadius),
+      side: side,
+    );
 
     return base.copyWith(
       canvasColor: Colors.transparent,
@@ -193,6 +218,9 @@ class GuildAppTheme {
       cardTheme: base.cardTheme.copyWith(
         color: layer,
         surfaceTintColor: Colors.transparent,
+        elevation: glass ? base.cardTheme.elevation : coverElevation,
+        shadowColor: glass ? base.cardTheme.shadowColor : coverShadowColor,
+        shape: glass ? base.cardTheme.shape : coverCardShape,
       ),
       drawerTheme: base.drawerTheme.copyWith(
         backgroundColor: layer,
@@ -201,10 +229,12 @@ class GuildAppTheme {
       dialogTheme: base.dialogTheme.copyWith(
         backgroundColor: overlayLayer,
         surfaceTintColor: Colors.transparent,
+        shape: glass ? base.dialogTheme.shape : coverCardShape,
       ),
       popupMenuTheme: base.popupMenuTheme.copyWith(
         color: overlayLayer,
         surfaceTintColor: Colors.transparent,
+        shape: glass ? base.popupMenuTheme.shape : coverCardShape,
       ),
       bottomSheetTheme: base.bottomSheetTheme.copyWith(
         backgroundColor: overlayLayer,
@@ -224,6 +254,7 @@ class GuildAppTheme {
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: layer,
         selectedColor: font.withValues(alpha: 0.16),
+        side: glass ? base.chipTheme.side : side,
       ),
       filledButtonTheme: glass
           ? base.filledButtonTheme
@@ -240,10 +271,14 @@ class GuildAppTheme {
           : base.floatingActionButtonTheme.copyWith(
               backgroundColor: Colors.transparent,
               foregroundColor: font,
-              elevation: 0,
-              focusElevation: 0,
-              hoverElevation: 0,
-              highlightElevation: 0,
+              elevation: coverElevation,
+              focusElevation: coverElevation,
+              hoverElevation: coverElevation + 1,
+              highlightElevation: coverElevation + 1,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: side,
+              ),
             ),
     );
   }

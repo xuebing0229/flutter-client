@@ -22,7 +22,7 @@ enum AppImageBackgroundMode {
   cover(
     id: 'cover',
     label: '全图覆盖',
-    description: '背景图直接铺满整个界面，控件底色隐藏，只保留文字、图标和必要边框。',
+    description: '背景图延伸到控件表面，控件仍保留边框、圆角和凸起层次。',
   ),
   glass(
     id: 'glass',
