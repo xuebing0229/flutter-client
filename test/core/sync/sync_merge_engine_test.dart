@@ -856,4 +856,147 @@ void main() {
     );
   });
 
+  test('explicit state transitions beat stale independently-seeded snapshots', () {
+    final engine = SyncMergeEngine();
+
+    const activeOrder = <String, dynamic>{
+      'id': 'transition-order',
+      'currentNodeId': 'node-a',
+      'currentNodeProgress': 60,
+      'completedAt': null,
+      'settledAt': null,
+      'settledIncome': null,
+      'archiveOutcome': null,
+      'settlementNodeId': null,
+      'customRefundAmount': null,
+      'isArchived': false,
+      'isPinned': false,
+    };
+    final orderBaseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'transition-order',
+      values: activeOrder,
+      deviceId: 'phone',
+    );
+    final archivedOrder = engine.applyLocalSnapshot(
+      record: orderBaseline,
+      previousValues: activeOrder,
+      nextValues: <String, dynamic>{
+        ...activeOrder,
+        'currentNodeId': 'node-final',
+        'currentNodeProgress': 0,
+        'completedAt': '2026-11-12T10:00:00.000Z',
+        'settledAt': '2026-11-12T10:01:00.000Z',
+        'settledIncome': 123.0,
+        'archiveOutcome': 'successful',
+        'isArchived': true,
+      },
+      deviceId: 'phone',
+    );
+    final staleOrder = SyncRecord.bootstrap(
+      kind: SyncEntityKind.order,
+      id: 'transition-order',
+      values: activeOrder,
+      deviceId: 'desktop',
+    );
+
+    for (final merged in <SyncRecord>[
+      engine.merge(archivedOrder, staleOrder),
+      engine.merge(staleOrder, archivedOrder),
+    ]) {
+      final values = engine.materialize(merged)!;
+      expect(values['currentNodeId'], 'node-final');
+      expect(values['currentNodeProgress'], 0);
+      expect(values['completedAt'], '2026-11-12T10:00:00.000Z');
+      expect(values['settledAt'], '2026-11-12T10:01:00.000Z');
+      expect(values['settledIncome'], 123.0);
+      expect(values['archiveOutcome'], 'successful');
+      expect(values['isArchived'], isTrue);
+      expect(
+        merged.conflicts.values.where(
+          (conflict) => <String>{
+            'currentNodeId',
+            'currentNodeProgress',
+            'completedAt',
+            'settledAt',
+            'settledIncome',
+            'archiveOutcome',
+            'isArchived',
+          }.contains(conflict.field),
+        ),
+        isEmpty,
+      );
+    }
+
+    final pinned = engine.applyLocalSnapshot(
+      record: orderBaseline,
+      previousValues: activeOrder,
+      nextValues: <String, dynamic>{...activeOrder, 'isPinned': true},
+      deviceId: 'phone',
+    );
+    for (final merged in <SyncRecord>[
+      engine.merge(pinned, staleOrder),
+      engine.merge(staleOrder, pinned),
+    ]) {
+      expect(engine.materialize(merged)!['isPinned'], isTrue);
+      expect(
+        merged.conflicts.values.where((item) => item.field == 'isPinned'),
+        isEmpty,
+      );
+    }
+  });
+
+  test('single-sale transition beats stale unsold snapshot as one state change', () {
+    final engine = SyncMergeEngine();
+    const unsold = <String, dynamic>{
+      'id': 'single-sale-stale',
+      'saleType': 'single',
+      'soldCount': 0,
+      'saleRecords': <String>[],
+      'saleClientNames': <String, dynamic>{},
+    };
+    final baseline = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'single-sale-stale',
+      values: unsold,
+      deviceId: 'phone',
+    );
+    final sold = engine.applyLocalSnapshot(
+      record: baseline,
+      previousValues: unsold,
+      nextValues: <String, dynamic>{
+        ...unsold,
+        'soldCount': 1,
+        'saleRecords': <String>['2026-11-12T10:00:00.000Z'],
+      },
+      deviceId: 'phone',
+    );
+    final stale = SyncRecord.bootstrap(
+      kind: SyncEntityKind.product,
+      id: 'single-sale-stale',
+      values: unsold,
+      deviceId: 'desktop',
+    );
+
+    for (final merged in <SyncRecord>[
+      engine.merge(sold, stale),
+      engine.merge(stale, sold),
+    ]) {
+      final values = engine.materialize(merged)!;
+      expect(values['soldCount'], 1);
+      expect(
+        values['saleRecords'],
+        <String>['2026-11-12T10:00:00.000Z'],
+      );
+      expect(
+        merged.conflicts.values.where(
+          (conflict) =>
+              conflict.field == 'soldCount' ||
+              conflict.field == 'saleRecords',
+        ),
+        isEmpty,
+      );
+    }
+  });
+
 }

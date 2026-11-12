@@ -17,9 +17,34 @@ class SyncMergeEngine {
     'single-sale-state',
     'progress-delta',
     'node-transition',
+    'state-transition',
     'reference-image-delta',
     'delete',
     'conflict-resolution',
+  };
+
+  // These fields represent explicit user/domain state transitions rather than
+  // free-form edits. They all share the same transition evidence mechanism so
+  // a stale independently-seeded snapshot cannot undo a local action merely
+  // because its raw value happens to win deterministic conflict ordering.
+  static const Map<SyncEntityKind, Set<String>> _stateTransitionFields =
+      <SyncEntityKind, Set<String>>{
+    SyncEntityKind.order: <String>{
+      'completedAt',
+      'settledAt',
+      'settledIncome',
+      'archiveOutcome',
+      'settlementNodeId',
+      'customRefundAmount',
+      'isArchived',
+      'isPinned',
+    },
+    SyncEntityKind.product: <String>{
+      'saleType',
+      'archivedAt',
+      'isArchived',
+      'isPinned',
+    },
   };
 
   /// A newer app may introduce an operation this version cannot materialize.
@@ -157,13 +182,43 @@ class SyncMergeEngine {
 
       final relation = a.clock.compare(b.clock);
 
-      // Archiving is a domain transition, not an ordinary boolean toggle.
-      // If an archive races with an older independently-seeded "active"
-      // snapshot, keeping false makes the first archive appear to do nothing.
-      // Prefer the archived side only for equal/concurrent clocks. A genuine
-      // restore is performed from the archived state and therefore has a
-      // causally newer clock, so the normal before/after rules still let it
-      // restore the order.
+      // Explicit state changes all use the same transition evidence rule:
+      // if exactly one branch can prove it moved from the other branch's value
+      // to its own value, that branch wins over the stale snapshot. This is the
+      // generic form of the original node-transition protection and also
+      // covers archive settlement fields, completion, pinning and product
+      // state without separate per-field merge implementations.
+      if (!syncJsonEquals(a.value, b.value) &&
+          (relation == SyncClockRelation.equal ||
+              relation == SyncClockRelation.concurrent)) {
+        final transitionWinner = _directStateTransitionWinner(
+          field: fieldName,
+          left: left,
+          right: right,
+          leftValue: a.value,
+          rightValue: b.value,
+        );
+        final compactedWinner =
+            transitionWinner == null &&
+                    (_hasStateTransitionEvidence(left, fieldName) ||
+                        _hasStateTransitionEvidence(right, fieldName))
+                ? _compactionWinnerForField(fieldName, left, right)
+                : null;
+        final winner = transitionWinner ?? compactedWinner;
+        if (winner != null) {
+          final selected = winner == 0 ? a : b;
+          fields[fieldName] = SyncFieldValue(
+            value: selected.value,
+            clock: a.clock.merge(b.clock),
+            updatedBy: selected.updatedBy,
+          );
+          continue;
+        }
+      }
+
+      // Keep the previous archive preference as a compatibility fallback for
+      // records produced before state-transition evidence existed. A genuine
+      // restore is causally newer, while new clients are handled above.
       if (fieldName == 'isArchived' &&
           a.value is bool &&
           b.value is bool &&
@@ -177,42 +232,6 @@ class SyncMergeEngine {
           updatedBy: archived.updatedBy,
         );
         continue;
-      }
-
-      // A node advance already carries explicit domain evidence as a
-      // node-transition operation. When that transition races with a stale
-      // snapshot still sitting at its "from" node, the transition must win;
-      // otherwise a fast local advance can visibly jump backwards and the
-      // confirmation UI then mistakes our own rollback for "another device".
-      //
-      // Do not guess when both sides made real, divergent transitions. That is
-      // still a genuine conflict and falls through to the normal merge path.
-      if (fieldName == 'currentNodeId' &&
-          a.value is String &&
-          b.value is String &&
-          a.value != b.value &&
-          (relation == SyncClockRelation.equal ||
-              relation == SyncClockRelation.concurrent)) {
-        final transitionWinner = _directNodeTransitionWinner(
-          left: left,
-          right: right,
-          leftValue: a.value as String,
-          rightValue: b.value as String,
-        );
-        final compactedWinner =
-            transitionWinner == null
-                ? _compactionWinnerForField(fieldName, left, right)
-                : null;
-        final winner = transitionWinner ?? compactedWinner;
-        if (winner != null) {
-          final selected = winner == 0 ? a : b;
-          fields[fieldName] = SyncFieldValue(
-            value: selected.value,
-            clock: a.clock.merge(b.clock),
-            updatedBy: selected.updatedBy,
-          );
-          continue;
-        }
       }
 
       switch (relation) {
@@ -375,6 +394,8 @@ class SyncMergeEngine {
           deviceId: deviceId,
           metadata: <String, dynamic>{
             'soldCount': next.clamp(0, 1),
+            'from': previous.clamp(0, 1),
+            'to': next.clamp(0, 1),
           },
         );
         operations[operation.id] = operation;
@@ -449,6 +470,22 @@ class SyncMergeEngine {
         final operation = _operation(
           field: field,
           kind: 'node-transition',
+          deviceId: deviceId,
+          metadata: <String, dynamic>{
+            'from': previous,
+            'to': next,
+          },
+        );
+        operations[operation.id] = operation;
+      } else if (_shouldRecordStateTransition(
+        kind: record.kind,
+        field: field,
+        previousValues: previousValues,
+        nextValues: nextValues,
+      )) {
+        final operation = _operation(
+          field: field,
+          kind: 'state-transition',
           deviceId: deviceId,
           metadata: <String, dynamic>{
             'from': previous,
@@ -1107,39 +1144,102 @@ class SyncMergeEngine {
     return false;
   }
 
-  int? _directNodeTransitionWinner({
+  bool _shouldRecordStateTransition({
+    required SyncEntityKind kind,
+    required String field,
+    required Map<String, dynamic> previousValues,
+    required Map<String, dynamic> nextValues,
+  }) {
+    if (_stateTransitionFields[kind]?.contains(field) == true) {
+      return true;
+    }
+
+    // Progress edits inside one node keep their existing delta semantics. A
+    // node change, however, resets progress absolutely and should therefore
+    // carry the same transition evidence as the node move itself.
+    if (kind == SyncEntityKind.order &&
+        field == 'currentNodeProgress' &&
+        !syncJsonEquals(
+          previousValues['currentNodeId'],
+          nextValues['currentNodeId'],
+        )) {
+      return true;
+    }
+
+    // A single-sale toggle changes both soldCount and saleRecords. soldCount
+    // already has single-sale-state evidence; record the paired timestamp list
+    // through the same generic mechanism so a stale unsold snapshot cannot
+    // keep the count while dropping its sale record.
+    if (kind == SyncEntityKind.product &&
+        field == 'saleRecords' &&
+        nextValues['saleType'] == 'single' &&
+        !syncJsonEquals(
+          previousValues['soldCount'],
+          nextValues['soldCount'],
+        )) {
+      return true;
+    }
+
+    return false;
+  }
+
+  bool _isStateTransitionOperationForField(
+    SyncOperation operation,
+    String field,
+  ) {
+    if (operation.kind == 'state-transition') {
+      return operation.field == field;
+    }
+    if (operation.kind == 'node-transition') {
+      return operation.field == field;
+    }
+    if (operation.kind == 'single-sale-state') {
+      return field == 'soldCount';
+    }
+    return false;
+  }
+
+  bool _hasStateTransitionEvidence(SyncRecord record, String field) {
+    return record.operations.values.any(
+      (operation) => _isStateTransitionOperationForField(operation, field),
+    );
+  }
+
+  int? _directStateTransitionWinner({
+    required String field,
     required SyncRecord left,
     required SyncRecord right,
-    required String leftValue,
-    required String rightValue,
+    required Object? leftValue,
+    required Object? rightValue,
   }) {
     bool hasDirectTransition(
       SyncRecord record, {
-      required String from,
-      required String to,
+      required Object? from,
+      required Object? to,
     }) {
-      return record.operations.values.any(
-        (operation) =>
-            operation.kind == 'node-transition' &&
-            operation.field == 'currentNodeId' &&
-            operation.metadata['from'] == from &&
-            operation.metadata['to'] == to,
-      );
+      return record.operations.values.any((operation) {
+        if (!_isStateTransitionOperationForField(operation, field) ||
+            operation.compacted) {
+          return false;
+        }
+        return syncJsonEquals(operation.metadata['from'], from) &&
+            syncJsonEquals(operation.metadata['to'], to);
+      });
     }
 
-    final leftAdvanced = hasDirectTransition(
+    final leftChanged = hasDirectTransition(
       left,
       from: rightValue,
       to: leftValue,
     );
-    final rightAdvanced = hasDirectTransition(
+    final rightChanged = hasDirectTransition(
       right,
       from: leftValue,
       to: rightValue,
     );
 
-    if (leftAdvanced == rightAdvanced) return null;
-    return leftAdvanced ? 0 : 1;
+    if (leftChanged == rightChanged) return null;
+    return leftChanged ? 0 : 1;
   }
 
   bool _operationAffectsField(SyncOperation operation, String field) {
@@ -1154,7 +1254,10 @@ class SyncMergeEngine {
       return field == 'currentNodeProgress';
     }
     if (operation.kind == 'node-transition') {
-      return field == 'currentNodeId';
+      return operation.field == field;
+    }
+    if (operation.kind == 'state-transition') {
+      return operation.field == field;
     }
     if (operation.kind == 'reference-image-delta') {
       return field == 'referenceImages';
