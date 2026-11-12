@@ -145,7 +145,8 @@ void main() {
       );
 
       // Simulate the previous local confirmation completing before Flutter has
-      // rebuilt the card. The button's closure still carries the old row object.
+      // rebuilt the card. This is the exact rapid-tap window that used to
+      // mislabel a local update as "updated elsewhere".
       orders.advanceOrder('rapid-node-order');
       expect(orders.byId('rapid-node-order').currentNodeId, nodes[1].id);
 
