@@ -234,6 +234,8 @@ void main() {
     );
   });
 
+  // Two real advances are intentionally different from "advance vs stale":
+  // keep surfacing those so the user can resolve a genuine cross-device race.
   test('divergent concurrent node advances remain a real conflict', () {
     final engine = SyncMergeEngine();
     const start = <String, dynamic>{
