@@ -12,6 +12,79 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
+    'duplicate rapid taps keep only one node confirmation dialog in flight',
+    (tester) async {
+      final accountStore = AccountStore();
+      final orders = OrderStore();
+      final products = ProductStore();
+      final presets = NodePresetStore();
+      final features = AppFeatureStore();
+      final coordinator = SyncCoordinator(
+        accountId: 'test-account',
+        deviceId: 'test-device',
+        deviceName: 'test',
+        accountStore: accountStore,
+        orderStore: orders,
+        productStore: products,
+        nodePresetStore: presets,
+        captureSettings: () => <String, dynamic>{},
+        applySettings: (_) async {},
+      );
+      addTearDown(accountStore.dispose);
+      addTearDown(orders.dispose);
+      addTearDown(products.dispose);
+      addTearDown(presets.dispose);
+      addTearDown(features.dispose);
+      addTearDown(coordinator.dispose);
+
+      final nodes = defaultNodePreset.nodes;
+      orders.addOrder(
+        QueueOrder(
+          id: 'duplicate-confirm-order',
+          platform: CommissionPlatform.mihuashi,
+          title: '重复确认测试',
+          clientName: '单主',
+          deadline: null,
+          nodePresetId: defaultNodePreset.id,
+          nodePresetSnapshot: defaultNodePreset,
+          currentNodeId: nodes.first.id,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: OrderQueuePage(
+              accountId: 'test-account',
+              store: orders,
+              nodePresetStore: presets,
+              featureStore: features,
+              syncCoordinator: NativeSyncCoordinatorViewAdapter(coordinator),
+              cardView: false,
+              onCardViewChanged: (_) {},
+              sortModeName: 'defaultOrder',
+              onSortModeChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      final button = find.text('确认节点');
+      await tester.tap(button);
+      await tester.tap(button);
+      await tester.pump();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, '取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(orders.byId('duplicate-confirm-order').currentNodeId, nodes.first.id);
+    },
+  );
+
+  testWidgets(
     'stale node confirmation does not advance a remotely advanced order twice',
     (tester) async {
       final accountStore = AccountStore();
