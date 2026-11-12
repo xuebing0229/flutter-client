@@ -70,6 +70,8 @@ void main() {
       );
 
       final button = find.text('确认节点');
+      // Both taps happen before the next frame, matching a real double-tap on
+      // a still-visible card action.
       await tester.tap(button);
       await tester.tap(button);
       await tester.pump();
