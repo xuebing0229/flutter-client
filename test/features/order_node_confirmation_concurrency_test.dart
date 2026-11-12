@@ -70,7 +70,8 @@ void main() {
       );
 
       // Simulate the user confirming the previous node and immediately tapping
-      // the still-visible old card before the next frame rebuilds it.
+      // the still-visible old card before the next frame rebuilds it. Do not
+      // pump here: the stale callback is the regression this test covers.
       final firstSnapshot = orders.byId('rapid-node-order');
       orders.updateOrder(firstSnapshot.copyWith(currentNodeId: nodes[1].id));
 
