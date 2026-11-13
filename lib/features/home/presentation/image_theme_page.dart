@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme_store.dart';
 import '../../../core/theme/guild_visual_theme.dart';
 import '../../shared/data/receipt_style_image_bridge.dart';
 import '../../shared/presentation/layout_spacing.dart';
+import '../../shared/presentation/screen_aspect_image_crop_page.dart';
 import 'theme_color_picker.dart';
 
 class ImageThemePage extends StatefulWidget {
@@ -32,19 +33,26 @@ class _ImageThemePageState extends State<ImageThemePage> {
       final picked = await _imageBridge.pickImage();
       if (picked == null) return;
       if (!mounted) return;
-      if (picked.bytes.length > 5 * 1024 * 1024) {
+      final cropped = await showScreenAspectImageCropper(
+        context: context,
+        image: picked.bytes,
+        title: '调整背景图',
+      );
+      if (cropped == null || !mounted) return;
+      if (cropped.length > 5 * 1024 * 1024) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('背景图请控制在 5 MB 以内'),
+            content: Text('裁切后的背景图仍超过 5 MB，请换一张尺寸稍小的图片'),
             behavior: SnackBarBehavior.floating,
           ),
         );
         return;
       }
       await widget.store.setImageBackground(
-        base64: base64Encode(picked.bytes),
+        base64: base64Encode(cropped),
         name: picked.name,
       );
+      await widget.store.setImageFitMode(AppImageFitMode.fit);
       await widget.store.setAppearanceMode(AppAppearanceMode.image);
     } catch (error) {
       if (!mounted) return;
