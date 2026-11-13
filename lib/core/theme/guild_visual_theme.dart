@@ -1408,6 +1408,13 @@ class GuildStyleBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = GuildStyleTheme.of(context);
     final colors = Theme.of(context).colorScheme;
+
+    // Image themes already provide the real page backdrop in GuildMaterialApp.
+    // Do not paint a second synthetic style backdrop over that image.
+    if (tokens.background.a == 0) {
+      return child;
+    }
+
     if (tokens.isClassic) {
       return DecoratedBox(
         decoration: BoxDecoration(
