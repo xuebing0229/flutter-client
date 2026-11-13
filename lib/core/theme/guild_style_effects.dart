@@ -137,21 +137,26 @@ class GuildSurfaceEffect extends StatelessWidget {
       _ => surface,
     };
 
+    final transparentRelief =
+        style == AppUiStyle.relief && effectiveSurface.a == 0;
+
     final gradient = switch (style) {
-      AppUiStyle.relief => LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: _inset
-              ? <Color>[
-                  _mix(effectiveSurface, Colors.black, 0.04),
-                  effectiveSurface,
-                  _mix(effectiveSurface, Colors.white, 0.05),
-                ]
-              : <Color>[
-                  _mix(effectiveSurface, Colors.white, 0.025),
-                  effectiveSurface,
-                ],
-        ),
+      AppUiStyle.relief => transparentRelief
+          ? null
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: _inset
+                  ? <Color>[
+                      _mix(effectiveSurface, Colors.black, 0.04),
+                      effectiveSurface,
+                      _mix(effectiveSurface, Colors.white, 0.05),
+                    ]
+                  : <Color>[
+                      _mix(effectiveSurface, Colors.white, 0.025),
+                      effectiveSurface,
+                    ],
+            ),
       AppUiStyle.retroLight => emphasized || _inset
           ? null
           : LinearGradient(
@@ -518,13 +523,17 @@ class _SurfaceFinishPainter extends CustomPainter {
     if (role == GuildEffectRole.inset) {
       switch (style) {
         case AppUiStyle.relief:
-          _paintInsetBevel(
-            canvas,
-            rrect,
-            dark: const Color(0xFFA3B1C6).withValues(alpha: 0.64),
-            light: Colors.white.withValues(alpha: 0.86),
-            width: 6,
-          );
+          // Image-theme full cover keeps the picture crisp on the control
+          // surface. Do not turn it into a recessed translucent field.
+          if (background.a != 0) {
+            _paintInsetBevel(
+              canvas,
+              rrect,
+              dark: const Color(0xFFA3B1C6).withValues(alpha: 0.64),
+              light: Colors.white.withValues(alpha: 0.86),
+              width: 6,
+            );
+          }
           break;
         case AppUiStyle.clay:
           _paintInsetBevel(
@@ -556,7 +565,11 @@ class _SurfaceFinishPainter extends CustomPainter {
 
     switch (style) {
       case AppUiStyle.relief:
-        _paintSoftTopHighlight(canvas, rrect, 0.12);
+        // Transparent relief is the image-theme cover surface: keep the
+        // underlying image unwashed and let border + shadow provide depth.
+        if (background.a != 0) {
+          _paintSoftTopHighlight(canvas, rrect, 0.12);
+        }
         break;
       case AppUiStyle.minimal:
         break;
