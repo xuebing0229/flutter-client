@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+249
-# beta-249: fix image-cover raised surfaces and background-through bottom navigation
+version: 0.0.1+250
+# beta-250: complete image-theme surface pass (raised cover, translucent glass, bottom-nav backdrop)
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
