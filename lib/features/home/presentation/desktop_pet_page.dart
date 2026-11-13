@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/desktop_pet/desktop_pet_service.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../focus/presentation/focus_panel.dart';
 import '../../focus/state/focus_store.dart';
 import '../../orders/domain/queue_order.dart';
@@ -2149,40 +2150,51 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
+    final style = GuildStyleTheme.of(context);
+    final radius =
+        style.isClassic ? BorderRadius.circular(18) : style.cardBorderRadius;
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.content,
+      borderRadius: radius,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic
+            ? Theme.of(context).colorScheme.surface
+            : Colors.transparent,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
                         ),
-                      ),
-                      if (helpMessage != null) ...[
-                        const SizedBox(width: 6),
-                        InlineHelpTooltip(message: helpMessage!),
+                        if (helpMessage != null) ...[
+                          const SizedBox(width: 6),
+                          InlineHelpTooltip(message: helpMessage!),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                if (trailing != null) trailing!,
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...children,
-          ],
+                  if (trailing != null) trailing!,
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...children,
+            ],
+          ),
         ),
       ),
     );
@@ -2196,12 +2208,22 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: child,
+    final style = GuildStyleTheme.of(context);
+    final radius =
+        style.isClassic ? BorderRadius.circular(16) : style.surfaceBorderRadius;
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.inset,
+      borderRadius: radius,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic
+            ? Theme.of(context).colorScheme.surfaceContainerLow
+            : Colors.transparent,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: child,
+        ),
       ),
     );
   }
