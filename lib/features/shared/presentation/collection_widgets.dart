@@ -187,6 +187,8 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
           }
 
           final minimal = style.style == AppUiStyle.minimal;
+          final imageCoverSurface =
+              style.style == AppUiStyle.relief && style.background.a == 0;
           final radius = style.isClassic
               ? BorderRadius.circular(18)
               : style.inputBorderRadius;
@@ -222,10 +224,15 @@ class _CollectionSearchFieldState extends State<CollectionSearchField> {
           if (minimal) return field;
 
           return GuildStyledSurface(
-            role: GuildSurfaceRole.inset,
+            // Full-cover image theme is a raised image-clad control, not a
+            // recessed transparent field. Glass mode keeps the inset glass.
+            role: imageCoverSurface
+                ? GuildSurfaceRole.chrome
+                : GuildSurfaceRole.inset,
             borderRadius: radius,
             backdropAvailable: style.isGlass,
-            backgroundColor: inputSurface,
+            backgroundColor:
+                imageCoverSurface ? Colors.transparent : inputSurface,
             child: field,
           );
         },

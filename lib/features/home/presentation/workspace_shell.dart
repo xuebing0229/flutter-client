@@ -107,9 +107,11 @@ class GuildWorkspaceShell extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final useDesktopLayout = width >= 900;
     final uiStyle = GuildStyleTheme.of(context);
+    final imageThemeActive = uiStyle.background.a == 0;
 
     return Scaffold(
-      extendBody: uiStyle.isGlass && !useDesktopLayout,
+      extendBody:
+          (uiStyle.isGlass || imageThemeActive) && !useDesktopLayout,
       drawer: ready && contentAvailable ? drawer : null,
       appBar: showAppBar
           ? AppBar(
@@ -241,11 +243,18 @@ class GuildWorkspaceShell extends StatelessWidget {
               : GuildStyledSurface(
                   role: GuildSurfaceRole.chrome,
                   backdropAvailable: uiStyle.isGlass,
-                  backgroundColor:
-                      Theme.of(context).colorScheme.surfaceContainer,
+                  backgroundColor: imageThemeActive
+                      ? Colors.transparent
+                      : Theme.of(context).colorScheme.surfaceContainer,
                   child: NavigationBar(
-                    backgroundColor:
-                        uiStyle.isClassic ? null : Colors.transparent,
+                    backgroundColor: uiStyle.isClassic && !imageThemeActive
+                        ? null
+                        : Colors.transparent,
+                    elevation: imageThemeActive ? 0 : null,
+                    shadowColor:
+                        imageThemeActive ? Colors.transparent : null,
+                    surfaceTintColor:
+                        imageThemeActive ? Colors.transparent : null,
                     selectedIndex: selectedIndex,
                     onDestinationSelected: onTabSelected,
                     destinations: [
