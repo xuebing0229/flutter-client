@@ -290,6 +290,8 @@ class ResponsiveCardActionButton extends StatelessWidget {
 
         final uiStyle = GuildStyleTheme.of(context);
         final colors = Theme.of(context).colorScheme;
+        final imageCoverSurface =
+            uiStyle.style == AppUiStyle.relief && uiStyle.background.a == 0;
         final styledForeground = switch (uiStyle.style) {
           AppUiStyle.relief ||
           AppUiStyle.minimal ||
@@ -343,7 +345,8 @@ class ResponsiveCardActionButton extends StatelessWidget {
           role: GuildSurfaceRole.emphasized,
           borderRadius: uiStyle.buttonBorderRadius,
           backdropAvailable: uiStyle.isGlass,
-          backgroundColor: colors.primary,
+          backgroundColor:
+              imageCoverSurface ? Colors.transparent : colors.primary,
           child: button,
         );
       },
