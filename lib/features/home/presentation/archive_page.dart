@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/features/app_feature_store.dart';
 import '../../../core/sync/sync_coordinator_view.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import '../../orders/data/node_presets.dart';
 import '../../orders/domain/queue_order.dart';
 import '../../orders/presentation/order_detail_page.dart';
@@ -467,23 +468,31 @@ class _CleanupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(16),
-      child: ListTile(
-        leading: const Icon(Icons.delete_sweep_outlined),
-        title: const Text(
-          '清理旧归档',
-          style: TextStyle(fontWeight: FontWeight.w700),
+    final style = GuildStyleTheme.of(context);
+    final radius =
+        style.isClassic ? BorderRadius.circular(16) : style.surfaceBorderRadius;
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.content,
+      borderRadius: radius,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic ? colors.surfaceContainerLow : Colors.transparent,
+        borderRadius: radius,
+        child: ListTile(
+          leading: const Icon(Icons.delete_sweep_outlined),
+          title: const Text(
+            '清理旧归档',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: const Text('自选归档时间范围，永久删除对应记录及参考图。'),
+          trailing: busy
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.chevron_right_rounded),
+          onTap: busy ? null : onPressed,
         ),
-        subtitle: const Text('自选归档时间范围，永久删除对应记录及参考图。'),
-        trailing: busy
-            ? const SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.chevron_right_rounded),
-        onTap: busy ? null : onPressed,
       ),
     );
   }
