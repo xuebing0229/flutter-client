@@ -7,6 +7,8 @@ import 'package:flutter_app/core/theme/app_theme_palette.dart';
 import 'package:flutter_app/core/theme/app_theme_store.dart';
 import 'package:flutter_app/core/theme/app_ui_style.dart';
 import 'package:flutter_app/core/theme/guild_visual_theme.dart';
+import 'package:flutter_app/core/theme/guild_style_effects.dart';
+import 'package:flutter_app/features/home/presentation/workspace_shell.dart';
 
 class _MemoryThemeStore extends AppThemeStore {
   Map<String, dynamic>? initial;
@@ -103,6 +105,94 @@ void main() {
     expect(
       button.elevation!.resolve(const <WidgetState>{}),
       greaterThan(0),
+    );
+  });
+
+
+  test('image theme surface channels always keep the background visible', () async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+    final cover = GuildAppTheme.light(store);
+    expect(cover.colorScheme.surface.a, 0);
+    expect(cover.colorScheme.surfaceContainer.a, 0);
+    expect(cover.extension<GuildStyleTheme>()!.surface.a, 0);
+
+    await store.setImageBackgroundMode(AppImageBackgroundMode.glass);
+    final glass = GuildAppTheme.light(store);
+    expect(glass.colorScheme.surface.a, greaterThan(0));
+    expect(glass.colorScheme.surface.a, lessThan(1));
+    expect(glass.colorScheme.surfaceContainer.a, greaterThan(0));
+    expect(glass.colorScheme.surfaceContainer.a, lessThan(1));
+    expect(glass.extension<GuildStyleTheme>()!.surface.a, lessThan(1));
+  });
+
+  testWidgets('image theme keeps the four-tab bottom navigation on the image', (
+    tester,
+  ) async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+    await store.setAppearanceMode(AppAppearanceMode.image);
+    final theme = GuildAppTheme.light(store);
+
+    final tabs = <GuildWorkspaceTab>[
+      for (var index = 0; index < 4; index++)
+        GuildWorkspaceTab(
+          id: 'tab$index',
+          label: 'Tab $index',
+          icon: Icons.circle_outlined,
+          selectedIcon: Icons.circle,
+          page: const SizedBox.expand(),
+        ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: GuildWorkspaceShell(
+          tabs: tabs,
+          selectedIndex: 0,
+          onTabSelected: (_) {},
+          title: '排单',
+          ready: true,
+          contentAvailable: true,
+          mobileBody: const SizedBox.expand(),
+          desktopBody: const SizedBox.expand(),
+          drawer: const SizedBox.shrink(),
+          desktopToolMenu: const SizedBox.shrink(),
+          desktopNavigationOpen: false,
+          onDesktopNavigationChanged: (_) {},
+          toolSelected: false,
+        ),
+      ),
+    );
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect(scaffold.extendBody, isTrue);
+    expect(navigation.backgroundColor, Colors.transparent);
+
+    final effects = tester.widgetList<GuildSurfaceEffect>(
+      find.byType(GuildSurfaceEffect),
+    );
+    expect(
+      effects.any(
+        (effect) =>
+            effect.role == GuildEffectRole.chrome &&
+            effect.surface.a == 0,
+      ),
+      isTrue,
     );
   });
 
