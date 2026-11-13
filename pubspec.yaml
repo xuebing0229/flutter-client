@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+248
-# beta-248: publish Android test APK as arm64-v8a only (Flutter ABI override; screen-crop background import)
+version: 0.0.1+249
+# beta-249: fix image-cover raised surfaces and background-through bottom navigation
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
