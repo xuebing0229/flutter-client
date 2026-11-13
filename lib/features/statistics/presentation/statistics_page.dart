@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/guild_visual_theme.dart';
+
 import '../../shared/presentation/help_tooltip.dart';
 import '../../shared/presentation/layout_spacing.dart';
 
@@ -789,12 +791,22 @@ class _StatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: child,
+    final style = GuildStyleTheme.of(context);
+    final radius =
+        style.isClassic ? BorderRadius.circular(18) : style.cardBorderRadius;
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.content,
+      borderRadius: radius,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic
+            ? Theme.of(context).colorScheme.surface
+            : Colors.transparent,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: child,
+        ),
       ),
     );
   }
