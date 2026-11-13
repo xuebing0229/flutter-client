@@ -122,12 +122,17 @@ class GuildAppTheme {
     final glass = store.imageBackgroundMode == AppImageBackgroundMode.glass;
     final tintBase =
         brightness == Brightness.dark ? Colors.black : Colors.white;
+    final glassSurface = glass
+        ? tintBase.withValues(
+            alpha: brightness == Brightness.dark ? 0.30 : 0.42,
+          )
+        : Colors.transparent;
     final semantic = AppThemeSemanticColors(
       primary: font,
       accent: font,
       background: Colors.transparent,
-      surface: glass ? tintBase : Colors.transparent,
-      surfaceAlt: glass ? tintBase : Colors.transparent,
+      surface: glassSurface,
+      surfaceAlt: glassSurface,
       foreground: font,
       mutedForeground: font.withValues(alpha: 0.72),
       border: font.withValues(alpha: glass ? 0.26 : 0.34),

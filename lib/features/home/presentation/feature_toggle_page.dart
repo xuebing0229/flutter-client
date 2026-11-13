@@ -5,6 +5,7 @@ import '../../../core/features/app_feature_store.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../shared/presentation/spotlight_guide.dart';
 import '../../../core/notifications/order_deadline_reminder_service.dart';
+import '../../../core/theme/guild_visual_theme.dart';
 import 'reminder_background_guide.dart';
 
 class FeatureTogglePage extends StatelessWidget {
@@ -257,26 +258,37 @@ class _FeatureSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 14, 10, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+    final style = GuildStyleTheme.of(context);
+    final radius =
+        style.isClassic ? BorderRadius.circular(18) : style.cardBorderRadius;
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.content,
+      borderRadius: radius,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic
+            ? Theme.of(context).colorScheme.surface
+            : Colors.transparent,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 14, 10, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  title,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            ...children,
-          ],
+              const SizedBox(height: 6),
+              ...children,
+            ],
+          ),
         ),
       ),
     );
@@ -327,10 +339,20 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(padding: const EdgeInsets.all(14), child: child),
+    final style = GuildStyleTheme.of(context);
+    final radius =
+        style.isClassic ? BorderRadius.circular(16) : style.surfaceBorderRadius;
+    return GuildStyledSurface(
+      role: GuildSurfaceRole.inset,
+      borderRadius: radius,
+      backdropAvailable: style.isGlass,
+      child: Material(
+        color: style.isClassic
+            ? Theme.of(context).colorScheme.surfaceContainerLow
+            : Colors.transparent,
+        borderRadius: radius,
+        child: Padding(padding: const EdgeInsets.all(14), child: child),
+      ),
     );
   }
 }
