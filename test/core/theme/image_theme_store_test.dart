@@ -133,6 +133,37 @@ void main() {
     expect(glass.extension<GuildStyleTheme>()!.surface.a, lessThan(1));
   });
 
+  testWidgets('image themes do not repaint a synthetic backdrop over the image', (
+    tester,
+  ) async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    for (final mode in AppImageBackgroundMode.values) {
+      await store.setImageBackgroundMode(mode);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: GuildAppTheme.light(store),
+          home: const Scaffold(
+            body: GuildStyleBackdrop(
+              child: SizedBox.expand(),
+            ),
+          ),
+        ),
+      );
+      expect(
+        find.byType(GuildBackdropEffect),
+        findsNothing,
+        reason: '${mode.label} must show the imported image directly',
+      );
+    }
+  });
+
   testWidgets('image theme keeps the four-tab bottom navigation on the image', (
     tester,
   ) async {
