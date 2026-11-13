@@ -113,7 +113,11 @@ class _ScreenAspectImageCropPageState
                         controller: _controller,
                         image: widget.image,
                         aspectRatio: widget.aspectRatio,
-                        initialSize: 1,
+                        initialRectBuilder:
+                            InitialRectBuilder.withSizeAndRatio(
+                          size: 1,
+                          aspectRatio: widget.aspectRatio,
+                        ),
                         interactive: true,
                         fixCropRect: true,
                         willUpdateScale: (scale) => scale <= 8,
