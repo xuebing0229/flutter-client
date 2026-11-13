@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/guild_visual_theme.dart';
+
 import '../../shared/presentation/detail_form_widgets.dart';
 import '../../shared/presentation/layout_spacing.dart';
 import '../../shared/presentation/help_tooltip.dart';
@@ -166,18 +168,28 @@ class _ProductSaleHistoryPageState extends State<ProductSaleHistoryPage> {
                   final soldAt = records[occurrenceNumber - 1];
                   final client = product.clientNameForSale(soldAt);
 
+                  final style = GuildStyleTheme.of(context);
+                  final radius = style.isClassic
+                      ? BorderRadius.circular(16)
+                      : style.surfaceBorderRadius;
                   return Padding(
                     padding: EdgeInsets.only(
                       bottom: index == records.length - 1 ? 0 : 10,
                     ),
-                    child: Material(
-                      color: colors.surface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: colors.outlineVariant),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: ListTile(
+                    child: GuildStyledSurface(
+                      role: GuildSurfaceRole.content,
+                      borderRadius: radius,
+                      backdropAvailable: style.isGlass,
+                      child: Material(
+                        color: style.isClassic ? colors.surface : Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: radius,
+                          side: style.isClassic
+                              ? BorderSide(color: colors.outlineVariant)
+                              : BorderSide.none,
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: ListTile(
                         leading: Icon(
                           Icons.sell_outlined,
                           color: colors.primary,
@@ -194,7 +206,8 @@ class _ProductSaleHistoryPageState extends State<ProductSaleHistoryPage> {
                         ),
                         isThreeLine: true,
                         trailing: const Icon(Icons.edit_outlined, size: 20),
-                        onTap: () => _editClient(product, soldAt),
+                          onTap: () => _editClient(product, soldAt),
+                        ),
                       ),
                     ),
                   );
