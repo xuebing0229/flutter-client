@@ -121,7 +121,7 @@ class ReferenceImageTileFrame extends StatelessWidget {
               bottom: 5,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: colors.surface.withValues(alpha: 0.86),
+                  color: colors.surface.withValues(alpha: colors.surface.a * 0.86),
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Padding(
