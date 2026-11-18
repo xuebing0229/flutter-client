@@ -319,6 +319,98 @@ void main() {
     );
   });
 
+
+  testWidgets('image cover surface drops the opaque relief glow', (
+    tester,
+  ) async {
+    const oldReliefShadows = <BoxShadow>[
+      BoxShadow(
+        color: Color.fromRGBO(255, 255, 255, 0.94),
+        offset: Offset(-6, -6),
+        blurRadius: 12,
+      ),
+      BoxShadow(
+        color: Color.fromRGBO(163, 177, 198, 0.82),
+        offset: Offset(6, 6),
+        blurRadius: 12,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GuildSurfaceEffect(
+            key: const Key('cover-effect'),
+            style: AppUiStyle.relief,
+            role: GuildEffectRole.chrome,
+            primary: Colors.blue,
+            accent2: Colors.purple,
+            accent3: Colors.orange,
+            background: Colors.transparent,
+            surface: Colors.transparent,
+            surfaceAlt: Colors.transparent,
+            foreground: Colors.black,
+            borderColor: Colors.blue,
+            borderWidth: 1,
+            borderRadius: const BorderRadius.all(Radius.circular(16)),
+            shadows: oldReliefShadows,
+            glassBlur: 0,
+            glassOpacity: 1,
+            backdropAvailable: false,
+            child: const SizedBox(width: 120, height: 60),
+          ),
+        ),
+      ),
+    );
+
+    final decorations = tester
+        .widgetList<DecoratedBox>(
+          find.descendant(
+            of: find.byKey(const Key('cover-effect')),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>();
+    final renderedShadows = <BoxShadow>[
+      for (final decoration in decorations)
+        ...?decoration.boxShadow,
+    ];
+
+    expect(renderedShadows, isNotEmpty);
+    expect(
+      renderedShadows.every((shadow) => shadow.color.a <= 0.20),
+      isTrue,
+    );
+    expect(
+      renderedShadows.any((shadow) => shadow.color.a > 0.80),
+      isFalse,
+    );
+  });
+
+  test('image theme disabled chips preserve the existing surface alpha', () async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+    final cover = GuildAppTheme.light(store);
+    expect(cover.chipTheme.disabledColor?.a, 0);
+
+    await store.setImageBackgroundMode(AppImageBackgroundMode.glass);
+    final glass = GuildAppTheme.light(store);
+    final surfaceAlpha = glass.colorScheme.surface.a;
+    final disabledAlpha = glass.chipTheme.disabledColor?.a;
+    expect(disabledAlpha, isNotNull);
+    expect(disabledAlpha!, greaterThan(0));
+    expect(disabledAlpha, lessThan(surfaceAlpha));
+    expect(disabledAlpha, closeTo(surfaceAlpha * 0.55, 0.01));
+  });
+
   testWidgets('image theme makes Android system bars transparent', (
     tester,
   ) async {
