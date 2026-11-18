@@ -180,6 +180,26 @@ class GuildAppTheme {
             Colors.black.withValues(alpha: 0.22);
     final coverTokens = base.extension<GuildStyleTheme>();
     final coverRadius = coverTokens?.cardRadius ?? 20;
+    final imageTokens = coverTokens?.copyWith(
+      shadows: glass
+          ? coverTokens.shadows
+          : <BoxShadow>[
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14),
+                offset: const Offset(0, 3),
+                blurRadius: 9,
+              ),
+            ],
+      chromeShadows: glass
+          ? coverTokens.chromeShadows
+          : <BoxShadow>[
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.16),
+                offset: const Offset(0, 4),
+                blurRadius: 12,
+              ),
+            ],
+    );
 
     ButtonStyle transparentButton(ButtonStyle? current) {
       return (current ?? const ButtonStyle()).copyWith(
@@ -204,6 +224,13 @@ class GuildAppTheme {
     );
 
     return base.copyWith(
+      extensions: imageTokens == null
+          ? base.extensions.values
+          : <ThemeExtension<dynamic>>[
+              for (final extension in base.extensions.values)
+                if (extension is! GuildStyleTheme) extension,
+              imageTokens,
+            ],
       canvasColor: Colors.transparent,
       scaffoldBackgroundColor: Colors.transparent,
       appBarTheme: base.appBarTheme.copyWith(
