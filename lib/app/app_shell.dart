@@ -43,7 +43,25 @@ class GuildMaterialApp extends StatelessWidget {
         if (!themeStore.isImageThemeActive ||
             encoded == null ||
             encoded.isEmpty) {
-          return child ?? const SizedBox.shrink();
+          final theme = Theme.of(context);
+          final dark = theme.brightness == Brightness.dark;
+          final navigationBarColor =
+              theme.navigationBarTheme.backgroundColor ??
+                  theme.colorScheme.surface;
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness:
+                  dark ? Brightness.light : Brightness.dark,
+              systemStatusBarContrastEnforced: false,
+              systemNavigationBarColor: navigationBarColor,
+              systemNavigationBarDividerColor: Colors.transparent,
+              systemNavigationBarIconBrightness:
+                  dark ? Brightness.light : Brightness.dark,
+              systemNavigationBarContrastEnforced: false,
+            ),
+            child: child ?? const SizedBox.shrink(),
+          );
         }
 
         Widget content;
