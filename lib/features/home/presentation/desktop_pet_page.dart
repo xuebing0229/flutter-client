@@ -1032,7 +1032,7 @@ class _PlacementCanvas extends StatelessWidget {
                 bottom: 8,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: colors.surface.withValues(alpha: 0.88),
+                    color: colors.surface.withValues(alpha: colors.surface.a * 0.88),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Padding(
