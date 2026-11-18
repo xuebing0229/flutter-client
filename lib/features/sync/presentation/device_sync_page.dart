@@ -402,7 +402,7 @@ class _ConflictTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: colors.surfaceContainerHighest.withValues(\n            alpha: colors.surfaceContainerHighest.a * 0.45,\n          ),
         borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.all(12),
