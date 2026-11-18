@@ -306,7 +306,7 @@ class _DetailedGuideCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
 
     return Material(
-      color: colors.surfaceContainerHighest.withValues(alpha: .38),
+      color: colors.surfaceContainerHighest.withValues(\n        alpha: colors.surfaceContainerHighest.a * .38,\n      ),
       borderRadius: BorderRadius.circular(18),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
