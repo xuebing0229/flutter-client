@@ -230,6 +230,48 @@ void main() {
   });
 
 
+
+  test('image theme component surfaces preserve the image surface alpha', () async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    for (final mode in AppImageBackgroundMode.values) {
+      await store.setImageBackgroundMode(mode);
+      final theme = GuildAppTheme.light(store);
+      final tokens = theme.extension<GuildStyleTheme>()!;
+      final expectedSurface = tokens.surface;
+      final expectedAlt = tokens.surfaceAlt;
+
+      expect(theme.appBarTheme.backgroundColor, expectedSurface);
+      expect(theme.navigationBarTheme.backgroundColor, expectedSurface);
+      expect(theme.dialogTheme.backgroundColor, expectedSurface);
+      expect(theme.popupMenuTheme.color, expectedSurface);
+      expect(theme.bottomSheetTheme.backgroundColor, expectedSurface);
+      expect(theme.bottomSheetTheme.modalBackgroundColor, expectedSurface);
+      expect(theme.inputDecorationTheme.fillColor, expectedAlt);
+      expect(theme.snackBarTheme.backgroundColor, expectedAlt);
+
+      final menuBackground =
+          theme.dropdownMenuTheme.menuStyle?.backgroundColor?.resolve({});
+      expect(menuBackground, expectedAlt);
+
+      if (mode == AppImageBackgroundMode.cover) {
+        expect(expectedSurface.a, 0);
+        expect(expectedAlt.a, 0);
+      } else {
+        expect(expectedSurface.a, greaterThan(0));
+        expect(expectedSurface.a, lessThan(1));
+        expect(expectedAlt.a, greaterThan(0));
+        expect(expectedAlt.a, lessThan(1));
+      }
+    }
+  });
+
   testWidgets('image glass uses the supplied translucent surface instead of generic white fill', (
     tester,
   ) async {
