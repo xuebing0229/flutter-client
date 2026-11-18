@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+250
-# beta-250: complete image-theme surface pass (raised cover, translucent glass, bottom-nav backdrop)
+version: 0.0.1+251
+# beta-251: complete image-theme transparency pass (all surfaces + Android system bars)
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
