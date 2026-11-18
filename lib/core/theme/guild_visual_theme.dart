@@ -141,9 +141,10 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
       _ => null,
     };
 
+    final imageBackdrop = background.a == 0;
     return BoxDecoration(
       color: gradient == null
-          ? (style == AppUiStyle.glass
+          ? (style == AppUiStyle.glass && !imageBackdrop
               ? Colors.white.withValues(
                   alpha: foreground.computeLuminance() < 0.35 ? 0.55 : 0.04,
                 )
@@ -227,6 +228,7 @@ abstract final class GuildVisualTheme {
     );
     final colors = resolved.colors;
     final tokens = resolved.tokens;
+    final imageBackdrop = tokens.background.a == 0;
     final selectedSurface = _mix(tokens.surfaceAlt, colors.primary, 0.20);
     final onPrimary = _contrast(colors.primary);
     final squareOrRounded = RoundedRectangleBorder(
@@ -257,17 +259,21 @@ abstract final class GuildVisualTheme {
       highlightColor: colors.primary.withValues(alpha: 0.08),
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: style == AppUiStyle.glass
-            ? tokens.surface.withValues(alpha: tokens.glassOpacity)
-            : tokens.surface,
+        backgroundColor: imageBackdrop
+            ? tokens.surface
+            : style == AppUiStyle.glass
+                ? tokens.surface.withValues(alpha: tokens.glassOpacity)
+                : tokens.surface,
         foregroundColor: tokens.foreground,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: style == AppUiStyle.glass
-            ? tokens.surface.withValues(alpha: tokens.glassOpacity)
-            : tokens.surface,
+        backgroundColor: imageBackdrop
+            ? tokens.surface
+            : style == AppUiStyle.glass
+                ? tokens.surface.withValues(alpha: tokens.glassOpacity)
+                : tokens.surface,
         indicatorColor: style == AppUiStyle.glass
             ? colors.primary.withValues(
                 alpha: colors.brightness == Brightness.dark ? 0.18 : 0.15,
@@ -324,9 +330,11 @@ abstract final class GuildVisualTheme {
         shape: squareOrRounded,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: style == AppUiStyle.glass
-            ? tokens.surface.withValues(alpha: 0.72)
-            : tokens.surface,
+        backgroundColor: imageBackdrop
+            ? tokens.surface
+            : style == AppUiStyle.glass
+                ? tokens.surface.withValues(alpha: 0.72)
+                : tokens.surface,
         surfaceTintColor: Colors.transparent,
         elevation: _overlayElevation(style),
         shadowColor: _overlayShadow(style, tokens, colors),
@@ -338,21 +346,27 @@ abstract final class GuildVisualTheme {
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: style == AppUiStyle.glass
-            ? tokens.surface.withValues(alpha: 0.78)
-            : tokens.surface,
+        color: imageBackdrop
+            ? tokens.surface
+            : style == AppUiStyle.glass
+                ? tokens.surface.withValues(alpha: 0.78)
+                : tokens.surface,
         surfaceTintColor: Colors.transparent,
         elevation: _overlayElevation(style),
         shadowColor: _overlayShadow(style, tokens, colors),
         shape: squareOrRounded,
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: style == AppUiStyle.glass
-            ? tokens.surface.withValues(alpha: 0.76)
-            : tokens.surface,
-        modalBackgroundColor: style == AppUiStyle.glass
-            ? tokens.surface.withValues(alpha: 0.76)
-            : tokens.surface,
+        backgroundColor: imageBackdrop
+            ? tokens.surface
+            : style == AppUiStyle.glass
+                ? tokens.surface.withValues(alpha: 0.76)
+                : tokens.surface,
+        modalBackgroundColor: imageBackdrop
+            ? tokens.surface
+            : style == AppUiStyle.glass
+                ? tokens.surface.withValues(alpha: 0.76)
+                : tokens.surface,
         surfaceTintColor: Colors.transparent,
         elevation: _overlayElevation(style),
         modalElevation: _overlayElevation(style),
@@ -432,15 +446,17 @@ abstract final class GuildVisualTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: style != AppUiStyle.minimal,
-        fillColor: switch (style) {
-          AppUiStyle.glass => colors.brightness == Brightness.light
-              ? Colors.white.withValues(alpha: 0.50)
-              : Colors.white.withValues(alpha: 0.05),
-          AppUiStyle.relief => tokens.background,
-          AppUiStyle.clay => tokens.background,
-          AppUiStyle.collage => tokens.surface,
-          _ => tokens.surfaceAlt,
-        },
+        fillColor: imageBackdrop
+            ? tokens.surfaceAlt
+            : switch (style) {
+                AppUiStyle.glass => colors.brightness == Brightness.light
+                    ? Colors.white.withValues(alpha: 0.50)
+                    : Colors.white.withValues(alpha: 0.05),
+                AppUiStyle.relief => tokens.background,
+                AppUiStyle.clay => tokens.background,
+                AppUiStyle.collage => tokens.surface,
+                _ => tokens.surfaceAlt,
+              },
         border: inputBorder,
         enabledBorder: inputBorder,
         focusedBorder: _focusedInputBorder(tokens, colors.primary),
@@ -526,6 +542,34 @@ abstract final class GuildVisualTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(tokens.radius),
         ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: imageBackdrop ? tokens.surfaceAlt : null,
+        contentTextStyle:
+            imageBackdrop ? TextStyle(color: tokens.foreground) : null,
+        actionTextColor: imageBackdrop ? colors.primary : null,
+        elevation: imageBackdrop ? 0 : null,
+        shape: imageBackdrop
+            ? RoundedRectangleBorder(
+                borderRadius: tokens.surfaceBorderRadius,
+                side: BorderSide(
+                  color: tokens.borderWidth > 0
+                      ? tokens.borderColor
+                      : colors.primary.withValues(alpha: 0.35),
+                  width: tokens.borderWidth > 0 ? tokens.borderWidth : 1,
+                ),
+              )
+            : null,
+        behavior: imageBackdrop ? SnackBarBehavior.floating : null,
+      ),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        menuStyle: imageBackdrop
+            ? MenuStyle(
+                backgroundColor: WidgetStatePropertyAll(tokens.surfaceAlt),
+                surfaceTintColor:
+                    const WidgetStatePropertyAll(Colors.transparent),
+              )
+            : null,
       ),
       listTileTheme: ListTileThemeData(
         textColor: tokens.foreground,

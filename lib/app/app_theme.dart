@@ -170,11 +170,10 @@ class GuildAppTheme {
             alpha: brightness == Brightness.dark ? 0.30 : 0.42,
           )
         : Colors.transparent;
-    final overlayLayer = glass
-        ? tintBase.withValues(
-            alpha: brightness == Brightness.dark ? 0.48 : 0.62,
-          )
-        : Colors.transparent;
+    // Image overlays must use the same theme surface alpha as cards and
+    // controls. A second 48/62% black/white layer turns dialogs, menus and
+    // bottom sheets into opaque-looking slabs over the imported image.
+    final overlayLayer = layer;
     final side = BorderSide(
       color: font.withValues(alpha: glass ? 0.24 : 0.42),
       width: 1,

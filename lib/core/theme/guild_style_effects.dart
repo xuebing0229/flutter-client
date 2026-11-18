@@ -122,6 +122,8 @@ class GuildSurfaceEffect extends StatelessWidget {
                         : 0.04,
               );
 
+    final imageBackdrop = background.a == 0;
+
     final effectiveSurface = switch (style) {
       // The reference primary neumorphic button keeps the same base material
       // and changes only its foreground accent.
@@ -219,7 +221,10 @@ class GuildSurfaceEffect extends StatelessWidget {
 
     return BoxDecoration(
       color: style == AppUiStyle.glass
-          ? glassFill
+          // Image-theme glass already supplies the intended translucent
+          // surface (or transparent chrome). Do not replace it with the
+          // generic 55-60% white glass fill, which hides the background.
+          ? (imageBackdrop ? effectiveSurface : glassFill)
           : gradient == null
               ? effectiveSurface
               : null,
