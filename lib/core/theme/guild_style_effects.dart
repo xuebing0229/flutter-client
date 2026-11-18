@@ -104,23 +104,36 @@ class GuildSurfaceEffect extends StatelessWidget {
   BoxDecoration _surfaceDecoration() {
     final lightGlass = foreground.computeLuminance() < 0.35;
     final emphasized = role == GuildEffectRole.emphasized;
-    final glassFill = emphasized
-        ? primary.withValues(alpha: lightGlass ? 0.15 : 0.25)
-        : lightGlass
-            ? Colors.white.withValues(
-                alpha: _inset
-                    ? 0.50
-                    : role == GuildEffectRole.chrome
-                        ? 0.60
-                        : 0.55,
-              )
-            : Colors.white.withValues(
-                alpha: _inset
-                    ? 0.05
-                    : role == GuildEffectRole.chrome
-                        ? 0.06
-                        : 0.04,
-              );
+    final imageBackdrop = background.a == 0;
+    final imageGlassMultiplier = switch (role) {
+      GuildEffectRole.inset => 0.82,
+      GuildEffectRole.chrome => 1.0,
+      GuildEffectRole.content => 0.92,
+      GuildEffectRole.emphasized => 0.72,
+    };
+    final glassFill = imageBackdrop
+        ? (emphasized
+            ? primary.withValues(alpha: 0.10)
+            : surface.withValues(
+                alpha: surface.a * imageGlassMultiplier,
+              ))
+        : emphasized
+            ? primary.withValues(alpha: lightGlass ? 0.15 : 0.25)
+            : lightGlass
+                ? Colors.white.withValues(
+                    alpha: _inset
+                        ? 0.50
+                        : role == GuildEffectRole.chrome
+                            ? 0.60
+                            : 0.55,
+                  )
+                : Colors.white.withValues(
+                    alpha: _inset
+                        ? 0.05
+                        : role == GuildEffectRole.chrome
+                            ? 0.06
+                            : 0.04,
+                  );
 
     final effectiveSurface = switch (style) {
       // The reference primary neumorphic button keeps the same base material
