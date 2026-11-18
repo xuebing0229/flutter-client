@@ -545,8 +545,9 @@ abstract final class GuildVisualTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: imageBackdrop ? tokens.surfaceAlt : null,
-        contentTextStyle: TextStyle(color: tokens.foreground),
-        actionTextColor: colors.primary,
+        contentTextStyle:
+            imageBackdrop ? TextStyle(color: tokens.foreground) : null,
+        actionTextColor: imageBackdrop ? colors.primary : null,
         elevation: imageBackdrop ? 0 : null,
         shape: imageBackdrop
             ? RoundedRectangleBorder(
@@ -562,13 +563,13 @@ abstract final class GuildVisualTheme {
         behavior: imageBackdrop ? SnackBarBehavior.floating : null,
       ),
       dropdownMenuTheme: DropdownMenuThemeData(
-        menuStyle: MenuStyle(
-          backgroundColor: imageBackdrop
-              ? WidgetStatePropertyAll(tokens.surfaceAlt)
-              : null,
-          surfaceTintColor:
-              const WidgetStatePropertyAll(Colors.transparent),
-        ),
+        menuStyle: imageBackdrop
+            ? MenuStyle(
+                backgroundColor: WidgetStatePropertyAll(tokens.surfaceAlt),
+                surfaceTintColor:
+                    const WidgetStatePropertyAll(Colors.transparent),
+              )
+            : null,
       ),
       listTileTheme: ListTileThemeData(
         textColor: tokens.foreground,
