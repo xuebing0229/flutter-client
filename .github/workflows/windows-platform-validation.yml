@@ -3,6 +3,8 @@ name: Embedded Sync and Windows Validation
 on:
   pull_request:
     paths:
+      - 'lib/main.dart'
+      - 'lib/app/app_shell.dart'
       - 'lib/core/update/**'
       - 'lib/core/sync/**'
       - 'android/app/build.gradle.kts'
