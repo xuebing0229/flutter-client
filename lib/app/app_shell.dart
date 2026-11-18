@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/theme/app_theme_background.dart';
@@ -44,9 +45,11 @@ class GuildMaterialApp extends StatelessWidget {
             encoded.isEmpty) {
           return child ?? const SizedBox.shrink();
         }
+
+        Widget content;
         try {
           final bytes = base64Decode(encoded);
-          return Stack(
+          content = Stack(
             fit: StackFit.expand,
             children: [
               Positioned.fill(
@@ -72,8 +75,25 @@ class GuildMaterialApp extends StatelessWidget {
             ],
           );
         } catch (_) {
-          return child ?? const SizedBox.shrink();
+          content = child ?? const SizedBox.shrink();
         }
+
+        final font = themeStore.imageFontColor;
+        final iconBrightness = font.computeLuminance() > 0.55
+            ? Brightness.light
+            : Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: iconBrightness,
+            systemStatusBarContrastEnforced: false,
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+            systemNavigationBarIconBrightness: iconBrightness,
+            systemNavigationBarContrastEnforced: false,
+          ),
+          child: content,
+        );
       },
       home: home,
     );
