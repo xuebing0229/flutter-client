@@ -141,12 +141,17 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
       _ => null,
     };
 
+    final imageBackdrop = background.a == 0;
+
     return BoxDecoration(
       color: gradient == null
           ? (style == AppUiStyle.glass
-              ? Colors.white.withValues(
-                  alpha: foreground.computeLuminance() < 0.35 ? 0.55 : 0.04,
-                )
+              ? (imageBackdrop
+                  ? base
+                  : Colors.white.withValues(
+                      alpha:
+                          foreground.computeLuminance() < 0.35 ? 0.55 : 0.04,
+                    ))
               : base)
           : null,
       gradient: gradient,
