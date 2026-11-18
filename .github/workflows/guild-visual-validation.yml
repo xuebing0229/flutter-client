@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'lib/app/app.dart'
+      - 'lib/app/app_shell.dart'
       - 'lib/app/app_theme.dart'
       - 'lib/core/theme/**'
       - 'lib/features/home/presentation/home_page.dart'
