@@ -316,7 +316,9 @@ class _SyncTransferProgress extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: colors.surfaceContainerHighest.withValues(
+          alpha: colors.surfaceContainerHighest.a * 0.5,
+        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -402,7 +404,9 @@ class _ConflictTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Material(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: colors.surfaceContainerHighest.withValues(
+            alpha: colors.surfaceContainerHighest.a * 0.45,
+          ),
         borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.all(12),

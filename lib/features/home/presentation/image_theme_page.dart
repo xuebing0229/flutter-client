@@ -286,8 +286,8 @@ class _ImageThemePreview extends StatelessWidget {
 
     final darkText = fontColor.computeLuminance() < 0.55;
     final glassColor = darkText
-        ? Colors.white.withValues(alpha: 0.58)
-        : Colors.black.withValues(alpha: 0.34);
+        ? Colors.white.withValues(alpha: 0.42)
+        : Colors.black.withValues(alpha: 0.30);
     final surfaceStyle = GuildStyleTheme.of(context);
 
     final screenAspectRatio = MediaQuery.sizeOf(context).aspectRatio;

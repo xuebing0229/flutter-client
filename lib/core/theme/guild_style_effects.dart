@@ -307,7 +307,21 @@ class GuildSurfaceEffect extends StatelessWidget {
   List<BoxShadow> _surfaceShadows() {
     if (_inset) return const <BoxShadow>[];
     return switch (style) {
-      AppUiStyle.relief => shadows,
+      AppUiStyle.relief => background.a == 0
+          ? <BoxShadow>[
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: role == GuildEffectRole.chrome ? 0.16 : 0.12,
+                ),
+                offset: Offset(
+                  0,
+                  role == GuildEffectRole.chrome ? 4 : 3,
+                ),
+                blurRadius:
+                    role == GuildEffectRole.chrome ? 12 : 9,
+              ),
+            ]
+          : shadows,
       AppUiStyle.bold => <BoxShadow>[
           BoxShadow(
             color: foreground,
