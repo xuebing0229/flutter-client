@@ -316,7 +316,7 @@ class _SyncTransferProgress extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: colors.surfaceContainerHighest.withValues(\n          alpha: colors.surfaceContainerHighest.a * 0.5,\n        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
