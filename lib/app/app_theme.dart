@@ -122,11 +122,8 @@ class GuildAppTheme {
     final glass = store.imageBackgroundMode == AppImageBackgroundMode.glass;
     final tintBase =
         brightness == Brightness.dark ? Colors.black : Colors.white;
-    final glassSurface = glass
-        ? tintBase.withValues(
-            alpha: brightness == Brightness.dark ? 0.30 : 0.42,
-          )
-        : Colors.transparent;
+    final glassSurface =
+        glass ? tintBase.withValues(alpha: 0.18) : Colors.transparent;
     final semantic = AppThemeSemanticColors(
       primary: font,
       accent: font,
@@ -165,16 +162,10 @@ class GuildAppTheme {
   }) {
     final tintBase =
         brightness == Brightness.dark ? Colors.black : Colors.white;
-    final layer = glass
-        ? tintBase.withValues(
-            alpha: brightness == Brightness.dark ? 0.30 : 0.42,
-          )
-        : Colors.transparent;
-    final overlayLayer = glass
-        ? tintBase.withValues(
-            alpha: brightness == Brightness.dark ? 0.48 : 0.62,
-          )
-        : Colors.transparent;
+    final layer =
+        glass ? tintBase.withValues(alpha: 0.18) : Colors.transparent;
+    final overlayLayer =
+        glass ? tintBase.withValues(alpha: 0.28) : Colors.transparent;
     final side = BorderSide(
       color: font.withValues(alpha: glass ? 0.24 : 0.42),
       width: 1,
