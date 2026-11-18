@@ -250,6 +250,7 @@ class GuildAppTheme {
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: layer,
         selectedColor: font.withValues(alpha: 0.16),
+        disabledColor: layer.withValues(alpha: layer.a * 0.55),
         side: glass ? base.chipTheme.side : side,
       ),
       filledButtonTheme: glass
