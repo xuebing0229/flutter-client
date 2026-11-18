@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flutter_app/app/app_shell.dart';
 import 'package:flutter_app/app/app_theme.dart';
 import 'package:flutter_app/core/theme/app_theme_background.dart';
 import 'package:flutter_app/core/theme/app_theme_palette.dart';
@@ -131,6 +132,118 @@ void main() {
     expect(glass.colorScheme.surfaceContainer.a, greaterThan(0));
     expect(glass.colorScheme.surfaceContainer.a, lessThan(1));
     expect(glass.extension<GuildStyleTheme>()!.surface.a, lessThan(1));
+  });
+
+
+  testWidgets('image glass surface paints only a light translucent layer', (
+    tester,
+  ) async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setImageBackgroundMode(AppImageBackgroundMode.glass);
+    await store.setAppearanceMode(AppAppearanceMode.image);
+    final theme = GuildAppTheme.light(store);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          body: Center(
+            child: GuildStyledSurface(
+              key: const Key('image-glass-surface'),
+              role: GuildSurfaceRole.chrome,
+              backdropAvailable: true,
+              child: const SizedBox(width: 120, height: 80),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final decorated = tester.widgetList<DecoratedBox>(
+      find.descendant(
+        of: find.byKey(const Key('image-glass-surface')),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    final fills = <Color>[
+      for (final box in decorated)
+        if (box.decoration case final BoxDecoration decoration)
+          if (decoration.color case final Color color) color,
+    ];
+
+    expect(fills, isNotEmpty);
+    for (final fill in fills) {
+      expect(
+        fill.a,
+        lessThanOrEqualTo(0.20),
+        reason: 'image glass must not inject the old 50-60% white panel',
+      );
+    }
+  });
+
+  test('full-cover image theme drops the opaque neumorphic glow', () async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    final tokens =
+        GuildAppTheme.light(store).extension<GuildStyleTheme>()!;
+    expect(tokens.shadows, isNotEmpty);
+    expect(tokens.chromeShadows, isNotEmpty);
+    for (final shadow in <BoxShadow>[
+      ...tokens.shadows,
+      ...tokens.chromeShadows,
+    ]) {
+      expect(
+        shadow.color.a,
+        lessThanOrEqualTo(0.20),
+        reason: 'cover mode must not reuse the 94% white relief glow',
+      );
+    }
+  });
+
+  testWidgets('image app requests a transparent Android navigation bar', (
+    tester,
+  ) async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      name: 'pixel.png',
+    );
+    await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    await tester.pumpWidget(
+      GuildMaterialApp(
+        themeStore: store,
+        home: const Scaffold(body: SizedBox.expand()),
+      ),
+    );
+    await tester.pump();
+
+    final regions = tester.widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+      find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+    );
+    expect(
+      regions.any(
+        (region) =>
+            region.value.systemNavigationBarColor == Colors.transparent &&
+            region.value.systemNavigationBarContrastEnforced == false,
+      ),
+      isTrue,
+    );
   });
 
   testWidgets('image themes do not repaint a synthetic backdrop over the image', (
