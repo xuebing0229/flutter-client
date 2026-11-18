@@ -205,7 +205,7 @@ Future<void> showAbstractModeGuide(
                       final colors = Theme.of(context).colorScheme;
                       return Material(
                         color: colors.surfaceContainerHighest.withValues(
-                          alpha: .38,
+                          alpha: colors.surfaceContainerHighest.a * .38,
                         ),
                         borderRadius: BorderRadius.circular(18),
                         child: Padding(
