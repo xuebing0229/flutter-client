@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flutter_app/app/app_shell.dart';
 import 'package:flutter_app/app/app_theme.dart';
 import 'package:flutter_app/core/theme/app_theme_background.dart';
 import 'package:flutter_app/core/theme/app_theme_palette.dart';
@@ -225,6 +227,83 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+
+  testWidgets('image glass uses the supplied translucent surface instead of generic white fill', (
+    tester,
+  ) async {
+    const suppliedSurface = Color(0x33777777);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GuildSurfaceEffect(
+            style: AppUiStyle.glass,
+            role: GuildEffectRole.chrome,
+            primary: Colors.blue,
+            accent2: Colors.purple,
+            accent3: Colors.orange,
+            background: Colors.transparent,
+            surface: suppliedSurface,
+            surfaceAlt: suppliedSurface,
+            foreground: Colors.black,
+            borderColor: Colors.blue,
+            borderWidth: 1,
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+            shadows: const <BoxShadow>[],
+            glassBlur: 16,
+            glassOpacity: 0.55,
+            backdropAvailable: true,
+            child: SizedBox(width: 120, height: 60),
+          ),
+        ),
+      ),
+    );
+
+    final decorations = tester
+        .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>()
+        .toList();
+    expect(
+      decorations.any((decoration) => decoration.color == suppliedSurface),
+      isTrue,
+    );
+    expect(
+      decorations.any(
+        (decoration) => decoration.color == Colors.white.withValues(alpha: 0.60),
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets('image theme makes Android system bars transparent', (
+    tester,
+  ) async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      name: 'background.png',
+    );
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    await tester.pumpWidget(
+      GuildMaterialApp(
+        themeStore: store,
+        home: const Scaffold(body: SizedBox.expand()),
+      ),
+    );
+    await tester.pump();
+
+    final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+      find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+    );
+    expect(region.value.statusBarColor, Colors.transparent);
+    expect(region.value.systemNavigationBarColor, Colors.transparent);
+    expect(region.value.systemNavigationBarDividerColor, Colors.transparent);
+    expect(region.value.systemNavigationBarContrastEnforced, isFalse);
   });
 
   test('reset returns to color theme without deleting image theme data', () async {
