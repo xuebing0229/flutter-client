@@ -225,12 +225,8 @@ class GuildAppTheme {
 
     return base.copyWith(
       extensions: imageTokens == null
-          ? base.extensions.values
-          : <ThemeExtension<dynamic>>[
-              for (final extension in base.extensions.values)
-                if (extension is! GuildStyleTheme) extension,
-              imageTokens,
-            ],
+          ? null
+          : <ThemeExtension<dynamic>>[imageTokens],
       canvasColor: Colors.transparent,
       scaffoldBackgroundColor: Colors.transparent,
       appBarTheme: base.appBarTheme.copyWith(
