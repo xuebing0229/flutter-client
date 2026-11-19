@@ -319,6 +319,59 @@ void main() {
     );
   });
 
+  testWidgets('Android edge-to-edge is scoped to image theme only', (
+    tester,
+  ) async {
+    const channel = MethodChannel('app.image_theme_system_ui');
+    final calls = <String>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call.method);
+      return null;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    final store = _MemoryThemeStore();
+    await store.load();
+
+    Widget app() => GuildMaterialApp(
+          themeStore: store,
+          home: const Scaffold(body: SizedBox.expand()),
+        );
+
+    await tester.pumpWidget(app());
+    await tester.pump();
+    expect(
+      calls,
+      isEmpty,
+      reason: '普通主题启动时不应主动接管 Android 系统栏',
+    );
+
+    await store.setImageBackground(
+      base64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      name: 'background.png',
+    );
+    await store.setAppearanceMode(AppAppearanceMode.image);
+    await tester.pumpWidget(app());
+    await tester.pump();
+    expect(calls, <String>['enterImageTheme']);
+
+    await store.setAppearanceMode(AppAppearanceMode.color);
+    await tester.pumpWidget(app());
+    await tester.pump();
+    expect(
+      calls,
+      <String>['enterImageTheme', 'exitImageTheme'],
+      reason: '退出图片主题后必须恢复进入前的 Android window 状态',
+    );
+  });
+
   testWidgets('image theme makes Android system bars transparent', (
     tester,
   ) async {
