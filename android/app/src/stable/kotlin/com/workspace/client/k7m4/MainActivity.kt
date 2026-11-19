@@ -11,11 +11,16 @@ class MainActivity : FlutterActivity() {
     private lateinit var syncthingBridge: SyncthingBridge
     private lateinit var screenshotOcrBridge: ScreenshotOcrBridge
     private lateinit var licenseDirectHttpsBridge: LicenseDirectHttpsBridge
+    private lateinit var imageThemeSystemUiBridge: ImageThemeSystemUiBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         licenseDirectHttpsBridge = LicenseDirectHttpsBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
+
+        imageThemeSystemUiBridge = ImageThemeSystemUiBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
 
