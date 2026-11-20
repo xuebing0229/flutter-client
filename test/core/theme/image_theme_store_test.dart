@@ -12,6 +12,7 @@ import 'package:flutter_app/core/theme/app_ui_style.dart';
 import 'package:flutter_app/core/theme/guild_visual_theme.dart';
 import 'package:flutter_app/core/theme/guild_style_effects.dart';
 import 'package:flutter_app/features/home/presentation/workspace_shell.dart';
+import 'package:flutter_app/features/home/presentation/image_theme_page.dart';
 
 class _MemoryThemeStore extends AppThemeStore {
   Map<String, dynamic>? initial;
@@ -214,6 +215,89 @@ void main() {
       );
     },
   );
+
+  testWidgets('image-theme preview reuses the real styled surface', (
+    tester,
+  ) async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      // 1x1 transparent PNG; the preview only needs a decodable image.
+      base64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      name: 'preview.png',
+    );
+    await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: GuildAppTheme.light(store),
+        home: ImageThemePage(store: store),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('全图覆盖模式'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.text('全图覆盖模式'),
+        matching: find.byType(GuildStyledSurface),
+      ),
+      findsOneWidget,
+      reason: '设置页示例必须复用实际控件表面，不能再手写一套假预览',
+    );
+  });
+
+  testWidgets('glass surfaces share backdrop capture only within the same role', (
+    tester,
+  ) async {
+    Widget surface(GuildEffectRole role) => GuildSurfaceEffect(
+          style: AppUiStyle.glass,
+          role: role,
+          primary: Colors.blue,
+          accent2: Colors.purple,
+          accent3: Colors.orange,
+          background: Colors.transparent,
+          surface: Colors.white.withValues(alpha: 0.32),
+          surfaceAlt: Colors.white.withValues(alpha: 0.24),
+          foreground: Colors.black,
+          borderColor: Colors.white.withValues(alpha: 0.42),
+          borderWidth: 1,
+          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          shadows: const <BoxShadow>[],
+          glassBlur: 12,
+          glassOpacity: 0.32,
+          backdropAvailable: true,
+          child: const SizedBox(width: 80, height: 40),
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              surface(GuildEffectRole.content),
+              surface(GuildEffectRole.content),
+              surface(GuildEffectRole.inset),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final filters = tester.widgetList<BackdropFilter>(
+      find.byType(BackdropFilter),
+    ).toList();
+    expect(filters, hasLength(3));
+    expect(filters[0].backdropGroupKey, isNotNull);
+    expect(filters[0].backdropGroupKey, same(filters[1].backdropGroupKey));
+    expect(
+      filters[2].backdropGroupKey,
+      isNot(same(filters[0].backdropGroupKey)),
+      reason: '父卡片和内部控件可能重叠，不能共用同一个 backdrop key',
+    );
+  });
 
   testWidgets('image themes do not repaint a synthetic backdrop over the image', (
     tester,
