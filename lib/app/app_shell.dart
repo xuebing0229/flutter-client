@@ -29,6 +29,15 @@ class GuildMaterialApp extends StatelessWidget {
         themeStore.isImageThemeActive &&
         encoded != null &&
         encoded.isNotEmpty;
+    // Android's default stretching overscroll can temporarily suppress a
+    // BackdropFilter while a short list is pulled past its edge (Flutter
+    // issue #138940). Only image-glass mode disables that decoration;
+    // standard scrolling and every other appearance mode remain unchanged.
+    final disableImageGlassStretch =
+        imageSystemUiActive &&
+        themeStore.imageBackgroundMode == AppImageBackgroundMode.glass &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android;
 
     return _ImageThemeSystemUiScope(
       active: imageSystemUiActive,
@@ -36,6 +45,9 @@ class GuildMaterialApp extends StatelessWidget {
         navigatorKey: navigatorKey,
         title: '冒险者公会',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: disableImageGlassStretch
+            ? const MaterialScrollBehavior().copyWith(overscroll: false)
+            : null,
         locale: const Locale('zh', 'CN'),
         supportedLocales: const <Locale>[
           Locale('zh', 'CN'),
