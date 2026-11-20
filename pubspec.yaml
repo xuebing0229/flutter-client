@@ -1,8 +1,8 @@
 name: flutter_app
 description: Private local-first application.
 publish_to: "none"
-version: 0.0.1+253
-# beta-253: remove shadow wash from full-cover image surfaces
+version: 0.0.1+255
+# beta-255: fix image-glass scrolling artifacts and card action rendering
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
