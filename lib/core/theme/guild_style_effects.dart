@@ -47,6 +47,15 @@ class GuildSurfaceEffect extends StatelessWidget {
   final bool backdropAvailable;
   final Widget child;
 
+  // Glass surfaces of the same role share the same backdrop capture. This is
+  // the pattern recommended by Flutter for lists with many BackdropFilters:
+  // it avoids recapturing the whole scene for every card while keeping
+  // overlapping parent/child surfaces separate by role.
+  static final Map<GuildEffectRole, BackdropKey> _glassBackdropKeys =
+      <GuildEffectRole, BackdropKey>{
+    for (final role in GuildEffectRole.values) role: BackdropKey(),
+  };
+
   bool get _inset => role == GuildEffectRole.inset;
 
   @override
@@ -78,9 +87,14 @@ class GuildSurfaceEffect extends StatelessWidget {
           ? math.min(glassBlur, 8.0)
           : glassBlur;
       inner = BackdropFilter(
+        backdropGroupKey: _glassBackdropKeys[role],
         filter: ui.ImageFilter.blur(
           sigmaX: effectiveBlur,
           sigmaY: effectiveBlur,
+          // Flutter's engine uses mirror as the stable default for scrolling
+          // blur edges; make it explicit so drag/overscroll sampling cannot
+          // silently regress if the engine default changes.
+          tileMode: ui.TileMode.mirror,
         ),
         child: inner,
       );
