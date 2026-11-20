@@ -470,6 +470,61 @@ void main() {
 
 
 
+  testWidgets(
+    'Android image-glass scrolling disables stretch without changing other modes',
+    (tester) async {
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+      final store = _MemoryThemeStore();
+      await store.load();
+      await store.setImageBackground(
+        // A real image avoids asynchronous invalid-image errors in the shell.
+        base64:
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        name: 'scroll.png',
+      );
+      await store.setAppearanceMode(AppAppearanceMode.image);
+
+      Widget app() => GuildMaterialApp(
+            themeStore: store,
+            home: Scaffold(
+              body: ListView(
+                children: const [
+                  SizedBox(height: 1000),
+                ],
+              ),
+            ),
+          );
+
+      await store.setImageBackgroundMode(AppImageBackgroundMode.glass);
+      await tester.pumpWidget(app());
+      final glassApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(glassApp.scrollBehavior, isNotNull);
+      expect(find.byType(StretchingOverscrollIndicator), findsNothing,
+          reason: '图片玻璃模式不能触发导致背景模糊失效的安卓拉伸效果');
+
+      await store.setImageBackgroundMode(AppImageBackgroundMode.cover);
+      await tester.pumpWidget(app());
+      expect(
+        tester.widget<MaterialApp>(find.byType(MaterialApp)).scrollBehavior,
+        isNull,
+        reason: '全图覆盖模式保留原有的滚动行为',
+      );
+
+      await store.setAppearanceMode(AppAppearanceMode.color);
+      await tester.pumpWidget(app());
+      expect(
+        tester.widget<MaterialApp>(find.byType(MaterialApp)).scrollBehavior,
+        isNull,
+        reason: '普通颜色与质感模式保留原有的滚动行为',
+      );
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
+    },
+  );
+
   test('image theme component surfaces preserve the image surface alpha', () async {
     final store = _MemoryThemeStore();
     await store.load();
