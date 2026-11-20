@@ -292,6 +292,8 @@ class ResponsiveCardActionButton extends StatelessWidget {
         final colors = Theme.of(context).colorScheme;
         final imageCoverSurface =
             uiStyle.style == AppUiStyle.relief && uiStyle.background.a == 0;
+        final imageGlassSurface =
+            uiStyle.style == AppUiStyle.glass && uiStyle.background.a == 0;
         final styledForeground = switch (uiStyle.style) {
           AppUiStyle.relief ||
           AppUiStyle.minimal ||
@@ -345,8 +347,14 @@ class ResponsiveCardActionButton extends StatelessWidget {
           role: GuildSurfaceRole.emphasized,
           borderRadius: uiStyle.buttonBorderRadius,
           backdropAvailable: uiStyle.isGlass,
-          backgroundColor:
-              imageCoverSurface ? Colors.transparent : colors.primary,
+          // Image glass uses the font colour as its primary. An opaque
+          // primary fill would hide the icon and label drawn in that same
+          // colour; keep the raised control translucent instead.
+          backgroundColor: imageCoverSurface
+              ? Colors.transparent
+              : imageGlassSurface
+                  ? colors.primary.withValues(alpha: 0.14)
+                  : colors.primary,
           child: button,
         );
       },
