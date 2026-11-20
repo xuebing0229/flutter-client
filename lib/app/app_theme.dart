@@ -179,8 +179,6 @@ class GuildAppTheme {
       width: 1,
     );
 
-    final baseButtonStyle =
-        base.filledButtonTheme.style ?? const ButtonStyle();
     // Transparent Material surfaces cannot keep ordinary elevation shadows:
     // the shadow is painted as a filled shape behind the widget and therefore
     // remains visible through the transparent face. In full-cover mode that
