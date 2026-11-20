@@ -181,11 +181,12 @@ class GuildAppTheme {
 
     final baseButtonStyle =
         base.filledButtonTheme.style ?? const ButtonStyle();
-    final coverElevation =
-        baseButtonStyle.elevation?.resolve(const <WidgetState>{}) ?? 0;
-    final coverShadowColor =
-        baseButtonStyle.shadowColor?.resolve(const <WidgetState>{}) ??
-            Colors.black.withValues(alpha: 0.22);
+    // Transparent Material surfaces cannot keep ordinary elevation shadows:
+    // the shadow is painted as a filled shape behind the widget and therefore
+    // remains visible through the transparent face. In full-cover mode that
+    // reads as a grey/white base instead of the imported image.
+    const coverElevation = 0.0;
+    const coverShadowColor = Colors.transparent;
     final coverTokens = base.extension<GuildStyleTheme>();
     final coverRadius = coverTokens?.cardRadius ?? 20;
 
@@ -195,14 +196,12 @@ class GuildAppTheme {
             const WidgetStatePropertyAll<Color>(Colors.transparent),
         foregroundColor: WidgetStatePropertyAll<Color>(font),
         side: WidgetStatePropertyAll<BorderSide>(side),
-        // Keep the elevation/shadow from the existing relief controls instead
-        // of flattening the button just because its fill is transparent.
         elevation: glass
             ? current?.elevation
-            : WidgetStatePropertyAll<double>(coverElevation),
+            : const WidgetStatePropertyAll<double>(coverElevation),
         shadowColor: glass
             ? current?.shadowColor
-            : WidgetStatePropertyAll<Color>(coverShadowColor),
+            : const WidgetStatePropertyAll<Color>(coverShadowColor),
       );
     }
 
@@ -229,27 +228,42 @@ class GuildAppTheme {
       drawerTheme: base.drawerTheme.copyWith(
         backgroundColor: layer,
         surfaceTintColor: Colors.transparent,
+        elevation: glass ? base.drawerTheme.elevation : coverElevation,
+        shadowColor:
+            glass ? base.drawerTheme.shadowColor : coverShadowColor,
       ),
       dialogTheme: base.dialogTheme.copyWith(
         backgroundColor: overlayLayer,
         surfaceTintColor: Colors.transparent,
+        elevation: glass ? base.dialogTheme.elevation : coverElevation,
+        shadowColor:
+            glass ? base.dialogTheme.shadowColor : coverShadowColor,
         shape: glass ? base.dialogTheme.shape : coverCardShape,
       ),
       popupMenuTheme: base.popupMenuTheme.copyWith(
         color: overlayLayer,
         surfaceTintColor: Colors.transparent,
+        elevation: glass ? base.popupMenuTheme.elevation : coverElevation,
+        shadowColor:
+            glass ? base.popupMenuTheme.shadowColor : coverShadowColor,
         shape: glass ? base.popupMenuTheme.shape : coverCardShape,
       ),
       bottomSheetTheme: base.bottomSheetTheme.copyWith(
         backgroundColor: overlayLayer,
         modalBackgroundColor: overlayLayer,
         surfaceTintColor: Colors.transparent,
+        elevation: glass ? base.bottomSheetTheme.elevation : coverElevation,
+        modalElevation:
+            glass ? base.bottomSheetTheme.modalElevation : coverElevation,
+        shadowColor:
+            glass ? base.bottomSheetTheme.shadowColor : coverShadowColor,
       ),
       navigationBarTheme: base.navigationBarTheme.copyWith(
         backgroundColor: layer,
       ),
       navigationRailTheme: base.navigationRailTheme.copyWith(
         backgroundColor: layer,
+        elevation: glass ? base.navigationRailTheme.elevation : coverElevation,
       ),
       inputDecorationTheme: base.inputDecorationTheme.copyWith(
         filled: true,
@@ -277,8 +291,9 @@ class GuildAppTheme {
               foregroundColor: font,
               elevation: coverElevation,
               focusElevation: coverElevation,
-              hoverElevation: coverElevation + 1,
-              highlightElevation: coverElevation + 1,
+              hoverElevation: coverElevation,
+              highlightElevation: coverElevation,
+              disabledElevation: coverElevation,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
                 side: side,
