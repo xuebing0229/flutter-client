@@ -86,8 +86,12 @@ class GuildSurfaceEffect extends StatelessWidget {
       final effectiveBlur = _inset || role == GuildEffectRole.emphasized
           ? math.min(glassBlur, 8.0)
           : glassBlur;
+      // Image-mode panels and their controls move and overlap while scrolling.
+      // Sharing a global key by role makes Flutter omit portions of the blur
+      // in overlapping regions. Keep independent captures for image glass;
+      // preserve the established grouping for ordinary glass themes.
       inner = BackdropFilter(
-        backdropGroupKey: _glassBackdropKeys[role],
+        backdropGroupKey: background.a == 0 ? null : _glassBackdropKeys[role],
         filter: ui.ImageFilter.blur(
           sigmaX: effectiveBlur,
           sigmaY: effectiveBlur,

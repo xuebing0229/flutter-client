@@ -13,6 +13,7 @@ import 'package:flutter_app/core/theme/guild_visual_theme.dart';
 import 'package:flutter_app/core/theme/guild_style_effects.dart';
 import 'package:flutter_app/features/home/presentation/workspace_shell.dart';
 import 'package:flutter_app/features/home/presentation/image_theme_page.dart';
+import 'package:flutter_app/features/shared/presentation/summary_card_widgets.dart';
 
 class _MemoryThemeStore extends AppThemeStore {
   Map<String, dynamic>? initial;
@@ -249,16 +250,17 @@ void main() {
     );
   });
 
-  testWidgets('glass surfaces share backdrop capture only within the same role', (
+  testWidgets('overlapping image-glass surfaces do not share a backdrop key', (
     tester,
   ) async {
-    Widget surface(GuildEffectRole role) => GuildSurfaceEffect(
+    Widget surface(GuildEffectRole role, Color background) =>
+        GuildSurfaceEffect(
           style: AppUiStyle.glass,
           role: role,
           primary: Colors.blue,
           accent2: Colors.purple,
           accent3: Colors.orange,
-          background: Colors.transparent,
+          background: background,
           surface: Colors.white.withValues(alpha: 0.32),
           surfaceAlt: Colors.white.withValues(alpha: 0.24),
           foreground: Colors.black,
@@ -272,31 +274,104 @@ void main() {
           child: const SizedBox(width: 80, height: 40),
         );
 
+    Future<List<BackdropFilter>> pumpSurfaces(Color background) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                Positioned(
+                  left: 10,
+                  top: 10,
+                  child: surface(GuildEffectRole.content, background),
+                ),
+                Positioned(
+                  left: 30,
+                  top: 20,
+                  child: surface(GuildEffectRole.content, background),
+                ),
+                Positioned(
+                  left: 50,
+                  top: 30,
+                  child: surface(GuildEffectRole.emphasized, background),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      return tester.widgetList<BackdropFilter>(
+        find.byType(BackdropFilter),
+      ).toList();
+    }
+
+    final imageFilters = await pumpSurfaces(Colors.transparent);
+    expect(imageFilters, hasLength(3));
+    expect(
+      imageFilters.every((filter) => filter.backdropGroupKey == null),
+      isTrue,
+      reason: '滚动时卡片、控件会相互重叠，不能共享整页的背景滤镜键',
+    );
+
+    // Existing non-image glass styles keep their established grouped path.
+    final colorFilters = await pumpSurfaces(const Color(0xFFF0EFF5));
+    expect(colorFilters, hasLength(3));
+    expect(colorFilters[0].backdropGroupKey, isNotNull);
+    expect(
+      colorFilters[0].backdropGroupKey,
+      same(colorFilters[1].backdropGroupKey),
+    );
+    expect(
+      colorFilters[2].backdropGroupKey,
+      isNot(same(colorFilters[0].backdropGroupKey)),
+    );
+  });
+
+  testWidgets('image-glass card action has readable text on translucent fill', (
+    tester,
+  ) async {
+    final store = _MemoryThemeStore();
+    await store.load();
+    await store.setImageBackground(
+      base64: 'aW1hZ2U=',
+      name: 'background.png',
+    );
+    await store.setImageBackgroundMode(AppImageBackgroundMode.glass);
+    await store.setImageFontColorValue(0xFF6784CA);
+    await store.setAppearanceMode(AppAppearanceMode.image);
+
     await tester.pumpWidget(
       MaterialApp(
+        theme: GuildAppTheme.light(store),
         home: Scaffold(
-          body: Column(
-            children: [
-              surface(GuildEffectRole.content),
-              surface(GuildEffectRole.content),
-              surface(GuildEffectRole.inset),
-            ],
+          body: Center(
+            child: SizedBox(
+              width: 240,
+              child: ResponsiveCardActionButton(
+                label: '确认节点',
+                icon: Icons.check_circle_outline_rounded,
+                onPressed: () {},
+              ),
+            ),
           ),
         ),
       ),
     );
 
-    final filters = tester.widgetList<BackdropFilter>(
-      find.byType(BackdropFilter),
-    ).toList();
-    expect(filters, hasLength(3));
-    expect(filters[0].backdropGroupKey, isNotNull);
-    expect(filters[0].backdropGroupKey, same(filters[1].backdropGroupKey));
-    expect(
-      filters[2].backdropGroupKey,
-      isNot(same(filters[0].backdropGroupKey)),
-      reason: '父卡片和内部控件可能重叠，不能共用同一个 backdrop key',
+    final surface = tester.widget<GuildStyledSurface>(
+      find.byType(GuildStyledSurface),
     );
+    expect(surface.role, GuildSurfaceRole.emphasized);
+    expect(surface.backgroundColor!.a, greaterThan(0));
+    expect(surface.backgroundColor!.a, lessThan(1));
+    expect(surface.backgroundColor, isNot(store.imageFontColor));
+
+    final action = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(
+      action.style!.foregroundColor!.resolve(const <WidgetState>{}),
+      store.imageFontColor,
+    );
+    expect(find.text('确认节点'), findsOneWidget);
   });
 
   testWidgets('image themes do not repaint a synthetic backdrop over the image', (
