@@ -80,7 +80,7 @@ void main() {
     expect(store.imageFitMode, AppImageFitMode.fit);
   });
 
-  test('full-cover image theme keeps raised outlined controls', () async {
+  test('full-cover image theme keeps outlined controls without shadow wash', () async {
     final store = _MemoryThemeStore();
     await store.load();
     await store.setImageBackground(
@@ -96,7 +96,17 @@ void main() {
 
     expect(tokens.style, AppUiStyle.relief);
     expect(theme.cardTheme.color, Colors.transparent);
-    expect(theme.cardTheme.elevation, greaterThan(0));
+    expect(theme.cardTheme.elevation, 0);
+    expect(theme.cardTheme.shadowColor, Colors.transparent);
+    expect(theme.dialogTheme.elevation, 0);
+    expect(theme.dialogTheme.shadowColor, Colors.transparent);
+    expect(theme.popupMenuTheme.elevation, 0);
+    expect(theme.popupMenuTheme.shadowColor, Colors.transparent);
+    expect(theme.bottomSheetTheme.elevation, 0);
+    expect(theme.bottomSheetTheme.modalElevation, 0);
+    expect(theme.bottomSheetTheme.shadowColor, Colors.transparent);
+    expect(theme.floatingActionButtonTheme.elevation, 0);
+    expect(theme.floatingActionButtonTheme.shadowColor, Colors.transparent);
     expect(
       button.backgroundColor!.resolve(const <WidgetState>{}),
       Colors.transparent,
@@ -107,7 +117,11 @@ void main() {
     );
     expect(
       button.elevation!.resolve(const <WidgetState>{}),
-      greaterThan(0),
+      0,
+    );
+    expect(
+      button.shadowColor!.resolve(const <WidgetState>{}),
+      Colors.transparent,
     );
   });
 
@@ -135,6 +149,72 @@ void main() {
     expect(glass.colorScheme.surfaceContainer.a, lessThan(1));
     expect(glass.extension<GuildStyleTheme>()!.surface.a, lessThan(1));
   });
+
+  testWidgets(
+    'transparent relief surface never paints neumorphic shadow through image',
+    (tester) async {
+      const legacyShadows = <BoxShadow>[
+        BoxShadow(
+          color: Color(0xFFFDFDFD),
+          offset: Offset(-6, -6),
+          blurRadius: 12,
+        ),
+        BoxShadow(
+          color: Color(0xFFA3B1C6),
+          offset: Offset(6, 6),
+          blurRadius: 12,
+        ),
+      ];
+
+      Future<List<BoxDecoration>> pumpSurface(Color background) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: GuildSurfaceEffect(
+                style: AppUiStyle.relief,
+                role: GuildEffectRole.chrome,
+                primary: Colors.blue,
+                accent2: Colors.purple,
+                accent3: Colors.orange,
+                background: background,
+                surface: Colors.transparent,
+                surfaceAlt: Colors.transparent,
+                foreground: Colors.blueGrey,
+                borderColor: Colors.blue,
+                borderWidth: 1,
+                borderRadius: const BorderRadius.all(Radius.circular(16)),
+                shadows: legacyShadows,
+                glassBlur: 0,
+                glassOpacity: 1,
+                backdropAvailable: false,
+                child: const SizedBox(width: 180, height: 72),
+              ),
+            ),
+          ),
+        );
+        return tester
+            .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+            .map((box) => box.decoration)
+            .whereType<BoxDecoration>()
+            .toList();
+      }
+
+      final imageCover = await pumpSurface(Colors.transparent);
+      expect(
+        imageCover.expand((decoration) => decoration.boxShadow ?? const []),
+        isEmpty,
+      );
+
+      final normalRelief = await pumpSurface(const Color(0xFFE0E5EC));
+      expect(
+        normalRelief
+            .expand((decoration) => decoration.boxShadow ?? const [])
+            .isNotEmpty,
+        isTrue,
+        reason: '普通浮雕模式必须保持原来的阴影',
+      );
+    },
+  );
 
   testWidgets('image themes do not repaint a synthetic backdrop over the image', (
     tester,
