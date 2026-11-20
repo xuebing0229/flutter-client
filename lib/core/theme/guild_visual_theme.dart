@@ -575,6 +575,12 @@ abstract final class GuildVisualTheme {
                 backgroundColor: WidgetStatePropertyAll(tokens.surfaceAlt),
                 surfaceTintColor:
                     const WidgetStatePropertyAll(Colors.transparent),
+                elevation: imageCoverRelief
+                    ? const WidgetStatePropertyAll<double>(0)
+                    : null,
+                shadowColor: imageCoverRelief
+                    ? const WidgetStatePropertyAll<Color>(Colors.transparent)
+                    : null,
               )
             : null,
       ),
