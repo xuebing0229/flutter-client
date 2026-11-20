@@ -284,10 +284,6 @@ class _ImageThemePreview extends StatelessWidget {
       );
     }
 
-    final darkText = fontColor.computeLuminance() < 0.55;
-    final glassColor = darkText
-        ? Colors.white.withValues(alpha: 0.58)
-        : Colors.black.withValues(alpha: 0.34);
     final surfaceStyle = GuildStyleTheme.of(context);
 
     final screenAspectRatio = MediaQuery.sizeOf(context).aspectRatio;
@@ -338,41 +334,36 @@ class _ImageThemePreview extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: mode == AppImageBackgroundMode.glass
-                          ? glassColor
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: fontColor.withValues(alpha: 0.36),
+                  GuildStyledSurface(
+                    role: GuildSurfaceRole.content,
+                    borderRadius: surfaceStyle.cardBorderRadius,
+                    backdropAvailable: surfaceStyle.isGlass,
+                    backgroundColor: mode == AppImageBackgroundMode.cover
+                        ? Colors.transparent
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            mode == AppImageBackgroundMode.glass
+                                ? '玻璃透明模式'
+                                : '全图覆盖模式',
+                            style: TextStyle(
+                              color: fontColor,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '示例排单 · 剩余 3 天',
+                            style: TextStyle(
+                              color: fontColor.withValues(alpha: 0.78),
+                            ),
+                          ),
+                        ],
                       ),
-                      boxShadow: mode == AppImageBackgroundMode.cover
-                          ? surfaceStyle.shadows
-                          : const <BoxShadow>[],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          mode == AppImageBackgroundMode.glass
-                              ? '玻璃透明模式'
-                              : '全图覆盖模式',
-                          style: TextStyle(
-                            color: fontColor,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '示例排单 · 剩余 3 天',
-                          style: TextStyle(
-                            color: fontColor.withValues(alpha: 0.78),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
