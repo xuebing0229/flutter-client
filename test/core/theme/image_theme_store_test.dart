@@ -475,10 +475,7 @@ void main() {
     (tester) async {
       final previousPlatform = debugDefaultTargetPlatformOverride;
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      addTearDown(() {
-        debugDefaultTargetPlatformOverride = previousPlatform;
-      });
-
+      try {
       final store = _MemoryThemeStore();
       await store.load();
       await store.setImageBackground(
@@ -522,6 +519,9 @@ void main() {
         isNull,
         reason: '普通颜色与质感模式保留原有的滚动行为',
       );
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
     },
   );
 
