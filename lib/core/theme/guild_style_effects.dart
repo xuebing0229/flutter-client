@@ -307,7 +307,14 @@ class GuildSurfaceEffect extends StatelessWidget {
   List<BoxShadow> _surfaceShadows() {
     if (_inset) return const <BoxShadow>[];
     return switch (style) {
-      AppUiStyle.relief => shadows,
+      // Full-cover image theme reuses relief geometry with a transparent
+      // surface. A normal neumorphic BoxShadow paints a filled blurred shape
+      // behind that transparent surface, so the white/grey shadow becomes
+      // visible *through* the control and looks exactly like an opaque base.
+      // Keep ordinary relief unchanged, but never put those shadows behind a
+      // transparent image-clad surface.
+      AppUiStyle.relief =>
+        background.a == 0 ? const <BoxShadow>[] : shadows,
       AppUiStyle.bold => <BoxShadow>[
           BoxShadow(
             color: foreground,
