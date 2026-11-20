@@ -234,6 +234,8 @@ abstract final class GuildVisualTheme {
     final colors = resolved.colors;
     final tokens = resolved.tokens;
     final imageBackdrop = tokens.background.a == 0;
+    final imageCoverRelief =
+        imageBackdrop && style == AppUiStyle.relief;
     final selectedSurface = _mix(tokens.surfaceAlt, colors.primary, 0.20);
     final onPrimary = _contrast(colors.primary);
     final squareOrRounded = RoundedRectangleBorder(
