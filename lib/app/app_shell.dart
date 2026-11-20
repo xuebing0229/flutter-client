@@ -62,19 +62,21 @@ class GuildMaterialApp extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 Positioned.fill(
-                  child: ColoredBox(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF121212)
-                        : const Color(0xFFF4F4F4),
-                    child: Image.memory(
-                      bytes,
-                      fit: switch (themeStore.imageFitMode) {
-                        AppImageFitMode.fit => BoxFit.contain,
-                        AppImageFitMode.fill => BoxFit.cover,
-                      },
-                      alignment: Alignment.center,
-                      gaplessPlayback: true,
-                      filterQuality: FilterQuality.medium,
+                  child: RepaintBoundary(
+                    child: ColoredBox(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF121212)
+                          : const Color(0xFFF4F4F4),
+                      child: Image.memory(
+                        bytes,
+                        fit: switch (themeStore.imageFitMode) {
+                          AppImageFitMode.fit => BoxFit.contain,
+                          AppImageFitMode.fill => BoxFit.cover,
+                        },
+                        alignment: Alignment.center,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.medium,
+                      ),
                     ),
                   ),
                 ),
