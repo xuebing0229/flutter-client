@@ -126,8 +126,13 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
     final border = borderWidth <= 0
         ? null
         : Border.all(color: borderColor, width: borderWidth);
-    final roleShadows =
-        role == GuildSurfaceRole.chrome ? chromeShadows : shadows;
+    final imageCoverRelief =
+        style == AppUiStyle.relief && background.a == 0;
+    final roleShadows = imageCoverRelief
+        ? const <BoxShadow>[]
+        : role == GuildSurfaceRole.chrome
+            ? chromeShadows
+            : shadows;
 
     final gradient = switch (style) {
       AppUiStyle.clay => LinearGradient(
@@ -229,6 +234,8 @@ abstract final class GuildVisualTheme {
     final colors = resolved.colors;
     final tokens = resolved.tokens;
     final imageBackdrop = tokens.background.a == 0;
+    final imageCoverRelief =
+        imageBackdrop && style == AppUiStyle.relief;
     final selectedSurface = _mix(tokens.surfaceAlt, colors.primary, 0.20);
     final onPrimary = _contrast(colors.primary);
     final squareOrRounded = RoundedRectangleBorder(
@@ -568,6 +575,12 @@ abstract final class GuildVisualTheme {
                 backgroundColor: WidgetStatePropertyAll(tokens.surfaceAlt),
                 surfaceTintColor:
                     const WidgetStatePropertyAll(Colors.transparent),
+                elevation: imageCoverRelief
+                    ? const WidgetStatePropertyAll<double>(0)
+                    : null,
+                shadowColor: imageCoverRelief
+                    ? const WidgetStatePropertyAll<Color>(Colors.transparent)
+                    : null,
               )
             : null,
       ),
