@@ -126,8 +126,13 @@ class GuildStyleTheme extends ThemeExtension<GuildStyleTheme> {
     final border = borderWidth <= 0
         ? null
         : Border.all(color: borderColor, width: borderWidth);
-    final roleShadows =
-        role == GuildSurfaceRole.chrome ? chromeShadows : shadows;
+    final imageCoverRelief =
+        style == AppUiStyle.relief && background.a == 0;
+    final roleShadows = imageCoverRelief
+        ? const <BoxShadow>[]
+        : role == GuildSurfaceRole.chrome
+            ? chromeShadows
+            : shadows;
 
     final gradient = switch (style) {
       AppUiStyle.clay => LinearGradient(
