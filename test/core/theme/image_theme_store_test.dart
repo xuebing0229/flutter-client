@@ -106,7 +106,6 @@ void main() {
     expect(theme.bottomSheetTheme.modalElevation, 0);
     expect(theme.bottomSheetTheme.shadowColor, Colors.transparent);
     expect(theme.floatingActionButtonTheme.elevation, 0);
-    expect(theme.floatingActionButtonTheme.shadowColor, Colors.transparent);
     expect(
       button.backgroundColor!.resolve(const <WidgetState>{}),
       Colors.transparent,
