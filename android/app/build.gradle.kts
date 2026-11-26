@@ -115,6 +115,18 @@ android {
         create("internal") {
             dimension = "channel"
             applicationIdSuffix = ".internal"
+            // Each internal APK is built independently using the already
+            // validated single-target Beta path, with its own ABI payload.
+            val internalAbi = System.getenv("INTERNAL_BUILD_ABI")
+            if (internalAbi != null) {
+                require(internalAbi in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) {
+                    "Unsupported Internal ABI: $internalAbi"
+                }
+                ndk {
+                    abiFilters.clear()
+                    abiFilters.add(internalAbi)
+                }
+            }
             signingConfig = signingConfigs.findByName("internalRelease")
         }
         create("issuer") {

@@ -112,28 +112,27 @@ jobs:
 
       - name: Build three separately installable Internal APKs
         run: |
-          flutter build apk \
-            --release \
-            --flavor internal \
-            -Pdisable-abi-filtering=true \
-            --split-per-abi \
-            --build-number="$INTERNAL_RELEASE_BUILD" \
-            --dart-define=APP_CHANNEL=internal \
-            --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
-            --dart-define=INTERNAL_RELEASE_BUILD="$INTERNAL_RELEASE_BUILD" \
-            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
-            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
-          python3 - <<'PY'
-          from pathlib import Path
-          import shutil
-          root = Path('build/app/outputs/flutter-apk')
-          for abi in ('arm64-v8a', 'armeabi-v7a', 'x86_64'):
-              candidates = [p for p in root.glob('*.apk') if abi in p.name and 'internal' in p.name and 'release' in p.name]
-              if len(candidates) != 1:
-                  raise SystemExit(f'Expected one internal release APK for {abi}, got: {candidates}')
-              shutil.copy2(candidates[0], f'app-internal-{abi}.apk')
-          PY
-
+          while read -r abi target; do
+            echo "Building signed internal APK for $abi ($target)"
+            INTERNAL_BUILD_ABI="$abi" flutter build apk \
+              --release \
+              --flavor internal \
+              -Pdisable-abi-filtering=true \
+              --target-platform "$target" \
+              --build-number="$INTERNAL_RELEASE_BUILD" \
+              --dart-define=APP_CHANNEL=internal \
+              --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
+              --dart-define=INTERNAL_RELEASE_BUILD="$INTERNAL_RELEASE_BUILD" \
+              --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
+              --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
+            test -s build/app/outputs/flutter-apk/app-internal-release.apk
+            cp build/app/outputs/flutter-apk/app-internal-release.apk "app-internal-$abi.apk"
+            (cd android && ./gradlew --stop)
+          done <<'ABIS'
+          arm64-v8a android-arm64
+          armeabi-v7a android-arm
+          x86_64 android-x64
+          ABIS
       - name: Verify all Internal runtime payloads
         run: |
           for abi in arm64-v8a armeabi-v7a x86_64; do
