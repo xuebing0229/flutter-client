@@ -2,7 +2,7 @@ name: flutter_app
 description: Private local-first application.
 publish_to: "none"
 version: 0.2.1+14
-# Internal 0.2.1 promoted from verified Beta 256; split APKs per architecture and shared sync relay.
+# Internal 0.2.1 promoted from verified Beta 256; split APKs per architecture with explicit ABI filtering.
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
