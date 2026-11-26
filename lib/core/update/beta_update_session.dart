@@ -64,7 +64,11 @@ class BetaUpdateSession extends ChangeNotifier {
     final info = await PackageInfo.fromPlatform();
     _versionLoaded = true;
     _currentVersion = info.version;
-    _currentBuild = int.tryParse(info.buildNumber) ?? 0;
+    // Split Android APKs have ABI-specific platform version codes.
+    // Compare the channel's logical release sequence, not APK ABI offsets.
+    _currentBuild = isInternalBuild && internalReleaseBuild > 0
+        ? internalReleaseBuild
+        : int.tryParse(info.buildNumber) ?? 0;
     notifyListeners();
   }
 

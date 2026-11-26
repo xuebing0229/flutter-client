@@ -56,7 +56,18 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
         (json['download_url'] as String).isEmpty) {
       throw const FormatException('无法读取最新内测版更新信息。');
     }
-    return json;
+    final downloadUrl = json['windows_download_url'];
+    if (downloadUrl is! String || downloadUrl.isEmpty) {
+      throw const FormatException('内测版缺少 Windows 安装包地址。');
+    }
+    return <String, dynamic>{
+      ...json,
+      'download_url': downloadUrl,
+      if (json['windows_size_bytes'] is int)
+        'size_bytes': json['windows_size_bytes'],
+      if (json['windows_sha256'] is String)
+        'sha256': json['windows_sha256'],
+    };
   }
 
   Map<String, dynamic>? _normalizeStaticManifest(

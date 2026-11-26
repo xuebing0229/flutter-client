@@ -110,9 +110,16 @@ class MainActivity : FlutterActivity() {
         val channel = json.optString("channel", "")
         val version = json.optString("version", "")
         val build = json.optInt("build", -1)
-        val downloadUrl = json.optString("download_url", "")
-        val sizeBytes = json.optLong("size_bytes", -1L)
-        val sha256 = json.optString("sha256", "")
+        // Select exactly one architecture-specific release APK.
+        // Prefer Android's native ABI order, never a mismatched variant.
+        val apks = json.optJSONObject("android_apks")
+        val selectedAbi = Build.SUPPORTED_ABIS.firstOrNull { abi ->
+            apks?.has(abi) == true
+        }
+        val packageInfo = selectedAbi?.let { apks?.optJSONObject(it) }
+        val downloadUrl = packageInfo?.optString("download_url", "") ?: ""
+        val sizeBytes = packageInfo?.optLong("size_bytes", -1L) ?: -1L
+        val sha256 = packageInfo?.optString("sha256", "") ?: ""
 
         if (
             schema != 1 ||
