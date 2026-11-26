@@ -1,0 +1,381 @@
+name: Build and Publish Internal
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'build/internal-*'
+    paths:
+      - pubspec.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: internal-publish
+  cancel-in-progress: true
+
+env:
+  RELEASE_FILES_TOKEN: ${{ secrets.RELEASE_FILES_TOKEN }}
+  RELEASE_SIGNING_BUNDLE_BASE64: ${{ secrets.RELEASE_SIGNING_BUNDLE_BASE64 }}
+  INTERNAL_SOURCE_BUILD: '256'
+  INTERNAL_RELEASE_BUILD: '14'
+  ACTIVATION_API_BASE_URL: https://license.apixb.top
+  PUBLIC_SYNC_RELAY_URL: https://internal.guild.apixb.top/sync
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Guard public release notes
+        run: python3 tool/check_internal_public_release.py
+
+      - name: Verify Internal source lineage
+        shell: bash
+        run: |
+          REQUIRED_BASE="9e8ed11502825e1cc9d4d157f6d477ccbb68f6b0"
+          if ! git merge-base --is-ancestor "$REQUIRED_BASE" HEAD; then
+            echo "::error::This Internal branch does not descend from the verified Internal 166 lineage. Refusing to publish a regression build."
+            exit 1
+          fi
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run full Flutter test suite
+        run: flutter test
+
+      - name: Smoke test Cloudflare relay runtime
+        run: dart tool/test_public_relay_runtime.dart
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java with Gradle cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Set up Go for embedded Syncthing
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.2'
+          cache: true
+
+      - name: Cache embedded Syncthing binaries
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/sync/jniLibs
+          key: embedded-syncthing-v2.1.7-d6d0181f7d466381-${{ runner.os }}-android
+
+      - name: Build embedded Syncthing core
+        env:
+          SYNCTHING_VERSION: v2.1.7
+        run: bash tool/build_syncthing_android.sh
+
+      - name: Restore fixed Internal signing bundle
+        run: |
+          test -n "$RELEASE_SIGNING_BUNDLE_BASE64"
+          BUNDLE="$RUNNER_TEMP/internal-signing-bundle.zip"
+          printf '%s' "$RELEASE_SIGNING_BUNDLE_BASE64" | base64 --decode > "$BUNDLE"
+          unzip -q "$BUNDLE" -d android
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Bundle verified PP-OCRv6 Small models
+        run: python3 tool/fetch_official_ppocrv6_models.py
+
+      - name: Build three separately installable Internal APKs
+        run: |
+          flutter build apk \
+            --release \
+            --flavor internal \
+            --split-per-abi \
+            --build-number="$INTERNAL_RELEASE_BUILD" \
+            --dart-define=APP_CHANNEL=internal \
+            --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
+            --dart-define=INTERNAL_RELEASE_BUILD="$INTERNAL_RELEASE_BUILD" \
+            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          root = Path('build/app/outputs/flutter-apk')
+          for abi in ('arm64-v8a', 'armeabi-v7a', 'x86_64'):
+              candidates = [p for p in root.glob('*.apk') if abi in p.name and 'internal' in p.name and 'release' in p.name]
+              if len(candidates) != 1:
+                  raise SystemExit(f'Expected one internal release APK for {abi}, got: {candidates}')
+              shutil.copy2(candidates[0], f'app-internal-{abi}.apk')
+          PY
+
+      - name: Verify all Internal runtime payloads
+        run: |
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            python3 tool/verify_android_apk_payload.py "app-internal-$abi.apk" --abis "$abi"
+          done
+
+      - name: Verify each Internal APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            "$APKSIGNER" verify --verbose --print-certs "app-internal-$abi.apk"
+          done
+      - name: Upload Android Internal package
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-android-package
+          path: |
+            app-internal-arm64-v8a.apk
+            app-internal-armeabi-v7a.apk
+            app-internal-x86_64.apk
+          retention-days: 1
+          if-no-files-found: error
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Test Windows updater and installer process shutdown
+        shell: powershell
+        run: ./tool/test_windows_updater.ps1
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Enable Windows desktop
+        shell: pwsh
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows Internal
+        shell: pwsh
+        run: flutter build windows --release --build-number="$env:INTERNAL_RELEASE_BUILD" --dart-define=APP_CHANNEL=internal --dart-define="INTERNAL_SOURCE_BUILD=$env:INTERNAL_SOURCE_BUILD" --dart-define="INTERNAL_RELEASE_BUILD=$env:INTERNAL_RELEASE_BUILD" --dart-define="PUBLIC_SYNC_RELAY_URL=$env:PUBLIC_SYNC_RELAY_URL" --dart-define="ACTIVATION_API_BASE_URL=$env:ACTIVATION_API_BASE_URL"
+
+      - name: Build VPet desktop companion
+        shell: pwsh
+        run: |
+          $output = "build/windows/x64/runner/Release/desktop_pet"
+          dotnet publish "windows/desktop_pet/AdventurersGuild.DesktopPet.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o $output
+          if (-not (Test-Path (Join-Path $output "AdventurersGuild.DesktopPet.exe"))) {
+            throw "Desktop pet host was not created."
+          }
+
+      - name: Bundle embedded Syncthing core
+        shell: pwsh
+        run: ./tool/fetch_syncthing_windows.ps1 -Version v2.1.7
+
+      - name: Smoke test embedded Syncthing runtime
+        shell: pwsh
+        run: ./tool/test_syncthing_windows_runtime.ps1
+
+      - name: Cache official PaddleOCR Windows runtime
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ag-official-paddleocr
+          key: official-paddleocr-windows-dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf-paddle3.2.1-opencv4.12.0-v2
+
+      - name: Bundle official PaddleOCR C++ screenshot recognition
+        shell: pwsh
+        run: ./tool/bundle_windows_official_paddleocr.ps1
+
+      - name: Bundle current Windows icon
+        shell: pwsh
+        run: |
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = (($versionLine -split ':', 2)[1].Trim() -split '\+', 2)[0]
+          $releaseDir = "build/windows/x64/runner/Release"
+          $sourceIcon = "windows/runner/resources/app_icon.ico"
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon.ico") -Force
+          Copy-Item -LiteralPath $sourceIcon -Destination (Join-Path $releaseDir "app_icon_$version.ico") -Force
+          Copy-Item -LiteralPath "windows/installer/refresh_app_shortcuts.ps1" -Destination $releaseDir -Force
+
+      - name: Verify Windows runtime payload
+        shell: pwsh
+        run: ./tool/verify_windows_release_bundle.ps1
+
+      - name: Package Windows Internal
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "build/windows/x64/runner/Release/*" `
+            -DestinationPath "app-windows-internal.zip" `
+            -Force
+
+      - name: Build Windows Internal installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+
+          $versionLine = Get-Content pubspec.yaml |
+            Where-Object { $_ -match '^version:' } |
+            Select-Object -First 1
+          if (-not $versionLine) {
+            throw "pubspec.yaml version was not found."
+          }
+          $version = (($versionLine -split ':', 2)[1].Trim() -split '\+', 2)[0]
+
+          & $iscc `
+            "/DMyAppVersion=$version" `
+            "/O$PWD" `
+            "/Fapp-windows-internal-setup" `
+            "windows\installer\adventurers_guild_internal.iss"
+
+          if (-not (Test-Path "app-windows-internal-setup.exe")) {
+            throw "Windows Internal installer was not created."
+          }
+
+      - name: Upload Windows Internal package
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-windows-package
+          path: |
+            app-windows-internal.zip
+            app-windows-internal-setup.exe
+          retention-days: 1
+          if-no-files-found: error
+
+  web:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Sync PWA icons from native app icon
+        run: dart run tool/sync_pwa_icons_from_android.dart
+
+      - name: Build PWA Internal
+        run: |
+          flutter build web \
+            --release \
+            --no-web-resources-cdn \
+            --dart-define=APP_CHANNEL=internal \
+            --dart-define=INTERNAL_SOURCE_BUILD="$INTERNAL_SOURCE_BUILD" \
+            --dart-define=INTERNAL_RELEASE_BUILD="$INTERNAL_RELEASE_BUILD" \
+            --dart-define=PUBLIC_SYNC_RELAY_URL="$PUBLIC_SYNC_RELAY_URL" \
+            --dart-define=ACTIVATION_API_BASE_URL="$ACTIVATION_API_BASE_URL"
+
+      - name: Finalize offline PWA cache
+        run: python3 tool/finalize_pwa.py build/web
+
+      - name: Validate installable PWA shell
+        shell: bash
+        run: |
+          test -s build/web/index.html
+          test -s build/web/manifest.json
+          test -s build/web/icons/app-icon-192.png
+          test -s build/web/icons/app-icon-512.png
+          test ! -e build/web/icons/app-icon-maskable-512.png
+          test -s build/web/pwa_service_worker.js
+          test -s build/web/flutter_bootstrap.js
+          grep -Fq "_flutter.loader.load({" web/flutter_bootstrap.js
+          if grep -Fq "canvasKitForceCpuOnly" web/flutter_bootstrap.js; then
+            echo "Android Web must keep GPU-backed CanvasKit; CPU-only rendering is too slow." >&2
+            exit 1
+          fi
+          grep -Fq "__PWA_BOOT_VERSION__" web/index.html
+          grep -Fq "__PWA_BOOT_VERSION__" web/flutter_bootstrap.js
+          if grep -q "serviceWorkerSettings" web/flutter_bootstrap.js; then
+            echo "Flutter bootstrap must not register the legacy worker." >&2
+            exit 1
+          fi
+          test -s build/web/main.dart.js
+          test -s build/web/canvaskit/canvaskit.js
+          test -s build/web/canvaskit/canvaskit.wasm
+          grep -q '"display": "standalone"' build/web/manifest.json
+          grep -Fq "registerCurrentWorker" build/web/index.html
+          grep -q './main.dart.js' build/web/pwa_service_worker.js
+          grep -q './canvaskit/canvaskit.wasm' build/web/pwa_service_worker.js
+          if grep -q '__PWA_PRECACHE_FILES__' build/web/pwa_service_worker.js; then
+            echo "PWA precache manifest was not finalized." >&2
+            exit 1
+          fi
+          if grep -q '__PWA_CACHE_VERSION__' build/web/pwa_service_worker.js; then
+            echo "PWA cache version was not finalized." >&2
+            exit 1
+          fi
+          grep -q "const CACHE_VERSION = 'adventurers-guild-pwa-" build/web/pwa_service_worker.js
+          if grep -q "__PWA_BOOT_VERSION__" build/web/index.html build/web/flutter_bootstrap.js; then
+            echo "PWA boot build id was not finalized." >&2
+            exit 1
+          fi
+          grep -Fq "adventurers-guild.pwa.boot-version" build/web/index.html
+          grep -Fq "navigator.serviceWorker.getRegistrations()" build/web/index.html
+          grep -Fq "build.mainJsPath" build/web/flutter_bootstrap.js
+          grep -Fq "NETWORK_FIRST_PATHS" build/web/pwa_service_worker.js
+
+      - name: Package PWA Internal
+        run: |
+          cd build/web
+          zip -qr ../../app-pwa-internal.zip .
+
+      - name: Upload PWA Internal package
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-pwa-package
+          path: app-pwa-internal.zip
+          retention-days: 1
+          if-no-files-found: error
