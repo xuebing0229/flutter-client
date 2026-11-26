@@ -115,6 +115,7 @@ jobs:
           flutter build apk \
             --release \
             --flavor internal \
+            -Pdisable-abi-filtering=true \
             --split-per-abi \
             --build-number="$INTERNAL_RELEASE_BUILD" \
             --dart-define=APP_CHANNEL=internal \
