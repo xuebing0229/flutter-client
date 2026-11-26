@@ -21,7 +21,7 @@ env:
   INTERNAL_SOURCE_BUILD: '256'
   INTERNAL_RELEASE_BUILD: '14'
   ACTIVATION_API_BASE_URL: https://license.apixb.top
-  PUBLIC_SYNC_RELAY_URL: https://internal.guild.apixb.top/sync
+  PUBLIC_SYNC_RELAY_URL: https://beta.guild.apixb.top/sync
 
 jobs:
   check:
