@@ -379,3 +379,132 @@ jobs:
           path: app-pwa-internal.zip
           retention-days: 1
           if-no-files-found: error
+
+  publish:
+    needs:
+      - android
+      - windows
+      - web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download Android architecture packages
+        uses: actions/download-artifact@v4
+        with:
+          name: internal-android-package
+          path: dist
+
+      - name: Download Windows packages
+        uses: actions/download-artifact@v4
+        with:
+          name: internal-windows-package
+          path: dist
+
+      - name: Download PWA package
+        uses: actions/download-artifact@v4
+        with:
+          name: internal-pwa-package
+          path: dist
+
+      - name: Verify Internal release version and files
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN"
+          test "$(grep '^version:' pubspec.yaml | awk '{print $2}')" = '0.2.1+14'
+          for file in app-internal-arm64-v8a.apk app-internal-armeabi-v7a.apk app-internal-x86_64.apk app-windows-internal.zip app-windows-internal-setup.exe app-pwa-internal.zip; do
+            test -s "dist/$file"
+          done
+          gh api 'repos/xuebing0229/release-files/contents/version.json?ref=deploy/internal-pwa' \
+            --jq .content | base64 --decode > previous-internal.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          previous = json.loads(Path('previous-internal.json').read_text())
+          if previous['channel'] != 'internal' or previous['build'] >= 14:
+              raise SystemExit('Internal update build number must strictly increase.')
+          PY
+
+      - name: Generate Internal download and update manifest
+        run: |
+          export INTERNAL_TAG="internal-v0.2.1+14-run${GITHUB_RUN_NUMBER}"
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from urllib.parse import quote
+          tag = os.environ['INTERNAL_TAG']
+          base = 'https://github.com/xuebing0229/release-files/releases/download/' + quote(tag, safe='')
+          def entry(name):
+              asset = Path('dist') / name
+              return dict(
+                  download_url=base + '/' + name,
+                  size_bytes=asset.stat().st_size,
+                  sha256=hashlib.sha256(asset.read_bytes()).hexdigest(),
+              )
+          apk_names = {
+              'arm64-v8a': 'app-internal-arm64-v8a.apk',
+              'armeabi-v7a': 'app-internal-armeabi-v7a.apk',
+              'x86_64': 'app-internal-x86_64.apk',
+          }
+          apks = {abi: entry(name) for abi, name in apk_names.items()}
+          windows = entry('app-windows-internal.zip')
+          pwa = entry('app-pwa-internal.zip')
+          notes = Path('server/release_site/public_notes.txt').read_text(encoding='utf-8').strip()
+          manifest = {
+              'schema': 1, 'channel': 'internal', 'version': '0.2.1',
+              'build': 14, 'source_test_build': 256, 'published': True,
+              'notes': notes,
+              'download_url': apks['arm64-v8a']['download_url'],
+              'size_bytes': apks['arm64-v8a']['size_bytes'],
+              'sha256': apks['arm64-v8a']['sha256'],
+              'android_apks': apks,
+              'windows_download_url': windows['download_url'],
+              'windows_size_bytes': windows['size_bytes'],
+              'windows_sha256': windows['sha256'],
+              'windows_installer_url': entry('app-windows-internal-setup.exe')['download_url'],
+              'pwa_download_url': pwa['download_url'],
+              'pwa_size_bytes': pwa['size_bytes'],
+              'pwa_sha256': pwa['sha256'],
+              'deployment_revision': 14,
+          }
+          Path('internal-version.json').write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Publish Internal packages to GitHub
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN"
+          TAG="internal-v0.2.1+14-run${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            dist/app-internal-arm64-v8a.apk \
+            dist/app-internal-armeabi-v7a.apk \
+            dist/app-internal-x86_64.apk \
+            dist/app-windows-internal.zip \
+            dist/app-windows-internal-setup.exe \
+            dist/app-pwa-internal.zip \
+            internal-version.json \
+            --repo xuebing0229/release-files \
+            --title "冒险者公会 内测版 0.2.1" \
+            --notes-file server/release_site/public_notes.txt \
+            --prerelease
+
+      - name: Update Internal manifest and deploy PWA
+        env:
+          GH_TOKEN: ${{ env.RELEASE_FILES_TOKEN }}
+        run: |
+          gh auth setup-git
+          gh repo clone xuebing0229/release-files "$RUNNER_TEMP/release-files"
+          cd "$RUNNER_TEMP/release-files"
+          git fetch origin deploy/internal-pwa
+          git checkout deploy/internal-pwa
+          cp "$GITHUB_WORKSPACE/internal-version.json" version.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "internal: publish 0.2.1 (14) from Beta 256"
+          git push origin deploy/internal-pwa
