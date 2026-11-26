@@ -4,7 +4,6 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../build/build_channel.dart';
 import 'beta_update_installer.dart';
 
 class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
@@ -151,9 +150,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     String? expectedSha256,
   }) async {
     final host = uri.host.toLowerCase();
-    final trustedHost = isInternalBuild
-        ? host == 'license.apixb.top'
-        : host == 'github.com';
+    final trustedHost = host == 'github.com';
     if (uri.scheme != 'https' || !trustedHost) {
       throw const FormatException('更新包下载地址不受信任。');
     }

@@ -18,7 +18,7 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     'https://api.github.com/repos/xuebing0229/release-files/releases/latest',
   );
   static final Uri _internalManifestUri = Uri.parse(
-    'https://license.apixb.top/releases/internal/windows-latest.json',
+    'https://raw.githubusercontent.com/xuebing0229/release-files/deploy/internal-pwa/version.json',
   );
   static const String _userAgent = 'adventurers-guild-windows-updater';
 
@@ -306,9 +306,7 @@ class WindowsBetaUpdateInstaller implements BetaUpdateInstaller {
     String? expectedSha256,
   }) async {
     final host = uri.host.toLowerCase();
-    final trustedHost = isInternalBuild
-        ? host == 'license.apixb.top'
-        : host == 'github.com';
+    final trustedHost = host == 'github.com';
     if (uri.scheme != 'https' || !trustedHost) {
       throw const FormatException('更新包下载地址不受信任。');
     }

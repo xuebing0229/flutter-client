@@ -18,7 +18,7 @@ import java.net.URL
 class MainActivity : FlutterActivity() {
     companion object {
         private const val STATIC_MANIFEST_URL =
-            "https://license.apixb.top/releases/internal/android-latest.json"
+            "https://raw.githubusercontent.com/xuebing0229/release-files/deploy/internal-pwa/version.json"
         private const val USER_AGENT = "artist-queue-beta-updater"
     }
 
@@ -28,12 +28,17 @@ class MainActivity : FlutterActivity() {
     private lateinit var syncthingBridge: SyncthingBridge
     private lateinit var screenshotOcrBridge: ScreenshotOcrBridge
     private lateinit var licenseDirectHttpsBridge: LicenseDirectHttpsBridge
+    private lateinit var imageThemeSystemUiBridge: ImageThemeSystemUiBridge
     private var pendingInstallApk: File? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         licenseDirectHttpsBridge = LicenseDirectHttpsBridge(this).also {
+            it.configure(flutterEngine.dartExecutor.binaryMessenger)
+        }
+
+        imageThemeSystemUiBridge = ImageThemeSystemUiBridge(this).also {
             it.configure(flutterEngine.dartExecutor.binaryMessenger)
         }
 

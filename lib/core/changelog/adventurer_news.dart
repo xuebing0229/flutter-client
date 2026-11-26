@@ -531,6 +531,13 @@ const internalAdventurerNewsCatalog = <AdventurerNewsEntry>[
     description:
         '本次内测版整合近期完成的功能与修复，包括排单与成品管理、统计与小票、新手引导、设备同步、截图导入、桌宠与专注，以及网页版体验等更新。',
   ),
+  AdventurerNewsEntry(
+    introducedBuild: 14,
+    versionLabel: '0.2.1',
+    title: '图片主题、订单导入与使用体验更新',
+    description:
+        '新增可裁剪的图片主题，支持全图覆盖与玻璃透明及字体颜色设置；优化截图导入的平台选择、同名作品稿价记忆与长图识别；改善订单节点、归档与多设备同步，并优化专注排版和界面帮助提示。',
+  ),
 ];
 
 String internalAdventurerNewsVersion(int build) {
