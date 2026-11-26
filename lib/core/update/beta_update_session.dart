@@ -9,7 +9,7 @@ import 'beta_update_coordinator.dart';
 import 'update_manifest.dart';
 import 'windows_beta_update_installer.dart';
 
-/// App-lifetime Beta update state.
+/// App-lifetime update state for Beta and Internal builds.
 ///
 /// Navigation, theme rebuilds, account switches and SettingsPage disposal must
 /// not own the update task. Windows partial downloads are kept on disk and can
@@ -19,7 +19,7 @@ class BetaUpdateSession extends ChangeNotifier {
 
   static final BetaUpdateSession instance = BetaUpdateSession._();
 
-  late final BetaUpdateCoordinator? _updater = !isBetaBuild
+  late final BetaUpdateCoordinator? _updater = !(isBetaBuild || isInternalBuild)
       ? null
       : Platform.isAndroid
       ? BetaUpdateCoordinator(installer: const AndroidBetaUpdateInstaller())
@@ -39,6 +39,8 @@ class BetaUpdateSession extends ChangeNotifier {
   int _currentBuild = 0;
   UpdateManifest? _latest;
   String _status = '尚未检查';
+
+  String get _channelLabel => isInternalBuild ? '内测版' : '测试版';
 
   bool get supported => _updater != null;
   bool get busy => _busy;
@@ -99,7 +101,7 @@ class BetaUpdateSession extends ChangeNotifier {
         _paused = false;
         _installReady = false;
         _status =
-            latest.build > _currentBuild ? '发现新的测试版' : '已经是最新测试版';
+            latest.build > _currentBuild ? '发现新的$_channelLabel' : '已经是最新$_channelLabel';
       }
     } on SocketException {
       _status = '网络连接失败，请检查当前网络后重试';

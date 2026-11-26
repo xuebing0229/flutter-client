@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../build/build_channel.dart';
 import 'beta_update_installer.dart';
 
 class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
@@ -66,7 +67,7 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File) continue;
       final name = entity.path.split(Platform.pathSeparator).last.toLowerCase();
-      if (!name.startsWith('app-beta-')) continue;
+      if (!(name.startsWith('app-beta-') || name.startsWith('app-internal-'))) continue;
       if (!(name.endsWith('.apk') || name.endsWith('.apk.part'))) continue;
       if (name == keepApk || name == keepPart) continue;
       try {
@@ -149,8 +150,12 @@ class AndroidBetaUpdateInstaller implements BetaUpdateInstaller {
     int? expectedSizeBytes,
     String? expectedSha256,
   }) async {
-    if (uri.scheme != 'https' || uri.host.toLowerCase() != 'github.com') {
-      throw const FormatException('Android Beta 只能从 GitHub Releases 下载。');
+    final host = uri.host.toLowerCase();
+    final trustedHost = isInternalBuild
+        ? host == 'license.apixb.top'
+        : host == 'github.com';
+    if (uri.scheme != 'https' || !trustedHost) {
+      throw const FormatException('更新包下载地址不受信任。');
     }
 
     final baseName = _safeBaseName(fileName);

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/build/build_channel.dart';
+
 class AppAboutPage extends StatelessWidget {
   const AppAboutPage({
     required this.version,
@@ -38,7 +40,7 @@ class AppAboutPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '版本 $version ($buildNumber)',
+                    isInternalBuild ? '版本 $version' : '版本 $version ($buildNumber)',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
